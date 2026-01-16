@@ -1,0 +1,35 @@
+# Operator Manual
+
+This manual ties the orchestration handoff system to the AEP workflow in `core/arch/`.
+
+## Start Here
+1) Read `core/orchestrator/handoff/STATUS.md`.
+2) Read `core/orchestrator/handoff/PLAN.md`.
+3) Review `core/orchestrator/handoff/TASKS.md`.
+
+## Planning and Scope
+- Use `core/arch/workflow.md` for the end-to-end AEP cycle.
+- Use `core/arch/scope-lock-template.md` to lock scope before a cycle.
+- Record master backlog using `core/arch/backlog-template.md`.
+
+## Execution
+1) Create or select a task in TASKS with explicit acceptance criteria.
+2) Assign owner, branch name, and verification steps.
+3) Implement minimal changes and run tests.
+4) Capture reviewer output if risk triggers apply.
+5) Close task using the DoD checklist.
+
+## Verification and Logging
+- Record commands and outcomes in TASKS.
+- Use `core/arch/verification-log.md` as the long-term evidence log.
+- Log decisions in `core/orchestrator/handoff/DECISIONS.md`.
+
+## Model-Agnostic Guidance
+- Do not assume any single model or tool.
+- If a task requires a specific tool or model, note it in TASKS.
+
+## Orchestration Consistency Checklist
+- TASKS updated with acceptance criteria and verification steps.
+- Evidence capture completed.
+- Review capture completed when risk triggers apply.
+- Decisions logged for scope or architecture changes.
