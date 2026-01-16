@@ -99,3 +99,6 @@
 | 2026-01-16 | README.md | README.md | Rewrote repo README with model-agnostic specs and usage. |  |
 | 2026-01-16 | core/README.md | core/README.md | Added core specifications section. |  |
 | 2026-01-16 | docs/README.md | (new) | Added local docs overview and canonical references. |  |
+
+## Release Notes
+- 2026-01-16: `RELEASE_NOTES_2026-01-16.md`
