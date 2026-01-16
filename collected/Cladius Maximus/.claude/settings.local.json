@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /b \"D:\\\\GITHUB\\\\Claudius Maximus\")",
+      "Bash(findstr:*)",
+      "Bash(dir /s /b \"D:\\\\GITHUB\\\\Claudius Maximus\\\\FIRECRAWL*\\\\*.md\")",
+      "Bash(python run_pipeline.py:*)"
+    ]
+  }
+}
