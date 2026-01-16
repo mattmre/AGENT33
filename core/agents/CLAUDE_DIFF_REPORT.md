@@ -1,0 +1,561 @@
+# CLAUDE Variant Diff Report
+
+Heading-only comparison between canonical `core/agents/CLAUDE.md` and archived CLAUDE variants.
+
+Canonical file: `D:\GITHUB\AGENT-33\core\agents\CLAUDE.md`
+
+## CHELATEDAI__docs__CLAUDE.md
+- Size: 748 bytes
+- Headings: 2
+- Headings missing in canonical:
+  - ARCH-AEP Workflow (Agentic Remediation)
+  - Project Context
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## Cladius Maximus__CLAUDE.md
+- Size: 6892 bytes
+- Headings: 23
+- Headings missing in canonical:
+  - Architecture Notes
+  - Claudius Maximus - Project Handoff Document
+  - Current Status (as of 2026-01-14)
+  - End Goal
+  - Environment
+  - Full run (requires ANTHROPIC_API_KEY)
+  - How to Run
+  - Important: No Data Truncation
+  - Key Files
+  - Known Issues / TODOs
+  - Pipeline Outputs
+  - Pipeline Scripts (All Ready)
+  - Post-Processing Pipeline (READY)
+  - Prerequisites
+  - Project Purpose
+  - Repository Structure
+  - Running the Pipeline
+  - Skip Logic (Critical Design Decision)
+  - Start Processing
+  - State Persistence
+  - Stop/Resume
+  - Test with sample (no Claude API needed)
+  - Workflow
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## Cladius Maximus__docs__CLAUDE.md
+- Size: 748 bytes
+- Headings: 2
+- Headings missing in canonical:
+  - ARCH-AEP Workflow (Agentic Remediation)
+  - Project Context
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## EDCTool__CLAUDE.md
+- Size: 6431 bytes
+- Headings: 25
+- Headings missing in canonical:
+  - Architecture Patterns
+  - Build
+  - Check git status
+  - Current Test Status
+  - Current Workstream
+  - Deferred Items
+  - EDCToolkit - Claude Code Project Handoff
+  - Findings Progress
+  - Import Error Detection (NEW - DEBUG-01)
+  - Key Fixes Applied
+  - MVP (Model-View-Presenter)
+  - Next Session Priority
+  - On Windows - clean temp files first (avoids flaky encoding tests)
+  - PRs Merged (Sessions 8-10)
+  - Project Structure
+  - Quick Start
+  - Refinement Remediation Status
+  - Repository Purpose
+  - Run tests (Windows)
+  - Session Resume Checklist
+  - Test
+  - Testability Patterns
+  - Useful Commands
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## EDCTool__docs__CLAUDE.md
+- Size: 748 bytes
+- Headings: 2
+- Headings missing in canonical:
+  - ARCH-AEP Workflow (Agentic Remediation)
+  - Project Context
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## EDCwayback__.claude__CLAUDE.md
+- Size: 4540 bytes
+- Headings: 28
+- Headings missing in canonical:
+  - CLI Usage
+  - Config Priority Chain
+  - Config management
+  - Configuration System (Phase 1.1)
+  - Core Application
+  - Current Development Phase
+  - Development Roadmap
+  - Documentation
+  - EDCwayback Project Context
+  - Encryption
+  - Environment Setup
+  - For browser tests (optional)
+  - For testing
+  - Full Plan
+  - Full test suite (requires playwright browser installation)
+  - Key Files
+  - Phase 1.1 Deliverables (All Complete)
+  - Recent Session (2026-01-13)
+  - Required
+  - Run capture jobs
+  - Run config and encryption tests (no playwright required)
+  - Testing
+  - Wave 1: Foundation + Forensic Core (Current)
+  - With config file
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## EDCwayback__docs__CLAUDE.md
+- Size: 748 bytes
+- Headings: 2
+- Headings missing in canonical:
+  - ARCH-AEP Workflow (Agentic Remediation)
+  - Project Context
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
+
+## myainewsbot.com__docs__CLAUDE.md
+- Size: 748 bytes
+- Headings: 2
+- Headings missing in canonical:
+  - ARCH-AEP Workflow (Agentic Remediation)
+  - Project Context
+- Headings missing in variant:
+  - AI Agent Orchestration Instructions
+  - Agent Types for This Project
+  - Alternative: Additional Parsers
+  - Background Agent Limitations (IMPORTANT!)
+  - Branch Tangling Warning (2026-01-14)
+  - CLI commands
+  - CRITICAL: Agent Orchestration Lessons Learned
+  - Check project status
+  - Code Style and Conventions
+  - Commands to Resume Work
+  - Completed Work
+  - Current Folder Structure
+  - Current State
+  - Docstrings
+  - Documentation Structure
+  - Exception Handling
+  - Forensic timestamp mode (captures audit trail)
+  - How to Run/Build/Test
+  - How to Use This Project with AI Agents
+  - Install dependencies
+  - Integration Improvements
+  - Key Technical Decisions
+  - Known Issues
+  - Linting
+  - Location
+  - Logging
+  - Naming Convention
+  - Next Steps
+  - Phase 12 - iMessage Parser (RECOMMENDED NEXT)
+  - Priority Input Formats
+  - Project Goals
+  - Project Overview
+  - RECOMMENDED APPROACH FOR FUTURE SESSIONS
+  - RSMF Format Summary
+  - RSMFConverter Project Context
+  - Reference Repositories
+  - Required Content
+  - Root Cause Analysis
+  - Run all tests (2825 tests)
+  - Run i18n tests
+  - Run parser tests
+  - Run specific test modules
+  - Running Agents in Parallel
+  - Session Logging Rules
+  - Technology Stack
+  - Test Slack conversion
+  - Test Teams conversion
+  - Test WhatsApp conversion with timezone and locale
+  - Test forensic timestamp mode
+  - Type Annotations
+  - Type checking
+  - What Happened
+  - WhatsApp conversion with timezone and locale
+  - When to Create Logs
