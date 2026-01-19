@@ -11,6 +11,8 @@ This manual ties the orchestration handoff system to the AEP workflow in `core/a
 - Use `core/arch/workflow.md` for the end-to-end AEP cycle.
 - Use `core/arch/scope-lock-template.md` to lock scope before a cycle.
 - Record master backlog using `core/arch/backlog-template.md`.
+- Apply `core/orchestrator/handoff/SPEC_FIRST_CHECKLIST.md` before implementation.
+- Capture an autonomy budget when scope or risk warrants it (`core/orchestrator/handoff/AUTONOMY_BUDGET.md`).
 
 ## Execution
 1) Create or select a task in TASKS with explicit acceptance criteria.

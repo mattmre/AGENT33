@@ -18,3 +18,4 @@ Use this document to track the next 2-4 weeks of orchestration priorities.
 ## Notes
 - Update weekly or when priorities shift.
 - Use session wrap to record priority changes.
+- Apply spec-first checklist for new priorities: `handoff/SPEC_FIRST_CHECKLIST.md`.
