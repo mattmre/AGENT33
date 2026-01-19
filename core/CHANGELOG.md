@@ -1,3 +1,9 @@
+## Template (for new entries)
+### Canonicalization Decisions
+| Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |
+| --- | --- | --- | --- | --- |
+| YYYY-MM-DD | core/<path> | collected/<repo>/<path>, ... |  |  |
+
 ## [Unreleased]
 ### Canonicalization Decisions
 | Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |
@@ -75,6 +81,7 @@
 | 2026-01-16 | core/orchestrator/handoff/TASKS.md | core/orchestrator/handoff/TASKS.md | Added acceptance criteria examples. |  |
 | 2026-01-16 | core/orchestrator/handoff/SESSION_WRAP.md | core/orchestrator/handoff/SESSION_WRAP.md | Added handoff checklist. |  |
 | 2026-01-16 | core/arch/verification-log.md | core/arch/verification-log.md | Added usage note for verification log. |  |
+| 2026-01-16 | core/research/agentic-orchestration-trends-2025H2.md | docs/research/agentic-orchestration-trends-2025H2.md | Promoted research doc to core for canonical reference. |  |
 | 2026-01-16 | core/orchestrator/handoff/EVIDENCE_CAPTURE.md | core/orchestrator/handoff/EVIDENCE_CAPTURE.md | Added evidence example. |  |
 | 2026-01-16 | core/orchestrator/handoff/REVIEW_CAPTURE.md | core/orchestrator/handoff/REVIEW_CAPTURE.md | Added risk trigger references. |  |
 | 2026-01-16 | core/arch/workflow.md | core/arch/workflow.md | Linked orchestration index. |  |
