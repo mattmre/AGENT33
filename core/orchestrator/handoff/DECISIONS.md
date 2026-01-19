@@ -1,4 +1,8 @@
-﻿# DECISIONS (Architecture Decision Log)
+# DECISIONS (Architecture Decision Log)
+
+## Related Handoff Docs
+- Spec-first checklist: `handoff/SPEC_FIRST_CHECKLIST.md`
+- Autonomy budget: `handoff/AUTONOMY_BUDGET.md`
 
 ## 2026-01-10: Separate repo + separate Ollama stack
 **Decision:** Keep a dedicated qwen_ollama container + volume and expose on port 11435.

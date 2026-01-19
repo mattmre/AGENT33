@@ -8,6 +8,10 @@ This directory defines a model-agnostic orchestration system. Any LLM or human a
 - `handoff/TASKS.md`: task queue and status.
 - `handoff/DECISIONS.md`: architectural decisions.
 - `handoff/PRIORITIES.md`: rolling priorities view.
+- `handoff/SPEC_FIRST_CHECKLIST.md`: spec-first checklist and sample spec.
+- `handoff/AUTONOMY_BUDGET.md`: autonomy budget template and escalation triggers.
+- `handoff/HARNESS_INITIALIZER.md`: initializer checklist + clean-state protocol.
+- `handoff/PROGRESS_LOG_FORMAT.md`: progress log format + rotation guidance.
 - `OPERATOR_MANUAL.md`: step-by-step operating guide.
 - `AGENT_ROUTING_MAP.md`: which roles to invoke by task type.
 - `CHEAT_SHEET.md`: one-page quick reference.
@@ -29,10 +33,11 @@ This directory defines a model-agnostic orchestration system. Any LLM or human a
 ## Quickstart
 1) Open `handoff/STATUS.md` to confirm runtime assumptions.
 2) Read `handoff/PLAN.md` for objectives and constraints.
-3) Check `handoff/PRIORITIES.md` and pick a task from `handoff/TASKS.md`.
-4) If risk triggers apply, use `handoff/REVIEW_CAPTURE.md` and `handoff/REVIEW_CHECKLIST.md`.
-5) Capture evidence with `handoff/EVIDENCE_CAPTURE.md`.
-6) Close the task using `handoff/DEFINITION_OF_DONE.md`.
+3) Use `handoff/SPEC_FIRST_CHECKLIST.md` to lock scope and acceptance criteria.
+4) Check `handoff/PRIORITIES.md` and pick a task from `handoff/TASKS.md`.
+5) If risk triggers apply, use `handoff/REVIEW_CAPTURE.md` and `handoff/REVIEW_CHECKLIST.md`.
+6) Capture evidence with `handoff/EVIDENCE_CAPTURE.md`.
+7) Close the task using `handoff/DEFINITION_OF_DONE.md`.
 
 ## Task Evidence Quick Checklist
 - Commands recorded

@@ -11,6 +11,14 @@ This repo captures a model-agnostic orchestration protocol. STATUS should record
 - Local runtime available (or specified alternative).
 - Repo in expected state (no unknown dirty changes).
 - Required environment variables documented.
+
+## Spec-First + Autonomy
+- Spec-first checklist: `handoff/SPEC_FIRST_CHECKLIST.md`
+- Autonomy budget template: `handoff/AUTONOMY_BUDGET.md`
+
+## Runtime Protocols
+- Harness initializer + clean-state protocol: `handoff/HARNESS_INITIALIZER.md`
+- Progress log format + rotation: `handoff/PROGRESS_LOG_FORMAT.md`
 ## Local Runtime (example)
 - Local LLM runtime on localhost:11435
 - Containerized deployment with persistent model volume
@@ -54,3 +62,7 @@ Test:
 - TASKS.md: task queue and status.
 - DECISIONS.md: architecture decisions and rationale.
 - PRIORITIES.md: rolling horizon priorities.
+- SPEC_FIRST_CHECKLIST.md: spec-first workflow checklist + sample spec.
+- AUTONOMY_BUDGET.md: scope and escalation template per task.
+- HARNESS_INITIALIZER.md: initializer steps and clean-state protocol.
+- PROGRESS_LOG_FORMAT.md: progress log fields + rotation guidance.

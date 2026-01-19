@@ -27,6 +27,13 @@ Local multi-agent workflow using:
   - diff produced + merged or ready for PR
 - Any new agent can open STATUS.md + PLAN.md + TASKS.md and continue in <5 minutes.
 
+## Spec-First Workflow
+- Use `handoff/SPEC_FIRST_CHECKLIST.md` before implementation.
+- Attach the checklist (or a link) in TASKS entries.
+
+## Autonomy Budget
+- Complete `handoff/AUTONOMY_BUDGET.md` for any task with elevated risk or scope.
+
 ## Minimum Required Artifacts
 - Updated TASKS entry with acceptance criteria and verification steps.
 - Evidence capture (commands + outcomes).
