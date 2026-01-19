@@ -1,8 +1,8 @@
-# RSMFConverter Documentation Index
+# AGENT-33 Documentation Index
 
 ## Project Overview
 
-RSMFConverter is an open-source tool for converting various messaging formats to Relativity Short Message Format (RSMF) for eDiscovery purposes.
+AGENT-33 is a master aggregation repo for model-agnostic orchestration workflows, agent guidance, and reusable governance assets.
 
 ---
 
@@ -10,10 +10,10 @@ RSMFConverter is an open-source tool for converting various messaging formats to
 
 | Document | Description |
 |----------|-------------|
-| [Master Roadmap](roadmap/00-MASTER-ROADMAP.md) | Overall project vision and architecture |
-| [RSMF Specification](research/01-RSMF-SPECIFICATION.md) | Technical RSMF format details |
-| [Competitor Analysis](research/02-COMPETITOR-ANALYSIS.md) | Market analysis of competing tools |
-| [Quick Start Tasks](agent-tasks/QUICK-START-TASKS.md) | Ready-to-implement tasks |
+| [Orchestration Index](ORCHESTRATION_INDEX.md) | Entry point for orchestration workflows |
+| [Core README](README.md) | Canonical core structure and usage |
+| [Phase Planning](../docs/phase-planning.md) | AGENT-33 development phases |
+| [Phase Index](../docs/phases/README.md) | AGENT-33 phase list and sequencing |
 
 ---
 
@@ -21,83 +21,23 @@ RSMFConverter is an open-source tool for converting various messaging formats to
 
 | Document | Description |
 |----------|-------------|
-| [01-RSMF-SPECIFICATION.md](research/01-RSMF-SPECIFICATION.md) | Complete RSMF 2.0 technical specification |
-| [02-COMPETITOR-ANALYSIS.md](research/02-COMPETITOR-ANALYSIS.md) | Analysis of Message Crawler, ReadySuite, Cellebrite, Axiom, etc. |
-| [03-INPUT-FORMATS.md](research/03-INPUT-FORMATS.md) | Supported input formats (Slack, Teams, WhatsApp, etc.) |
-| [04-EDISCOVERY-CHALLENGES.md](research/04-EDISCOVERY-CHALLENGES.md) | Common eDiscovery challenges and solutions |
-| [05-FEATURE-COMPARISON-MATRIX.md](research/05-FEATURE-COMPARISON-MATRIX.md) | Feature comparison across all tools |
+| [Agentic Orchestration Trends 2025H2](research/agentic-orchestration-trends-2025H2.md) | Industry trends and guidance for agentic coding |
 
 ---
 
-## Roadmap Documents
+## Phase Templates (Generic)
 
 | Document | Description |
 |----------|-------------|
-| [00-MASTER-ROADMAP.md](roadmap/00-MASTER-ROADMAP.md) | Master roadmap with 40 phases |
+| [Phase Templates](phases/README.md) | Generic, reusable phase outlines (examples) |
 
 ---
 
-## Phase Documents (40 Phases)
+## AGENT-33 Phase Plan
 
-### Foundation (Phases 1-8)
-| Phase | Title | Priority |
-|-------|-------|----------|
-| [01](phases/PHASE-01-PROJECT-FOUNDATION.md) | Project Foundation | P0 |
-| [02](phases/PHASE-02-DATA-MODELS.md) | Data Models | P0 |
-| [03](phases/PHASE-03-PARSER-FRAMEWORK.md) | Parser Framework | P0 |
-| [04](phases/PHASE-04-RSMF-WRITER.md) | RSMF Writer Core | P0 |
-| [05](phases/PHASE-05-VALIDATION-ENGINE.md) | Validation Engine | P0 |
-| [06](phases/PHASE-06-CLI-FOUNDATION.md) | CLI Foundation | P0 |
-| [07](phases/PHASE-07-ERROR-HANDLING.md) | Error Handling | P1 |
-| [08](phases/PHASE-08-LOGGING-TELEMETRY.md) | Logging & Telemetry | P1 |
-
-### Input Parsers (Phases 9-20)
-| Phase | Title | Priority |
-|-------|-------|----------|
-| [09](phases/PHASE-09-WHATSAPP-PARSER.md) | WhatsApp Parser | P0 |
-| [10](phases/PHASE-10-SLACK-PARSER.md) | Slack Parser | P0 |
-| [11](phases/PHASE-11-TEAMS-PARSER.md) | Microsoft Teams Parser | P0 |
-| [12](phases/PHASE-12-IMESSAGE-PARSER.md) | iMessage/SMS Parser | P0 |
-| [13](phases/PHASE-13-DISCORD-PARSER.md) | Discord Parser | P1 |
-| [14](phases/PHASE-14-TELEGRAM-PARSER.md) | Telegram Parser | P1 |
-| [15](phases/PHASE-15-FACEBOOK-PARSER.md) | Facebook Messenger Parser | P1 |
-| [16](phases/PHASE-16-CELLEBRITE-PARSER.md) | Cellebrite UFDR Parser | P0 |
-| [17](phases/PHASE-17-AXIOM-PARSER.md) | Magnet Axiom Parser | P1 |
-| [18](phases/PHASE-18-GENERIC-PARSERS.md) | Generic Format Parsers | P0 |
-| [19](phases/PHASE-19-GOOGLE-CHAT-PARSER.md) | Google Chat/Hangouts Parser | P1 |
-| [20](phases/PHASE-20-ADDITIONAL-PARSERS.md) | Additional Parsers | P2 |
-
-### Output & Export (Phases 21-24)
-| Phase | Title | Priority |
-|-------|-------|----------|
-| [21](phases/PHASE-21-SLICING-ENGINE.md) | RSMF Slicing Engine | P0 |
-| [22](phases/PHASE-22-PDF-GENERATION.md) | Enhanced PDF Generation | P0 |
-| [23](phases/PHASE-23-EXPORT-FORMATS.md) | Additional Export Formats | P1 |
-| [24](phases/PHASE-24-DEDUPLICATION.md) | Deduplication Engine | P1 |
-
-### User Interfaces (Phases 25-30)
-| Phase | Title | Priority |
-|-------|-------|----------|
-| [25](phases/PHASE-25-REST-API.md) | REST API | P0 |
-| [26](phases/PHASE-26-WEB-UI-FOUNDATION.md) | Web UI Foundation | P1 |
-| [27](phases/PHASE-27-WEB-UI-FEATURES.md) | Web UI Advanced Features | P1 |
-| [28](phases/PHASE-28-CLI-ENHANCEMENTS.md) | CLI Enhancements | P1 |
-| [29](phases/PHASE-29-PYTHON-SDK.md) | Python SDK | P0 |
-| [30](phases/PHASE-30-INTEGRATIONS.md) | External Integrations | P1 |
-
-### Advanced Features (Phases 31-40)
-| Phase | Title | Priority |
-|-------|-------|----------|
-| [31](phases/PHASE-31-AI-INTEGRATION.md) | AI Integration Foundation | P1 |
-| [32](phases/PHASE-32-AI-FEATURES.md) | Advanced AI Features | P2 |
-| [33](phases/PHASE-33-ANALYTICS-ENGINE.md) | Analytics Engine | P1 |
-| [34](phases/PHASE-34-PLUGIN-SYSTEM.md) | Plugin System | P1 |
-| [35](phases/PHASE-35-PERFORMANCE.md) | Performance Optimization | P0 |
-| [36](phases/PHASE-36-ENTERPRISE-FEATURES.md) | Enterprise Features | P1 |
-| [37](phases/PHASE-37-TESTING-QA.md) | Testing & QA | P0 |
-| [38](phases/PHASE-38-DOCUMENTATION.md) | Documentation | P0 |
-| [39](phases/PHASE-39-COMMUNITY.md) | Community & Ecosystem | P1 |
-| [40](phases/PHASE-40-POLISH-LAUNCH.md) | Polish & Launch | P0 |
+The canonical AGENT-33 phases live in `docs/phases/`.
+Use the phase index for sequencing and dependency order:
+`../docs/phases/README.md`
 
 ---
 
@@ -106,7 +46,6 @@ RSMFConverter is an open-source tool for converting various messaging formats to
 | Document | Description |
 |----------|-------------|
 | [AGENT-IMPLEMENTATION-GUIDE.md](agent-tasks/AGENT-IMPLEMENTATION-GUIDE.md) | Guide for AI agents implementing features |
-| [QUICK-START-TASKS.md](agent-tasks/QUICK-START-TASKS.md) | Ready-to-implement tasks organized by tier |
 
 ---
 
@@ -148,12 +87,9 @@ RSMFConverter is an open-source tool for converting various messaging formats to
 
 | Metric | Value |
 |--------|-------|
-| Total Phases | 40 |
-| Total Features | ~600 |
-| Input Formats | 25+ |
-| Output Formats | 8+ |
-| Research Documents | 5 |
-| Agent Task Documents | 2 |
+| Total Phase Templates | 40 |
+| AGENT-33 Phases | 10 |
+| Research Documents | 1 |
 
 ---
 
@@ -184,4 +120,4 @@ This documentation should be updated as:
 - New research is conducted
 - Community feedback is incorporated
 
-Last Updated: 2026-01-13
+Last Updated: 2026-01-16

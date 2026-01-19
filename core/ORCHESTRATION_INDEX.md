@@ -18,6 +18,18 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/orchestrator/handoff/SESSION_WRAP.md`
 - `core/orchestrator/handoff/PRIORITIES.md`
 
+## Policy Pack
+- `core/packs/policy-pack-v1/AGENTS.md`
+- `core/packs/policy-pack-v1/ORCHESTRATION.md`
+- `core/packs/policy-pack-v1/EVIDENCE.md`
+- `core/packs/policy-pack-v1/RISK_TRIGGERS.md`
+- `core/packs/policy-pack-v1/ACCEPTANCE_CHECKS.md`
+- `core/packs/policy-pack-v1/PROMOTION_GUIDE.md`
+
+## Tool Governance
+- `core/orchestrator/TOOL_GOVERNANCE.md`
+- `core/orchestrator/TOOLS_AS_CODE.md`
+
 ## AEP Workflow
 - `core/arch/workflow.md`
 - `core/arch/templates.md`

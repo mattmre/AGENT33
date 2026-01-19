@@ -2,151 +2,50 @@
 
 ## Overview
 - **Phase**: 36 of 40
-- **Category**: Advanced Features
-- **Release Target**: v2.2
-- **Estimated Sprints**: 2
+- **Category**: Enterprise
+- **Release Target**: TBD
+- **Estimated Sprints**: TBD
 
 ## Objectives
-Implement features required for enterprise deployment and compliance.
+- Implement governance, compliance, and auditability.
+- Support permissions and multi-tenant configuration.
+- Provide operational controls for enterprise deployments.
+- Focus: Governance, compliance, multi-tenant support.
 
----
+## Scope Outline
+- Planning: confirm requirements, inputs/outputs, and success metrics.
+- Implementation: build minimal, composable components and integration seams.
+- Validation: create deterministic tests and fixtures, capture evidence.
+- Documentation: add concise usage notes and examples.
 
-## Features (12 items)
-
-### 36.1 Multi-Tenancy
-**Priority**: P1 | **Complexity**: High
-- Tenant isolation
-- Resource quotas
-- Configuration per tenant
-- Data segregation
-
-### 36.2 Role-Based Access Control
-**Priority**: P0 | **Complexity**: High
-- Role definitions
-- Permission system
-- API access control
-- UI access control
-
-### 36.3 Audit Logging
-**Priority**: P0 | **Complexity**: Medium
-- Comprehensive audit trail
-- Immutable logs
-- Log export
-- Compliance reporting
-
-### 36.4 Encryption at Rest
-**Priority**: P0 | **Complexity**: Medium
-- Encrypt stored data
-- Key management
-- Rotation support
-- Compliance modes
-
-### 36.5 Encryption in Transit
-**Priority**: P0 | **Complexity**: Low
-- TLS enforcement
-- Certificate management
-- Cipher configuration
-- HTTPS only
-
-### 36.6 SSO Integration
-**Priority**: P1 | **Complexity**: High
-- SAML support
-- OIDC support
-- Active Directory
-- MFA support
-
-### 36.7 LDAP Integration
-**Priority**: P2 | **Complexity**: Medium
-- LDAP authentication
-- Group mapping
-- User sync
-- Configuration
-
-### 36.8 High Availability
-**Priority**: P1 | **Complexity**: High
-- Clustered deployment
-- Load balancing
-- Failover support
-- Session management
-
-### 36.9 Disaster Recovery
-**Priority**: P1 | **Complexity**: Medium
-- Backup procedures
-- Restore procedures
-- RTO/RPO targets
-- Documentation
-
-### 36.10 Compliance Features
-**Priority**: P1 | **Complexity**: Medium
-- GDPR support
-- HIPAA considerations
-- Data retention
-- Right to erasure
-
-### 36.11 SLA Monitoring
-**Priority**: P2 | **Complexity**: Medium
-- SLA metrics
-- Alerting
-- Dashboards
-- Reporting
-
-### 36.12 Enterprise Tests
-**Priority**: P0 | **Complexity**: High
-- Security tests
-- Compliance tests
-- HA tests
-- Integration tests
-
----
+## Deliverables
+- Access control and audit logging patterns.
+- Compliance documentation and checklists.
+- Enterprise configuration templates.
 
 ## Acceptance Criteria
+- [ ] Audit trails are complete and tamper-evident.
+- [ ] Access controls are enforced and tested.
+- [ ] Deployment guidance reflects enterprise constraints.
 
-- [ ] RBAC fully functional
-- [ ] Audit logging comprehensive
-- [ ] Encryption working
-- [ ] SSO operational
-- [ ] HA deployment works
-- [ ] 90%+ test coverage
+## Dependencies
+- Phase 35
 
----
+## Blocks
+- Phase 37
 
-## Technical Notes
+## Orchestration Guidance
+- Review compliance requirements before coding.
+- Include security review in acceptance checks.
+- Capture audit event examples.
 
-### RBAC Model
-```python
-class Role(Enum):
-    ADMIN = "admin"
-    CONVERTER = "converter"
-    VIEWER = "viewer"
-    AUDITOR = "auditor"
+## Coding Direction
+- Use least-privilege defaults.
+- Keep audit schemas stable.
+- Avoid tenant-specific hardcoding.
 
-class Permission(Enum):
-    CONVERT = "convert"
-    VALIDATE = "validate"
-    VIEW = "view"
-    CONFIGURE = "configure"
-    AUDIT = "audit"
-```
-
-### Audit Log Format
-```json
-{
-  "timestamp": "2024-01-15T09:30:00Z",
-  "user": "user@example.com",
-  "action": "convert",
-  "resource": "slack_export.zip",
-  "result": "success",
-  "details": {...},
-  "ip_address": "192.168.1.1"
-}
-```
-
-### Encryption Configuration
-```yaml
-security:
-  encryption:
-    at_rest: true
-    algorithm: AES-256-GCM
-    key_provider: aws-kms  # or local, vault
-    key_id: "alias/rsmfconverter"
-```
+## Review Checklist
+- [ ] Interfaces/contracts reviewed and approved.
+- [ ] Tests/fixtures added with evidence.
+- [ ] Documentation updated and verified.
+- [ ] Scope remains within this phase only.

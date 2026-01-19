@@ -7,6 +7,8 @@ Use these criteria to decide whether a workflow or template should move from `co
 - It documents a standard quality gate (tests, lint, security checks).
 - It does not hardcode repo-specific paths or secrets.
 - It matches the model-agnostic orchestration intent.
+- It includes acceptance checks and verification evidence.
+- It includes a brief security posture note (risk triggers, approvals).
 
 ## Keep in sources if
 - It deploys a specific product or service.
@@ -16,10 +18,14 @@ Use these criteria to decide whether a workflow or template should move from `co
 ## How to promote
 1) Compare with existing canonical files.
 2) Normalize names and paths for generic use.
-3) Update `core/workflows/README.md` and `core/CHANGELOG.md`.
+3) Capture rationale, acceptance checks, and evidence references.
+4) Update `core/workflows/README.md` and `core/CHANGELOG.md`.
 
 ## Promotion Decision Log (Template)
 - Date:
 - Candidate file:
 - Decision: Promote / Keep in sources
 - Rationale:
+- Acceptance checks:
+- Evidence:
+- Security notes:

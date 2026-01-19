@@ -1,140 +1,51 @@
-# Phase 35: Performance Optimization
+# Phase 35: Performance & Scalability
 
 ## Overview
 - **Phase**: 35 of 40
-- **Category**: Advanced Features
-- **Release Target**: v2.2
-- **Estimated Sprints**: 2
+- **Category**: Performance
+- **Release Target**: TBD
+- **Estimated Sprints**: TBD
 
 ## Objectives
-Optimize performance for handling large-scale data efficiently.
+- Identify hot paths and establish budgets.
+- Provide reproducible benchmarks.
+- Improve scalability for large workloads.
+- Focus: Benchmarks, budgets, hot-path optimization.
 
----
+## Scope Outline
+- Planning: confirm requirements, inputs/outputs, and success metrics.
+- Implementation: build minimal, composable components and integration seams.
+- Validation: create deterministic tests and fixtures, capture evidence.
+- Documentation: add concise usage notes and examples.
 
-## Features (12 items)
-
-### 35.1 Profiling Infrastructure
-**Priority**: P0 | **Complexity**: Medium
-- Built-in profiling
-- Memory profiling
-- CPU profiling
-- I/O profiling
-
-### 35.2 Streaming Processing
-**Priority**: P0 | **Complexity**: High
-- Stream large files
-- Memory-efficient parsing
-- Incremental output
-- Progress reporting
-
-### 35.3 Parallel Processing
-**Priority**: P0 | **Complexity**: High
-- Multi-threaded parsing
-- Process pool for CPU
-- Async I/O operations
-- Work distribution
-
-### 35.4 Memory Optimization
-**Priority**: P0 | **Complexity**: High
-- Reduce memory footprint
-- Object pooling
-- Lazy loading
-- Garbage collection tuning
-
-### 35.5 Caching System
-**Priority**: P1 | **Complexity**: Medium
-- Result caching
-- Parser state caching
-- Validation caching
-- Cache invalidation
-
-### 35.6 Database Backend
-**Priority**: P1 | **Complexity**: High
-- SQLite for large data
-- Indexed queries
-- Batch operations
-- Transaction support
-
-### 35.7 Compression Support
-**Priority**: P1 | **Complexity**: Medium
-- Compressed RSMF reading
-- Compressed output option
-- Streaming compression
-- Multiple formats
-
-### 35.8 Batch Optimization
-**Priority**: P1 | **Complexity**: Medium
-- Optimized batch processing
-- Resource management
-- Parallel batches
-- Progress aggregation
-
-### 35.9 I/O Optimization
-**Priority**: P1 | **Complexity**: Medium
-- Buffered I/O
-- Async file operations
-- Network I/O optimization
-- Disk usage optimization
-
-### 35.10 Benchmark Suite
-**Priority**: P0 | **Complexity**: Medium
-- Performance benchmarks
-- Regression detection
-- Comparison baselines
-- CI integration
-
-### 35.11 Performance Tuning Guide
-**Priority**: P1 | **Complexity**: Low
-- Configuration guide
-- Best practices
-- Troubleshooting
-- Case studies
-
-### 35.12 Performance Tests
-**Priority**: P0 | **Complexity**: High
-- Load tests
-- Stress tests
-- Memory tests
-- Regression tests
-
----
+## Deliverables
+- Benchmark suite and baseline metrics.
+- Optimizations with before/after evidence.
+- Performance regression tests.
 
 ## Acceptance Criteria
+- [ ] Benchmarks are reproducible and automated.
+- [ ] No regressions versus baseline budgets.
+- [ ] Performance changes are documented.
 
-- [ ] 3000+ messages/second
-- [ ] <500MB for 100K messages
-- [ ] Parallel processing works
-- [ ] Streaming handles large files
-- [ ] Benchmarks pass
-- [ ] No performance regressions
+## Dependencies
+- Phase 34
 
----
+## Blocks
+- Phase 36
 
-## Technical Notes
+## Orchestration Guidance
+- Define baseline metrics before optimization.
+- Capture evidence for each change.
+- Review performance diffs carefully.
 
-### Parallel Processing
-```python
-from concurrent.futures import ProcessPoolExecutor
+## Coding Direction
+- Avoid premature optimization.
+- Keep changes readable and test-backed.
+- Prefer algorithmic wins over micro-optimizations.
 
-async def parallel_convert(files: list[Path]) -> list[RSMFDocument]:
-    with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-        futures = [executor.submit(convert_file, f) for f in files]
-        return [f.result() for f in as_completed(futures)]
-```
-
-### Streaming Parser
-```python
-class StreamingParser:
-    def parse_stream(self, source: InputSource) -> Iterator[Event]:
-        for chunk in source.read_chunks(size=1024*1024):
-            for event in self.parse_chunk(chunk):
-                yield event
-```
-
-### Benchmark Targets
-| Metric | Target | Critical |
-|--------|--------|----------|
-| Parse rate | 3000 msg/s | 1000 msg/s |
-| Memory/100K | 500 MB | 1 GB |
-| Startup time | 2s | 5s |
-| API p95 | 100ms | 500ms |
+## Review Checklist
+- [ ] Interfaces/contracts reviewed and approved.
+- [ ] Tests/fixtures added with evidence.
+- [ ] Documentation updated and verified.
+- [ ] Scope remains within this phase only.
