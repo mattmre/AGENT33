@@ -18,7 +18,7 @@ This manual ties the orchestration handoff system to the AEP workflow in `core/a
 1) Create or select a task in TASKS with explicit acceptance criteria.
 2) Assign owner, branch name, and verification steps.
 3) Implement minimal changes and run tests.
-4) Capture reviewer output if risk triggers apply.
+4) If review inputs exist, follow `core/orchestrator/REVIEW_INTAKE.md` and capture output in `core/orchestrator/handoff/REVIEW_CAPTURE.md`.
 5) Close task using the DoD checklist.
 
 ## Verification and Logging
@@ -29,6 +29,10 @@ This manual ties the orchestration handoff system to the AEP workflow in `core/a
 ## Model-Agnostic Guidance
 - Do not assume any single model or tool.
 - If a task requires a specific tool or model, note it in TASKS.
+
+## Tool Governance
+- Follow `core/orchestrator/TOOL_GOVERNANCE.md` before adding tools or MCP servers.
+- Use `core/orchestrator/TOOLS_AS_CODE.md` for progressive disclosure and tooling structure.
 
 ## Orchestration Consistency Checklist
 - TASKS updated with acceptance criteria and verification steps.
