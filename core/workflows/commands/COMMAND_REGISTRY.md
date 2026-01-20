@@ -36,7 +36,7 @@ outputs:             # Produced artifacts
 | description | Review current STATUS.md and surface blockers |
 | workflow | `commands/status.md` |
 | triggers | manual |
-| inputs | `handoff/STATUS.md`, `handoff/TASKS.md`, `handoff/PLAN.md` |
+| inputs | `handoff/STATUS.md`, `handoff/TASKS.md`, `handoff/PLAN.md`, `handoff/PRIORITIES.md` |
 | outputs | Summary report (stdout) |
 
 ---
@@ -50,7 +50,7 @@ outputs:             # Produced artifacts
 | description | List open tasks from TASKS.md with priorities |
 | workflow | `commands/tasks.md` |
 | triggers | manual |
-| inputs | `handoff/TASKS.md`, `handoff/PRIORITIES.md` |
+| inputs | `handoff/TASKS.md`, `handoff/PRIORITIES.md`, `handoff/DEFINITION_OF_DONE.md` |
 | outputs | Task list (stdout) |
 
 ---
@@ -78,7 +78,7 @@ outputs:             # Produced artifacts
 | description | Generate session wrap summary for next session |
 | workflow | `commands/handoff.md` |
 | triggers | manual |
-| inputs | `handoff/STATUS.md`, `handoff/TASKS.md`, `handoff/DECISIONS.md` |
+| inputs | `handoff/STATUS.md`, `handoff/TASKS.md`, `handoff/DECISIONS.md`, `handoff/PLAN.md`, `handoff/PRIORITIES.md` |
 | outputs | `handoff/SESSION_WRAP.md` (append) |
 
 ---
@@ -92,8 +92,8 @@ outputs:             # Produced artifacts
 | description | Create implementation plan with confirmation wait |
 | workflow | `commands/plan.md` |
 | triggers | manual |
-| inputs | User request, `handoff/TASKS.md` |
-| outputs | `handoff/PLAN.md` (update) |
+| inputs | User request, `handoff/TASKS.md`, `handoff/PLAN.md`, `handoff/PRIORITIES.md`, `ACCEPTANCE_CHECKS.md` |
+| outputs | `handoff/PLAN.md` (update), `handoff/TASKS.md` (append) |
 
 ---
 
@@ -106,7 +106,7 @@ outputs:             # Produced artifacts
 | description | Trigger code review workflow |
 | workflow | `commands/review.md` |
 | triggers | manual, event (PR opened) |
-| inputs | Code diff, `RISK_TRIGGERS.md` |
+| inputs | Code diff, `RISK_TRIGGERS.md`, `AGENT_ROUTING_MAP.md`, `TWO_LAYER_REVIEW.md`, `REVIEW_CHECKLIST.md` |
 | outputs | `handoff/REVIEW_CAPTURE.md` (append) |
 
 ---
