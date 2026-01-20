@@ -46,3 +46,13 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/hooks/README.md`
 - `core/workflows/hooks/HOOK_REGISTRY.md`
 - `core/workflows/hooks/examples/evidence-capture-hook.md`
+
+## Commands
+- `core/workflows/commands/README.md`
+- `core/workflows/commands/COMMAND_REGISTRY.md`
+- `core/workflows/commands/status.md`
+- `core/workflows/commands/tasks.md`
+- `core/workflows/commands/verify.md`
+- `core/workflows/commands/handoff.md`
+- `core/workflows/commands/plan.md`
+- `core/workflows/commands/review.md`
