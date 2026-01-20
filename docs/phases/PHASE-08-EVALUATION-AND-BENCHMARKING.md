@@ -53,7 +53,7 @@
 - Preserve golden artifacts for regression checks.
 
 ## Review Checklist
-- [ ] Interfaces/contracts reviewed and approved.
-- [ ] Tests/fixtures or evidence added.
-- [ ] Documentation updated and verified.
-- [ ] Scope remains within this phase only.
+- [x] Interfaces/contracts reviewed and approved.
+- [x] Tests/fixtures or evidence added.
+- [x] Documentation updated and verified.
+- [x] Scope remains within this phase only.
