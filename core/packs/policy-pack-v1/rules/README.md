@@ -43,7 +43,7 @@ Example override file:
 # Rules Override
 
 ## Disabled Rules
-- `coding-style.md#file-size-limits` - Legacy codebase with large files
+- `coding-style.md#3-file-size-limits` - Legacy codebase with large files
 
 ## Extended Rules
 - Require TypeScript strict mode for all new files
