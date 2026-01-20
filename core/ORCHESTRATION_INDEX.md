@@ -41,3 +41,8 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/README.md`
 - `core/workflows/PROMOTION_CRITERIA.md`
 - `core/workflows/SOURCES_INDEX.md`
+
+## Hooks
+- `core/workflows/hooks/README.md`
+- `core/workflows/hooks/HOOK_REGISTRY.md`
+- `core/workflows/hooks/examples/evidence-capture-hook.md`
