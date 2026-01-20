@@ -39,6 +39,7 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 ## Tool Governance
 - `core/orchestrator/TOOL_GOVERNANCE.md`
 - `core/orchestrator/TOOLS_AS_CODE.md`
+- `core/orchestrator/QWEN_CODE_TOOL_PROTOCOL.md`
 
 ## AEP Workflow
 - `core/arch/workflow.md`
