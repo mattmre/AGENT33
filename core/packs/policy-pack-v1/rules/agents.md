@@ -62,12 +62,11 @@ Related docs:
 - API contract changes
 
 ### Parallel Coordination
-```
+
 1. Define clear boundaries for each agent
 2. Specify non-overlapping file scopes
 3. Establish merge order if needed
 4. Plan conflict resolution
-```
 
 ---
 

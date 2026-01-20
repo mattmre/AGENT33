@@ -23,12 +23,11 @@ Related docs:
 - Clear temporary context regularly
 
 ### Context Hierarchy
-```
+
 1. Current task scope (highest priority)
 2. Related files and dependencies
 3. Project conventions and patterns
 4. General knowledge (lowest priority)
-```
 
 ---
 
@@ -153,13 +152,12 @@ Avoid:
 - Rework rate
 
 ### Efficiency Targets
-```
-Optimal:
+
+**Optimal:**
 - Single read per file (unless modified)
 - Minimal search iterations
 - Focused context (< 50% capacity)
 - Zero scope creep
-```
 
 ---
 
