@@ -1,7 +1,6 @@
 ﻿# TASKS
 
 ## Queue (unassigned)
-- [ ] T1: Create/update orchestration protocol files in repo and validate Qwen Code tool usage.
 - [ ] T2: Add warmup/pin script and confirm model stays hot for 30+ minutes.
 - [ ] T3: Run a small "real task" in this repo (e.g., improve scripts, README, add diagnostics).
 
@@ -18,6 +17,12 @@
 
 ### Bootstrap
 - [x] Bootstrap orchestration files created (this commit)
+
+### T1 - Orchestration Protocols
+- [x] T1: Create/update orchestration protocol files and validate Qwen Code tool usage
+  - Evidence: `core/orchestrator/QWEN_CODE_TOOL_PROTOCOL.md` (invocation schema, validation checklist, error handling, model pinning/warmup)
+  - Evidence: `core/orchestrator/agents/QWEN_WORKER_RULES.md` (code tool usage, output validation, error patterns)
+  - Evidence: `core/ORCHESTRATION_INDEX.md` (updated with new protocol file)
 
 ### Phase 3
 - [x] T4 (Phase 3): Spec-first workflow consolidation (spec-first checklist + handoff links; review pending)
