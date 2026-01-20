@@ -15,7 +15,7 @@ Commands serve as:
 |------------|---------|-------------|
 | Lowercase | `/status` | All command names use lowercase |
 | Single word | `/verify` | Prefer single-word names when possible |
-| Hyphenated | `/code-review` | Multi-word commands use hyphens |
+| Hyphenated | `/review` | Multi-word commands use hyphens |
 | No prefix | `status` | Registry IDs omit the `/` prefix |
 
 ## Integration with AGENT-33 Orchestration
