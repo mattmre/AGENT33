@@ -19,6 +19,20 @@ Purpose: Provide a model-agnostic baseline for how agents should operate in any 
 - Network: off by default; allowlist if approved.
 - Stop conditions: ambiguity, failing tests, scope expansion.
 
+## Knowledge Management
+
+Agents should follow the memory protocol for autonomous knowledge operations:
+
+- **Protocol**: `core/agents/AGENT_MEMORY_PROTOCOL.md`
+- **Relationships**: `core/orchestrator/RELATIONSHIP_TYPES.md`
+- **Artifact Index**: `core/ARTIFACT_INDEX.md`
+
+Key behaviors:
+- Search artifacts before starting tasks
+- Store reusable insights in CHANGELOG or agent memory
+- Create relationship links between discovered artifacts
+- Mark deprecated artifacts with `supersedes` links
+
 ## Modular Rules
 
 Detailed rules are organized in the `rules/` subdirectory for easier customization:
@@ -31,3 +45,12 @@ Detailed rules are organized in the `rules/` subdirectory for easier customizati
 | `rules/coding-style.md` | File organization, immutability, documentation |
 
 See `rules/README.md` for customization guidance and per-project overrides.
+
+## Relationships
+
+| Type | Target | Notes |
+|------|--------|-------|
+| depends-on | `core/agents/AGENT_MEMORY_PROTOCOL.md` | Knowledge management protocol |
+| depends-on | `core/orchestrator/RELATIONSHIP_TYPES.md` | Relationship taxonomy |
+| exemplifies | `core/orchestrator/README.md` | Orchestration system entry point |
+| explains | Agent autonomy patterns | Governance for agent behavior |

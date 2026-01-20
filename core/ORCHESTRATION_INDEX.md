@@ -68,6 +68,11 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/hooks/examples/session-end-handoff-hook.md`
 - `core/workflows/hooks/examples/scope-validation-hook.md`
 
+## Agent Memory
+- `core/agents/AGENT_MEMORY_PROTOCOL.md`
+- `core/orchestrator/RELATIONSHIP_TYPES.md`
+- `core/ARTIFACT_INDEX.md`
+
 ## Commands
 - `core/workflows/commands/README.md`
 - `core/workflows/commands/COMMAND_REGISTRY.md`

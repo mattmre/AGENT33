@@ -5,7 +5,27 @@
 2) Most complete (coverage of sections/templates)
 3) Most widely referenced across repos
 
+## Immutability Principle
+- **`collected/` is immutable**: Raw ingests are never modified after initial capture.
+- All refinements create new artifacts in `core/` with `supersedes` relationships.
+- Provenance chain: collected → core → distributed repos.
+
 ## Conflict Handling
 - Preserve both in `collected/`
 - Create a merged canonical version in `core/`
-- Record rationale in `core/CHANGELOG.md` (planned)
+- Record rationale in `core/CHANGELOG.md`
+- Add `supersedes` relationship link when replacing artifacts
+
+## Relationship Types
+When canonicalizing, document relationships:
+- `derived-from`: canonical artifact → source in collected/
+- `supersedes`: new version → deprecated version
+- See `core/orchestrator/RELATIONSHIP_TYPES.md` for full taxonomy
+
+## Relationships
+
+| Type | Target | Notes |
+|------|--------|-------|
+| depends-on | `core/orchestrator/RELATIONSHIP_TYPES.md` | Relationship taxonomy |
+| explains | Canonicalization workflow | Immutability and provenance rules |
+| contextualizes | `sync-plan.md` | Related sync policies |

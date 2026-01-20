@@ -5,6 +5,28 @@
 | YYYY-MM-DD | core/<path> | collected/<repo>/<path>, ... |  |  |
 
 ## [Unreleased]
+
+### Research Intake
+| Date | Action | Source | Target | Rationale | Relationships |
+| --- | --- | --- | --- | --- | --- |
+| 2026-01-20 | Research dossier created | petabridge/memorizer-v1 (dev branch) | docs/research/repo_dossiers/memorizer__petabridge__memorizer-v1.md | Competitive research for extensibility patterns | contextualizes → Phase-21 |
+| 2026-01-20 | Master feature matrix updated | memorizer dossier | docs/research/master_feature_matrix.md, .csv | Added memorizer-v1 row | derived-from → dossier |
+| 2026-01-20 | Phase plan created | memorizer dossier section 10 | docs/phases/PHASE-21-EXTENSIBILITY-PATTERNS-INTEGRATION.md | Integration roadmap for adaptable patterns | derived-from → dossier |
+
+### Documentation Updates
+| Date | File | Change Type | Notes |
+| --- | --- | --- | --- |
+| 2026-01-20 | core/orchestrator/RELATIONSHIP_TYPES.md | artifact_created | Phase 21 Tier 1 - Relationship typing system |
+| 2026-01-20 | core/arch/templates.md | content_updated | Added relationship documentation guidance |
+| 2026-01-20 | core/agents/AGENT_MEMORY_PROTOCOL.md | artifact_created | Phase 21 Tier 2 - Autonomous agent memory protocol |
+| 2026-01-20 | core/packs/policy-pack-v1/AGENTS.md | content_updated | Added Knowledge Management section with protocol links |
+| 2026-01-20 | core/ORCHESTRATION_INDEX.md | content_updated | Added Agent Memory section |
+| 2026-01-20 | core/ARTIFACT_INDEX.md | artifact_created | Phase 21 Tier 3 - Lightweight artifact index |
+| 2026-01-20 | core/arch/CHANGE_EVENT_TYPES.md | artifact_created | Phase 21 Tier 4 - Typed change events |
+| 2026-01-20 | dedup-policy.md | Updated | Added immutability principle and relationship types |
+| 2026-01-20 | sync-plan.md | Updated | Added relationship tracking and immutability |
+| 2026-01-20 | docs/phases/README.md | Updated | Added Phase 21 to index |
+
 ### Canonicalization Decisions
 | Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |
 | --- | --- | --- | --- | --- |

@@ -55,3 +55,12 @@ All guidance here avoids model-specific assumptions. If a tool or model is requi
 ## Session Logs
 - Store orchestration session wraps in `core/orchestrator/handoff/SESSION_WRAP.md`.
 - If using repo-specific session logs, document the path in STATUS.md.
+
+## Relationships
+
+| Type | Target | Notes |
+|------|--------|-------|
+| explains | `core/ORCHESTRATION_INDEX.md` | Navigation index for orchestration system |
+| depends-on | `core/packs/policy-pack-v1/` | Governance policies for agent behavior |
+| contextualizes | `core/agents/AGENT_MEMORY_PROTOCOL.md` | Agent knowledge management protocol |
+| contextualizes | `core/orchestrator/RELATIONSHIP_TYPES.md` | Artifact relationship taxonomy |
