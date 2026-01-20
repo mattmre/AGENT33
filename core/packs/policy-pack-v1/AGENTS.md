@@ -18,3 +18,16 @@ Purpose: Provide a model-agnostic baseline for how agents should operate in any 
 - Commands: explicit allowlist.
 - Network: off by default; allowlist if approved.
 - Stop conditions: ambiguity, failing tests, scope expansion.
+
+## Modular Rules
+
+Detailed rules are organized in the `rules/` subdirectory for easier customization:
+
+| Rule File | Domain |
+|-----------|--------|
+| `rules/security.md` | Secrets, input validation, injection prevention |
+| `rules/testing.md` | TDD workflow, coverage, verification evidence |
+| `rules/git-workflow.md` | Commits, branches, PRs, reviews |
+| `rules/coding-style.md` | File organization, immutability, documentation |
+
+See `rules/README.md` for customization guidance and per-project overrides.
