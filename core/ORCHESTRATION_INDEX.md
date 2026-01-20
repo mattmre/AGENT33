@@ -26,6 +26,13 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/packs/policy-pack-v1/ACCEPTANCE_CHECKS.md`
 - `core/packs/policy-pack-v1/PROMOTION_GUIDE.md`
 
+## Modular Rules
+- `core/packs/policy-pack-v1/rules/README.md`
+- `core/packs/policy-pack-v1/rules/security.md`
+- `core/packs/policy-pack-v1/rules/testing.md`
+- `core/packs/policy-pack-v1/rules/git-workflow.md`
+- `core/packs/policy-pack-v1/rules/coding-style.md`
+
 ## Tool Governance
 - `core/orchestrator/TOOL_GOVERNANCE.md`
 - `core/orchestrator/TOOLS_AS_CODE.md`
@@ -41,3 +48,7 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/README.md`
 - `core/workflows/PROMOTION_CRITERIA.md`
 - `core/workflows/SOURCES_INDEX.md`
+
+## Skills
+- `core/workflows/skills/README.md`
+- `core/workflows/skills/tdd-workflow.md`
