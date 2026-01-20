@@ -32,6 +32,9 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/packs/policy-pack-v1/rules/testing.md`
 - `core/packs/policy-pack-v1/rules/git-workflow.md`
 - `core/packs/policy-pack-v1/rules/coding-style.md`
+- `core/packs/policy-pack-v1/rules/agents.md`
+- `core/packs/policy-pack-v1/rules/patterns.md`
+- `core/packs/policy-pack-v1/rules/performance.md`
 
 ## Tool Governance
 - `core/orchestrator/TOOL_GOVERNANCE.md`
@@ -52,11 +55,17 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 ## Skills
 - `core/workflows/skills/README.md`
 - `core/workflows/skills/tdd-workflow.md`
+- `core/workflows/skills/security-review.md`
+- `core/workflows/skills/coding-standards.md`
+- `core/workflows/skills/backend-patterns.md`
 
 ## Hooks
 - `core/workflows/hooks/README.md`
 - `core/workflows/hooks/HOOK_REGISTRY.md`
 - `core/workflows/hooks/examples/evidence-capture-hook.md`
+- `core/workflows/hooks/examples/pre-commit-security-hook.md`
+- `core/workflows/hooks/examples/session-end-handoff-hook.md`
+- `core/workflows/hooks/examples/scope-validation-hook.md`
 
 ## Commands
 - `core/workflows/commands/README.md`
@@ -67,3 +76,8 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/commands/handoff.md`
 - `core/workflows/commands/plan.md`
 - `core/workflows/commands/review.md`
+- `core/workflows/commands/tdd.md`
+- `core/workflows/commands/build-fix.md`
+- `core/workflows/commands/docs.md`
+- `core/workflows/commands/e2e.md`
+- `core/workflows/commands/refactor.md`

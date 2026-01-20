@@ -2,6 +2,10 @@
 
 This document defines the schema and registry of available hooks for AGENT-33 orchestration.
 
+Related docs:
+- `core/packs/policy-pack-v1/ORCHESTRATION.md` (workflow protocol)
+- `core/ORCHESTRATION_INDEX.md` (main orchestration index)
+
 ## Hook Definition Schema
 
 ```yaml
@@ -21,6 +25,24 @@ hook:
     - path: string
       purpose: string
 ```
+
+---
+
+## Available Hooks
+
+| Hook | Trigger | Purpose | Blocking |
+|------|---------|---------|----------|
+| HOOK-001: PreTask Validation | PreTask | Verify task has acceptance criteria | Yes |
+| HOOK-002: PostTask Evidence | PostTask | Auto-log commands and outcomes | No |
+| HOOK-003: SessionStart Status | SessionStart | Verify STATUS.md is current | Yes |
+| HOOK-004: SessionEnd Handoff | SessionEnd | Generate session wrap summary | No |
+| HOOK-005: PreCommit Security | PreCommit | Scan for secrets/sensitive data | Yes |
+| HOOK-006: PostVerify Log | PostVerify | Update verification-log.md | No |
+| pre-commit-security | pre-commit | Scan for secrets/sensitive data | Yes |
+| session-end-handoff | session-end | Auto-generate handoff docs | No |
+| scope-validation | pre-commit | Validate changes against scope | No |
+
+---
 
 ## Registered Hooks
 
@@ -225,14 +247,51 @@ hook:
 
 ---
 
+## Hook Index (Phase 4 Examples)
+
+### Pre-Commit Hooks
+
+- **[pre-commit-security-hook](./examples/pre-commit-security-hook.md)**
+  - Trigger: pre-commit
+  - Purpose: Check for hardcoded secrets, validate no sensitive files staged
+  - Blocking: Yes (on critical/high findings)
+
+- **[scope-validation-hook](./examples/scope-validation-hook.md)**
+  - Trigger: pre-commit
+  - Purpose: Validate changes against PLAN.md scope
+  - Blocking: No (warning only)
+
+### Session Hooks
+
+- **[session-end-handoff-hook](./examples/session-end-handoff-hook.md)**
+  - Trigger: session-end
+  - Purpose: Auto-generate SESSION_WRAP summary
+  - Blocking: No
+
+---
+
+## Trigger Types
+
+| Trigger | When Fired | Common Uses |
+|---------|------------|-------------|
+| PreTask | Before task execution starts | Validation, criteria checks |
+| PostTask | After task execution completes | Evidence capture, logging |
+| SessionStart | When agent session begins | Context loading, state restore |
+| SessionEnd | When agent session ends | Handoff docs, state save |
+| PreCommit | Before commit is created | Validation, security scans |
+| PostCommit | After commit is created | Notifications, logging |
+| PostVerify | After verification completes | Log updates, gate checks |
+
+---
+
 ## Hook Execution Order
 
 When multiple hooks apply to the same trigger point, they execute in this order:
 
-1. **Validation hooks** (blocking checks)
-2. **Security hooks** (blocking scans)
-3. **Evidence hooks** (non-blocking capture)
-4. **Notification hooks** (non-blocking alerts)
+1. **Blocking hooks** (validation and security checks)
+2. **Non-blocking hooks** (evidence capture, notifications)
+3. Within category: alphabetical order by hook ID
+4. Any blocking hook failure stops the chain
 
 ## Adding New Hooks
 
@@ -241,6 +300,48 @@ When multiple hooks apply to the same trigger point, they execute in this order:
 3. Add to this registry with full documentation
 4. Update `core/workflows/hooks/README.md` if new trigger point
 5. Create example in `core/workflows/hooks/examples/` if complex
+
+### Hook Template Structure
+
+```markdown
+# <hook-name>
+
+Purpose: <one-line description>
+
+Related docs:
+- <related-file-1>
+- <related-file-2>
+
+---
+
+## Hook Configuration
+## Checks Performed
+## Pseudo-code Implementation
+## Output Format
+## Integration Notes
+```
+
+---
+
+## Evidence Capture
+
+Document hook executions:
+```markdown
+## Hook Execution Evidence
+
+### Hook: <hook-name>
+### Trigger: <trigger-type>
+### Timestamp: <datetime>
+
+### Result
+- Status: PASS / FAIL / WARN
+- Findings: X critical, Y high, Z medium
+- Action: ALLOWED / BLOCKED
+
+### Findings Detail
+- <finding-1>
+- <finding-2>
+```
 
 ## Related Documents
 
