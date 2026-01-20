@@ -2,6 +2,10 @@
 
 This registry defines all available commands in the AGENT-33 orchestration framework.
 
+Related docs:
+- `core/orchestrator/OPERATOR_MANUAL.md` (operator usage guide)
+- `core/packs/policy-pack-v1/ORCHESTRATION.md` (workflow protocol)
+
 ## Schema
 
 Each command definition follows this schema:
@@ -25,7 +29,27 @@ outputs:             # Produced artifacts
 
 ---
 
+## Available Commands
+
+| Command | Purpose | Skill Invoked |
+|---------|---------|---------------|
+| `/status` | Review current STATUS.md and surface blockers | - |
+| `/tasks` | List open tasks from TASKS.md with priorities | - |
+| `/verify` | Capture verification evidence for current task | - |
+| `/handoff` | Generate session wrap summary for next session | - |
+| `/plan` | Create implementation plan with confirmation wait | - |
+| `/review` | Trigger code review workflow | - |
+| `/tdd` | Test-Driven Development workflow | tdd-workflow |
+| `/build-fix` | Fix build or test failures | - |
+| `/docs` | Sync documentation with code | - |
+| `/e2e` | Generate or run E2E tests | - |
+| `/refactor` | Clean up dead code or refactor | coding-standards |
+
+---
+
 ## Registered Commands
+
+### Phase 2 Commands
 
 ### /status
 
@@ -111,12 +135,95 @@ outputs:             # Produced artifacts
 
 ---
 
+### Phase 4 Commands
+
+### /tdd
+
+- **[/tdd](./tdd.md)** - Direct entry point for TDD workflow
+  - Invoke TDD skill, track RED/GREEN/REFACTOR stages
+  - Outputs: Tests, implementation, evidence
+
+---
+
+### /build-fix
+
+- **[/build-fix](./build-fix.md)** - Fix build or test failures
+  - Analyze error output, identify root cause, apply minimal fix
+  - Outputs: Fixed code, verification evidence
+
+---
+
+### /refactor
+
+- **[/refactor](./refactor.md)** - Code cleanup and refactoring
+  - Identify candidates, verify no behavior change
+  - Outputs: Refactored code, test verification
+
+---
+
+### /e2e
+
+- **[/e2e](./e2e.md)** - End-to-end testing
+  - Identify critical flows, create scenarios, capture evidence
+  - Outputs: E2E test files, execution results
+
+---
+
+### /docs
+
+- **[/docs](./docs.md)** - Documentation synchronization
+  - Identify affected docs, update content, verify links
+  - Outputs: Updated docs, link verification
+
+---
+
+## Command Conventions
+
+### Invocation
+```
+/<command> [required-args] [optional-args]
+```
+
+### Standard Outputs
+All commands should produce:
+1. Primary artifacts (code, docs, tests)
+2. Evidence of execution
+3. TASKS.md update
+
+### Error Handling
+- Commands should fail gracefully with clear messages
+- Partial progress should be captured in STATUS.md
+- Escalation path should be clear
+
+---
+
 ## Adding New Commands
 
 1. Create command specification in `commands/<id>.md`
 2. Add entry to this registry following the schema
 3. Update `core/ORCHESTRATION_INDEX.md` if command affects orchestration flow
 4. Document any new handoff artifacts in `core/orchestrator/handoff/`
+
+### Command Template Structure
+
+```markdown
+# /<command-name> Command
+
+Purpose: <one-line description>
+
+Related docs:
+- <related-file-1>
+- <related-file-2>
+
+---
+
+## Command Signature
+## Workflow
+## Inputs
+## Outputs
+## Evidence Capture
+## Example Usage
+```
 
 ## Related Documents
 
