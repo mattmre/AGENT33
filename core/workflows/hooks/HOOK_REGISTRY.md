@@ -181,10 +181,13 @@ hook:
 4. Flag environment-specific paths
 
 **Patterns Checked**:
-- `(?i)(api[_-]?key|apikey)\s*[:=]\s*['"]?[a-zA-Z0-9]{16,}`
-- `(?i)(password|passwd|pwd)\s*[:=]\s*['"]?[^\s'"]+`
-- `(?i)(secret|token)\s*[:=]\s*['"]?[a-zA-Z0-9]{16,}`
-- `-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----`
+
+```regex
+(?i)(api[_-]?key|apikey)\s*[:=]\s*['"]?[a-zA-Z0-9]{16,}
+(?i)(password|passwd|pwd)\s*[:=]\s*['"]?[^\s'"]+
+(?i)(secret|token)\s*[:=]\s*['"]?[a-zA-Z0-9]{16,}
+-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----
+```
 
 **Failure Response**: Block commit, report findings, require remediation.
 

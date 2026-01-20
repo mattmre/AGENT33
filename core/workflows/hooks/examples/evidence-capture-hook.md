@@ -66,9 +66,9 @@ FUNCTION execute_hook(task_context, command_history, session_id):
     # 3. Determine verification command to record
     # Priority: test command > build command > manual verification
     IF evidence_commands.has_test_command():
-        primary_command = evidence_commands.get_test_command()
+        primary_command = evidence_commands.get_test_command().command
     ELSE IF evidence_commands.has_build_command():
-        primary_command = evidence_commands.get_build_command()
+        primary_command = evidence_commands.get_build_command().command
     ELSE:
         primary_command = "N/A (manual verification)"
     
