@@ -14,7 +14,7 @@ Test-Driven Development (TDD) follows a disciplined cycle: write a failing test,
 
 **Entry Criteria**:
 - Clear acceptance criteria from task specification
-- Test harness operational (verified per `test-matrix.md`)
+- Test harness operational (verified per `core/arch/test-matrix.md`)
 - Understanding of API/interface being tested
 
 **Actions**:
