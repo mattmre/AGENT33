@@ -41,3 +41,13 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/README.md`
 - `core/workflows/PROMOTION_CRITERIA.md`
 - `core/workflows/SOURCES_INDEX.md`
+
+## Commands
+- `core/workflows/commands/README.md`
+- `core/workflows/commands/COMMAND_REGISTRY.md`
+- `core/workflows/commands/status.md`
+- `core/workflows/commands/tasks.md`
+- `core/workflows/commands/verify.md`
+- `core/workflows/commands/handoff.md`
+- `core/workflows/commands/plan.md`
+- `core/workflows/commands/review.md`
