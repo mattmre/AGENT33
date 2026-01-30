@@ -82,3 +82,60 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/commands/docs.md`
 - `core/workflows/commands/e2e.md`
 - `core/workflows/commands/refactor.md`
+
+## Incremental Processing (CA-007)
+- `core/orchestrator/incremental/README.md`
+- `core/orchestrator/incremental/CHANGE_DETECTION.md`
+- `core/orchestrator/incremental/ARTIFACT_GRAPH.md`
+
+## Parallel Execution (CA-008)
+- `core/orchestrator/parallel/README.md`
+- `core/orchestrator/parallel/SEMAPHORE_CONTROL.md`
+- `core/orchestrator/parallel/EXECUTION_MODES.md`
+
+## Change Triggers (CA-009)
+- `core/orchestrator/triggers/README.md`
+- `core/orchestrator/triggers/TRIGGER_CATALOG.md`
+
+## Configuration Schemas (CA-010)
+- `core/schemas/README.md`
+- `core/schemas/agent.schema.json`
+- `core/schemas/workflow.schema.json`
+- `core/schemas/orchestrator.schema.json`
+
+## Execution Modes (CA-011)
+- `core/orchestrator/modes/README.md`
+- `core/orchestrator/modes/DRY_RUN_SPEC.md`
+
+## MDC Rules (CA-012)
+- `core/packs/mdc-rules/README.md`
+- `core/packs/mdc-rules/orchestrator.mdc`
+- `core/packs/mdc-rules/refinement.mdc`
+- `core/packs/mdc-rules/evidence.mdc`
+
+## Artifact Filtering (CA-013)
+- `core/orchestrator/filters/README.md`
+- `core/orchestrator/filters/GLOB_PATTERNS.md`
+
+## Dependency Graph (CA-014)
+- `core/orchestrator/dependencies/README.md`
+- `core/orchestrator/dependencies/DEPENDENCY_GRAPH_SPEC.md`
+
+## Analytics (CA-015)
+- `core/orchestrator/analytics/README.md`
+- `core/orchestrator/analytics/METRICS_CATALOG.md`
+
+## Config Generation (CA-016)
+- `core/orchestrator/config-gen/README.md`
+- `core/orchestrator/config-gen/GENERATOR_SPEC.md`
+
+## Platform Integrations (CA-017)
+- `core/orchestrator/integrations/README.md`
+- `core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md`
+- `core/orchestrator/integrations/VOICE_MEDIA_SPEC.md`
+- `core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md`
+- `core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md`
+
+## Research
+- `core/research/06-OPENCLAW-SECURITY-ANALYSIS.md`
+- `core/research/07-OPENCLAW-FEATURE-PARITY.md`
