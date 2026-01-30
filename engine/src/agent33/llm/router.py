@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse
+if TYPE_CHECKING:
+    from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse
 
 logger = logging.getLogger(__name__)
 

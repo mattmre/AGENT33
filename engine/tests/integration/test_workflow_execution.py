@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -12,6 +11,8 @@ from agent33.testing.mock_llm import MockLLMProvider
 from agent33.testing.workflow_harness import WorkflowTestHarness
 from agent33.workflows.definition import WorkflowDefinition
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SIMPLE_WORKFLOW = {
     "name": "test-workflow",

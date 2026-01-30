@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from agent33.security.permissions import check_permission
-from agent33.tools.base import ToolContext, ToolResult
+
+if TYPE_CHECKING:
+    from agent33.tools.base import ToolContext, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,6 @@ class ToolGovernance:
                 "params": params,
                 "success": result.success,
                 "error": result.error or None,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )

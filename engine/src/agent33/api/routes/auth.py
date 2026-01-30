@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -13,7 +12,6 @@ from agent33.security.auth import (
     create_access_token,
     generate_api_key,
     revoke_api_key,
-    verify_token,
 )
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])

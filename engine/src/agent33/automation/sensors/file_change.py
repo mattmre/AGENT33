@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import fnmatch
 import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +114,8 @@ class FileChangeSensor:
             if not entry.is_file():
                 continue
             if any(fnmatch.fnmatch(entry.name, p) for p in patterns):
-                try:
+                with contextlib.suppress(OSError):
                     result[entry.path] = entry.stat().st_mtime
-                except OSError:
-                    pass
         return result
 
     async def _poll_loop(self) -> None:

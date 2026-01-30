@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -50,8 +49,8 @@ class MetricsCollector:
                 summary[name] = dict(label_map)
 
         # Observations
-        for name, label_map in self._observations.items():
-            for label_key, obs in label_map.items():
+        for name, obs_map in self._observations.items():
+            for label_key, obs in obs_map.items():
                 display = f"{name}({label_key})" if label_key else name
                 vals = obs.values
                 if vals:

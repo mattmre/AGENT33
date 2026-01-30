@@ -43,15 +43,14 @@ class WebFetchTool:
         parsed = urlparse(url)
         domain = parsed.hostname or ""
 
-        if context.domain_allowlist:
-            if not any(
-                domain == allowed or domain.endswith(f".{allowed}")
-                for allowed in context.domain_allowlist
-            ):
-                return ToolResult.fail(
-                    f"Domain '{domain}' is not in the allowlist: "
-                    f"{context.domain_allowlist}"
-                )
+        if context.domain_allowlist and not any(
+            domain == allowed or domain.endswith(f".{allowed}")
+            for allowed in context.domain_allowlist
+        ):
+            return ToolResult.fail(
+                f"Domain '{domain}' is not in the allowlist: "
+                f"{context.domain_allowlist}"
+            )
 
         method: str = params.get("method", "GET").upper()
         if method not in ("GET", "POST"):

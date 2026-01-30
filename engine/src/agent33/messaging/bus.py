@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
 import nats
-from nats.aio.client import Client as NATSClient
-from nats.aio.msg import Msg
 
 from agent33.config import settings
+
+if TYPE_CHECKING:
+    from nats.aio.client import Client as NATSClient
+    from nats.aio.msg import Msg
 
 logger = logging.getLogger(__name__)
 

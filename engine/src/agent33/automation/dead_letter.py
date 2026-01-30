@@ -121,5 +121,8 @@ class DeadLetterQueue:
         for item_id in to_remove:
             del self._items[item_id]
         if to_remove:
-            logger.info("Purged %d dead-letter items older than %ss", len(to_remove), older_than_seconds)
+            logger.info(
+                "Purged %d dead-letter items older than %ss",
+                len(to_remove), older_than_seconds,
+            )
         return len(to_remove)

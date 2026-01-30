@@ -125,9 +125,11 @@ class WorkflowExecutor:
                             break
                     else:
                         # Run group in parallel with concurrency limit
-                        semaphore = asyncio.Semaphore(parallel_limit)
+                        _sem = asyncio.Semaphore(parallel_limit)
 
-                        async def _run_limited(sid: str) -> StepResult:
+                        async def _run_limited(
+                            sid: str, semaphore: asyncio.Semaphore = _sem,
+                        ) -> StepResult:
                             async with semaphore:
                                 return await self._execute_step(
                                     self._steps[sid], state, execution.dry_run
@@ -136,7 +138,7 @@ class WorkflowExecutor:
                         tasks = [_run_limited(sid) for sid in group]
                         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        for sid, res in zip(group, results):
+                        for sid, res in zip(group, results, strict=False):
                             if isinstance(res, BaseException):
                                 sr = StepResult(
                                     step_id=sid,
@@ -235,7 +237,7 @@ class WorkflowExecutor:
                     duration_ms=round(elapsed, 2),
                 )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = f"Step timed out after {step.timeout_seconds}s"
                 logger.warning("step_timeout", step_id=step.id, attempt=attempt)
             except Exception as exc:

@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
-from agent33.observability.metrics import MetricsCollector
 from agent33.observability.lineage import ExecutionLineage
+from agent33.observability.metrics import MetricsCollector
 
 router = APIRouter(prefix="/v1/dashboard", tags=["dashboard"])
 

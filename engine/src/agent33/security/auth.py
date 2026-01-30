@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
-from datetime import datetime, timezone
 
 import jwt
 from pydantic import BaseModel

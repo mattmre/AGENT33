@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = structlog.get_logger()
 
@@ -41,7 +44,7 @@ async def execute(
     results: dict[str, Any] = {}
     errors: list[str] = []
 
-    for sid, result in zip(sub_step_ids, results_list):
+    for sid, result in zip(sub_step_ids, results_list, strict=False):
         if isinstance(result, BaseException):
             errors.append(f"Step '{sid}' failed: {result}")
             results[sid] = {"error": str(result)}

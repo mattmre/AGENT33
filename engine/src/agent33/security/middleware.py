@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from agent33.security.auth import validate_api_key, verify_token
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +43,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = auth_header[7:]
             try:
                 payload = verify_token(token)
-                request.state.user = payload
-                return await call_next(request)
             except Exception:
-                return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or expired token"},
+                )
+            request.state.user = payload
+            return await call_next(request)
 
         # Try API key
         api_key = request.headers.get("X-API-Key")
         if api_key:
-            payload = validate_api_key(api_key)
-            if payload is not None:
-                request.state.user = payload
+            api_payload = validate_api_key(api_key)
+            if api_payload is not None:
+                request.state.user = api_payload
                 return await call_next(request)
             return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
 
-        return JSONResponse(status_code=401, content={"detail": "Missing authentication credentials"})
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing authentication credentials"},
+        )

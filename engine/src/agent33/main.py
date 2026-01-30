@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import FastAPI
 
 from agent33.api.routes import agents, auth, chat, dashboard, health, webhooks, workflows
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = structlog.get_logger()
 

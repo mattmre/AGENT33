@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from agent33.agents.definition import AgentDefinition
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
+
+if TYPE_CHECKING:
+    from agent33.agents.definition import AgentDefinition
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
