@@ -8,6 +8,18 @@
 ### Canonicalization Decisions
 | Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-01-30 | core/orchestrator/COMPETITIVE_FEATURES_INDEX.md | docs/competitive-analysis/* (12 analyses) | De-duplicated 136 raw features into 65 unique items across 5 clusters with implementation mappings. | Master feature index. |
+| 2026-01-30 | core/orchestrator/workflows/* (3 specs) | Dagster, Conductor, Orca, Kestra, Camunda | Asset-first workflow, DAG execution engine, expression language (CA-018 to CA-030). | Cluster 1: Workflow Definition. |
+| 2026-01-30 | core/orchestrator/agent-protocols/* (3 specs) | OpenAI Swarm, Agency Swarm, wshobson/agents | Agent handoff, communication flow, guardrails (CA-031 to CA-040). | Cluster 2: Agent Coordination. |
+| 2026-01-30 | core/orchestrator/statecharts/* (3 specs) | XState, Camunda, Conductor | Statechart format, task registry, backpressure (CA-041 to CA-050). | Cluster 3: State Machines & Decision. |
+| 2026-01-30 | core/orchestrator/decision/DECISION_ROUTING_SPEC.md | Osmedeus, Conductor, Camunda | Switch/case, weighted, rule-based decision routing (CA-042). | Cluster 3. |
+| 2026-01-30 | core/orchestrator/lineage/LINEAGE_TRACKING_SPEC.md | Dagster, Orca | Artifact lineage, provenance, impact analysis, visualization (CA-051). | Cluster 4. |
+| 2026-01-30 | core/orchestrator/sensors/ARTIFACT_SENSOR_SPEC.md | Dagster, Kestra | Event-driven artifact sensors and triggers (CA-052). | Cluster 4. |
+| 2026-01-30 | core/orchestrator/observability/HEALTH_DASHBOARD_SPEC.md | Dagster, all tools | Health monitoring, alerting, status dashboard (CA-053). | Cluster 4. |
+| 2026-01-30 | core/orchestrator/testing/WORKFLOW_TESTING_FRAMEWORK.md | Dagster, XState | Unit/integration/model-based workflow testing (CA-054). | Cluster 4. |
+| 2026-01-30 | core/orchestrator/plugins/PLUGIN_REGISTRY_SPEC.md | Osmedeus, Kestra | Plugin system with lifecycle, isolation, governance (CA-055). | Cluster 4. |
+| 2026-01-30 | core/orchestrator/distribution/DISTRIBUTION_SYNC_SPEC.md | Phase 9 | Downstream repo sync rules, PR templates, validation (CA-061). | Phase 9: Distribution & Sync. |
+| 2026-01-30 | core/orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md | Phase 10 | Contribution model, review assignment, escalation, maintenance cadence (CA-062). | Phase 10: Governance & Community. |
 | 2026-01-30 | core/research/06-OPENCLAW-SECURITY-ANALYSIS.md | github.com/openclaw/openclaw | Full platform security analysis identifying plaintext credentials, information leaking, third-party dependency risks. | New research document. |
 | 2026-01-30 | core/research/07-OPENCLAW-FEATURE-PARITY.md | github.com/openclaw/openclaw | Feature-by-feature parity mapping with security improvements. | New research document. |
 | 2026-01-30 | core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md | OpenClaw channel architecture (20+ platforms) | Security-hardened channel integration spec with tiered platform classification. | New specification (CA-017). |
