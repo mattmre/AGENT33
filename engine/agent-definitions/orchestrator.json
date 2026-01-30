@@ -1,0 +1,51 @@
+{
+  "$schema": "https://agent-33.dev/schemas/agent.schema.json",
+  "name": "orchestrator",
+  "version": "1.0.0",
+  "role": "orchestrator",
+  "description": "Top-level orchestrator that decomposes tasks, delegates to specialist agents, and assembles final results.",
+  "capabilities": [
+    "orchestration",
+    "api-calls"
+  ],
+  "inputs": {
+    "task": {
+      "type": "string",
+      "description": "The high-level task to accomplish",
+      "required": true
+    },
+    "context": {
+      "type": "object",
+      "description": "Optional context or prior results",
+      "required": false
+    }
+  },
+  "outputs": {
+    "plan": {
+      "type": "object",
+      "description": "Execution plan with ordered steps and agent assignments"
+    },
+    "result": {
+      "type": "string",
+      "description": "Final assembled result from sub-agent outputs"
+    }
+  },
+  "dependencies": [],
+  "prompts": {
+    "system": "prompts/orchestrator/system.md",
+    "user": "prompts/orchestrator/user.md",
+    "examples": []
+  },
+  "constraints": {
+    "max_tokens": 8192,
+    "timeout_seconds": 300,
+    "max_retries": 3,
+    "parallel_allowed": false
+  },
+  "metadata": {
+    "author": "agent-33",
+    "created": "2025-01-01",
+    "updated": "2025-01-30",
+    "tags": ["core", "orchestration"]
+  }
+}
