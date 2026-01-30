@@ -8,6 +8,7 @@ It defines the model-agnostic orchestration system, AEP workflow, and reusable t
 - `agents/`: Canonical agent instructions; `agents/sources/` holds archived variants.
 - `prompts/`: Canonical review frameworks and prompt packs.
 - `orchestrator/`: Orchestrator rules, handoff docs, and prompt assets.
+- `orchestrator/integrations/`: Platform integration specs (channels, voice/media, credentials, privacy).
 - `workflows/`: Canonical GitHub workflow templates and instructions.
 - `roadmap/`, `phases/`, `research/`, `user-guide/`, `api/`: Project documentation canon.
 - `logs/`: Session logs and next-session narratives, partitioned by source repo.
@@ -22,6 +23,7 @@ It defines the model-agnostic orchestration system, AEP workflow, and reusable t
 - Risk triggers: security, schema, API, CI/CD, large refactors require review.
 - Evidence capture: commands, tests, artifacts, and review outcomes.
 - Workflow promotion: only reusable templates move from sources to canonical.
+- Platform integrations (CA-017): channel integration, voice/media, credential management, privacy-first architecture.
 
 ## Canonicalization
 - Canonical choices are logged in `core/CHANGELOG.md`.
