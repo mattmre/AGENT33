@@ -129,3 +129,27 @@ This documentation should be updated as:
 - Community feedback is incorporated
 
 Last Updated: 2026-01-30
+
+---
+
+## Runtime Engine
+
+The `engine/` directory contains the working Python implementation of the specifications defined in `core/`. It translates the orchestration designs, agent definitions, workflow schemas, and governance policies into executable runtime modules.
+
+### Key Engine Resources
+
+| Resource | Description |
+|----------|-------------|
+| [Getting Started](../engine/docs/getting-started.md) | Installation and first run |
+| [Architecture](../engine/docs/architecture.md) | Engine architecture overview |
+| [API Reference](../engine/docs/api-reference.md) | Programmatic API documentation |
+| [Workflow Guide](../engine/docs/workflow-guide.md) | Building and running workflows |
+| [Agent Guide](../engine/docs/agent-guide.md) | Defining and routing agents |
+| [Security Guide](../engine/docs/security-guide.md) | Credentials, vaults, and access control |
+| [Integration Guide](../engine/docs/integration-guide.md) | Messaging and platform integrations |
+| [CLI Reference](../engine/docs/cli-reference.md) | Command-line interface usage |
+| [Use Cases](../engine/docs/use-cases.md) | End-to-end usage examples |
+| [Orchestration Mapping](../engine/docs/orchestration-mapping.md) | How core specs map to engine modules |
+| [Feature Roadmap](../engine/docs/feature-roadmap.md) | Planned engine enhancements |
+
+For a detailed mapping of orchestration concepts to engine modules, see the [Engine Implementation section in the Orchestration Index](ORCHESTRATION_INDEX.md#engine-implementation).
