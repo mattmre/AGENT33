@@ -25,7 +25,7 @@ Each analysis follows this structure:
 
 | Date | Repository | Status | Key Findings |
 |------|------------|--------|--------------|
-| 2026-01-20 | [dagster-io/dagster](competitive-analysis-dagster-2026-01-20.md) | Complete | Asset-first definitions; declarative automation; freshness policies; lineage graphs; partitioning; 12 backlog items generated (CA-020 to CA-031) |
+| 2026-01-20 | [dagster-io/dagster](2026-01-20_dagster.md) | Complete | Asset-first definitions; declarative automation; freshness policies; lineage graphs; partitioning; 12 backlog items generated (CA-020 to CA-031) |
 | 2026-01-20 | [affaan-m/everything-claude-code](2026-01-20_everything-claude-code.md) | Complete | Production-ready configs; hooks system; modular rules; TDD workflow |
 
 ## Analyses Planned
