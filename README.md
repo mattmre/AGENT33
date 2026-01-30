@@ -22,6 +22,7 @@ AGENT 33 is the master aggregation repo for model-agnostic agentic workflows, or
 - Evidence capture: commands, tests, artifacts, and review outcomes.
 - Workflow promotion: only reusable templates move from sources to canonical.
 - Review intake: PR comments and review notes feed backlog expansion and refinement workflows.
+- Platform integrations (CA-017): multi-channel messaging, voice/media processing, credential management, privacy architecture.
 
 ## Repo Layout
 - `collected/`: raw ingest from source repos (do not edit).
