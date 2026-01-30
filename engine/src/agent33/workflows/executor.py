@@ -125,9 +125,11 @@ class WorkflowExecutor:
                             break
                     else:
                         # Run group in parallel with concurrency limit
-                        semaphore = asyncio.Semaphore(parallel_limit)
+                        _sem = asyncio.Semaphore(parallel_limit)
 
-                        async def _run_limited(sid: str) -> StepResult:
+                        async def _run_limited(
+                            sid: str, semaphore: asyncio.Semaphore = _sem,
+                        ) -> StepResult:
                             async with semaphore:
                                 return await self._execute_step(
                                     self._steps[sid], state, execution.dry_run
@@ -136,7 +138,7 @@ class WorkflowExecutor:
                         tasks = [_run_limited(sid) for sid in group]
                         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        for sid, res in zip(group, results):
+                        for sid, res in zip(group, results, strict=False):
                             if isinstance(res, BaseException):
                                 sr = StepResult(
                                     step_id=sid,
@@ -235,7 +237,7 @@ class WorkflowExecutor:
                     duration_ms=round(elapsed, 2),
                 )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = f"Step timed out after {step.timeout_seconds}s"
                 logger.warning("step_timeout", step_id=step.id, attempt=attempt)
             except Exception as exc:
@@ -336,3 +338,50 @@ class WorkflowExecutor:
             )
 
         raise ValueError(f"Unknown action: {action}")
+
+
+# ---------------------------------------------------------------------------
+# CA-043: Backpressure Signaling
+# ---------------------------------------------------------------------------
+
+
+class BackpressureController:
+    """Token-bucket rate limiter that emits backpressure signals.
+
+    Upstream producers can check ``is_pressured()`` or await
+    ``wait_for_capacity()`` before submitting more work.
+    """
+
+    def __init__(self, max_tokens: int = 10, refill_rate: float = 1.0) -> None:
+        self._max_tokens = max_tokens
+        self._tokens = max_tokens
+        self._refill_rate = refill_rate
+        self._lock = asyncio.Lock()
+        self._capacity_event = asyncio.Event()
+        self._capacity_event.set()
+
+    async def acquire(self) -> bool:
+        """Acquire a token. Returns True if acquired, False if no capacity."""
+        async with self._lock:
+            if self._tokens > 0:
+                self._tokens -= 1
+                if self._tokens == 0:
+                    self._capacity_event.clear()
+                return True
+            return False
+
+    async def release(self) -> None:
+        """Release a token back to the pool."""
+        async with self._lock:
+            if self._tokens < self._max_tokens:
+                self._tokens += 1
+                if self._tokens > 0:
+                    self._capacity_event.set()
+
+    def is_pressured(self) -> bool:
+        """Return True if the system is under backpressure (no tokens)."""
+        return self._tokens == 0
+
+    async def wait_for_capacity(self) -> None:
+        """Block until at least one token is available."""
+        await self._capacity_event.wait()
