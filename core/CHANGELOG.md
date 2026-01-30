@@ -8,6 +8,13 @@
 ### Canonicalization Decisions
 | Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-01-30 | core/research/06-OPENCLAW-SECURITY-ANALYSIS.md | github.com/openclaw/openclaw | Full platform security analysis identifying plaintext credentials, information leaking, third-party dependency risks. | New research document. |
+| 2026-01-30 | core/research/07-OPENCLAW-FEATURE-PARITY.md | github.com/openclaw/openclaw | Feature-by-feature parity mapping with security improvements. | New research document. |
+| 2026-01-30 | core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md | OpenClaw channel architecture (20+ platforms) | Security-hardened channel integration spec with tiered platform classification. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/VOICE_MEDIA_SPEC.md | OpenClaw STT/TTS/vision features | Privacy-first voice and media processing with local-first preference. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md | OpenClaw auth-profiles.json (plaintext) | Vault/keyring mandatory credential management replacing plaintext patterns. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md | OpenClaw data flow analysis | Privacy-first architecture with encryption at rest, consent requirements, data minimization. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/README.md | (new) | Integration specifications index. | New specification (CA-017). |
 | 2026-01-16 | core/arch/* (AEP templates & guides) | collected/*/docs/ARCH AGENTIC ENGINEERING AND PLANNING/* | Identical copies across repos; selected RSMFConverter as canonical baseline. | Removed suffixed variants in core/arch. |
 | 2026-01-16 | core/prompts/agentic-review-framework.md | collected/*/docs/agentic-review-framework.md | Identical copies; selected RSMFConverter baseline. |  |
 | 2026-01-16 | core/prompts/agentic-review-prompts.md | collected/*/docs/agentic-review-prompts.md | Identical copies; selected RSMFConverter baseline. |  |
