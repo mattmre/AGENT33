@@ -136,6 +136,41 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md`
 - `core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md`
 
+## Competitive Features Index
+- `core/orchestrator/COMPETITIVE_FEATURES_INDEX.md`
+
+## Workflow Definitions (CA-018 to CA-030)
+- `core/orchestrator/workflows/README.md`
+- `core/orchestrator/workflows/ASSET_FIRST_WORKFLOW_SCHEMA.md`
+- `core/orchestrator/workflows/DAG_EXECUTION_ENGINE.md`
+- `core/orchestrator/workflows/EXPRESSION_LANGUAGE_SPEC.md`
+
+## Agent Coordination (CA-031 to CA-040)
+- `core/orchestrator/agent-protocols/AGENT_HANDOFF_PROTOCOL.md`
+- `core/orchestrator/agent-protocols/COMMUNICATION_FLOW_SCHEMA.md`
+- `core/orchestrator/agent-protocols/GUARDRAILS_VALIDATION_HOOKS.md`
+
+## State Machines & Decision (CA-041 to CA-050)
+- `core/orchestrator/statecharts/STATECHART_WORKFLOW_FORMAT.md`
+- `core/orchestrator/statecharts/TASK_DEFINITION_REGISTRY.md`
+- `core/orchestrator/statecharts/BACKPRESSURE_SPEC.md`
+- `core/orchestrator/decision/DECISION_ROUTING_SPEC.md`
+
+## Observability & Testing (CA-051 to CA-060)
+- `core/orchestrator/lineage/LINEAGE_TRACKING_SPEC.md`
+- `core/orchestrator/sensors/ARTIFACT_SENSOR_SPEC.md`
+- `core/orchestrator/observability/HEALTH_DASHBOARD_SPEC.md`
+- `core/orchestrator/testing/WORKFLOW_TESTING_FRAMEWORK.md`
+- `core/orchestrator/plugins/PLUGIN_REGISTRY_SPEC.md`
+
+## Distribution & Sync (Phase 9 / CA-061)
+- `core/orchestrator/distribution/README.md`
+- `core/orchestrator/distribution/DISTRIBUTION_SYNC_SPEC.md`
+
+## Governance & Community (Phase 10 / CA-062)
+- `core/orchestrator/community/README.md`
+- `core/orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md`
+
 ## Research
 - `core/research/06-OPENCLAW-SECURITY-ANALYSIS.md`
 - `core/research/07-OPENCLAW-FEATURE-PARITY.md`
