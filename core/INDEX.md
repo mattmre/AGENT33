@@ -22,6 +22,8 @@ AGENT-33 is a master aggregation repo for model-agnostic orchestration workflows
 | Document | Description |
 |----------|-------------|
 | [Agentic Orchestration Trends 2025H2](research/agentic-orchestration-trends-2025H2.md) | Industry trends and guidance for agentic coding |
+| [OpenClaw Security Analysis](research/06-OPENCLAW-SECURITY-ANALYSIS.md) | Security vulnerability analysis of OpenClaw platform |
+| [OpenClaw Feature Parity](research/07-OPENCLAW-FEATURE-PARITY.md) | Feature comparison and security hardening mapping |
 
 ---
 
@@ -38,6 +40,18 @@ AGENT-33 is a master aggregation repo for model-agnostic orchestration workflows
 The canonical AGENT-33 phases live in `docs/phases/`.
 Use the phase index for sequencing and dependency order:
 `../docs/phases/README.md`
+
+---
+
+## Platform Integration Specifications (CA-017)
+
+| Document | Description |
+|----------|-------------|
+| [Integration Specs Index](orchestrator/integrations/README.md) | Overview, design principles, and integration checklist |
+| [Channel Integration](orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md) | Multi-platform messaging channel architecture |
+| [Voice & Media](orchestrator/integrations/VOICE_MEDIA_SPEC.md) | Voice interaction and media processing (privacy-first) |
+| [Credential Management](orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md) | Vault-backed credential storage and rotation |
+| [Privacy Architecture](orchestrator/integrations/PRIVACY_ARCHITECTURE.md) | Encryption at rest, consent model, data lifecycle |
 
 ---
 
@@ -89,7 +103,7 @@ Use the phase index for sequencing and dependency order:
 |--------|-------|
 | Total Phase Templates | 40 |
 | AGENT-33 Phases | 10 |
-| Research Documents | 1 |
+| Research Documents | 3 |
 
 ---
 
@@ -120,4 +134,4 @@ This documentation should be updated as:
 - New research is conducted
 - Community feedback is incorporated
 
-Last Updated: 2026-01-16
+Last Updated: 2026-01-30
