@@ -34,9 +34,34 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
     encryption_key: str = ""
 
+    # SearXNG
+    searxng_url: str = "http://searxng:8080"
+
     # Optional cloud LLM
     openai_api_key: str = ""
     openai_base_url: str = ""
+
+    # AirLLM (layer-sharded large model inference)
+    airllm_enabled: bool = False
+    airllm_model_path: str = ""
+    airllm_device: str = "cuda:0"
+    airllm_compression: str = ""  # "4bit" | "8bit" | ""
+    airllm_max_seq_len: int = 2048
+    airllm_prefetch: bool = True
+
+    # Jina
+    jina_api_key: str = ""
+    jina_reader_url: str = "https://r.jina.ai"
+
+    # Embeddings
+    embedding_provider: str = "ollama"  # "ollama" | "jina"
+
+    # Training (self-evolving loop)
+    training_enabled: bool = False
+    training_optimize_interval: int = 100
+    training_idle_optimize_seconds: int = 300
+    training_min_rollouts: int = 10
+    training_eval_model: str = ""
 
 
 settings = Settings()
