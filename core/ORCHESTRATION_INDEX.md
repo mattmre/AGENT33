@@ -128,3 +128,14 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 ## Config Generation (CA-016)
 - `core/orchestrator/config-gen/README.md`
 - `core/orchestrator/config-gen/GENERATOR_SPEC.md`
+
+## Platform Integrations (CA-017)
+- `core/orchestrator/integrations/README.md`
+- `core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md`
+- `core/orchestrator/integrations/VOICE_MEDIA_SPEC.md`
+- `core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md`
+- `core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md`
+
+## Research
+- `core/research/06-OPENCLAW-SECURITY-ANALYSIS.md`
+- `core/research/07-OPENCLAW-FEATURE-PARITY.md`
