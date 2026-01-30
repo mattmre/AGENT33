@@ -1234,8 +1234,8 @@ config = load_config("rsmfconverter.yaml")
 ## See Also
 
 - [PHASE-01-PROJECT-FOUNDATION.md](../phases/PHASE-01-PROJECT-FOUNDATION.md) - Phase 1 implementation details
-- [CLAUDE.md](../CLAUDE.md) - Project context and technical decisions
-- [00-MASTER-ROADMAP.md](../roadmap/00-MASTER-ROADMAP.md) - Full project roadmap
+- [ORCHESTRATION_INDEX.md](../ORCHESTRATION_INDEX.md) - Orchestration system entry point
+- [Phase Planning](../../docs/phase-planning.md) - Project phase planning
 
 ---
 
