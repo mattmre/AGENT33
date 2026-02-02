@@ -1,5 +1,7 @@
 # AGENT-33 Engine
 
+> **Looking for project-level docs?** See the [Documentation Hub](../docs/README.md) for quickstart, integration, deployment, and architecture guides. Key links: [Quick Start](../docs/QUICKSTART.md) | [Integration Guide](../docs/INTEGRATION-GUIDE.md) | [Deployment Guide](../docs/DEPLOYMENT.md)
+
 The runtime engine for AGENT-33 -- an autonomous AI agent orchestration platform. This component provides the FastAPI server, workflow executor, agent runtime, LLM routing, memory/RAG pipeline, security layer, messaging integrations, and CLI tooling.
 
 ## Directory Structure

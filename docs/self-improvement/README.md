@@ -31,3 +31,7 @@ When running without internet connectivity, the system continues optimizing usin
 - [testing-protocol.md](testing-protocol.md) — Continuous testing and regression prevention
 - [offline-mode.md](offline-mode.md) — Silo operation and graceful degradation
 - [community-improvement.md](community-improvement.md) — Multi-agent communal learning
+
+## See Also
+
+- [Mission and Vision](../MISSION-AND-VISION.md) — The philosophy behind self-improvement as a core principle
