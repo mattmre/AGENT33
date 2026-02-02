@@ -15,7 +15,7 @@
 ## Repository Structure
 
 ```
-D:\GITHUB\Claudius Maximus\
+<PROJECT_ROOT>/../Claudius Maximus\
 ├── monitor_relevance.py          # Main processing script (watches & processes files)
 ├── CLAUDE.md                     # This handoff document
 ├── docs/
@@ -58,7 +58,7 @@ D:\GITHUB\Claudius Maximus\
 ### Start Processing
 
 ```bash
-cd "D:\GITHUB\Claudius Maximus"
+cd "<PROJECT_ROOT>/../Claudius Maximus"
 python monitor_relevance.py
 ```
 
@@ -128,7 +128,7 @@ The 5-stage pipeline transforms raw narratives into actionable phase documents:
 [13,734 Narratives] → [Parse JSON] → [SQLite Catalog] → [Claude Dedup] → [Dependency Graph] → [Phase Docs]
 ```
 
-**Location**: `D:\GITHUB\Claudius Maximus\pipeline\`
+**Location**: `<PROJECT_ROOT>/../Claudius Maximus\pipeline\`
 **Full plan**: See `pipeline/PIPELINE_PLAN.md`
 
 ### Pipeline Scripts (All Ready)
@@ -145,7 +145,7 @@ The 5-stage pipeline transforms raw narratives into actionable phase documents:
 ### Running the Pipeline
 
 ```bash
-cd "D:\GITHUB\Claudius Maximus\pipeline"
+cd "<PROJECT_ROOT>/../Claudius Maximus\pipeline"
 
 # Test with sample (no Claude API needed)
 python run_pipeline.py --sample 50 --skip-dedup

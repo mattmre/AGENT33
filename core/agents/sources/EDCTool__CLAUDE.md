@@ -31,7 +31,7 @@ EDCToolkit is a Windows Forms (.NET 8.0) eDiscovery data processing application 
 
 ### Build
 ```bash
-cd D:\GITHUB\EDCTool
+cd <PROJECT_ROOT>/../EDCTool
 dotnet build WindowsFormsApplication19
 ```
 
@@ -92,7 +92,7 @@ dotnet test EDCToolkit.Tests
 ## Project Structure
 
 ```
-D:\GITHUB\EDCTool\
+<PROJECT_ROOT>/../EDCTool\
 ├── WindowsFormsApplication19/     # Main application
 │   ├── Main.cs                    # Main form (1249 lines)
 │   ├── Import.cs                  # File import (PERF-02, DEBUG-01 fixed)
@@ -174,7 +174,7 @@ if (Import.HasImportError(table))
 
 ```bash
 # Check git status
-cd D:\GITHUB\EDCTool
+cd <PROJECT_ROOT>/../EDCTool
 git status
 
 # Run tests (Windows)

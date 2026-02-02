@@ -97,7 +97,7 @@ git pull origin master
 ## Commands to Run First
 
 ```bash
-cd D:\GITHUB\EDCTool
+cd <PROJECT_ROOT>/../EDCTool
 
 # Check PR status and merge
 gh pr checks 90

@@ -2,7 +2,7 @@
 
 Heading-only comparison between canonical `core/agents/CLAUDE.md` and archived CLAUDE variants.
 
-Canonical file: `D:\GITHUB\AGENT-33\core\agents\CLAUDE.md`
+Canonical file: `<PROJECT_ROOT>/../AGENT-33\core\agents\CLAUDE.md`
 
 ## CHELATEDAI__docs__CLAUDE.md
 - Size: 748 bytes
