@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Agency Swarm is a mature, production-ready Python framework for building multi-agent applications, built on top of the OpenAI Agents SDK. Created by Arsenii Shatokhin (VRSEN), the framework emphasizes modeling AI automation after real-world organizational structures—defining agents with roles like CEO, Developer, and Virtual Assistant that communicate through explicit, directional flows.
+Agency Swarm is a mature, production-ready Python framework for building multi-agent applications, built on top of the OpenAI Agents SDK. The framework emphasizes modeling AI automation after real-world organizational structures—defining agents with roles like CEO, Developer, and Virtual Assistant that communicate through explicit, directional flows.
 
 The framework's core philosophy of treating agent systems as "agencies" with defined hierarchies and communication patterns directly aligns with AGENT-33's orchestration goals. However, Agency Swarm takes an implementation-first approach with Python code, while AGENT-33 maintains a specification/documentation-first stance. This creates complementary opportunities: AGENT-33 can adopt Agency Swarm's proven patterns as model-agnostic specifications while preserving its evidence-first, auditable approach.
 

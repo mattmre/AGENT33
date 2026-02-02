@@ -429,7 +429,7 @@ The HTML file contains no recognizable message elements.
 
 If you encounter issues not covered here:
 
-1. Check the [GitHub Issues](https://github.com/mattmre/RSMFConvert/issues) for similar problems
+1. Check the [GitHub Issues](https://github.com/<owner>/RSMFConvert/issues) for similar problems
 2. Open a new issue with:
    - RSMFConverter version (`rsmfconverter --version`)
    - Teams export source (Purview, Admin Center, etc.)

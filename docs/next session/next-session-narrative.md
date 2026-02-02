@@ -10,18 +10,18 @@
 ### Competitive Analysis Integration (PRs #5-9)
 | PR | Branch | Scope | Status |
 |----|--------|-------|--------|
-| [#5](https://github.com/mattmre/AGENT-33/pull/5) | `feature/hooks-system-specification` | Hooks system (6 hooks) | ✅ Merged |
-| [#6](https://github.com/mattmre/AGENT-33/pull/6) | `feature/slash-command-registry` | Commands (6 commands) | ✅ Merged |
-| [#7](https://github.com/mattmre/AGENT-33/pull/7) | `feature/tdd-skill-modular-rules` | TDD skill + 4 rules | ✅ Merged |
-| [#8](https://github.com/mattmre/AGENT-33/pull/8) | `feature/phase-4-gap-fills` | Gap fills (5 cmd, 3 skill, 3 rule, 3 hook) | ✅ Merged |
-| [#9](https://github.com/mattmre/AGENT-33/pull/9) | `feature/phase-8-review-checklist` | Phase 8 review completion | ✅ Merged |
+| [#5](https://github.com/<owner>/AGENT-33/pull/5) | `feature/hooks-system-specification` | Hooks system (6 hooks) | ✅ Merged |
+| [#6](https://github.com/<owner>/AGENT-33/pull/6) | `feature/slash-command-registry` | Commands (6 commands) | ✅ Merged |
+| [#7](https://github.com/<owner>/AGENT-33/pull/7) | `feature/tdd-skill-modular-rules` | TDD skill + 4 rules | ✅ Merged |
+| [#8](https://github.com/<owner>/AGENT-33/pull/8) | `feature/phase-4-gap-fills` | Gap fills (5 cmd, 3 skill, 3 rule, 3 hook) | ✅ Merged |
+| [#9](https://github.com/<owner>/AGENT-33/pull/9) | `feature/phase-8-review-checklist` | Phase 8 review completion | ✅ Merged |
 
 ### T1-T3 Backlog (PRs #10-12)
 | PR | Branch | Scope | Status |
 |----|--------|-------|--------|
-| [#10](https://github.com/mattmre/AGENT-33/pull/10) | `feature/t1-orchestration-protocol` | Orchestration protocol files | ✅ Merged |
-| [#11](https://github.com/mattmre/AGENT-33/pull/11) | `feature/t2-warmup-script` | Warmup/pin script | ✅ Merged |
-| [#12](https://github.com/mattmre/AGENT-33/pull/12) | `feature/t3-real-task` | Validate orchestration task | ✅ Merged |
+| [#10](https://github.com/<owner>/AGENT-33/pull/10) | `feature/t1-orchestration-protocol` | Orchestration protocol files | ✅ Merged |
+| [#11](https://github.com/<owner>/AGENT-33/pull/11) | `feature/t2-warmup-script` | Warmup/pin script | ✅ Merged |
+| [#12](https://github.com/<owner>/AGENT-33/pull/12) | `feature/t3-real-task` | Validate orchestration task | ✅ Merged |
 
 ## Completed Backlog Tasks
 | Priority | Task | Description | Status |

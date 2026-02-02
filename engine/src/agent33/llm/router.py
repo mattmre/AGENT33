@@ -16,6 +16,7 @@ _DEFAULT_PREFIX_MAP: list[tuple[str, str]] = [
     ("o3", "openai"),
     ("claude-", "openai"),  # Anthropic via OpenAI-compat proxy
     ("ft:gpt-", "openai"),
+    ("airllm-", "airllm"),
 ]
 
 _DEFAULT_PROVIDER = "ollama"

@@ -47,8 +47,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: agent33
-      POSTGRES_PASSWORD: agent33
+      POSTGRES_USER: agent33          # WARNING: change in production
+      POSTGRES_PASSWORD: agent33      # WARNING: change in production
       POSTGRES_DB: agent33
     ports:
       - "${POSTGRES_PORT:-5432}:5432"

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # API
     api_port: int = 8000
     api_log_level: str = "info"
-    api_secret_key: str = "change-me-in-production"
+    api_secret_key: str = "change-me-in-production"  # WARNING: override in production via env var
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     nats_url: str = "nats://nats:4222"
 
     # Security
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = "change-me-in-production"  # WARNING: override in production via env var
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     encryption_key: str = ""

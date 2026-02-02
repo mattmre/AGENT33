@@ -102,11 +102,17 @@ class AgentRuntime:
         router: ModelRouter,
         model: str | None = None,
         temperature: float = 0.7,
+        observation_capture: Any | None = None,
+        trace_emitter: Any | None = None,
+        session_id: str = "",
     ) -> None:
         self._definition = definition
         self._router = router
         self._model = model or "llama3.2"
         self._temperature = temperature
+        self._observation_capture = observation_capture
+        self._trace_emitter = trace_emitter
+        self._session_id = session_id
 
     @property
     def definition(self) -> AgentDefinition:
@@ -160,9 +166,41 @@ class AgentRuntime:
 
         output = _parse_output(response.content, self._definition)
 
-        return AgentResult(
+        result = AgentResult(
             output=output,
             raw_response=response.content,
             tokens_used=response.total_tokens,
             model=response.model,
         )
+
+        # Record observation if capture is available
+        if self._observation_capture is not None:
+            try:
+                from agent33.memory.observation import Observation
+
+                obs = Observation(
+                    session_id=self._session_id,
+                    agent_name=self._definition.name,
+                    event_type="llm_response",
+                    content=response.content[:2000],
+                    metadata={"model": response.model, "tokens": response.total_tokens},
+                    tags=[],
+                )
+                await self._observation_capture.record(obs)
+            except Exception:
+                logger.debug("failed to record observation", exc_info=True)
+
+        # Emit trace spans if emitter is available
+        if self._trace_emitter is not None:
+            try:
+                self._trace_emitter.emit_prompt(
+                    self._definition.name,
+                    [{"role": m.role, "content": m.content} for m in messages],
+                )
+                self._trace_emitter.emit_result(
+                    self._definition.name, response.content
+                )
+            except Exception:
+                logger.debug("failed to emit trace", exc_info=True)
+
+        return result

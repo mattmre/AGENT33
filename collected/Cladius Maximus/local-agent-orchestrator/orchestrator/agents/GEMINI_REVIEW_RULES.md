@@ -1,14 +1,6 @@
-﻿# Gemini Review Rules
+# GEMINI_REVIEW_RULES.md
 
-Use Gemini primarily for:
-- Second opinion review of diffs
-- Test plan generation
-- Risk/edge-case analysis
-- Alternative design suggestions
-
-Output:
-- Required issues (must fix)
-- Suggested improvements (nice-to-have)
-- Test suggestions
-
-Keep it concise and actionable.
+> **Stub**: This file originally contained agent orchestration code and documentation.
+> Removed for public release. File path preserved as reference architecture.
+>
+> **Document type**: Agent orchestration code & docs
