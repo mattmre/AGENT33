@@ -57,11 +57,19 @@ class Settings(BaseSettings):
     embedding_provider: str = "ollama"  # "ollama" | "jina"
 
     # Training (self-evolving loop)
-    training_enabled: bool = False
+    training_enabled: bool = True
     training_optimize_interval: int = 100
     training_idle_optimize_seconds: int = 300
     training_min_rollouts: int = 10
     training_eval_model: str = ""
+
+    # Self-improvement
+    self_improve_enabled: bool = True
+    self_improve_scope: str = "prompts,workflows,templates"
+    self_improve_require_approval: bool = True
+    offline_mode: bool = False
+    intake_output_dir: str = "docs/research/repo_dossiers"
+    analysis_template_dir: str = "docs/research/templates"
 
 
 settings = Settings()

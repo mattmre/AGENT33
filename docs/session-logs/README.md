@@ -1,12 +1,30 @@
 # Session Logs
 
-This directory stores development session logs for the AGENT-33 project.
+Session persistence is handled by the AGENT-33 engine memory system rather than static log files.
 
-## Structure
+## How Sessions Are Recorded
 
-Each session log captures decisions, progress, and context from a development session. Use the templates below when creating new entries.
+The engine automatically captures:
+- Conversation history and context
+- Decisions made and rationale
+- Tool invocations and results
+- Workflow execution traces
 
-## Templates
+All session data is stored in PostgreSQL and queryable via the engine API.
 
-- **TEMPLATE-session-log.md** — Standard session log format
-- **TEMPLATE-next-session-briefing.md** — Briefing document for resuming work in a future session
+## Accessing Session History
+
+```bash
+# List recent sessions
+agent33 sessions list
+
+# View a specific session
+agent33 sessions show <session-id>
+
+# Export session as markdown
+agent33 sessions export <session-id> --format md
+```
+
+## Session Templates
+
+For manual session documentation, use the templates in `core/workflows/` which define standard formats for session logs and briefings.
