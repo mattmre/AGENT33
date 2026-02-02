@@ -4,11 +4,18 @@ Multi-agent orchestration framework — governance layer, evidence capture, sess
 
 ## Repository Structure
 
-- `core/` — Framework specifications, orchestrator rules, research, workflow templates
-- `collected/` — Reference architecture from source projects (stubbed for public release)
-- `docs/` — AGENT-33 phase planning, competitive analysis, research, session logs
+- `core/` — Framework specifications, orchestrator rules, workflow templates
+- `collected/` — Dynamic intake directory (populated by `agent33 intake <repo>`)
+- `docs/` — Phase planning, self-improvement protocols, research templates
+- `docs/self-improvement/` — Continuous improvement loop, intake, testing, offline mode
 - `engine/` — Runtime engine (FastAPI, workflow executor, LLM routing, memory/RAG, security)
 - `scripts/` — Utility scripts
+
+## Self-Improvement Philosophy
+
+AGENT-33 generates knowledge on demand rather than storing static snapshots. The system
+learns *how* to analyze rather than caching *what* was analyzed. See
+`docs/self-improvement/README.md` for the continuous improvement loop and protocols.
 
 ## Engine Quick Start
 

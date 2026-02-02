@@ -117,8 +117,12 @@ AGENT-33/
 │   ├── docker-compose.yml       #   Full stack deployment
 │   ├── Dockerfile               #   Engine container image
 │   └── pyproject.toml           #   Python project configuration
-├── collected/                   # Raw ingested assets from source repos (immutable)
-└── docs/                        # Planning artifacts and session notes
+├── collected/                   # Dynamic intake directory (populated by agent33 intake)
+└── docs/                        # Planning, self-improvement protocols, research templates
+    ├── self-improvement/        #   Continuous improvement loop, intake, testing, offline mode
+    ├── phases/                  #   AGENT-33 roadmap and phase planning
+    ├── competitive-analysis/    #   Autonomous competitive analysis protocol
+    └── research/                #   Research templates and generated dossiers
 ```
 
 ## Documentation
