@@ -42,7 +42,7 @@ EDCToolkit is a Windows Forms (.NET 8.0) eDiscovery data processing application.
 
 **First**: Merge PR #95 (already approved)
 ```bash
-cd D:\GITHUB\EDCTool
+cd <PROJECT_ROOT>/../EDCTool
 gh pr merge 95 --squash --delete-branch
 git checkout master
 git pull origin master
@@ -140,7 +140,7 @@ cat docs/refinement-remediation/2026-01-15_tracker.md | grep -A2 "MEDIUM"
 ## Commands to Run First
 
 ```bash
-cd D:\GITHUB\EDCTool
+cd <PROJECT_ROOT>/../EDCTool
 
 # Merge PR #95 (already approved)
 gh pr merge 95 --squash --delete-branch

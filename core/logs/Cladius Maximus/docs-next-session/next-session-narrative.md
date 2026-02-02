@@ -18,13 +18,13 @@
 
 1. **Check narrative progress**:
    ```bash
-   cd "D:\GITHUB\Claudius Maximus"
+   cd "<PROJECT_ROOT>/../Claudius Maximus"
    python -c "import json; s=json.load(open('RELEVANCE PROCESSING ROOM/processing_state.json')); print(f'Processed: {len(s[\"processed_files\"])}')"
    ```
 
 2. **If narratives complete, run full pipeline**:
    ```bash
-   cd "D:\GITHUB\Claudius Maximus\pipeline"
+   cd "<PROJECT_ROOT>/../Claudius Maximus\pipeline"
    python run_pipeline.py --skip-dedup  # Without Claude dedup
    # OR with dedup:
    export ANTHROPIC_API_KEY=sk-ant-...
@@ -75,7 +75,7 @@ Pipeline now preserves **full data** throughout all stages.
 
 ```bash
 # Check narrative progress
-cd "D:\GITHUB\Claudius Maximus"
+cd "<PROJECT_ROOT>/../Claudius Maximus"
 python -c "import json; s=json.load(open('RELEVANCE PROCESSING ROOM/processing_state.json')); print(f'Processed: {len(s[\"processed_files\"])}')"
 
 # Resume narrative processing (if stopped)
