@@ -172,8 +172,8 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md`
 
 ## Research
-- `core/research/06-OPENCLAW-SECURITY-ANALYSIS.md`
-- `core/research/07-OPENCLAW-FEATURE-PARITY.md`
+- `core/research/06-SECURITY-ANALYSIS.md`
+- `core/research/07-FEATURE-PARITY.md`
 
 ---
 

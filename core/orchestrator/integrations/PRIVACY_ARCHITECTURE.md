@@ -47,7 +47,7 @@ Only these categories of providers are approved for data transmission:
 
 ### BLOCKED Providers
 
-The following providers are blocked due to security and privacy concerns identified in the OpenClaw analysis:
+The following providers are blocked due to security and privacy concerns identified in the external platform analysis:
 
 - **MiniMax** (api.minimax.io) - Chinese company, data jurisdiction concerns
 - **Chutes AI** (api.chutes.ai) - hardcoded endpoint, no configurability

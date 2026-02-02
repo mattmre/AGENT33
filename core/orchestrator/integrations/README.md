@@ -35,4 +35,4 @@ Before adding any new platform integration:
 - `core/orchestrator/SECURITY_HARDENING.md`
 - `core/orchestrator/TOOL_GOVERNANCE.md`
 - `core/orchestrator/TOOL_REGISTRY_CHANGE_CONTROL.md`
-- `core/research/06-OPENCLAW-SECURITY-ANALYSIS.md`
+- `core/research/06-SECURITY-ANALYSIS.md`

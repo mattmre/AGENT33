@@ -80,9 +80,9 @@ The `collected/` directory contains immutable source captures:
 
 ```
 collected/
-├── RSMFConverter/    # Captured from RSMFConverter repo
-├── EDCTool/          # Captured from EDCTool repo
-└── myainewsbot/      # Captured from myainewsbot repo
+├── project-a/    # Captured from source repo A
+├── project-b/    # Captured from source repo B
+└── project-c/    # Captured from source repo C
 ```
 
 ### Rules for Collected
@@ -114,10 +114,10 @@ Before completing refinement:
 
 ```markdown
 <!-- BAD -->
-Fixed typo in collected/RSMFConverter/README.md
+Fixed typo in collected/project-a/README.md
 
 <!-- GOOD -->
-Noted typo in collected/RSMFConverter/README.md
+Noted typo in collected/project-a/README.md
 → Created issue in upstream repo
 → Will sync after upstream fix
 ```

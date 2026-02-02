@@ -22,8 +22,8 @@ AGENT-33 is a master aggregation repo for model-agnostic orchestration workflows
 | Document | Description |
 |----------|-------------|
 | [Agentic Orchestration Trends 2025H2](research/agentic-orchestration-trends-2025H2.md) | Industry trends and guidance for agentic coding |
-| [OpenClaw Security Analysis](research/06-OPENCLAW-SECURITY-ANALYSIS.md) | Security vulnerability analysis of OpenClaw platform |
-| [OpenClaw Feature Parity](research/07-OPENCLAW-FEATURE-PARITY.md) | Feature comparison and security hardening mapping |
+| [Security Analysis](research/06-SECURITY-ANALYSIS.md) | External platform security vulnerability analysis |
+| [Feature Parity](research/07-FEATURE-PARITY.md) | Feature comparison and security hardening mapping |
 
 ---
 
