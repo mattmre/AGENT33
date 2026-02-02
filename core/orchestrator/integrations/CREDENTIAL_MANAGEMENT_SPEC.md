@@ -7,7 +7,7 @@
 
 ## Purpose
 
-Define mandatory credential handling practices for all AGENT-33 integrations. This specification replaces plaintext storage patterns (as found in OpenClaw and similar frameworks) with vault-backed, encrypted credential management. Compliance with this specification is not optional; any integration that stores or transmits credentials outside these requirements MUST be rejected during review.
+Define mandatory credential handling practices for all AGENT-33 integrations. This specification replaces plaintext storage patterns (as found in similar frameworks) with vault-backed, encrypted credential management. Compliance with this specification is not optional; any integration that stores or transmits credentials outside these requirements MUST be rejected during review.
 
 ---
 
@@ -170,9 +170,9 @@ agent33 credentials rotate --credential <name> --emergency
 
 ---
 
-## 5. Anti-Patterns (from OpenClaw Analysis)
+## 5. Anti-Patterns (from External Analysis)
 
-The following anti-patterns were identified through analysis of the OpenClaw framework and similar projects. Each is documented here as a cautionary reference.
+The following anti-patterns were identified through analysis of external frameworks and similar projects. Each is documented here as a cautionary reference.
 
 ### 5.1 Plaintext API Keys in JSON Files
 

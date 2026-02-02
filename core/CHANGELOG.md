@@ -20,30 +20,30 @@
 | 2026-01-30 | core/orchestrator/plugins/PLUGIN_REGISTRY_SPEC.md | Osmedeus, Kestra | Plugin system with lifecycle, isolation, governance (CA-055). | Cluster 4. |
 | 2026-01-30 | core/orchestrator/distribution/DISTRIBUTION_SYNC_SPEC.md | Phase 9 | Downstream repo sync rules, PR templates, validation (CA-061). | Phase 9: Distribution & Sync. |
 | 2026-01-30 | core/orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md | Phase 10 | Contribution model, review assignment, escalation, maintenance cadence (CA-062). | Phase 10: Governance & Community. |
-| 2026-01-30 | core/research/06-OPENCLAW-SECURITY-ANALYSIS.md | github.com/openclaw/openclaw | Full platform security analysis identifying plaintext credentials, information leaking, third-party dependency risks. | New research document. |
-| 2026-01-30 | core/research/07-OPENCLAW-FEATURE-PARITY.md | github.com/openclaw/openclaw | Feature-by-feature parity mapping with security improvements. | New research document. |
-| 2026-01-30 | core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md | OpenClaw channel architecture (20+ platforms) | Security-hardened channel integration spec with tiered platform classification. | New specification (CA-017). |
-| 2026-01-30 | core/orchestrator/integrations/VOICE_MEDIA_SPEC.md | OpenClaw STT/TTS/vision features | Privacy-first voice and media processing with local-first preference. | New specification (CA-017). |
-| 2026-01-30 | core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md | OpenClaw auth-profiles.json (plaintext) | Vault/keyring mandatory credential management replacing plaintext patterns. | New specification (CA-017). |
-| 2026-01-30 | core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md | OpenClaw data flow analysis | Privacy-first architecture with encryption at rest, consent requirements, data minimization. | New specification (CA-017). |
-| 2026-01-30 | core/orchestrator/integrations/README.md | (new) | Integration specifications index. | New specification (CA-017). |
-| 2026-01-16 | core/arch/* (AEP templates & guides) | collected/*/docs/ARCH AGENTIC ENGINEERING AND PLANNING/* | Identical copies across repos; selected RSMFConverter as canonical baseline. | Removed suffixed variants in core/arch. |
-| 2026-01-16 | core/prompts/agentic-review-framework.md | collected/*/docs/agentic-review-framework.md | Identical copies; selected RSMFConverter baseline. |  |
-| 2026-01-16 | core/prompts/agentic-review-prompts.md | collected/*/docs/agentic-review-prompts.md | Identical copies; selected RSMFConverter baseline. |  |
-| 2026-01-16 | core/agents/CLAUDE.md | collected/*/CLAUDE.md and collected/*/docs/CLAUDE.md | Selected most complete (RSMFConverter docs version, 25,208 bytes). |  |
-| 2026-01-16 | core/agents/CLAUDE_SESSION_WRAP_CONTEXT_AGENT.md | collected/*/docs/CLAUDE_SESSION_WRAP_CONTEXT_AGENT.md | Identical copies; selected RSMFConverter baseline. |  |
-| 2026-01-16 | core/agents/AGENTS.md | collected/EDCwayback/AGENTS.md, collected/EDCTool/AGENTS.md | Selected most complete (EDCwayback is longer). |  |
-| 2026-01-16 | core/orchestrator/* | collected/Cladius Maximus/local-agent-orchestrator/* | Only repo containing orchestrator assets. |  |
-| 2026-01-16 | core/workflows/* | collected/RSMFConverter/.github/* | Baseline workflow set; other repos pending merge review. |  |
-| 2026-01-16 | core/workflows/instructions/csharp.instructions.md | collected/EDCTool/.github/instructions/csharp.instructions.md | Only repo providing C# instruction file. | Promoted to canonical instructions. |
-| 2026-01-16 | core/workflows/instructions/python.instructions.md | collected/EDCwayback/.github/instructions/python.instructions.md | Only repo providing Python instruction file. | Promoted to canonical instructions. |
+| 2026-01-30 | core/research/06-SECURITY-ANALYSIS.md | External platform analysis | Full platform security analysis identifying plaintext credentials, information leaking, third-party dependency risks. | New research document. |
+| 2026-01-30 | core/research/07-FEATURE-PARITY.md | External platform analysis | Feature-by-feature parity mapping with security improvements. | New research document. |
+| 2026-01-30 | core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md | External channel architecture (20+ platforms) | Security-hardened channel integration spec with tiered platform classification. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/VOICE_MEDIA_SPEC.md | External STT/TTS/vision features | Privacy-first voice and media processing with local-first preference. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md | External auth-profiles analysis | Vault/keyring mandatory credential management replacing plaintext patterns. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md | External data flow analysis | Privacy-first architecture with encryption at rest, consent requirements, data minimization. | New specification (CA-017). |
+| 2026-01-30 | core/orchestrator/integrations/README.md | (new) | Integration specifications index. | New specification. |
+| 2026-01-16 | core/arch/* (AEP templates & guides) | collected/*/docs/ARCH AGENTIC ENGINEERING AND PLANNING/* | Identical copies across repos; selected canonical baseline. | Removed suffixed variants in core/arch. |
+| 2026-01-16 | core/prompts/agentic-review-framework.md | collected/*/docs/agentic-review-framework.md | Identical copies; selected canonical baseline. |  |
+| 2026-01-16 | core/prompts/agentic-review-prompts.md | collected/*/docs/agentic-review-prompts.md | Identical copies; selected canonical baseline. |  |
+| 2026-01-16 | core/agents/CLAUDE.md | collected/*/CLAUDE.md and collected/*/docs/CLAUDE.md | Selected most complete variant (25,208 bytes). |  |
+| 2026-01-16 | core/agents/CLAUDE_SESSION_WRAP_CONTEXT_AGENT.md | collected/*/docs/CLAUDE_SESSION_WRAP_CONTEXT_AGENT.md | Identical copies; selected canonical baseline. |  |
+| 2026-01-16 | core/agents/AGENTS.md | collected/*/AGENTS.md | Selected most complete variant. |  |
+| 2026-01-16 | core/orchestrator/* | collected/*/local-agent-orchestrator/* | Only repo containing orchestrator assets. |  |
+| 2026-01-16 | core/workflows/* | collected/*/.github/* | Baseline workflow set; other repos pending merge review. |  |
+| 2026-01-16 | core/workflows/instructions/csharp.instructions.md | collected/*/.github/instructions/csharp.instructions.md | Only repo providing C# instruction file. | Promoted to canonical instructions. |
+| 2026-01-16 | core/workflows/instructions/python.instructions.md | collected/*/.github/instructions/python.instructions.md | Only repo providing Python instruction file. | Promoted to canonical instructions. |
 | 2026-01-16 | core/agents/sources/* | collected/*/CLAUDE.md, collected/*/AGENTS.md, collected/*/docs/agentic-review-*.md | Archived for reference; non-canonical. | Flattened filenames. |
 | 2026-01-16 | core/workflows/sources/* | collected/*/.github/* | Archived for later workflow merge. |  |
-| 2026-01-16 | core/agents/AGENTS.md | collected/EDCwayback/AGENTS.md, collected/EDCTool/AGENTS.md | Consolidated project-specific constraints into a single core file. |  |
+| 2026-01-16 | core/agents/AGENTS.md | collected/*/AGENTS.md | Consolidated project-specific constraints into a single core file. |  |
 | 2026-01-16 | core/agents/CLAUDE_SOURCES.md | core/agents/sources/* | Added index for archived CLAUDE variants. |  |
-| 2026-01-16 | core/workflows/workflows/dotnet-build.yml | collected/EDCTool/.github/workflows/dotnet-build.yml | Selected as reusable .NET CI template. |  |
-| 2026-01-16 | core/workflows/dependabot.yml | collected/myainewsbot.com/.github/dependabot.yml | Simple baseline dependabot config. |  |
-| 2026-01-16 | core/agents/CLAUDE.md | core/agents/sources/* CLAUDE variants | Added condensed sections for EDCToolkit, EDCwayback, Claudius Maximus. |  |
+| 2026-01-16 | core/workflows/workflows/dotnet-build.yml | collected/*/.github/workflows/dotnet-build.yml | Selected as reusable .NET CI template. |  |
+| 2026-01-16 | core/workflows/dependabot.yml | collected/*/.github/dependabot.yml | Simple baseline dependabot config. |  |
+| 2026-01-16 | core/agents/CLAUDE.md | core/agents/sources/* CLAUDE variants | Added condensed sections for source project contexts. |  |
 | 2026-01-16 | core/orchestrator/README.md | (new) | Added model-agnostic orchestrator entrypoint. |  |
 | 2026-01-16 | core/orchestrator/handoff/DEFINITION_OF_DONE.md | (new) | Added definition of done checklist. |  |
 | 2026-01-16 | core/orchestrator/handoff/TASKS.md | core/orchestrator/handoff/TASKS.md | Added review capture + DoD step. |  |
@@ -74,8 +74,8 @@
 | 2026-01-16 | core/agents/CLAUDE.md | core/agents/CLAUDE.md | Added quick links to sources and diff report. |  |
 | 2026-01-16 | core/README.md | core/README.md | Added orchestration overview links. |  |
 | 2026-01-16 | core/orchestrator/GLOSSARY.md | (new) | Added orchestration glossary. |  |
-| 2026-01-16 | core/agents/CLAUDE_ADDENDUM.md | (new) | Moved non-RSMF contexts into addendum. |  |
-| 2026-01-16 | core/agents/CLAUDE.md | core/agents/CLAUDE.md | Linked addendum and removed non-RSMF contexts. |  |
+| 2026-01-16 | core/agents/CLAUDE_ADDENDUM.md | (new) | Moved additional project contexts into addendum. |  |
+| 2026-01-16 | core/agents/CLAUDE.md | core/agents/CLAUDE.md | Linked addendum and removed project-specific contexts. |  |
 | 2026-01-16 | core/orchestrator/README.md | core/orchestrator/README.md | Added orchestration quickstart. |  |
 | 2026-01-16 | core/orchestrator/AGENT_ROUTING_MAP.md | core/orchestrator/AGENT_ROUTING_MAP.md | Added role selection checklist. |  |
 | 2026-01-16 | core/orchestrator/handoff/ESCALATION_PATHS.md | (new) | Added escalation paths guidance. |  |

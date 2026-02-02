@@ -840,13 +840,13 @@ Dry Run Analysis
 Changed Artifacts: 12
   - core/workflows/review.md (modified)
   - core/agents/implementer.md (modified)
-  - collected/RSMFConverter/CLAUDE.md (modified)
+  - collected/project-a/CLAUDE.md (modified)
   ...
 
 Agents to Invoke: 3
   1. AGT-005 Reviewer → core/workflows/review.md
   2. AGT-007 Documentation → core/agents/implementer.md
-  3. AGT-001 Orchestrator → collected/RSMFConverter/CLAUDE.md
+  3. AGT-001 Orchestrator → collected/project-a/CLAUDE.md
 
 Execution Mode: Incremental (12 of 156 artifacts affected)
 Estimated Duration: 8 minutes

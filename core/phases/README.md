@@ -12,7 +12,7 @@ This index summarizes the generic phase templates used for agentic planning and 
 | 01 | Project Foundation | Foundation | `PHASE-01-PROJECT-FOUNDATION.md` |
 | 02 | Data Models | Core Models | `PHASE-02-DATA-MODELS.md` |
 | 03 | Parser Framework | Core Parsing | `PHASE-03-PARSER-FRAMEWORK.md` |
-| 04 | Writer/Exporter Framework | Output | `PHASE-04-RSMF-WRITER.md` |
+| 04 | Writer/Exporter Framework | Output | `PHASE-04-WRITER-FRAMEWORK.md` |
 | 05 | Validation Engine | Validation | `PHASE-05-VALIDATION-ENGINE.md` |
 | 06 | CLI Foundation | Interfaces | `PHASE-06-CLI-FOUNDATION.md` |
 | 07 | Error Handling | Reliability | `PHASE-07-ERROR-HANDLING.md` |
@@ -25,7 +25,7 @@ This index summarizes the generic phase templates used for agentic planning and 
 | 13 | Source Parser E | Ingestion | `PHASE-13-DISCORD-PARSER.md` |
 | 14 | Source Parser F | Ingestion | `PHASE-14-TELEGRAM-PARSER.md` |
 | 15 | Source Parser G | Ingestion | `PHASE-15-FACEBOOK-PARSER.md` |
-| 16 | Source Parser H | Ingestion | `PHASE-16-CELLEBRITE-PARSER.md` |
+| 16 | Source Parser H | Ingestion | `PHASE-16-FORENSIC-PARSER.md` |
 | 17 | Source Parser I | Ingestion | `PHASE-17-AXIOM-PARSER.md` |
 | 18 | General Parsers | Ingestion | `PHASE-18-GENERIC-PARSERS.md` |
 | 19 | Source Parser J | Ingestion | `PHASE-19-GOOGLE-CHAT-PARSER.md` |

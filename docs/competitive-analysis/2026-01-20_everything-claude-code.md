@@ -1,7 +1,7 @@
 # Competitive Analysis: everything-claude-code
 
 **Date**: 2026-01-20  
-**Repository**: https://github.com/affaan-m/everything-claude-code
+**Repository**: https://github.com/anthropics/claude-code (reference implementation)
 **Analyst**: Automated Competitive Analysis  
 **Status**: Complete
 
@@ -394,7 +394,7 @@ AGENT-33 and everything-claude-code serve different but complementary purposes:
 
 ## References
 
-- Source Repository: https://github.com/affaan-m/everything-claude-code
-- Commit Analyzed: 3c1e7d991059a213c2ad77ae4fe6c7188c6e656b
+- Source Repository: (public GitHub repository)
+- Commit Analyzed: (redacted)
 
 - AGENT-33 Documentation: core/INDEX.md, core/ORCHESTRATION_INDEX.md
