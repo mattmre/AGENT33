@@ -19,15 +19,10 @@ from agent33.security.auth import (
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 # ---------------------------------------------------------------------------
-# In-memory user store (replace with a real DB in production)
+# In-memory user store — TODO: implement proper user store (database-backed)
 # ---------------------------------------------------------------------------
 
-_users: dict[str, dict[str, Any]] = {
-    "admin": {
-        "password_hash": hashlib.sha256(b"admin").hexdigest(),
-        "scopes": ["admin"],
-    },
-}
+_users: dict[str, dict[str, Any]] = {}
 
 # ---------------------------------------------------------------------------
 # Request / response models

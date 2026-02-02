@@ -597,8 +597,8 @@ Authenticate with username and password to receive a JWT access token.
 
 ```json
 {
-  "username": "admin",
-  "password": "admin"
+  "username": "<your-username>",
+  "password": "<your-password>"
 }
 ```
 
@@ -622,7 +622,7 @@ Authenticate with username and password to receive a JWT access token.
 ```bash
 curl -X POST http://localhost:8000/v1/auth/token \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin"}'
+  -d '{"username": "<your-username>", "password": "<your-password>"}'
 ```
 
 ---
