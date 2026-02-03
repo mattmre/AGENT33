@@ -8,8 +8,9 @@ API Documentation: https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -76,7 +77,7 @@ class GDELTWorker(BaseWorker):
                     try:
                         published_at = datetime.strptime(
                             date_str[:14], "%Y%m%d%H%M%S"
-                        ).replace(tzinfo=timezone.utc)
+                        ).replace(tzinfo=UTC)
                     except ValueError:
                         pass
 

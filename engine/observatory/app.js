@@ -1,21 +1,37 @@
 /**
- * AGENT-33 Observatory - Main Application
+ * AGENT-33 Observatory - Main Application Controller
  *
- * Handles UI interactions, state management, and API integration.
+ * Handles UI interactions, state management, and component orchestration.
+ * Features: SSE with auto-reconnect, stats polling, graph refresh, connection status
  */
 
 (function () {
     'use strict';
 
+    // Configuration
+    const CONFIG = {
+        statsPollingInterval: 30000,      // 30 seconds
+        graphRefreshInterval: 60000,      // 60 seconds
+        activityPageSize: 15,
+        graphNodeLimit: 100,
+    };
+
     // Application state
     const state = {
         connected: false,
+        reconnecting: false,
         currentPage: 1,
         totalPages: 1,
-        itemsPerPage: 15,
-        eventSource: null,
+        itemsPerPage: CONFIG.activityPageSize,
+        streamController: null,
         statsInterval: null,
+        graphInterval: null,
         chatHistory: [],
+        chatLoading: false,
+        graphFilter: {
+            type: 'all',
+            search: '',
+        },
     };
 
     // DOM element references
@@ -33,6 +49,14 @@
         chatInput: null,
         chatSubmit: null,
         lastUpdate: null,
+        graphContainer: null,
+        graphSearch: null,
+        graphTypeFilter: null,
+        graphDetails: null,
+        graphZoomIn: null,
+        graphZoomOut: null,
+        graphReset: null,
+        graphRefresh: null,
     };
 
     /**
@@ -52,30 +76,47 @@
         elements.chatInput = document.getElementById('chat-input');
         elements.chatSubmit = document.getElementById('chat-submit');
         elements.lastUpdate = document.getElementById('last-update');
+        elements.graphContainer = document.getElementById('graph-container');
+        elements.graphSearch = document.getElementById('graph-search');
+        elements.graphTypeFilter = document.getElementById('graph-type-filter');
+        elements.graphDetails = document.getElementById('graph-details');
+        elements.graphZoomIn = document.getElementById('graph-zoom-in');
+        elements.graphZoomOut = document.getElementById('graph-zoom-out');
+        elements.graphReset = document.getElementById('graph-reset');
+        elements.graphRefresh = document.getElementById('graph-refresh');
     }
 
     /**
      * Update connection status indicator
-     * @param {string} status - 'connected', 'disconnected', or 'connecting'
+     * @param {string} status - 'connected', 'disconnected', 'connecting', or 'reconnecting'
+     * @param {Object} data - Optional additional data (for reconnecting status)
      */
-    function updateConnectionStatus(status) {
+    function updateConnectionStatus(status, data = {}) {
         if (!elements.statusIndicator) return;
 
-        elements.statusIndicator.classList.remove('connected', 'disconnected');
+        elements.statusIndicator.classList.remove('connected', 'disconnected', 'reconnecting');
 
         switch (status) {
             case 'connected':
                 elements.statusIndicator.classList.add('connected');
                 elements.statusText.textContent = 'Connected';
                 state.connected = true;
+                state.reconnecting = false;
                 break;
             case 'disconnected':
                 elements.statusIndicator.classList.add('disconnected');
                 elements.statusText.textContent = 'Disconnected';
                 state.connected = false;
+                state.reconnecting = false;
+                break;
+            case 'reconnecting':
+                elements.statusIndicator.classList.add('reconnecting');
+                elements.statusText.textContent = `Reconnecting (${data.attempt}/${data.maxAttempts})...`;
+                state.reconnecting = true;
                 break;
             default:
                 elements.statusText.textContent = 'Connecting...';
+                state.connected = false;
         }
     }
 
@@ -89,42 +130,32 @@
         const now = new Date();
         const diff = now - date;
 
-        // Less than a minute ago
-        if (diff < 60000) {
-            return 'Just now';
-        }
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
 
-        // Less than an hour ago
-        if (diff < 3600000) {
-            const minutes = Math.floor(diff / 60000);
-            return `${minutes}m ago`;
-        }
-
-        // Less than a day ago
-        if (diff < 86400000) {
-            const hours = Math.floor(diff / 3600000);
-            return `${hours}h ago`;
-        }
-
-        // Show full date
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 
     /**
-     * Get icon class for activity type
+     * Get icon for activity type
      * @param {string} type - Activity type
-     * @returns {string} Icon class name
+     * @returns {Object} Icon info with symbol and class
      */
     function getActivityIcon(type) {
         const icons = {
-            query: 'Q',
-            ingest: 'I',
-            workflow: 'W',
-            error: '!',
-            chat: 'C',
-            agent: 'A',
+            query: { symbol: 'Q', class: 'query' },
+            ingest: { symbol: 'I', class: 'ingest' },
+            workflow: { symbol: 'W', class: 'workflow' },
+            error: { symbol: '!', class: 'error' },
+            chat: { symbol: 'C', class: 'chat' },
+            agent: { symbol: 'A', class: 'agent' },
+            system: { symbol: 'S', class: 'system' },
         };
-        return icons[type] || '?';
+        return icons[type] || { symbol: '?', class: 'default' };
     }
 
     /**
@@ -135,21 +166,27 @@
     function renderActivityItem(activity) {
         const item = document.createElement('div');
         item.className = 'activity-item';
+        item.dataset.id = activity.id || '';
 
-        const iconClass = activity.type || 'query';
         const icon = getActivityIcon(activity.type);
         const timestamp = formatTimestamp(activity.timestamp || new Date());
 
         item.innerHTML = `
-            <div class="activity-icon ${iconClass}">${icon}</div>
+            <div class="activity-icon ${icon.class}">
+                <span>${icon.symbol}</span>
+            </div>
             <div class="activity-content">
                 <div class="activity-message">${escapeHtml(activity.message || activity.content || 'Unknown activity')}</div>
                 <div class="activity-meta">
                     <span class="activity-timestamp">${timestamp}</span>
                     ${activity.agent ? `<span class="activity-agent">${escapeHtml(activity.agent)}</span>` : ''}
+                    ${activity.duration ? `<span class="activity-duration">${activity.duration}ms</span>` : ''}
                 </div>
             </div>
         `;
+
+        // Add entrance animation
+        item.style.animation = 'slideInRight 0.3s ease-out';
 
         return item;
     }
@@ -182,8 +219,10 @@
         }
 
         elements.activityFeed.innerHTML = '';
-        activities.forEach(activity => {
-            elements.activityFeed.appendChild(renderActivityItem(activity));
+        activities.forEach((activity, index) => {
+            const item = renderActivityItem(activity);
+            item.style.animationDelay = `${index * 50}ms`;
+            elements.activityFeed.appendChild(item);
         });
     }
 
@@ -215,7 +254,6 @@
         } catch (error) {
             console.error('Failed to load activity:', error);
             if (error.isNetworkError || error.status === 404) {
-                // API not available, show mock data for demo
                 renderMockActivity();
             } else {
                 elements.activityFeed.innerHTML = `
@@ -234,9 +272,10 @@
         const mockActivities = [
             { type: 'query', message: 'User queried: "What are the main components of AGENT-33?"', timestamp: new Date(Date.now() - 120000) },
             { type: 'ingest', message: 'Ingested 15 documents from collected/docs/', timestamp: new Date(Date.now() - 300000) },
-            { type: 'workflow', message: 'Workflow "research-pipeline" completed successfully', timestamp: new Date(Date.now() - 600000) },
+            { type: 'workflow', message: 'Workflow "research-pipeline" completed successfully', timestamp: new Date(Date.now() - 600000), duration: 2340 },
             { type: 'agent', message: 'Agent "researcher" spawned for task analysis', timestamp: new Date(Date.now() - 900000) },
             { type: 'chat', message: 'New chat session started', timestamp: new Date(Date.now() - 1200000) },
+            { type: 'system', message: 'Knowledge graph updated with 42 new nodes', timestamp: new Date(Date.now() - 1800000) },
         ];
         renderActivityFeed(mockActivities);
         state.totalPages = 1;
@@ -253,7 +292,6 @@
         } catch (error) {
             console.error('Failed to load stats:', error);
             if (error.isNetworkError || error.status === 404) {
-                // Show mock stats for demo
                 updateStatsDisplay({
                     facts_count: 1247,
                     sources_count: 42,
@@ -265,19 +303,35 @@
     }
 
     /**
-     * Update stats display
+     * Update stats display with animation
      * @param {Object} stats - Stats data
      */
     function updateStatsDisplay(stats) {
-        const factEl = document.getElementById('stat-facts');
-        const sourcesEl = document.getElementById('stat-sources');
-        const queriesEl = document.getElementById('stat-queries');
-        const uptimeEl = document.getElementById('stat-uptime');
+        const elements = {
+            facts: document.getElementById('stat-facts'),
+            sources: document.getElementById('stat-sources'),
+            queries: document.getElementById('stat-queries'),
+            uptime: document.getElementById('stat-uptime'),
+        };
 
-        if (factEl) factEl.textContent = formatNumber(stats.facts_count);
-        if (sourcesEl) sourcesEl.textContent = formatNumber(stats.sources_count);
-        if (queriesEl) queriesEl.textContent = formatNumber(stats.queries_today);
-        if (uptimeEl) uptimeEl.textContent = stats.uptime || '--';
+        if (elements.facts) animateValue(elements.facts, stats.facts_count);
+        if (elements.sources) animateValue(elements.sources, stats.sources_count);
+        if (elements.queries) animateValue(elements.queries, stats.queries_today);
+        if (elements.uptime) elements.uptime.textContent = stats.uptime || '--';
+    }
+
+    /**
+     * Animate a numeric value change
+     * @param {HTMLElement} element - Element to update
+     * @param {number} newValue - New value
+     */
+    function animateValue(element, newValue) {
+        const formatted = formatNumber(newValue);
+        if (element.textContent !== formatted) {
+            element.classList.add('updating');
+            element.textContent = formatted;
+            setTimeout(() => element.classList.remove('updating'), 300);
+        }
     }
 
     /**
@@ -302,22 +356,22 @@
     }
 
     /**
-     * Connect to activity stream
+     * Connect to activity stream with enhanced callbacks
      */
     function connectActivityStream() {
-        if (state.eventSource) {
-            state.eventSource.close();
+        if (state.streamController) {
+            state.streamController.close();
         }
 
-        state.eventSource = ObservatoryAPI.connectActivityStream({
+        state.streamController = ObservatoryAPI.connectActivityStream({
             onActivity: (activity) => {
-                // Prepend new activity to feed
                 if (elements.activityFeed && state.currentPage === 1) {
-                    const item = renderActivityItem(activity);
                     const placeholder = elements.activityFeed.querySelector('.activity-placeholder');
                     if (placeholder) {
                         elements.activityFeed.innerHTML = '';
                     }
+
+                    const item = renderActivityItem(activity);
                     elements.activityFeed.insertBefore(item, elements.activityFeed.firstChild);
 
                     // Keep feed size manageable
@@ -329,16 +383,61 @@
             },
             onConnect: () => {
                 updateConnectionStatus('connected');
+                console.log('Activity stream connected');
             },
             onDisconnect: () => {
                 updateConnectionStatus('disconnected');
-                // Attempt reconnect after delay
-                setTimeout(connectActivityStream, 5000);
+                console.log('Activity stream disconnected');
+            },
+            onReconnecting: (data) => {
+                updateConnectionStatus('reconnecting', data);
+                console.log(`Reconnecting attempt ${data.attempt}/${data.maxAttempts}, delay: ${data.delay}ms`);
             },
             onError: (error) => {
                 console.error('Activity stream error:', error);
+                if (error.message === 'Max reconnection attempts reached') {
+                    updateConnectionStatus('disconnected');
+                    showNotification('Connection lost. Please refresh the page.', 'error');
+                }
+            },
+            onStats: (stats) => {
+                updateStatsDisplay(stats);
             },
         });
+    }
+
+    /**
+     * Show a notification message
+     * @param {string} message - Message to display
+     * @param {string} type - Notification type (info, success, warning, error)
+     */
+    function showNotification(message, type = 'info') {
+        let container = document.getElementById('notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+        }
+
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <span class="notification-message">${escapeHtml(message)}</span>
+            <button class="notification-close">&times;</button>
+        `;
+
+        notification.querySelector('.notification-close').addEventListener('click', () => {
+            notification.remove();
+        });
+
+        container.appendChild(notification);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            notification.classList.add('fade-out');
+            setTimeout(() => notification.remove(), 300);
+        }, 5000);
     }
 
     /**
@@ -350,7 +449,6 @@
     function addChatMessage(role, content, sources = []) {
         if (!elements.chatMessages) return;
 
-        // Remove welcome message if present
         const welcome = elements.chatMessages.querySelector('.chat-welcome');
         if (welcome) {
             welcome.remove();
@@ -364,7 +462,11 @@
             sourcesHtml = `
                 <div class="chat-sources">
                     <div class="chat-sources-title">Sources:</div>
-                    ${sources.map(s => `<a class="chat-source-item" href="${escapeHtml(s.url || '#')}" target="_blank">${escapeHtml(s.title || s)}</a>`).join('')}
+                    ${sources.map(s => `
+                        <a class="chat-source-item" href="${escapeHtml(s.url || '#')}" target="_blank">
+                            ${escapeHtml(s.title || s)}
+                        </a>
+                    `).join('')}
                 </div>
             `;
         }
@@ -383,6 +485,25 @@
     }
 
     /**
+     * Add a loading indicator to chat
+     * @returns {HTMLElement} Loading element
+     */
+    function addChatLoading() {
+        const loading = document.createElement('div');
+        loading.className = 'chat-message agent chat-loading';
+        loading.innerHTML = `
+            <div class="chat-bubble">
+                <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        `;
+        elements.chatMessages.appendChild(loading);
+        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        return loading;
+    }
+
+    /**
      * Handle chat form submission
      * @param {Event} event - Form submit event
      */
@@ -390,32 +511,114 @@
         event.preventDefault();
 
         const question = elements.chatInput?.value.trim();
-        if (!question) return;
+        if (!question || state.chatLoading) return;
 
-        // Disable input while processing
+        state.chatLoading = true;
         elements.chatInput.disabled = true;
         elements.chatSubmit.disabled = true;
         elements.chatInput.value = '';
 
-        // Add user message
         addChatMessage('user', question);
+        const loadingEl = addChatLoading();
 
         try {
             const response = await ObservatoryAPI.askAgent(question);
+            loadingEl.remove();
             addChatMessage('agent', response.answer, response.sources);
         } catch (error) {
             console.error('Failed to get response:', error);
+            loadingEl.remove();
+
             if (error.isNetworkError || error.status === 404) {
-                // Mock response for demo
                 addChatMessage('agent', 'The Observatory API is not yet connected. This is a placeholder response demonstrating the chat interface. Once the backend is running, you will receive real answers from the AGENT-33 knowledge base.');
             } else {
                 addChatMessage('agent', `Sorry, I encountered an error: ${error.message}`);
             }
         } finally {
+            state.chatLoading = false;
             elements.chatInput.disabled = false;
             elements.chatSubmit.disabled = false;
             elements.chatInput.focus();
         }
+    }
+
+    /**
+     * Initialize knowledge graph
+     */
+    function initKnowledgeGraph() {
+        if (typeof KnowledgeGraph === 'undefined') {
+            console.warn('KnowledgeGraph module not loaded');
+            return;
+        }
+
+        KnowledgeGraph.init('graph-container', {
+            searchInputId: 'graph-search',
+            typeFilterId: 'graph-type-filter',
+            detailsPanelId: 'graph-details',
+        });
+
+        loadKnowledgeGraph();
+    }
+
+    /**
+     * Load knowledge graph data
+     */
+    async function loadKnowledgeGraph() {
+        if (typeof KnowledgeGraph === 'undefined') return;
+
+        try {
+            const data = await ObservatoryAPI.fetchKnowledgeGraph(
+                CONFIG.graphNodeLimit,
+                state.graphFilter
+            );
+            KnowledgeGraph.loadData(data);
+        } catch (error) {
+            console.error('Failed to load knowledge graph:', error);
+
+            if (error.isNetworkError || error.status === 404) {
+                // Load mock data for demo
+                KnowledgeGraph.loadData(getMockGraphData());
+            }
+        }
+    }
+
+    /**
+     * Get mock graph data for demo
+     * @returns {Object} Mock graph data
+     */
+    function getMockGraphData() {
+        return {
+            nodes: [
+                { id: 'agent33', label: 'AGENT-33', type: 'entity', description: 'Multi-agent orchestration framework' },
+                { id: 'orchestrator', label: 'Orchestrator', type: 'entity', description: 'Central coordination component' },
+                { id: 'knowledge', label: 'Knowledge Base', type: 'entity', description: 'Facts and relationships storage' },
+                { id: 'workflows', label: 'Workflows', type: 'entity', description: 'Task execution pipelines' },
+                { id: 'agents', label: 'Agent Pool', type: 'entity', description: 'Specialized AI agents' },
+                { id: 'rag', label: 'RAG System', type: 'entity', description: 'Retrieval-augmented generation' },
+                { id: 'memory', label: 'Memory Layer', type: 'entity', description: 'Persistent context storage' },
+                { id: 'intake', label: 'Intake Process', type: 'event', description: 'Document ingestion workflow' },
+                { id: 'research', label: 'Research Agent', type: 'entity', description: 'Information gathering agent' },
+                { id: 'analyst', label: 'Analyst Agent', type: 'entity', description: 'Data analysis agent' },
+                { id: 'coordinator', label: 'Coordinator Agent', type: 'entity', description: 'Task delegation agent' },
+                { id: 'manages', label: 'manages', type: 'relationship' },
+                { id: 'uses', label: 'uses', type: 'relationship' },
+                { id: 'produces', label: 'produces', type: 'relationship' },
+            ],
+            edges: [
+                { source: 'agent33', target: 'orchestrator', label: 'contains' },
+                { source: 'orchestrator', target: 'workflows', label: 'executes' },
+                { source: 'orchestrator', target: 'agents', label: 'manages' },
+                { source: 'orchestrator', target: 'knowledge', label: 'queries' },
+                { source: 'knowledge', target: 'rag', label: 'powers' },
+                { source: 'knowledge', target: 'memory', label: 'includes' },
+                { source: 'agents', target: 'research', label: 'includes' },
+                { source: 'agents', target: 'analyst', label: 'includes' },
+                { source: 'agents', target: 'coordinator', label: 'includes' },
+                { source: 'intake', target: 'knowledge', label: 'populates' },
+                { source: 'research', target: 'knowledge', label: 'reads' },
+                { source: 'analyst', target: 'knowledge', label: 'analyzes' },
+            ],
+        };
     }
 
     /**
@@ -443,10 +646,41 @@
         // Chat form
         elements.chatForm?.addEventListener('submit', handleChatSubmit);
 
+        // Graph controls
+        elements.graphZoomIn?.addEventListener('click', () => KnowledgeGraph?.zoomIn());
+        elements.graphZoomOut?.addEventListener('click', () => KnowledgeGraph?.zoomOut());
+        elements.graphReset?.addEventListener('click', () => KnowledgeGraph?.resetZoom());
+        elements.graphRefresh?.addEventListener('click', loadKnowledgeGraph);
+
         // Handle visibility change to reconnect if needed
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && !state.connected) {
+            if (!document.hidden && !state.connected && !state.reconnecting) {
                 connectActivityStream();
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+            // Escape to close details panel
+            if (event.key === 'Escape') {
+                KnowledgeGraph?.hideNodeDetails();
+            }
+
+            // Ctrl/Cmd + Enter to send chat
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                if (document.activeElement === elements.chatInput) {
+                    elements.chatForm?.dispatchEvent(new Event('submit'));
+                }
+            }
+        });
+
+        // Click outside graph details to close
+        document.addEventListener('click', (event) => {
+            if (elements.graphDetails &&
+                elements.graphDetails.classList.contains('visible') &&
+                !elements.graphDetails.contains(event.target) &&
+                !event.target.closest('.graph-node')) {
+                KnowledgeGraph?.hideNodeDetails();
             }
         });
     }
@@ -465,14 +699,29 @@
     }
 
     /**
-     * Start periodic stats polling
+     * Start periodic polling intervals
      */
-    function startStatsPolling() {
-        // Initial load
+    function startPolling() {
+        // Stats polling every 30 seconds
         loadStats();
+        state.statsInterval = setInterval(loadStats, CONFIG.statsPollingInterval);
 
-        // Poll every 30 seconds
-        state.statsInterval = setInterval(loadStats, 30000);
+        // Graph refresh every 60 seconds
+        state.graphInterval = setInterval(loadKnowledgeGraph, CONFIG.graphRefreshInterval);
+    }
+
+    /**
+     * Stop polling intervals
+     */
+    function stopPolling() {
+        if (state.statsInterval) {
+            clearInterval(state.statsInterval);
+            state.statsInterval = null;
+        }
+        if (state.graphInterval) {
+            clearInterval(state.graphInterval);
+            state.graphInterval = null;
+        }
     }
 
     /**
@@ -485,7 +734,10 @@
         // Initial data load
         checkHealth();
         loadActivity();
-        startStatsPolling();
+        startPolling();
+
+        // Initialize knowledge graph
+        initKnowledgeGraph();
 
         // Connect to live stream
         connectActivityStream();
@@ -493,10 +745,38 @@
         console.log('AGENT-33 Observatory initialized');
     }
 
+    /**
+     * Cleanup on page unload
+     */
+    function cleanup() {
+        stopPolling();
+
+        if (state.streamController) {
+            state.streamController.close();
+        }
+
+        if (typeof KnowledgeGraph !== 'undefined') {
+            KnowledgeGraph.destroy();
+        }
+    }
+
+    // Handle cleanup on page unload
+    window.addEventListener('beforeunload', cleanup);
+
     // Start when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
+
+    // Expose for debugging
+    window.ObservatoryApp = {
+        state,
+        loadActivity,
+        loadStats,
+        loadKnowledgeGraph,
+        connectActivityStream,
+        showNotification,
+    };
 })();

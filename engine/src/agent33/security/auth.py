@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import jwt
@@ -115,7 +115,7 @@ def generate_api_key(
 
 
 async def generate_api_key_async(
-    session: "AsyncSession",
+    session: AsyncSession,
     tenant_id: str,
     subject: str,
     name: str,
@@ -180,7 +180,7 @@ def validate_api_key(key: str) -> TokenPayload | None:
 
 
 async def validate_api_key_async(
-    session: "AsyncSession",
+    session: AsyncSession,
     key: str,
 ) -> TokenPayload | None:
     """Validate an API key against the database.
@@ -189,6 +189,7 @@ async def validate_api_key_async(
     Updates cache on successful database lookup.
     """
     from sqlalchemy import select
+
     from agent33.db.models import ApiKey
 
     key_hash = _hash_key(key)
@@ -215,11 +216,11 @@ async def validate_api_key_async(
         return None
 
     # Check expiration
-    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+    if api_key.expires_at and api_key.expires_at < datetime.now(UTC):
         return None
 
     # Update last used timestamp
-    api_key.last_used_at = datetime.now(timezone.utc)
+    api_key.last_used_at = datetime.now(UTC)
 
     # Cache the result
     _api_keys_cache[key_hash] = {
@@ -252,7 +253,7 @@ def revoke_api_key(key_id: str) -> bool:
 
 
 async def revoke_api_key_async(
-    session: "AsyncSession",
+    session: AsyncSession,
     key_id: str,
     tenant_id: str,
 ) -> bool:
@@ -261,6 +262,7 @@ async def revoke_api_key_async(
     Returns ``True`` if the key was found and revoked.
     """
     from sqlalchemy import select
+
     from agent33.db.models import ApiKey
 
     stmt = select(ApiKey).where(
@@ -285,13 +287,14 @@ async def revoke_api_key_async(
     return True
 
 
-async def load_api_keys_to_cache(session: "AsyncSession") -> int:
+async def load_api_keys_to_cache(session: AsyncSession) -> int:
     """Load all active API keys from database into cache.
 
     Call this on startup to warm the cache.
     Returns the number of keys loaded.
     """
     from sqlalchemy import select
+
     from agent33.db.models import ApiKey
 
     stmt = select(ApiKey).where(ApiKey.is_active == True)  # noqa: E712
@@ -300,7 +303,7 @@ async def load_api_keys_to_cache(session: "AsyncSession") -> int:
 
     for api_key in api_keys:
         # Skip expired keys
-        if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+        if api_key.expires_at and api_key.expires_at < datetime.now(UTC):
             continue
 
         _api_keys_cache[api_key.key_hash] = {

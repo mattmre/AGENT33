@@ -1,12 +1,30 @@
 /**
- * AGENT-33 Observatory - API Client
+ * AGENT-33 Observatory - Enhanced API Client
  *
  * Handles all communication with the backend API endpoints.
+ * Features: error handling, loading states, SSE with auto-reconnect
  */
 
 const ObservatoryAPI = (function () {
     // Base URL for API calls - adjust based on deployment
     const BASE_URL = window.location.origin;
+
+    // Connection state for SSE
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const BASE_RECONNECT_DELAY = 1000; // 1 second
+
+    /**
+     * Calculate exponential backoff delay
+     * @param {number} attempt - Current attempt number
+     * @returns {number} Delay in milliseconds
+     */
+    function getReconnectDelay(attempt) {
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (max)
+        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt), 32000);
+        // Add jitter (0-1000ms) to prevent thundering herd
+        return delay + Math.random() * 1000;
+    }
 
     /**
      * Generic fetch wrapper with error handling
@@ -76,25 +94,61 @@ const ObservatoryAPI = (function () {
     }
 
     /**
-     * Send a question to the agent
+     * Send a question to the agent with loading state management
      * @param {string} question - User's question
+     * @param {Object} options - Additional options
+     * @param {Function} options.onLoadingChange - Callback for loading state changes
      * @returns {Promise<{answer: string, sources: Array}>}
      */
-    async function askAgent(question) {
-        return request('/api/ask', {
-            method: 'POST',
-            body: JSON.stringify({ question }),
-        });
+    async function askAgent(question, options = {}) {
+        const { onLoadingChange = () => {} } = options;
+
+        onLoadingChange(true);
+
+        try {
+            const result = await request('/api/ask', {
+                method: 'POST',
+                body: JSON.stringify({ question }),
+            });
+            return result;
+        } finally {
+            onLoadingChange(false);
+        }
     }
 
     /**
-     * Connect to the activity stream via Server-Sent Events
+     * Fetch knowledge graph data
+     * @param {number} limit - Maximum number of nodes to return
+     * @param {Object} filter - Filter options
+     * @param {string} filter.type - Node type filter (entity, relationship, event)
+     * @param {string} filter.search - Search query for node labels
+     * @returns {Promise<{nodes: Array, edges: Array, metadata: Object}>}
+     */
+    async function fetchKnowledgeGraph(limit = 100, filter = {}) {
+        const params = new URLSearchParams({
+            limit: limit.toString(),
+        });
+
+        if (filter.type && filter.type !== 'all') {
+            params.append('type', filter.type);
+        }
+
+        if (filter.search) {
+            params.append('search', filter.search);
+        }
+
+        return request(`/api/knowledge/graph?${params}`);
+    }
+
+    /**
+     * Connect to the activity stream via Server-Sent Events with auto-reconnect
      * @param {Object} callbacks - Event handlers
      * @param {Function} callbacks.onActivity - Called when new activity arrives
      * @param {Function} callbacks.onConnect - Called when connection established
      * @param {Function} callbacks.onDisconnect - Called when connection lost
      * @param {Function} callbacks.onError - Called on error
-     * @returns {EventSource} The EventSource instance for cleanup
+     * @param {Function} callbacks.onReconnecting - Called when attempting to reconnect
+     * @returns {Object} Controller object with close() method
      */
     function connectActivityStream(callbacks = {}) {
         const {
@@ -102,46 +156,112 @@ const ObservatoryAPI = (function () {
             onConnect = () => {},
             onDisconnect = () => {},
             onError = () => {},
+            onReconnecting = () => {},
         } = callbacks;
 
-        const eventSource = new EventSource(`${BASE_URL}/api/activity/stream`);
+        let eventSource = null;
+        let reconnectTimeout = null;
+        let isManualClose = false;
 
-        eventSource.onopen = function () {
-            onConnect();
-        };
-
-        eventSource.onmessage = function (event) {
-            try {
-                const data = JSON.parse(event.data);
-                onActivity(data);
-            } catch (err) {
-                console.error('Failed to parse activity event:', err);
+        function connect() {
+            if (eventSource) {
+                eventSource.close();
             }
-        };
 
-        eventSource.onerror = function (event) {
-            if (eventSource.readyState === EventSource.CLOSED) {
-                onDisconnect();
-            } else {
-                onError(new Error('SSE connection error'));
+            eventSource = new EventSource(`${BASE_URL}/api/activity/stream`);
+
+            eventSource.onopen = function () {
+                reconnectAttempts = 0;
+                onConnect();
+            };
+
+            eventSource.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    onActivity(data);
+                } catch (err) {
+                    console.error('Failed to parse activity event:', err);
+                }
+            };
+
+            eventSource.onerror = function (event) {
+                if (isManualClose) {
+                    return;
+                }
+
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    onDisconnect();
+                    scheduleReconnect();
+                } else {
+                    onError(new Error('SSE connection error'));
+                }
+            };
+
+            // Handle specific event types if the server sends them
+            eventSource.addEventListener('activity', function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    onActivity(data);
+                } catch (err) {
+                    console.error('Failed to parse activity event:', err);
+                }
+            });
+
+            eventSource.addEventListener('heartbeat', function () {
+                // Keep-alive, no action needed
+            });
+
+            eventSource.addEventListener('stats', function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (callbacks.onStats) {
+                        callbacks.onStats(data);
+                    }
+                } catch (err) {
+                    console.error('Failed to parse stats event:', err);
+                }
+            });
+        }
+
+        function scheduleReconnect() {
+            if (isManualClose || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                    onError(new Error('Max reconnection attempts reached'));
+                }
+                return;
             }
+
+            const delay = getReconnectDelay(reconnectAttempts);
+            reconnectAttempts++;
+
+            onReconnecting({ attempt: reconnectAttempts, delay, maxAttempts: MAX_RECONNECT_ATTEMPTS });
+
+            reconnectTimeout = setTimeout(connect, delay);
+        }
+
+        // Initial connection
+        connect();
+
+        // Return controller object
+        return {
+            close: function () {
+                isManualClose = true;
+                if (reconnectTimeout) {
+                    clearTimeout(reconnectTimeout);
+                }
+                if (eventSource) {
+                    eventSource.close();
+                }
+            },
+            reconnect: function () {
+                isManualClose = false;
+                reconnectAttempts = 0;
+                connect();
+            },
+            getEventSource: function () {
+                return eventSource;
+            },
         };
-
-        // Handle specific event types if the server sends them
-        eventSource.addEventListener('activity', function (event) {
-            try {
-                const data = JSON.parse(event.data);
-                onActivity(data);
-            } catch (err) {
-                console.error('Failed to parse activity event:', err);
-            }
-        });
-
-        eventSource.addEventListener('heartbeat', function () {
-            // Keep-alive, no action needed
-        });
-
-        return eventSource;
     }
 
     /**
@@ -150,14 +270,6 @@ const ObservatoryAPI = (function () {
      */
     async function checkHealth() {
         return request('/health');
-    }
-
-    /**
-     * Fetch knowledge graph data (placeholder for future implementation)
-     * @returns {Promise<{nodes: Array, edges: Array}>}
-     */
-    async function fetchKnowledgeGraph() {
-        return request('/api/knowledge/graph');
     }
 
     // Public API
@@ -169,6 +281,8 @@ const ObservatoryAPI = (function () {
         checkHealth,
         fetchKnowledgeGraph,
         BASE_URL,
+        // Expose for testing
+        _getReconnectDelay: getReconnectDelay,
     };
 })();
 

@@ -7,8 +7,8 @@ This is a gray area legally but widely used for AI applications.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx

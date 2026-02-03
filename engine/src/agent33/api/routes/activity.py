@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -155,7 +156,7 @@ async def stream_activity(
         last_id: str | None = None
 
         # Send initial heartbeat
-        yield f"event: connected\ndata: {{}}\n\n"
+        yield "event: connected\ndata: {}\n\n"
 
         while True:
             try:
@@ -192,7 +193,7 @@ async def stream_activity(
                     yield f"event: activity\ndata: {json.dumps(event_data)}\n\n"
 
                 # Send heartbeat every 30 seconds
-                yield f"event: heartbeat\ndata: {{}}\n\n"
+                yield "event: heartbeat\ndata: {}\n\n"
 
                 # Poll interval
                 await asyncio.sleep(5)
@@ -231,7 +232,7 @@ async def get_stats(
     sources_count = sources_result.scalar() or 0
 
     # Count activities today
-    today_start = datetime.now(timezone.utc).replace(
+    today_start = datetime.now(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
     activities_result = await session.execute(
@@ -266,20 +267,36 @@ async def ask_agent(
 ) -> AskResponse:
     """Ask the agent a question using RAG over stored facts.
 
-    The agent will search through learned facts and provide an answer
-    with source citations.
+    This endpoint implements Retrieval-Augmented Generation (RAG):
+    1. Accepts a user question
+    2. Searches for relevant facts using KnowledgeService semantic search
+    3. Uses the LLM to generate an answer based on retrieved context
+    4. Returns the answer with source citations
+
+    Args:
+        request: The question request containing the user's question
+        session: Database session (injected)
+
+    Returns:
+        AskResponse containing the answer, sources, and confidence score
+
+    Raises:
+        HTTPException: 400 if question is empty, 500 if processing fails
     """
-    from agent33.memory.long_term import LongTermMemory
-    from agent33.memory.embeddings import get_embedding
-    from agent33.llm.router import ModelRouter
     from agent33.config import settings
+    from agent33.db.session import get_session_factory
+    from agent33.llm.base import ChatMessage
+    from agent33.llm.ollama import OllamaProvider
+    from agent33.llm.router import ModelRouter
+    from agent33.memory.embeddings import EmbeddingProvider
+    from agent33.observatory.knowledge import KnowledgeService
 
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     # Log the query activity
-    activity = ActivityLog(
+    query_activity = ActivityLog(
         tenant_id="default",  # TODO: get from auth context
         activity_type=ActivityType.QUERIED,
         title=f"Question: {question[:100]}",
@@ -287,76 +304,137 @@ async def ask_agent(
         metadata_={"question_length": len(question)},
         is_public=True,
     )
-    session.add(activity)
+    session.add(query_activity)
 
     try:
-        # Get embedding for the question
-        question_embedding = await get_embedding(question)
+        # Initialize the KnowledgeService with required providers
+        embedding_provider = EmbeddingProvider(
+            base_url=settings.ollama_base_url,
+            model="nomic-embed-text",
+        )
+        session_factory = get_session_factory()
+        knowledge_service = KnowledgeService(
+            session_factory=session_factory,
+            embedding_provider=embedding_provider,
+        )
 
-        # Search for relevant facts
-        memory = LongTermMemory(settings.database_url)
-        await memory.initialize()
+        # Search for relevant facts using semantic similarity
+        search_results = await knowledge_service.search_facts(
+            query=question,
+            tenant_id=None,  # Search across all tenants for now
+            limit=5,
+        )
 
-        results = await memory.search(question_embedding, top_k=5)
-        await memory.close()
+        # Build context from retrieved facts
+        context_parts: list[str] = []
+        sources: list[dict[str, Any]] = []
 
-        # Build context from search results
-        context_parts = []
-        sources = []
-        for i, result in enumerate(results):
-            context_parts.append(f"[{i+1}] {result.text}")
+        for i, fact in enumerate(search_results):
+            context_parts.append(f"[{i + 1}] {fact.content}")
             sources.append({
                 "index": i + 1,
-                "text": result.text[:200],
-                "score": result.score,
-                "metadata": result.metadata,
+                "id": fact.id,
+                "text": fact.content[:200] + ("..." if len(fact.content) > 200 else ""),
+                "score": fact.score,
+                "confidence": fact.confidence,
+                "source_url": fact.source_url,
+                "metadata": fact.metadata,
             })
 
-        context = "\n\n".join(context_parts) if context_parts else "No relevant information found."
+        # Determine confidence based on search results
+        confidence = search_results[0].score if search_results and search_results[0].score else 0.0
 
-        # Generate answer using LLM
-        router = ModelRouter()
-        prompt = f"""Based on the following information, answer the user's question.
-If the information doesn't contain the answer, say so clearly.
-Cite your sources using [1], [2], etc.
+        # Build the context string for the LLM
+        if context_parts:
+            context = "\n\n".join(context_parts)
+        else:
+            context = "No relevant information found in the knowledge base."
 
-Information:
+        # Initialize the LLM router with Ollama provider
+        ollama_provider = OllamaProvider(
+            base_url=settings.ollama_base_url,
+            default_model=settings.ollama_default_model,
+        )
+        router = ModelRouter(default_provider="ollama")
+        router.register("ollama", ollama_provider)
+
+        # Build the RAG prompt
+        system_message = ChatMessage(
+            role="system",
+            content=(
+                "You are a helpful assistant that answers questions based on provided context. "
+                "Always cite your sources using [1], [2], etc. when referencing information. "
+                "If the provided context doesn't contain relevant information to answer the question, "
+                "clearly state that you don't have enough information to provide a complete answer."
+            ),
+        )
+        user_message = ChatMessage(
+            role="user",
+            content=f"""Based on the following information, please answer my question.
+
+Context:
 {context}
 
 Question: {question}
 
-Answer:"""
-
-        response = await router.complete(
-            messages=[{"role": "user", "content": prompt}],
-            model="default",
+Please provide a clear, accurate answer based on the context above. Cite sources using [1], [2], etc.""",
         )
 
-        answer = response.get("content", "I couldn't generate an answer.")
+        # Generate the answer using the LLM
+        llm_response = await router.complete(
+            messages=[system_message, user_message],
+            model=settings.ollama_default_model,
+            temperature=0.3,  # Lower temperature for more factual responses
+            max_tokens=1024,
+        )
 
-        # Log the response
+        answer = llm_response.content
+        if not answer:
+            answer = "I was unable to generate a response. Please try rephrasing your question."
+
+        # Log the response activity
         response_activity = ActivityLog(
             tenant_id="default",
             activity_type=ActivityType.RESPONDED,
-            title=f"Answered: {question[:50]}...",
-            description=answer[:500],
+            title=f"Answered: {question[:50]}{'...' if len(question) > 50 else ''}",
+            description=answer[:500] if len(answer) > 500 else answer,
             metadata_={
                 "sources_used": len(sources),
-                "confidence": results[0].score if results else 0,
+                "confidence": confidence,
+                "prompt_tokens": llm_response.prompt_tokens,
+                "completion_tokens": llm_response.completion_tokens,
             },
             is_public=True,
         )
         session.add(response_activity)
 
+        logger.info(
+            "ask_completed",
+            question_length=len(question),
+            sources_found=len(sources),
+            confidence=confidence,
+        )
+
         return AskResponse(
             answer=answer,
             sources=sources,
-            confidence=results[0].score if results else 0.0,
+            confidence=confidence,
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error("ask_failed", error=str(e), question=question[:100])
-        raise HTTPException(status_code=500, detail=f"Failed to process question: {str(e)}")
+        logger.error(
+            "ask_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            question=question[:100],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process question: {str(e)}",
+        )
 
 
 @router.get("/knowledge")

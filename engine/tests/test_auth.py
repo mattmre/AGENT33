@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
@@ -237,8 +236,8 @@ class TestAsyncAPIKeyFunctions:
         """Test that async generation creates database record."""
         from agent33.security.auth import generate_api_key_async
 
-        # Mock the ApiKey model
-        with patch("agent33.security.auth.ApiKey") as mock_api_key:
+        # Mock the ApiKey model (imported inside the function)
+        with patch("agent33.db.models.ApiKey") as mock_api_key:
             mock_instance = MagicMock()
             mock_instance.id = "db_id_123"
             mock_api_key.return_value = mock_instance

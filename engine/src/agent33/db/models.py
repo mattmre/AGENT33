@@ -11,8 +11,7 @@ This module defines all SQLAlchemy models for persistent storage including:
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -39,7 +38,7 @@ except ImportError:
 
 def utc_now() -> datetime:
     """Return current UTC datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def new_uuid() -> str:

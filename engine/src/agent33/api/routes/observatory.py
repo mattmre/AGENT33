@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -67,7 +68,7 @@ class AskResponse(BaseModel):
 
 _activity_store: list[ActivityItem] = []
 _activity_subscribers: list[asyncio.Queue] = []
-_start_time = datetime.now(timezone.utc)
+_start_time = datetime.now(UTC)
 
 
 def record_activity(
@@ -78,10 +79,10 @@ def record_activity(
 ) -> ActivityItem:
     """Record a new activity and notify subscribers."""
     activity = ActivityItem(
-        id=f"act_{len(_activity_store) + 1}_{int(datetime.now(timezone.utc).timestamp())}",
+        id=f"act_{len(_activity_store) + 1}_{int(datetime.now(UTC).timestamp())}",
         type=activity_type,
         message=message,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         agent=agent,
         metadata=metadata,
     )
@@ -104,8 +105,8 @@ def record_activity(
 # --- Static file routes ---
 
 
-@router.get("/observatory", response_class=HTMLResponse)
-async def observatory_index() -> FileResponse | HTMLResponse:
+@router.get("/observatory", response_class=HTMLResponse, response_model=None)
+async def observatory_index():
     """Serve the Observatory main page."""
     index_path = _OBSERVATORY_PATH / "index.html"
     if index_path.exists():
@@ -186,9 +187,9 @@ async def activity_stream(request: Request) -> StreamingResponse:
                     activity = await asyncio.wait_for(queue.get(), timeout=30.0)
                     data = activity.model_dump_json()
                     yield f"event: activity\ndata: {data}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Send heartbeat
-                    yield f"event: heartbeat\ndata: {json.dumps({'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
+                    yield f"event: heartbeat\ndata: {json.dumps({'timestamp': datetime.now(UTC).isoformat()})}\n\n"
 
         finally:
             _activity_subscribers.remove(queue)
@@ -208,7 +209,7 @@ async def activity_stream(request: Request) -> StreamingResponse:
 async def get_stats(request: Request) -> StatsResponse:
     """Get system statistics."""
     # Calculate uptime
-    uptime_delta = datetime.now(timezone.utc) - _start_time
+    uptime_delta = datetime.now(UTC) - _start_time
     days = uptime_delta.days
     hours = uptime_delta.seconds // 3600
     minutes = (uptime_delta.seconds % 3600) // 60
@@ -234,7 +235,7 @@ async def get_stats(request: Request) -> StatsResponse:
             pass
 
     # Count today's queries from activity
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     queries_today = sum(
         1
         for a in _activity_store
@@ -278,7 +279,7 @@ async def ask_agent(request: Request, body: AskRequest) -> AskResponse:
             )
     except ImportError:
         pass
-    except Exception as e:
+    except Exception:
         # Log but don't fail
         pass
 

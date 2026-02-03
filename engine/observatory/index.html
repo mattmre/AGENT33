@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AGENT-33 Observatory - Multi-agent orchestration monitoring dashboard">
+    <meta name="theme-color" content="#0d1117">
     <title>AGENT-33 Observatory</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Preconnect to D3.js CDN for faster loading -->
+    <link rel="preconnect" href="https://d3js.org">
 </head>
 <body>
     <header class="header">
@@ -87,25 +91,57 @@
                 </div>
             </section>
 
-            <!-- Knowledge Graph Placeholder -->
+            <!-- Knowledge Graph -->
             <section class="panel graph-panel">
-                <h2 class="panel-title">Knowledge Graph</h2>
+                <div class="graph-header">
+                    <h2 class="panel-title" style="margin-bottom: 0;">Knowledge Graph</h2>
+                    <div class="graph-controls">
+                        <input
+                            type="text"
+                            class="graph-search"
+                            id="graph-search"
+                            placeholder="Search nodes..."
+                            autocomplete="off"
+                        >
+                        <select class="graph-filter" id="graph-type-filter">
+                            <option value="all">All Types</option>
+                            <option value="entity">Entities</option>
+                            <option value="relationship">Relationships</option>
+                            <option value="event">Events</option>
+                        </select>
+                        <div class="graph-zoom-controls">
+                            <button class="graph-zoom-btn" id="graph-zoom-in" title="Zoom In">+</button>
+                            <button class="graph-zoom-btn" id="graph-zoom-out" title="Zoom Out">-</button>
+                            <button class="graph-zoom-btn" id="graph-reset" title="Reset View">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                    <path d="M3 3v5h5"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <button class="btn btn-secondary" id="graph-refresh">Refresh</button>
+                    </div>
+                </div>
                 <div class="graph-container" id="graph-container">
-                    <div class="graph-placeholder">
-                        <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <circle cx="19" cy="5" r="2"/>
-                            <circle cx="5" cy="5" r="2"/>
-                            <circle cx="5" cy="19" r="2"/>
-                            <circle cx="19" cy="19" r="2"/>
-                            <line x1="12" y1="9" x2="12" y2="5"/>
-                            <line x1="9.5" y1="13.5" x2="6" y2="17"/>
-                            <line x1="14.5" y1="13.5" x2="18" y2="17"/>
-                            <line x1="7" y1="5" x2="10" y2="5"/>
-                            <line x1="14" y1="5" x2="17" y2="5"/>
-                        </svg>
-                        <p>Knowledge graph visualization</p>
-                        <p class="placeholder-subtext">Coming soon</p>
+                    <!-- Graph SVG will be injected here by D3.js -->
+                </div>
+                <!-- Node Details Panel (slides in from right) -->
+                <div class="graph-details" id="graph-details">
+                    <!-- Content dynamically populated -->
+                </div>
+                <!-- Graph Legend -->
+                <div class="graph-legend">
+                    <div class="legend-item">
+                        <span class="legend-dot entity"></span>
+                        <span>Entity</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot relationship"></span>
+                        <span>Relationship</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot event"></span>
+                        <span>Event</span>
                     </div>
                 </div>
             </section>
@@ -113,12 +149,17 @@
     </main>
 
     <footer class="footer">
-        <span>AGENT-33 Observatory v0.1.0</span>
+        <span>AGENT-33 Observatory v0.2.0</span>
         <span class="footer-separator">|</span>
         <span id="last-update">Last update: --</span>
     </footer>
 
+    <!-- D3.js for knowledge graph visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <!-- Application scripts -->
     <script src="api.js"></script>
+    <script src="knowledge-graph.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

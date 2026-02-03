@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -80,7 +79,7 @@ class IngestionManager:
                         new_facts += 1
 
                 # Update source metadata
-                source.last_fetched_at = datetime.now(timezone.utc)
+                source.last_fetched_at = datetime.now(UTC)
                 source.items_fetched += len(results)
                 source.last_error = None
 

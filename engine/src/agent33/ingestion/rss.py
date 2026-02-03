@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
-from typing import AsyncIterator
-from html import unescape
 import re
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from html import unescape
 
 import httpx
 
@@ -62,7 +62,7 @@ class RSSWorker(BaseWorker):
             published_at = None
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 try:
-                    published_at = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    published_at = datetime(*entry.published_parsed[:6], tzinfo=UTC)
                 except Exception:
                     pass
 
