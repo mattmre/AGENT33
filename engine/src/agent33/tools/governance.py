@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from agent33.security.permissions import check_permission
@@ -99,6 +99,6 @@ class ToolGovernance:
                 "params": params,
                 "success": result.success,
                 "error": result.error or None,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )

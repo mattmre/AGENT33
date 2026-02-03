@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from agent33.memory.embeddings import EmbeddingProvider
 from agent33.memory.long_term import LongTermMemory, SearchResult

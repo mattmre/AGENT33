@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from agent33.messaging.models import Message, OutgoingMessage
+from agent33.messaging.models import Message
 
 
 @runtime_checkable

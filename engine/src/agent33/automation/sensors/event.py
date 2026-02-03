@@ -5,7 +5,8 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -106,7 +105,7 @@ def run(
         "-b",
         help="API base URL.",
     ),
-    inputs: Optional[str] = typer.Option(
+    inputs: str | None = typer.Option(
         None,
         "--inputs",
         "-i",

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent33.tools.base import ToolContext, ToolResult
+from agent33.tools.base import ToolContext
 from agent33.tools.builtin.reader import ReaderTool
 
 

@@ -59,7 +59,7 @@ def _check_encoded_payloads(text: str) -> list[str]:
             # Re-scan the decoded content for known attack patterns
             for pat in _SYSTEM_OVERRIDE_PATTERNS + _INSTRUCTION_OVERRIDE_PATTERNS:
                 if pat.search(decoded):
-                    threats.append(f"encoded_payload: hidden injection in base64 segment")
+                    threats.append("encoded_payload: hidden injection in base64 segment")
                     return threats
         except Exception:
             continue

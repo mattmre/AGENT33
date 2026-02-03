@@ -11,7 +11,7 @@ _DEFAULT_MODEL = "nomic-embed-text"
 _DEFAULT_TIMEOUT = 60.0
 
 # Global provider instance
-_provider: "EmbeddingProvider | None" = None
+_provider: EmbeddingProvider | None = None
 
 
 async def get_embedding(text: str) -> list[float]:

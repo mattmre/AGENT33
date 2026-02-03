@@ -5,10 +5,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from cryptography.fernet import Fernet
@@ -22,8 +21,8 @@ class SessionData:
     user_id: str
     agent_name: str
     data: dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class SessionManager:
@@ -74,7 +73,7 @@ class SessionManager:
         """Merge *data* into the session's data dict."""
         session = self.get(session_id)
         session.data.update(data)
-        session.updated_at = datetime.now(timezone.utc).isoformat()
+        session.updated_at = datetime.now(UTC).isoformat()
         payload = {
             "session_id": session.session_id,
             "user_id": session.user_id,

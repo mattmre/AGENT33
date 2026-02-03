@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent33.training.emitter import Span, TraceEmitter
+from agent33.training.emitter import TraceEmitter
 
 
 class TestTraceEmitter:

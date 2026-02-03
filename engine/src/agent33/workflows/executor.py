@@ -235,7 +235,7 @@ class WorkflowExecutor:
                     duration_ms=round(elapsed, 2),
                 )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = f"Step timed out after {step.timeout_seconds}s"
                 logger.warning("step_timeout", step_id=step.id, attempt=attempt)
             except Exception as exc:

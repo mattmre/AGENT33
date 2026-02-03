@@ -71,7 +71,7 @@ async def execute(
             proc.communicate(),
             timeout=float(timeout_seconds) if timeout_seconds else None,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.communicate()
         raise TimeoutError(

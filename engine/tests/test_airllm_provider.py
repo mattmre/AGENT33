@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent33.llm.base import ChatMessage, LLMResponse
+from agent33.llm.base import ChatMessage
 
 
 class TestAirLLMProvider:

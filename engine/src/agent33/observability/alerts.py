@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import operator
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
 
 from agent33.observability.metrics import MetricsCollector
 
@@ -35,7 +35,7 @@ class Alert:
     current_value: float
     threshold: float
     triggered_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
 

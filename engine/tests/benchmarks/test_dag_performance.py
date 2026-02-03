@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from agent33.workflows.dag import DAGBuilder
 from agent33.workflows.definition import WorkflowStep
 
