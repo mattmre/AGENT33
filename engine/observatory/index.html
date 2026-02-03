@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGENT-33 Observatory</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <h1 class="logo">AGENT-33</h1>
+            <span class="subtitle">Observatory</span>
+        </div>
+        <div class="header-right">
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="grid-layout">
+            <!-- Stats Panel -->
+            <section class="panel stats-panel">
+                <h2 class="panel-title">System Statistics</h2>
+                <div class="stats-grid" id="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-value" id="stat-facts">--</span>
+                        <span class="stat-label">Facts Indexed</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="stat-sources">--</span>
+                        <span class="stat-label">Sources</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="stat-queries">--</span>
+                        <span class="stat-label">Queries Today</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="stat-uptime">--</span>
+                        <span class="stat-label">Uptime</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Activity Feed -->
+            <section class="panel activity-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Activity Feed</h2>
+                    <button class="btn btn-secondary" id="refresh-activity">Refresh</button>
+                </div>
+                <div class="activity-feed" id="activity-feed">
+                    <div class="activity-placeholder">
+                        <p>Loading activity...</p>
+                    </div>
+                </div>
+                <div class="activity-pagination" id="activity-pagination">
+                    <button class="btn btn-secondary" id="prev-page" disabled>Previous</button>
+                    <span class="page-info" id="page-info">Page 1</span>
+                    <button class="btn btn-secondary" id="next-page">Next</button>
+                </div>
+            </section>
+
+            <!-- Ask the Agent -->
+            <section class="panel chat-panel">
+                <h2 class="panel-title">Ask the Agent</h2>
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="chat-welcome">
+                            <p>Ask a question about the knowledge base or request an action.</p>
+                        </div>
+                    </div>
+                    <form class="chat-form" id="chat-form">
+                        <input
+                            type="text"
+                            class="chat-input"
+                            id="chat-input"
+                            placeholder="Type your question..."
+                            autocomplete="off"
+                        >
+                        <button type="submit" class="btn btn-primary" id="chat-submit">
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Knowledge Graph Placeholder -->
+            <section class="panel graph-panel">
+                <h2 class="panel-title">Knowledge Graph</h2>
+                <div class="graph-container" id="graph-container">
+                    <div class="graph-placeholder">
+                        <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <circle cx="19" cy="5" r="2"/>
+                            <circle cx="5" cy="5" r="2"/>
+                            <circle cx="5" cy="19" r="2"/>
+                            <circle cx="19" cy="19" r="2"/>
+                            <line x1="12" y1="9" x2="12" y2="5"/>
+                            <line x1="9.5" y1="13.5" x2="6" y2="17"/>
+                            <line x1="14.5" y1="13.5" x2="18" y2="17"/>
+                            <line x1="7" y1="5" x2="10" y2="5"/>
+                            <line x1="14" y1="5" x2="17" y2="5"/>
+                        </svg>
+                        <p>Knowledge graph visualization</p>
+                        <p class="placeholder-subtext">Coming soon</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <span>AGENT-33 Observatory v0.1.0</span>
+        <span class="footer-separator">|</span>
+        <span id="last-update">Last update: --</span>
+    </footer>
+
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

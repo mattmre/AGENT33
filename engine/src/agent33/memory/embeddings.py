@@ -4,9 +4,39 @@ from __future__ import annotations
 
 import httpx
 
+from agent33.config import settings
+
 _DEFAULT_BASE_URL = "http://localhost:11434"
 _DEFAULT_MODEL = "nomic-embed-text"
 _DEFAULT_TIMEOUT = 60.0
+
+# Global provider instance
+_provider: "EmbeddingProvider | None" = None
+
+
+async def get_embedding(text: str) -> list[float]:
+    """Get embedding for a single text using the default provider.
+
+    This is a convenience function for common use cases.
+    """
+    global _provider
+    if _provider is None:
+        _provider = EmbeddingProvider(
+            base_url=settings.ollama_base_url,
+            model="nomic-embed-text",
+        )
+    return await _provider.embed(text)
+
+
+async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    """Get embeddings for multiple texts using the default provider."""
+    global _provider
+    if _provider is None:
+        _provider = EmbeddingProvider(
+            base_url=settings.ollama_base_url,
+            model="nomic-embed-text",
+        )
+    return await _provider.embed_batch(texts)
 
 
 class EmbeddingProvider:

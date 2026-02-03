@@ -44,6 +44,10 @@ browser = [
 reader = [
     "trafilatura>=1.8,<2",
 ]
+ingestion = [
+    "feedparser>=6.0,<7",
+    "youtube-transcript-api>=0.6,<1",
+]
 gpu = [
     "airllm>=2.8,<3",
     "torch>=2.2,<3",
