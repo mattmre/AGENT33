@@ -2,15 +2,78 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
+from urllib.parse import urlparse
 
 import httpx
 
 from agent33.ingestion.base import BaseWorker, IngestResult
+
+
+# Private/internal IP ranges that should be blocked for SSRF protection
+_BLOCKED_IP_RANGES = [
+    ipaddress.ip_network("10.0.0.0/8"),        # Private Class A
+    ipaddress.ip_network("172.16.0.0/12"),     # Private Class B
+    ipaddress.ip_network("192.168.0.0/16"),    # Private Class C
+    ipaddress.ip_network("127.0.0.0/8"),       # Loopback
+    ipaddress.ip_network("169.254.0.0/16"),    # Link-local (AWS metadata)
+    ipaddress.ip_network("0.0.0.0/8"),         # "This" network
+    ipaddress.ip_network("224.0.0.0/4"),       # Multicast
+    ipaddress.ip_network("255.255.255.255/32"),# Broadcast
+    ipaddress.ip_network("::1/128"),           # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),          # IPv6 private
+    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+]
+
+
+def _is_safe_url(url: str) -> tuple[bool, str]:
+    """Validate URL for SSRF protection.
+
+    Returns:
+        Tuple of (is_safe, error_message). If safe, error_message is empty.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Invalid URL format"
+
+    # Only allow HTTP/HTTPS
+    if parsed.scheme not in ("http", "https"):
+        return False, f"URL scheme '{parsed.scheme}' not allowed, only http/https"
+
+    # Get the hostname
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "URL must have a hostname"
+
+    # Block localhost variants
+    if hostname.lower() in ("localhost", "localhost.localdomain"):
+        return False, "localhost URLs are not allowed"
+
+    # Resolve hostname to IP and check against blocked ranges
+    try:
+        # Get all IP addresses for the hostname
+        addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _type, _proto, _canonname, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                for blocked_range in _BLOCKED_IP_RANGES:
+                    if ip in blocked_range:
+                        return False, f"URL resolves to blocked IP range: {ip}"
+            except ValueError:
+                continue
+    except socket.gaierror:
+        # Can't resolve - might be temporary, allow but log warning
+        pass
+
+    return True, ""
 
 # Optional: use feedparser if available for better parsing
 try:
@@ -32,6 +95,12 @@ class RSSWorker(BaseWorker):
         feed_url = self.config.get("url")
         if not feed_url:
             raise ValueError("RSS worker requires 'url' in config")
+
+        # SSRF protection: validate URL before fetching
+        is_safe, error_msg = _is_safe_url(feed_url)
+        if not is_safe:
+            self._logger.warning("ssrf_blocked", url=feed_url, reason=error_msg)
+            raise ValueError(f"URL validation failed: {error_msg}")
 
         max_items = self.config.get("max_items", 50)
 

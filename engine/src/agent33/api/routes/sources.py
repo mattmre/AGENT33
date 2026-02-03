@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent33.db.models import Source, SourceType
 from agent33.db.session import get_session
 from agent33.ingestion.manager import IngestionManager, create_default_sources
+from agent33.tenancy.middleware import get_current_tenant
+from agent33.tenancy.models import TenantContext
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/api/sources", tags=["sources"])
@@ -86,10 +88,10 @@ async def list_sources(
     source_type: SourceType | None = None,
     is_active: bool | None = None,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> SourceListResponse:
     """List all sources, optionally filtered by type or status."""
-    # TODO: Get tenant_id from auth context
-    tenant_id = "default"
+    tenant_id = str(tenant.tenant_id)
 
     stmt = select(Source).where(Source.tenant_id == tenant_id)
 
@@ -126,10 +128,10 @@ async def list_sources(
 async def create_source(
     body: SourceCreate,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> SourceResponse:
     """Create a new ingestion source."""
-    # TODO: Get tenant_id from auth context
-    tenant_id = "default"
+    tenant_id = str(tenant.tenant_id)
 
     source = Source(
         tenant_id=tenant_id,
@@ -160,9 +162,13 @@ async def create_source(
 async def get_source(
     source_id: str,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> SourceResponse:
     """Get a source by ID."""
-    source = await session.get(Source, source_id)
+    tenant_id = str(tenant.tenant_id)
+    stmt = select(Source).where(Source.id == source_id, Source.tenant_id == tenant_id)
+    result = await session.execute(stmt)
+    source = result.scalar_one_or_none()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
 
@@ -185,9 +191,13 @@ async def update_source(
     source_id: str,
     body: SourceUpdate,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> SourceResponse:
     """Update a source."""
-    source = await session.get(Source, source_id)
+    tenant_id = str(tenant.tenant_id)
+    stmt = select(Source).where(Source.id == source_id, Source.tenant_id == tenant_id)
+    result = await session.execute(stmt)
+    source = result.scalar_one_or_none()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
 
@@ -218,9 +228,13 @@ async def update_source(
 async def delete_source(
     source_id: str,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> dict[str, str]:
     """Delete a source."""
-    source = await session.get(Source, source_id)
+    tenant_id = str(tenant.tenant_id)
+    stmt = select(Source).where(Source.id == source_id, Source.tenant_id == tenant_id)
+    result = await session.execute(stmt)
+    source = result.scalar_one_or_none()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
 
@@ -232,17 +246,17 @@ async def delete_source(
 async def run_ingestion(
     source_id: str,
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> IngestResponse:
     """Run ingestion for a specific source."""
-    # TODO: Get tenant_id from auth context
-    tenant_id = "default"
+    tenant_id = str(tenant.tenant_id)
 
-    source = await session.get(Source, source_id)
+    # Verify source belongs to tenant
+    stmt = select(Source).where(Source.id == source_id, Source.tenant_id == tenant_id)
+    result = await session.execute(stmt)
+    source = result.scalar_one_or_none()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
-
-    if source.tenant_id != tenant_id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     manager = IngestionManager(tenant_id)
 
@@ -262,10 +276,10 @@ async def run_ingestion(
 async def run_all_ingestion(
     source_type: SourceType | None = Query(None),
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Run ingestion for all active sources."""
-    # TODO: Get tenant_id from auth context
-    tenant_id = "default"
+    tenant_id = str(tenant.tenant_id)
 
     manager = IngestionManager(tenant_id)
     result = await manager.run_all_sources(source_type)
@@ -276,10 +290,10 @@ async def run_all_ingestion(
 @router.post("/setup-defaults", response_model=SourceListResponse)
 async def setup_default_sources(
     session: AsyncSession = Depends(get_session),
+    tenant: TenantContext = Depends(get_current_tenant),
 ) -> SourceListResponse:
     """Create default ingestion sources (GDELT, popular RSS feeds)."""
-    # TODO: Get tenant_id from auth context
-    tenant_id = "default"
+    tenant_id = str(tenant.tenant_id)
 
     # Check if sources already exist
     stmt = select(Source).where(Source.tenant_id == tenant_id).limit(1)

@@ -203,6 +203,37 @@
     }
 
     /**
+     * Sanitize URL to prevent XSS via javascript: protocol
+     * @param {string} url - URL to sanitize
+     * @returns {string} Sanitized URL or '#' if invalid
+     */
+    function sanitizeUrl(url) {
+        if (!url || typeof url !== 'string') return '#';
+
+        // Trim whitespace
+        url = url.trim();
+
+        // Only allow http, https, and relative URLs
+        if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
+            return url;
+        }
+
+        // Block javascript:, data:, vbscript:, etc.
+        const protocol = url.split(':')[0].toLowerCase();
+        if (['javascript', 'data', 'vbscript', 'file'].includes(protocol)) {
+            return '#';
+        }
+
+        // For other URLs (like relative paths without /), prefix with ./
+        if (!url.includes(':')) {
+            return './' + url;
+        }
+
+        // Default: block unknown protocols
+        return '#';
+    }
+
+    /**
      * Render activity feed
      * @param {Array} activities - Array of activity items
      */
@@ -463,8 +494,8 @@
                 <div class="chat-sources">
                     <div class="chat-sources-title">Sources:</div>
                     ${sources.map(s => `
-                        <a class="chat-source-item" href="${escapeHtml(s.url || '#')}" target="_blank">
-                            ${escapeHtml(s.title || s)}
+                        <a class="chat-source-item" href="${sanitizeUrl(s.url || s.source_url || '#')}" target="_blank" rel="noopener noreferrer">
+                            ${escapeHtml(s.title || s.text || s)}
                         </a>
                     `).join('')}
                 </div>

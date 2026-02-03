@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,7 +80,7 @@ def record_activity(
 ) -> ActivityItem:
     """Record a new activity and notify subscribers."""
     activity = ActivityItem(
-        id=f"act_{len(_activity_store) + 1}_{int(datetime.now(UTC).timestamp())}",
+        id=f"act_{uuid.uuid4().hex[:12]}",
         type=activity_type,
         message=message,
         timestamp=datetime.now(UTC),

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC
 
 from agent33.db.models import (
     ActivityLog,
     ActivityType,
     AgentDefinitionRecord,
     ApiKey,
-    Base,
     Fact,
     MemoryRecord,
     Source,
@@ -31,7 +28,7 @@ class TestHelperFunctions:
     def test_utc_now_returns_utc(self):
         """Test that utc_now returns UTC datetime."""
         now = utc_now()
-        assert now.tzinfo == timezone.utc
+        assert now.tzinfo == UTC
 
     def test_new_uuid_format(self):
         """Test that new_uuid returns valid UUID string."""

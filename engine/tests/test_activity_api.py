@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
 
-from agent33.db.models import ActivityLog, ActivityType, Fact, Source, SourceType
+from agent33.db.models import ActivityLog, ActivityType, SourceType
 
 
 class TestActivityFeedAPI:
@@ -34,7 +33,7 @@ class TestActivityFeedAPI:
                 description="RSS feed update",
                 metadata_={"items_count": 10},
                 is_public=True,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             ),
             ActivityLog(
                 id="act_2",
@@ -44,7 +43,7 @@ class TestActivityFeedAPI:
                 description="Extracted fact from news article",
                 metadata_={"confidence": 0.95},
                 is_public=True,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             ),
         ]
 
@@ -59,7 +58,7 @@ class TestActivityFeedAPI:
             description="Test description",
             metadata={"key": "value"},
             source_name="Test Source",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         assert item.id == "test_id"
         assert item.activity_type == "ingested"
@@ -72,7 +71,7 @@ class TestActivityFeedAPI:
             facts_count=100,
             sources_count=5,
             activities_today=25,
-            last_activity_at=datetime.now(timezone.utc),
+            last_activity_at=datetime.now(UTC),
         )
         assert stats.facts_count == 100
         assert stats.sources_count == 5
@@ -108,7 +107,7 @@ class TestObservatoryAPI:
             id="test_123",
             type="query",
             message="User asked a question",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             agent="assistant",
             metadata={"extra": "data"},
         )
@@ -117,7 +116,7 @@ class TestObservatoryAPI:
 
     def test_record_activity(self):
         """Test recording activity to in-memory store."""
-        from agent33.api.routes.observatory import record_activity, _activity_store
+        from agent33.api.routes.observatory import _activity_store, record_activity
 
         initial_count = len(_activity_store)
 
@@ -135,7 +134,7 @@ class TestObservatoryAPI:
 
     def test_activity_store_bounded(self):
         """Test that activity store doesn't grow unbounded."""
-        from agent33.api.routes.observatory import record_activity, _activity_store
+        from agent33.api.routes.observatory import _activity_store, record_activity
 
         # Record many activities
         for i in range(1100):
