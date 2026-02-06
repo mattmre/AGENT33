@@ -130,7 +130,7 @@ engine/
 
 ```bash
 # 1. Clone and enter the engine directory
-git clone https://github.com/<owner>/agent-33.git
+git clone https://github.com/mattmre/Agent-33.git
 cd agent-33/engine
 
 # 2. Create your environment file

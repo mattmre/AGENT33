@@ -38,15 +38,15 @@
 
 ### Phase 3
 - [x] T4 (Phase 3): Spec-first workflow consolidation (spec-first checklist + handoff links; review pending)
-  - Evidence: `core/orchestrator/handoff/SPEC_FIRST_CHECKLIST.md`, `docs/session-logs/SESSION-2026-01-16_AGENT-33_PHASE-3.md`
+  - Evidence: `core/orchestrator/handoff/SPEC_FIRST_CHECKLIST.md`
 - [x] T5 (Phase 3): Autonomy budget + escalation guidance (autonomy template + handoff links; review pending)
-  - Evidence: `core/orchestrator/handoff/AUTONOMY_BUDGET.md`, `docs/session-logs/SESSION-2026-01-16_AGENT-33_PHASE-3.md`
+  - Evidence: `core/orchestrator/handoff/AUTONOMY_BUDGET.md`
 
 ### Phase 4
 - [x] T6 (Phase 4): Harness initializer + clean-state protocol (initializer doc; review pending)
-  - Evidence: `core/orchestrator/handoff/HARNESS_INITIALIZER.md`, `docs/session-logs/SESSION-2026-01-16_AGENT-33_PHASE-4.md`
+  - Evidence: `core/orchestrator/handoff/HARNESS_INITIALIZER.md`
 - [x] T7 (Phase 4): Progress log format + rotation guidance (progress log format doc)
-  - Evidence: `core/orchestrator/handoff/PROGRESS_LOG_FORMAT.md`, `docs/session-logs/SESSION-2026-01-16_AGENT-33_PHASE-4.md`
+  - Evidence: `core/orchestrator/handoff/PROGRESS_LOG_FORMAT.md`
 
 ### Phase 5
 - [x] T8 (Phase 5): Policy pack v1 skeleton
@@ -58,15 +58,15 @@
 
 ### Phase 6
 - [x] T11 (Phase 6): MCP/tool registry governance
-  - Evidence: `core/orchestrator/TOOL_GOVERNANCE.md`, `core/ORCHESTRATION_INDEX.md`, `docs/phases/PHASE-06-TOOLING-INTEGRATION-AND-MCP.md`
+  - Evidence: `core/orchestrator/TOOL_GOVERNANCE.md`, `core/ORCHESTRATION_INDEX.md`
 - [x] T12 (Phase 6): Tools-as-code guidance
-  - Evidence: `core/orchestrator/TOOLS_AS_CODE.md`, `core/ORCHESTRATION_INDEX.md`, `docs/phases/PHASE-06-TOOLING-INTEGRATION-AND-MCP.md`
+  - Evidence: `core/orchestrator/TOOLS_AS_CODE.md`, `core/ORCHESTRATION_INDEX.md`
 
 ### Phase 7
 - [x] T13 (Phase 7): Evidence capture + verification log alignment
   - Evidence: `core/orchestrator/handoff/EVIDENCE_CAPTURE.md`, `core/arch/verification-log.md`, `core/orchestrator/handoff/SESSION_WRAP.md`
 - [x] T14 (Phase 7): Test matrix extension for agent workflows
-  - Evidence: `core/arch/test-matrix.md`, `docs/session-logs/SESSION-2026-01-16_AGENT-33_PHASE-7.md`
+  - Evidence: `core/arch/test-matrix.md`
 
 ### Phase 8
 - [x] T15 (Phase 8): Evaluation harness + golden tasks plan
