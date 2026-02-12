@@ -2,8 +2,12 @@ name: shell
 description: >
   Execute shell commands in a sandboxed environment with an explicit
   command allowlist.  Only the executables listed below may be invoked.
-
 version: "1.0"
+owner: agent33-core
+provenance:
+  repo_url: https://github.com/agent-33/AGENT-33
+  license: MIT
+status: active
 
 parameters:
   command:
