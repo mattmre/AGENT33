@@ -13,7 +13,7 @@ _KEY_BYTES = 32  # 256-bit
 
 def generate_key() -> bytes:
     """Generate a random 256-bit encryption key."""
-    return AESGCM.generate_key(bit_length=_KEY_BYTES * 8)
+    return AESGCM.generate_key(_KEY_BYTES * 8)
 
 
 def encrypt(plaintext: str, key: bytes) -> str:

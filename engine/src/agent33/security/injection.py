@@ -23,10 +23,11 @@ class ScanResult:
 # Detection patterns
 # ---------------------------------------------------------------------------
 
+_OVERRIDE_VERBS = r"(previous|prior|above)\s+(instructions|prompts|directives)"
 _SYSTEM_OVERRIDE_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|directives)", re.I),
-    re.compile(r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|directives)", re.I),
-    re.compile(r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|directives)", re.I),
+    re.compile(rf"ignore\s+(all\s+)?{_OVERRIDE_VERBS}", re.I),
+    re.compile(rf"disregard\s+(all\s+)?{_OVERRIDE_VERBS}", re.I),
+    re.compile(rf"forget\s+(all\s+)?{_OVERRIDE_VERBS}", re.I),
     re.compile(r"you\s+are\s+now\s+(?:a|an|the)\s+", re.I),
     re.compile(r"new\s+system\s+prompt", re.I),
     re.compile(r"override\s+system\s+(prompt|message|instructions)", re.I),
@@ -55,11 +56,13 @@ def _check_encoded_payloads(text: str) -> list[str]:
     b64_re = re.compile(r"[A-Za-z0-9+/=]{40,}")
     for match in b64_re.finditer(text):
         try:
-            decoded = base64.b64decode(match.group(), validate=True).decode("utf-8", errors="ignore")
+            decoded = base64.b64decode(
+                match.group(), validate=True,
+            ).decode("utf-8", errors="ignore")
             # Re-scan the decoded content for known attack patterns
             for pat in _SYSTEM_OVERRIDE_PATTERNS + _INSTRUCTION_OVERRIDE_PATTERNS:
                 if pat.search(decoded):
-                    threats.append(f"encoded_payload: hidden injection in base64 segment")
+                    threats.append("encoded_payload: hidden injection in base64 segment")
                     return threats
         except Exception:
             continue

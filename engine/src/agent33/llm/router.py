@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse
+if TYPE_CHECKING:
+    from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ _DEFAULT_PREFIX_MAP: list[tuple[str, str]] = [
     ("o3", "openai"),
     ("claude-", "openai"),  # Anthropic via OpenAI-compat proxy
     ("ft:gpt-", "openai"),
+    ("airllm-", "airllm"),
 ]
 
 _DEFAULT_PROVIDER = "ollama"

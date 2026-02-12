@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from agent33.memory.session import SessionManager
+if TYPE_CHECKING:
+    from agent33.memory.session import SessionManager
 
 
 @dataclass
@@ -31,10 +33,8 @@ class RetentionManager:
         now = time.time()
         expired = [sid for sid, exp in self._ttls.items() if now >= exp]
         for sid in expired:
-            try:
+            with contextlib.suppress(KeyError):
                 self._sm.delete(sid)
-            except KeyError:
-                pass
             del self._ttls[sid]
         return expired
 

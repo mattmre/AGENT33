@@ -20,7 +20,7 @@ Related docs:
 | CA-014 | Dependency Graphs | Incrementalist | `orchestrator/dependencies/` | ✅ Complete |
 | CA-015 | Analytics & Metrics | Incrementalist | `orchestrator/analytics/` | ✅ Complete |
 | CA-016 | Config Generation | Incrementalist | `orchestrator/config-gen/` | ✅ Complete |
-| CA-017 | Platform Integrations | OpenClaw | `orchestrator/integrations/` | ✅ Complete |
+| CA-017 | Platform Integrations | External Platform | `orchestrator/integrations/` | ✅ Complete |
 
 ## Newly Implemented - De-duplicated Feature Clusters
 
@@ -98,9 +98,9 @@ New for AGENT-33
 |-----------|---------|---------|---------------|
 | CA-061 | Distribution & Sync | Phase 9 | `orchestrator/distribution/DISTRIBUTION_SYNC_SPEC.md` |
 | CA-062 | Community Governance | Phase 10 | `orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md` |
-| CA-063 | Platform Integrations | OpenClaw CA-017 | `orchestrator/integrations/` (5 specs) |
-| CA-064 | Security Analysis | OpenClaw | `research/06-OPENCLAW-SECURITY-ANALYSIS.md` |
-| CA-065 | Feature Parity Analysis | OpenClaw | `research/07-OPENCLAW-FEATURE-PARITY.md` |
+| CA-063 | Platform Integrations | External Platform CA-017 | `orchestrator/integrations/` (5 specs) |
+| CA-064 | Security Analysis | External Platform | `research/06-SECURITY-ANALYSIS.md` |
+| CA-065 | Feature Parity Analysis | External Platform | `research/07-FEATURE-PARITY.md` |
 
 ## De-duplication Summary
 

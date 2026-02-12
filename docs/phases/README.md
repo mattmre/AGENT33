@@ -25,6 +25,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 18 | Autonomy Budget Enforcement & Policy Automation | Governance | `PHASE-18-AUTONOMY-BUDGET-ENFORCEMENT-AND-POLICY-AUTOMATION.md` |
 | 19 | Release & Sync Automation | Distribution | `PHASE-19-RELEASE-AND-SYNC-AUTOMATION.md` |
 | 20 | Continuous Improvement & Research Intake | Research | `PHASE-20-CONTINUOUS-IMPROVEMENT-AND-RESEARCH-INTAKE.md` |
+| 21 | Extensibility Patterns Integration | Research/Core | `PHASE-21-EXTENSIBILITY-PATTERNS-INTEGRATION.md` |
 
 ## Workflow Plans
 - `PHASE-03-08-WORKFLOW-PLAN.md` (phase sequencing, task mapping, review gates)

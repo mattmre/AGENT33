@@ -5,13 +5,15 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent33.agents.definition import AgentDefinition
 from agent33.agents.runtime import AgentResult, AgentRuntime
 from agent33.llm.base import ChatMessage, LLMResponse
 from agent33.llm.router import ModelRouter
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,9 @@ class AgentTestHarness:
         expected_output: dict[str, Any],
     ) -> None:
         """Register a canned input/output pair for regression testing."""
-        self._canned_pairs.append(CannedPair(input_data=input_data, expected_output=expected_output))
+        self._canned_pairs.append(
+            CannedPair(input_data=input_data, expected_output=expected_output),
+        )
 
     async def test_with_input(
         self,

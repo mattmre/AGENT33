@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -106,7 +105,7 @@ def run(
         "-b",
         help="API base URL.",
     ),
-    inputs: Optional[str] = typer.Option(
+    inputs: str | None = typer.Option(
         None,
         "--inputs",
         "-i",
@@ -171,7 +170,8 @@ def status(
             data = resp.json()
             typer.echo(json.dumps(data, indent=2))
     except httpx.HTTPStatusError as exc:
-        typer.echo(f"Health check failed ({exc.response.status_code}): {exc.response.text}", err=True)
+        msg = f"Health check failed ({exc.response.status_code}): {exc.response.text}"
+        typer.echo(msg, err=True)
         raise typer.Exit(code=1) from exc
     except httpx.ConnectError as exc:
         typer.echo(f"Cannot connect to {base_url}: {exc}", err=True)

@@ -6,7 +6,10 @@ import dataclasses
 import hashlib
 import hmac
 import logging
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 

@@ -37,6 +37,8 @@ class TriggerEvent(str, Enum):
     SESSION_END = "session-end"
     ARTIFACT_CREATED = "artifact-created"
     REVIEW_COMPLETE = "review-complete"
+    WEBHOOK = "webhook"
+    SCHEDULE = "schedule"
 
 
 class StepRetry(BaseModel):

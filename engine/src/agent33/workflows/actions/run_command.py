@@ -71,12 +71,12 @@ async def execute(
             proc.communicate(),
             timeout=float(timeout_seconds) if timeout_seconds else None,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError as exc:
         proc.kill()
         await proc.communicate()
         raise TimeoutError(
             f"Command timed out after {timeout_seconds}s: {command}"
-        )
+        ) from exc
 
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()

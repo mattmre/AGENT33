@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent33.tools.registry import ToolRegistry
+if TYPE_CHECKING:
+    from agent33.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class PluginLoader:
         selected = (
             eps.select(group=_PLUGIN_GROUP)
             if hasattr(eps, "select")
-            else eps.get(_PLUGIN_GROUP, [])
+            else eps.get(_PLUGIN_GROUP, [])  # type: ignore[arg-type]
         )
         for ep in selected:
             try:

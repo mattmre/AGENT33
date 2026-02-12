@@ -5,7 +5,10 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 

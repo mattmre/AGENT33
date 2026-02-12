@@ -83,3 +83,25 @@ Format:
 Multi-finding commits:
 - Use the primary finding-id in the commit message.
 - List additional finding-ids in the PR description.
+
+## Relationship Documentation
+
+When artifacts have relationships to other documents, add a Relationships section:
+
+```markdown
+## Relationships
+
+| Type | Target | Notes |
+|------|--------|-------|
+| derived-from | collected/repo/path.md | Source artifact |
+| depends-on | core/phases/PHASE-03.md | Prerequisite |
+```
+
+Common relationship types:
+- `depends-on` - Phase or artifact prerequisites
+- `derived-from` - Canonical artifact from collected source
+- `supersedes` - New version replaces deprecated artifact
+- `exemplifies` - Concrete example of abstract pattern
+- `contextualizes` - Research informing design
+
+See `core/orchestrator/RELATIONSHIP_TYPES.md` for full taxonomy.
