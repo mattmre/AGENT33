@@ -87,3 +87,130 @@ All guidance is written to be model-neutral. If a task requires a specific tool 
 - `core/workflows/commands/docs.md`
 - `core/workflows/commands/e2e.md`
 - `core/workflows/commands/refactor.md`
+
+## Incremental Processing (CA-007)
+- `core/orchestrator/incremental/README.md`
+- `core/orchestrator/incremental/CHANGE_DETECTION.md`
+- `core/orchestrator/incremental/ARTIFACT_GRAPH.md`
+
+## Parallel Execution (CA-008)
+- `core/orchestrator/parallel/README.md`
+- `core/orchestrator/parallel/SEMAPHORE_CONTROL.md`
+- `core/orchestrator/parallel/EXECUTION_MODES.md`
+
+## Change Triggers (CA-009)
+- `core/orchestrator/triggers/README.md`
+- `core/orchestrator/triggers/TRIGGER_CATALOG.md`
+
+## Configuration Schemas (CA-010)
+- `core/schemas/README.md`
+- `core/schemas/agent.schema.json`
+- `core/schemas/workflow.schema.json`
+- `core/schemas/orchestrator.schema.json`
+
+## Execution Modes (CA-011)
+- `core/orchestrator/modes/README.md`
+- `core/orchestrator/modes/DRY_RUN_SPEC.md`
+
+## MDC Rules (CA-012)
+- `core/packs/mdc-rules/README.md`
+- `core/packs/mdc-rules/orchestrator.mdc`
+- `core/packs/mdc-rules/refinement.mdc`
+- `core/packs/mdc-rules/evidence.mdc`
+
+## Artifact Filtering (CA-013)
+- `core/orchestrator/filters/README.md`
+- `core/orchestrator/filters/GLOB_PATTERNS.md`
+
+## Dependency Graph (CA-014)
+- `core/orchestrator/dependencies/README.md`
+- `core/orchestrator/dependencies/DEPENDENCY_GRAPH_SPEC.md`
+
+## Analytics (CA-015)
+- `core/orchestrator/analytics/README.md`
+- `core/orchestrator/analytics/METRICS_CATALOG.md`
+
+## Config Generation (CA-016)
+- `core/orchestrator/config-gen/README.md`
+- `core/orchestrator/config-gen/GENERATOR_SPEC.md`
+
+## Platform Integrations (CA-017)
+- `core/orchestrator/integrations/README.md`
+- `core/orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md`
+- `core/orchestrator/integrations/VOICE_MEDIA_SPEC.md`
+- `core/orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md`
+- `core/orchestrator/integrations/PRIVACY_ARCHITECTURE.md`
+
+## Competitive Features Index
+- `core/orchestrator/COMPETITIVE_FEATURES_INDEX.md`
+
+## Workflow Definitions (CA-018 to CA-030)
+- `core/orchestrator/workflows/README.md`
+- `core/orchestrator/workflows/ASSET_FIRST_WORKFLOW_SCHEMA.md`
+- `core/orchestrator/workflows/DAG_EXECUTION_ENGINE.md`
+- `core/orchestrator/workflows/EXPRESSION_LANGUAGE_SPEC.md`
+
+## Agent Coordination (CA-031 to CA-040)
+- `core/orchestrator/agent-protocols/AGENT_HANDOFF_PROTOCOL.md`
+- `core/orchestrator/agent-protocols/COMMUNICATION_FLOW_SCHEMA.md`
+- `core/orchestrator/agent-protocols/GUARDRAILS_VALIDATION_HOOKS.md`
+
+## State Machines & Decision (CA-041 to CA-050)
+- `core/orchestrator/statecharts/STATECHART_WORKFLOW_FORMAT.md`
+- `core/orchestrator/statecharts/TASK_DEFINITION_REGISTRY.md`
+- `core/orchestrator/statecharts/BACKPRESSURE_SPEC.md`
+- `core/orchestrator/decision/DECISION_ROUTING_SPEC.md`
+
+## Observability & Testing (CA-051 to CA-060)
+- `core/orchestrator/lineage/LINEAGE_TRACKING_SPEC.md`
+- `core/orchestrator/sensors/ARTIFACT_SENSOR_SPEC.md`
+- `core/orchestrator/observability/HEALTH_DASHBOARD_SPEC.md`
+- `core/orchestrator/testing/WORKFLOW_TESTING_FRAMEWORK.md`
+- `core/orchestrator/plugins/PLUGIN_REGISTRY_SPEC.md`
+
+## Distribution & Sync (Phase 9 / CA-061)
+- `core/orchestrator/distribution/README.md`
+- `core/orchestrator/distribution/DISTRIBUTION_SYNC_SPEC.md`
+
+## Governance & Community (Phase 10 / CA-062)
+- `core/orchestrator/community/README.md`
+- `core/orchestrator/community/GOVERNANCE_COMMUNITY_SPEC.md`
+
+## Research
+- `core/research/06-SECURITY-ANALYSIS.md`
+- `core/research/07-FEATURE-PARITY.md`
+
+---
+
+## Engine Implementation
+
+The AGENT-33 engine (`engine/`) provides a working runtime implementation of the orchestration concepts defined in this index.
+
+### Implementation Status
+
+| Orchestration Concept | Engine Module | Status |
+|---|---|---|
+| Agent Definitions & Routing | `engine/src/agent33/agents/` | Implemented |
+| Workflow DAG Engine | `engine/src/agent33/workflows/` | Implemented |
+| Tool Governance | `engine/src/agent33/tools/` | Implemented |
+| Security & Credentials | `engine/src/agent33/security/` | Implemented |
+| Messaging Integrations | `engine/src/agent33/messaging/` | Implemented |
+| Sensors & Triggers | `engine/src/agent33/automation/` | Implemented |
+| Observability & Lineage | `engine/src/agent33/observability/` | Implemented |
+| Memory & RAG | `engine/src/agent33/memory/` | Implemented |
+| State Machines | `engine/src/agent33/workflows/state_machine.py` | Implemented |
+| Plugin System | `engine/src/agent33/plugins/` | Implemented |
+
+### Engine Documentation
+
+- [Getting Started](../engine/docs/getting-started.md)
+- [Architecture](../engine/docs/architecture.md)
+- [API Reference](../engine/docs/api-reference.md)
+- [Workflow Guide](../engine/docs/workflow-guide.md)
+- [Agent Guide](../engine/docs/agent-guide.md)
+- [Security Guide](../engine/docs/security-guide.md)
+- [Integration Guide](../engine/docs/integration-guide.md)
+- [CLI Reference](../engine/docs/cli-reference.md)
+- [Use Cases](../engine/docs/use-cases.md)
+- [Orchestration Mapping](../engine/docs/orchestration-mapping.md)
+- [Feature Roadmap](../engine/docs/feature-roadmap.md)

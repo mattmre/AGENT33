@@ -52,6 +52,13 @@ All guidance here avoids model-specific assumptions. If a tool or model is requi
 - Use `handoff/REVIEW_CAPTURE.md` for reviewer findings and required changes.
 - Use `handoff/EVIDENCE_CAPTURE.md` for commands, test results, and artifacts.
 
+## Platform Integrations (CA-017)
+- `integrations/README.md`: platform integration specifications index.
+- `integrations/CHANNEL_INTEGRATION_SPEC.md`: multi-channel messaging (4-tier classification).
+- `integrations/VOICE_MEDIA_SPEC.md`: voice and media processing (local-first).
+- `integrations/CREDENTIAL_MANAGEMENT_SPEC.md`: vault-backed credential management.
+- `integrations/PRIVACY_ARCHITECTURE.md`: privacy-first data handling and encryption.
+
 ## Session Logs
 - Store orchestration session wraps in `core/orchestrator/handoff/SESSION_WRAP.md`.
 - If using repo-specific session logs, document the path in STATUS.md.

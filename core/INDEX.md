@@ -22,6 +22,8 @@ AGENT-33 is a master aggregation repo for model-agnostic orchestration workflows
 | Document | Description |
 |----------|-------------|
 | [Agentic Orchestration Trends 2025H2](research/agentic-orchestration-trends-2025H2.md) | Industry trends and guidance for agentic coding |
+| [Security Analysis](research/06-SECURITY-ANALYSIS.md) | External platform security vulnerability analysis |
+| [Feature Parity](research/07-FEATURE-PARITY.md) | Feature comparison and security hardening mapping |
 
 ---
 
@@ -41,11 +43,17 @@ Use the phase index for sequencing and dependency order:
 
 ---
 
-## Agent Task Documents
+## Platform Integration Specifications (CA-017)
 
 | Document | Description |
 |----------|-------------|
-| [AGENT-IMPLEMENTATION-GUIDE.md](agent-tasks/AGENT-IMPLEMENTATION-GUIDE.md) | Guide for AI agents implementing features |
+| [Integration Specs Index](orchestrator/integrations/README.md) | Overview, design principles, and integration checklist |
+| [Channel Integration](orchestrator/integrations/CHANNEL_INTEGRATION_SPEC.md) | Multi-platform messaging channel architecture |
+| [Voice & Media](orchestrator/integrations/VOICE_MEDIA_SPEC.md) | Voice interaction and media processing (privacy-first) |
+| [Credential Management](orchestrator/integrations/CREDENTIAL_MANAGEMENT_SPEC.md) | Vault-backed credential storage and rotation |
+| [Privacy Architecture](orchestrator/integrations/PRIVACY_ARCHITECTURE.md) | Encryption at rest, consent model, data lifecycle |
+
+---
 
 ---
 
@@ -53,33 +61,33 @@ Use the phase index for sequencing and dependency order:
 
 | Document | Description |
 |----------|-------------|
-| [ARCH-AEP Overview](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/README.md) | Narrative overview for ARCH-AEP |
-| [ARCH-AEP Orchestrator Briefing](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/orchestrator-briefing.md) | Session-start narrative and folder index |
-| [ARCH-AEP Workflow Spec](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/workflow.md) | End-to-end workflow specification |
-| [ARCH-AEP Templates](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/templates.md) | ID, branch, and tracker conventions |
-| [ARCH-AEP Next Session](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/next-session.md) | Session handoff checklist |
-| [ARCH-AEP Phase Planning](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/phase-planning.md) | Long-running planning record |
-| [ARCH-AEP Schedule And Tracking](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/schedule-and-tracking.md) | Cadence and gates |
-| [ARCH-AEP Tier Close Checklist](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/tier-close-checklist.md) | Tier close audit checklist |
-| [ARCH-AEP Cycle Summary Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/cycle-summary-template.md) | End-of-cycle summary template |
-| [ARCH-AEP Cycle Summaries](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/cycle-summaries/README.md) | Cycle summary storage location |
-| [ARCH-AEP Backlog Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/backlog-template.md) | Master backlog template |
-| [ARCH-AEP Backlog Index](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/backlog-index.md) | Backlog index across cycles |
-| [ARCH-AEP Tracker Pointer](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/tracker-pointer.md) | Active tracker link |
-| [ARCH-AEP Tracker Index](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/tracker-index.md) | Tracker index across cycles |
-| [ARCH-AEP Verification Log](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/verification-log.md) | Test/build evidence log |
-| [ARCH-AEP Phase Summary Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/phase-summary-template.md) | Per-PR or per-phase summary template |
-| [ARCH-AEP Phase Summaries](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/phase-summaries/README.md) | Phase summary storage location |
-| [ARCH-AEP Risk Memo Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/risk-memo-template.md) | Critical/High risk memo template |
-| [ARCH-AEP Risk Memos](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/risk-memos/README.md) | Risk memo storage location |
-| [ARCH-AEP Risk Memo Archive](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/risk-memos/closed/README.md) | Closed risk memo archive |
-| [ARCH-AEP Agent Learning](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/agent-learning.md) | Cross-session learnings |
-| [ARCH-AEP Change Log](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/change-log.md) | Scope/defer decision log |
-| [ARCH-AEP Scope Lock Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/scope-lock-template.md) | Scope lock record |
-| [ARCH-AEP Glossary](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/glossary.md) | Shared terminology |
-| [ARCH-AEP Test Matrix](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/test-matrix.md) | Test selection guidance |
-| [ARCH-AEP Active Tracker Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/active-tracker-template.md) | Tracker template with lock block |
-| [ARCH-AEP Cycle Layout Template](ARCH%20AGENTIC%20ENGINEERING%20AND%20PLANNING/cycle-layout-template.md) | Optional parallel cycle layout |
+| [ARCH-AEP Overview](arch/README.md) | Narrative overview for ARCH-AEP |
+| [ARCH-AEP Orchestrator Briefing](arch/orchestrator-briefing.md) | Session-start narrative and folder index |
+| [ARCH-AEP Workflow Spec](arch/workflow.md) | End-to-end workflow specification |
+| [ARCH-AEP Templates](arch/templates.md) | ID, branch, and tracker conventions |
+| [ARCH-AEP Next Session](arch/next-session.md) | Session handoff checklist |
+| [ARCH-AEP Phase Planning](arch/phase-planning.md) | Long-running planning record |
+| [ARCH-AEP Schedule And Tracking](arch/schedule-and-tracking.md) | Cadence and gates |
+| [ARCH-AEP Tier Close Checklist](arch/tier-close-checklist.md) | Tier close audit checklist |
+| [ARCH-AEP Cycle Summary Template](arch/cycle-summary-template.md) | End-of-cycle summary template |
+| [ARCH-AEP Cycle Summaries](arch/cycle-summaries/README.md) | Cycle summary storage location |
+| [ARCH-AEP Backlog Template](arch/backlog-template.md) | Master backlog template |
+| [ARCH-AEP Backlog Index](arch/backlog-index.md) | Backlog index across cycles |
+| [ARCH-AEP Tracker Pointer](arch/tracker-pointer.md) | Active tracker link |
+| [ARCH-AEP Tracker Index](arch/tracker-index.md) | Tracker index across cycles |
+| [ARCH-AEP Verification Log](arch/verification-log.md) | Test/build evidence log |
+| [ARCH-AEP Phase Summary Template](arch/phase-summary-template.md) | Per-PR or per-phase summary template |
+| [ARCH-AEP Phase Summaries](arch/phase-summaries/README.md) | Phase summary storage location |
+| [ARCH-AEP Risk Memo Template](arch/risk-memo-template.md) | Critical/High risk memo template |
+| [ARCH-AEP Risk Memos](arch/risk-memos/README.md) | Risk memo storage location |
+| [ARCH-AEP Risk Memo Archive](arch/risk-memos/closed/README.md) | Closed risk memo archive |
+| [ARCH-AEP Agent Learning](arch/agent-learning.md) | Cross-session learnings |
+| [ARCH-AEP Change Log](arch/change-log.md) | Scope/defer decision log |
+| [ARCH-AEP Scope Lock Template](arch/scope-lock-template.md) | Scope lock record |
+| [ARCH-AEP Glossary](arch/glossary.md) | Shared terminology |
+| [ARCH-AEP Test Matrix](arch/test-matrix.md) | Test selection guidance |
+| [ARCH-AEP Active Tracker Template](arch/active-tracker-template.md) | Tracker template with lock block |
+| [ARCH-AEP Cycle Layout Template](arch/cycle-layout-template.md) | Optional parallel cycle layout |
 
 ---
 
@@ -89,26 +97,26 @@ Use the phase index for sequencing and dependency order:
 |--------|-------|
 | Total Phase Templates | 40 |
 | AGENT-33 Phases | 10 |
-| Research Documents | 1 |
+| Research Documents | 3 |
 
 ---
 
 ## Getting Started
 
 ### For Developers
-1. Start with [Project Foundation (Phase 1)](phases/PHASE-01-PROJECT-FOUNDATION.md)
-2. Follow the dependency graph in the Master Roadmap
-3. Use [Quick Start Tasks](agent-tasks/QUICK-START-TASKS.md) for ready-to-implement items
+1. Start at `core/ORCHESTRATION_INDEX.md`
+2. Follow `core/orchestrator/README.md` and `core/orchestrator/OPERATOR_MANUAL.md`
+3. Use `core/arch/workflow.md` for AEP cycles
 
 ### For AI Agents
-1. Read [Agent Implementation Guide](agent-tasks/AGENT-IMPLEMENTATION-GUIDE.md)
-2. Select tasks from [Quick Start Tasks](agent-tasks/QUICK-START-TASKS.md)
-3. Follow implementation standards
+1. Read `core/agents/CLAUDE.md` for agent instructions
+2. Follow `core/orchestrator/AGENT_REGISTRY.md` for role definitions
+3. Use `core/orchestrator/AGENT_ROUTING_MAP.md` for task routing
 
 ### For Project Planning
-1. Review [Master Roadmap](roadmap/00-MASTER-ROADMAP.md)
+1. Review `docs/phases/README.md` for phase index
 2. Consult [Feature Comparison Matrix](research/05-FEATURE-COMPARISON-MATRIX.md)
-3. Prioritize based on business needs
+3. Review `core/orchestrator/COMPETITIVE_FEATURES_INDEX.md` for feature backlog
 
 ---
 
@@ -120,4 +128,28 @@ This documentation should be updated as:
 - New research is conducted
 - Community feedback is incorporated
 
-Last Updated: 2026-01-16
+Last Updated: 2026-01-30
+
+---
+
+## Runtime Engine
+
+The `engine/` directory contains the working Python implementation of the specifications defined in `core/`. It translates the orchestration designs, agent definitions, workflow schemas, and governance policies into executable runtime modules.
+
+### Key Engine Resources
+
+| Resource | Description |
+|----------|-------------|
+| [Getting Started](../engine/docs/getting-started.md) | Installation and first run |
+| [Architecture](../engine/docs/architecture.md) | Engine architecture overview |
+| [API Reference](../engine/docs/api-reference.md) | Programmatic API documentation |
+| [Workflow Guide](../engine/docs/workflow-guide.md) | Building and running workflows |
+| [Agent Guide](../engine/docs/agent-guide.md) | Defining and routing agents |
+| [Security Guide](../engine/docs/security-guide.md) | Credentials, vaults, and access control |
+| [Integration Guide](../engine/docs/integration-guide.md) | Messaging and platform integrations |
+| [CLI Reference](../engine/docs/cli-reference.md) | Command-line interface usage |
+| [Use Cases](../engine/docs/use-cases.md) | End-to-end usage examples |
+| [Orchestration Mapping](../engine/docs/orchestration-mapping.md) | How core specs map to engine modules |
+| [Feature Roadmap](../engine/docs/feature-roadmap.md) | Planned engine enhancements |
+
+For a detailed mapping of orchestration concepts to engine modules, see the [Engine Implementation section in the Orchestration Index](ORCHESTRATION_INDEX.md#engine-implementation).

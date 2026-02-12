@@ -1,0 +1,70 @@
+"""Action that invokes an agent by name from a registry."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import structlog
+
+logger = structlog.get_logger()
+
+# Simple in-process agent registry. External modules register callables here.
+_agent_registry: dict[str, Any] = {}
+
+
+def register_agent(name: str, handler: Any) -> None:
+    """Register an agent handler callable.
+
+    Args:
+        name: Agent name used in workflow step definitions.
+        handler: An async callable accepting (inputs: dict) -> dict.
+    """
+    _agent_registry[name] = handler
+
+
+def get_agent(name: str) -> Any:
+    """Retrieve a registered agent handler by name.
+
+    Raises:
+        KeyError: If the agent is not registered.
+    """
+    if name not in _agent_registry:
+        raise KeyError(f"Agent '{name}' is not registered in the workflow agent registry")
+    return _agent_registry[name]
+
+
+async def execute(
+    agent: str | None,
+    inputs: dict[str, Any],
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Invoke a named agent with the given inputs.
+
+    Args:
+        agent: Name of the agent to invoke.
+        inputs: Input data to pass to the agent.
+        dry_run: If True, log but skip actual execution.
+
+    Returns:
+        A dict containing the agent's output.
+
+    Raises:
+        ValueError: If agent name is not provided.
+        KeyError: If the agent is not found in the registry.
+    """
+    if not agent:
+        raise ValueError("invoke-agent action requires an 'agent' field")
+
+    logger.info("invoke_agent", agent=agent, dry_run=dry_run)
+
+    if dry_run:
+        return {"dry_run": True, "agent": agent, "inputs": inputs}
+
+    handler = get_agent(agent)
+    result = await handler(inputs)
+
+    if not isinstance(result, dict):
+        result = {"result": result}
+
+    logger.info("invoke_agent_complete", agent=agent, output_keys=list(result.keys()))
+    return result

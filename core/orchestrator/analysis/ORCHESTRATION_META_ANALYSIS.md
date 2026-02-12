@@ -31,7 +31,7 @@ Scope: Orchestration system docs, prompts, agent rules, workflow templates, and 
 - Recommendation: Update links or add a short note that `core/` is the canonical store.
 
 ## Context Perspective (Project-Specific Handoff)
-- Strength: `core/agents/CLAUDE.md` now includes condensed contexts for EDCToolkit, EDCwayback, Claudius Maximus.
+- Strength: `core/agents/CLAUDE.md` now includes condensed contexts for source projects.
 - Gap: Context sections are appended without a TOC or selection guidance.
 - Recommendation: Add a short “Context Selector” table to `core/agents/CLAUDE.md` or to `core/agents/CLAUDE_SOURCES.md`.
 
@@ -73,5 +73,5 @@ Scope: Orchestration system docs, prompts, agent rules, workflow templates, and 
 - All changes should update `core/CHANGELOG.md`.
 
 # Review & Research Notes
-- Workflow sources from Cladius Maximus contain deploy/test pipelines for a different product; do not promote unless needed.
-- EDCTool .NET pipeline and myainewsbot dependabot have been promoted as reusable templates.
+- Some workflow sources contain deploy/test pipelines for a different product; do not promote unless needed.
+- .NET pipeline and dependabot config have been promoted as reusable templates.
