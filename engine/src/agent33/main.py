@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable
+
+    from agent33.llm.router import ModelRouter
 
 import structlog
 from fastapi import FastAPI
@@ -49,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         await _redis_client.ping()
         redis_conn = _redis_client
-        logger.info("redis_connected", url=settings.redis_url)
+        logger.info("redis_connected", url=_redact_url(settings.redis_url))
     except Exception as exc:
         logger.warning("redis_init_failed", error=str(exc))
     app.state.redis = redis_conn
@@ -58,7 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     nats_bus = NATSMessageBus(settings.nats_url)
     try:
         await nats_bus.connect()
-        logger.info("nats_connected", url=settings.nats_url)
+        logger.info("nats_connected", url=_redact_url(settings.nats_url))
     except Exception as exc:
         logger.warning("nats_init_failed", error=str(exc))
     app.state.nats_bus = nats_bus
@@ -98,8 +103,8 @@ def _redact_url(url: str) -> str:
 
 
 def _register_agent_runtime_bridge(
-    model_router: object,
-    register_fn: object,
+    model_router: ModelRouter,
+    register_fn: Callable[..., object],
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
@@ -125,8 +130,9 @@ def _register_agent_runtime_bridge(
             role=AgentRole.WORKER,
             description=f"Dynamically invoked agent '{agent_name}'",
             inputs={
-                k: AgentParameter(type="string", description=k)
+                k: AgentParameter(type="string", description="Workflow input")
                 for k in inputs
+                if k.isidentifier()
             },
             outputs={
                 "result": AgentParameter(type="string", description="result"),
@@ -154,7 +160,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
