@@ -4,9 +4,21 @@
   "version": "1.0.0",
   "role": "worker",
   "description": "Autonomous browser agent that decomposes web tasks into steps, navigates pages, interacts with elements, and extracts results using a planner/navigator pattern.",
+  "status": "active",
   "capabilities": [
     "api-calls"
   ],
+  "spec_capabilities": [],
+  "governance": {
+    "scope": "browser-sandbox",
+    "commands": "none",
+    "network": "external-read",
+    "approval_required": []
+  },
+  "ownership": {
+    "owner": "platform-team",
+    "escalation_target": "orchestrator"
+  },
   "inputs": {
     "task": {
       "type": "string",

@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     training_min_rollouts: int = 10
     training_eval_model: str = ""
 
+    # Agent definitions
+    agent_definitions_dir: str = "agent-definitions"
+
     # Self-improvement
     self_improve_enabled: bool = True
     self_improve_scope: str = "prompts,workflows,templates"

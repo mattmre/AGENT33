@@ -4,11 +4,24 @@
   "version": "1.0.0",
   "role": "worker",
   "description": "General-purpose coding worker that reads, writes, and executes code to complete assigned sub-tasks.",
+  "agent_id": "AGT-003",
+  "status": "active",
   "capabilities": [
     "file-read",
     "file-write",
     "code-execution"
   ],
+  "spec_capabilities": ["I-01", "I-02", "I-03", "I-04", "I-05"],
+  "governance": {
+    "scope": "assigned-workspace",
+    "commands": "build,test,lint",
+    "network": "none",
+    "approval_required": ["deploy"]
+  },
+  "ownership": {
+    "owner": "platform-team",
+    "escalation_target": "orchestrator"
+  },
   "inputs": {
     "instruction": {
       "type": "string",

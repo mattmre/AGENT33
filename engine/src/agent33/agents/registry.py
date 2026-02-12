@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from agent33.agents.definition import AgentDefinition
+from agent33.agents.definition import (
+    AgentDefinition,
+    AgentRole,
+    AgentStatus,
+    CapabilityCategory,
+    SpecCapability,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +71,60 @@ class AgentRegistry:
 
     def __contains__(self, name: str) -> bool:
         return name in self._agents
+
+    # -- Search -----------------------------------------------------------
+
+    def get_by_agent_id(self, agent_id: str) -> AgentDefinition | None:
+        """Lookup by spec agent ID (e.g. ``AGT-001``)."""
+        for defn in self._agents.values():
+            if defn.agent_id == agent_id:
+                return defn
+        return None
+
+    def find_by_role(self, role: AgentRole) -> list[AgentDefinition]:
+        """Return all definitions with the given role."""
+        return [d for d in self._agents.values() if d.role == role]
+
+    def find_by_spec_capability(
+        self, cap: SpecCapability,
+    ) -> list[AgentDefinition]:
+        """Return definitions that declare the given spec capability."""
+        return [d for d in self._agents.values() if cap in d.spec_capabilities]
+
+    def find_by_capability_category(
+        self, category: CapabilityCategory,
+    ) -> list[AgentDefinition]:
+        """Return definitions with any capability in the category."""
+        return [
+            d for d in self._agents.values()
+            if any(c.category == category for c in d.spec_capabilities)
+        ]
+
+    def find_by_status(self, status: AgentStatus) -> list[AgentDefinition]:
+        """Return definitions with the given lifecycle status."""
+        return [d for d in self._agents.values() if d.status == status]
+
+    def search(
+        self,
+        *,
+        role: AgentRole | None = None,
+        spec_capability: SpecCapability | None = None,
+        category: CapabilityCategory | None = None,
+        status: AgentStatus | None = None,
+    ) -> list[AgentDefinition]:
+        """Multi-criteria AND search across all definitions."""
+        results = list(self._agents.values())
+        if role is not None:
+            results = [d for d in results if d.role == role]
+        if spec_capability is not None:
+            results = [
+                d for d in results if spec_capability in d.spec_capabilities
+            ]
+        if category is not None:
+            results = [
+                d for d in results
+                if any(c.category == category for c in d.spec_capabilities)
+            ]
+        if status is not None:
+            results = [d for d in results if d.status == status]
+        return sorted(results, key=lambda d: d.name)

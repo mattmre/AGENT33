@@ -4,10 +4,23 @@
   "version": "1.0.0",
   "role": "researcher",
   "description": "Deep research agent that iteratively searches the web, reads promising sources, accumulates knowledge, and synthesizes comprehensive answers.",
+  "agent_id": "AGT-006",
+  "status": "active",
   "capabilities": [
     "api-calls",
-    "code-analysis"
+    "research"
   ],
+  "spec_capabilities": ["X-01", "X-02", "X-03", "X-04", "X-05"],
+  "governance": {
+    "scope": "read-only",
+    "commands": "none",
+    "network": "external-read",
+    "approval_required": []
+  },
+  "ownership": {
+    "owner": "platform-team",
+    "escalation_target": "orchestrator"
+  },
   "inputs": {
     "query": {
       "type": "string",
