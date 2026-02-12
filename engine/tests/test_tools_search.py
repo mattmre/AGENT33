@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -33,7 +33,7 @@ async def test_missing_query(tool: SearchTool, context: ToolContext) -> None:
 async def test_search_returns_results(mock_settings: AsyncMock, tool: SearchTool, context: ToolContext) -> None:
     mock_settings.searxng_url = "http://searxng:8080"
 
-    mock_resp = AsyncMock()
+    mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
         "results": [
@@ -41,7 +41,7 @@ async def test_search_returns_results(mock_settings: AsyncMock, tool: SearchTool
             {"title": "Result 2", "url": "https://example.com/2", "content": "Snippet 2"},
         ]
     }
-    mock_resp.raise_for_status = AsyncMock()
+    mock_resp.raise_for_status = MagicMock()
 
     with patch("agent33.tools.builtin.search.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()

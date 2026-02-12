@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -41,10 +41,10 @@ async def test_jina_api_mode(mock_settings: AsyncMock, tool: ReaderTool, context
     mock_settings.jina_api_key = "test-key"
     mock_settings.jina_reader_url = "https://r.jina.ai"
 
-    mock_resp = AsyncMock()
+    mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"data": {"content": "# Hello World"}}
-    mock_resp.raise_for_status = AsyncMock()
+    mock_resp.json.return_value = {"content": "# Hello World"}
+    mock_resp.raise_for_status = MagicMock()
 
     with patch("agent33.tools.builtin.reader.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
