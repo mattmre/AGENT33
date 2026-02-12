@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -202,3 +205,57 @@ class StateMachine:
         else:
             logger.warning("action_not_found", action=action_name)
             self._actions_executed.append(f"{action_name}:not_found")
+
+
+# ---------------------------------------------------------------------------
+# CA-046: Deep History States
+# ---------------------------------------------------------------------------
+
+
+class HistoryState(BaseModel):
+    """A history pseudo-state that remembers previous state configuration.
+
+    When ``deep`` is True, the entire nested state hierarchy is restored
+    (deep history). When False, only the top-level child state is restored
+    (shallow history).
+    """
+
+    id: str
+    parent_state: str
+    deep: bool = False
+    _saved_configuration: dict[str, str] = PrivateAttr(default_factory=dict)
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def save(self, configuration: dict[str, str]) -> None:
+        """Save the current state configuration.
+
+        Parameters
+        ----------
+        configuration:
+            Mapping of region/level to active state name.
+            For deep history, this includes all nested levels.
+        """
+        if self.deep:
+            self._saved_configuration = dict(configuration)
+        else:
+            # Shallow: only save top-level
+            self._saved_configuration = {
+                k: v for k, v in configuration.items()
+                if "." not in k
+            }
+
+    def restore(self) -> dict[str, str]:
+        """Restore the saved state configuration.
+
+        Returns
+        -------
+        dict[str, str]
+            The previously saved configuration, or empty dict if none saved.
+        """
+        return dict(self._saved_configuration)
+
+    @property
+    def has_saved_state(self) -> bool:
+        """Return whether a state configuration has been saved."""
+        return bool(self._saved_configuration)

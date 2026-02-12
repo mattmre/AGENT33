@@ -338,3 +338,49 @@ class WorkflowExecutor:
             )
 
         raise ValueError(f"Unknown action: {action}")
+
+
+# ---------------------------------------------------------------------------
+# CA-043: Backpressure Signaling
+# ---------------------------------------------------------------------------
+
+
+class BackpressureController:
+    """Concurrency limiter that emits backpressure signals.
+
+    Upstream producers can check ``is_pressured()`` or await
+    ``wait_for_capacity()`` before submitting more work.
+    """
+
+    def __init__(self, max_tokens: int = 10) -> None:
+        self._max_tokens = max_tokens
+        self._tokens = max_tokens
+        self._lock = asyncio.Lock()
+        self._capacity_event = asyncio.Event()
+        self._capacity_event.set()
+
+    async def acquire(self) -> bool:
+        """Acquire a token. Returns True if acquired, False if no capacity."""
+        async with self._lock:
+            if self._tokens > 0:
+                self._tokens -= 1
+                if self._tokens == 0:
+                    self._capacity_event.clear()
+                return True
+            return False
+
+    async def release(self) -> None:
+        """Release a token back to the pool."""
+        async with self._lock:
+            if self._tokens < self._max_tokens:
+                self._tokens += 1
+                if self._tokens > 0:
+                    self._capacity_event.set()
+
+    def is_pressured(self) -> bool:
+        """Return True if the system is under backpressure (no tokens)."""
+        return self._tokens == 0
+
+    async def wait_for_capacity(self) -> None:
+        """Block until at least one token is available."""
+        await self._capacity_event.wait()

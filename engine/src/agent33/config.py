@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # API
     api_port: int = 8000
     api_log_level: str = "info"
-    api_secret_key: str = "change-me-in-production"
+    api_secret_key: str = "change-me-in-production"  # WARNING: override in production via env var
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
@@ -29,14 +29,47 @@ class Settings(BaseSettings):
     nats_url: str = "nats://nats:4222"
 
     # Security
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = "change-me-in-production"  # WARNING: override in production via env var
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     encryption_key: str = ""
 
+    # SearXNG
+    searxng_url: str = "http://searxng:8080"
+
     # Optional cloud LLM
     openai_api_key: str = ""
     openai_base_url: str = ""
+
+    # AirLLM (layer-sharded large model inference)
+    airllm_enabled: bool = False
+    airllm_model_path: str = ""
+    airllm_device: str = "cuda:0"
+    airllm_compression: str = ""  # "4bit" | "8bit" | ""
+    airllm_max_seq_len: int = 2048
+    airllm_prefetch: bool = True
+
+    # Jina
+    jina_api_key: str = ""
+    jina_reader_url: str = "https://r.jina.ai"
+
+    # Embeddings
+    embedding_provider: str = "ollama"  # "ollama" | "jina"
+
+    # Training (self-evolving loop)
+    training_enabled: bool = True
+    training_optimize_interval: int = 100
+    training_idle_optimize_seconds: int = 300
+    training_min_rollouts: int = 10
+    training_eval_model: str = ""
+
+    # Self-improvement
+    self_improve_enabled: bool = True
+    self_improve_scope: str = "prompts,workflows,templates"
+    self_improve_require_approval: bool = True
+    offline_mode: bool = False
+    intake_output_dir: str = "docs/research/repo_dossiers"
+    analysis_template_dir: str = "docs/research/templates"
 
 
 settings = Settings()

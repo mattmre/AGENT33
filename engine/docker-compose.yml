@@ -11,6 +11,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
       OLLAMA_BASE_URL: http://ollama:11434
+      SEARXNG_URL: http://searxng:8080
+      JINA_API_KEY: ${JINA_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -20,10 +22,13 @@ services:
         condition: service_started
       ollama:
         condition: service_started
+      searxng:
+        condition: service_healthy
     volumes:
       - ./agent-definitions:/app/agent-definitions:ro
       - ./workflow-definitions:/app/workflow-definitions:ro
       - ./tool-definitions:/app/tool-definitions:ro
+      - shared_data:/data/shared
 
   ollama:
     image: ollama/ollama:latest
@@ -42,8 +47,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: agent33
-      POSTGRES_PASSWORD: agent33
+      POSTGRES_USER: agent33          # WARNING: change in production
+      POSTGRES_PASSWORD: agent33      # WARNING: change in production
       POSTGRES_DB: agent33
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -74,7 +79,65 @@ services:
       - "8222:8222"
     command: ["--jetstream", "--http_port", "8222"]
 
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "${SEARXNG_PORT:-8888}:8080"
+    volumes:
+      - searxng_data:/etc/searxng
+      - shared_data:/data/shared
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      N8N_HOST: 0.0.0.0
+      WEBHOOK_URL: http://n8n:5678
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-change-me}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - shared_data:/data/shared
+    profiles:
+      - integrations
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  airllm:
+    build:
+      context: .
+      dockerfile: Dockerfile.airllm
+    volumes:
+      - model_cache:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      AIRLLM_ENABLED: "true"
+      AIRLLM_MODEL_PATH: /models/meta-llama/Meta-Llama-3-70B-Instruct
+      AIRLLM_DEVICE: cuda:0
+      DATABASE_URL: postgresql+asyncpg://agent33:agent33@postgres:5432/agent33
+      REDIS_URL: redis://redis:6379/0
+    profiles:
+      - gpu
+
 volumes:
   ollama_data:
   postgres_data:
   redis_data:
+  model_cache:
+  searxng_data:
+  n8n_data:
+  shared_data:
