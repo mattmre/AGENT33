@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
-from agent33.workflows.state_machine import StatechartDefinition, StateNode, Transition
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from agent33.workflows.state_machine import StatechartDefinition
 
 
 @dataclass
@@ -99,7 +102,7 @@ class StateModelTester:
                 continue
 
             # Explore transitions
-            for event, transition_def in state_node.on.items():
+            for _event, transition_def in state_node.on.items():
                 if isinstance(transition_def, str):
                     target = transition_def
                 else:
@@ -155,7 +158,11 @@ class StateModelTester:
             if node is None:
                 continue
             for transition_def in node.on.values():
-                target = transition_def if isinstance(transition_def, str) else transition_def.target
+                target = (
+                    transition_def
+                    if isinstance(transition_def, str)
+                    else transition_def.target
+                )
                 stack.append(target)
 
         # Check if start is reachable from itself (cycle)

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent33.training.emitter import Span, TraceEmitter
+from agent33.training.emitter import TraceEmitter
 
 
 class TestTraceEmitter:
@@ -24,9 +24,9 @@ class TestTraceEmitter:
         emitter.new_rollout()
 
         pid = emitter.emit_prompt("agent1", [{"role": "user", "content": "hi"}])
-        tid = emitter.emit_tool_call("agent1", "shell", {"cmd": "ls"})
-        rid = emitter.emit_result("agent1", "output text", parent_id=pid)
-        rew = emitter.emit_reward("agent1", 0.85, "good output")
+        _tid = emitter.emit_tool_call("agent1", "shell", {"cmd": "ls"})
+        _rid = emitter.emit_result("agent1", "output text", parent_id=pid)
+        _rew = emitter.emit_reward("agent1", 0.85, "good output")
 
         spans = emitter.collect()
         assert len(spans) == 4

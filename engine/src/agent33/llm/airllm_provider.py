@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from agent33.llm.base import ChatMessage, LLMResponse
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +137,6 @@ class AirLLMProvider:
         self, prompt: str, max_new_tokens: int, temperature: float
     ) -> tuple[str, int]:
         """Synchronous generation (runs in executor)."""
-        import torch  # type: ignore[import-untyped]
 
         tokenizer = self._tokenizer
         input_ids = tokenizer(  # type: ignore[misc]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
 import time
@@ -15,12 +14,7 @@ logger = logging.getLogger(__name__)
 
 _PLAYWRIGHT_AVAILABLE = True
 try:
-    from playwright.async_api import (  # type: ignore[import-untyped]
-        Browser,
-        Page,
-        Playwright,
-        async_playwright,
-    )
+    from playwright.async_api import async_playwright  # type: ignore[import-untyped]
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
 

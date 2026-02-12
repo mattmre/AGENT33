@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent33.tools.base import ToolContext, ToolResult
+from agent33.tools.base import ToolContext
 from agent33.tools.builtin.reader import ReaderTool
 
 
@@ -37,7 +37,9 @@ async def test_domain_allowlist_blocks(tool: ReaderTool) -> None:
 
 
 @patch("agent33.tools.builtin.reader.settings")
-async def test_jina_api_mode(mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext) -> None:
+async def test_jina_api_mode(
+    mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext
+) -> None:
     mock_settings.jina_api_key = "test-key"
     mock_settings.jina_reader_url = "https://r.jina.ai"
 
@@ -59,7 +61,9 @@ async def test_jina_api_mode(mock_settings: AsyncMock, tool: ReaderTool, context
 
 
 @patch("agent33.tools.builtin.reader.settings")
-async def test_local_fallback(mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext) -> None:
+async def test_local_fallback(
+    mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext
+) -> None:
     mock_settings.jina_api_key = ""
 
     mock_resp = AsyncMock()
