@@ -138,7 +138,7 @@ class WorkflowExecutor:
                         tasks = [_run_limited(sid) for sid in group]
                         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        for sid, res in zip(group, results, strict=False):
+                        for sid, res in zip(group, results, strict=True):
                             if isinstance(res, BaseException):
                                 sr = StepResult(
                                     step_id=sid,

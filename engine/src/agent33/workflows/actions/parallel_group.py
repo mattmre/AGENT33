@@ -44,7 +44,7 @@ async def execute(
     results: dict[str, Any] = {}
     errors: list[str] = []
 
-    for sid, result in zip(sub_step_ids, results_list, strict=False):
+    for sid, result in zip(sub_step_ids, results_list, strict=True):
         if isinstance(result, BaseException):
             errors.append(f"Step '{sid}' failed: {result}")
             results[sid] = {"error": str(result)}
