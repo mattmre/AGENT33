@@ -64,7 +64,11 @@ class ReaderTool:
         parsed = urlparse(url)
         domain = parsed.hostname or ""
 
-        if context.domain_allowlist and not any(
+        if not context.domain_allowlist:
+            return ToolResult.fail(
+                "Domain allowlist not configured — all requests denied by default"
+            )
+        if not any(
             domain == allowed or domain.endswith(f".{allowed}")
             for allowed in context.domain_allowlist
         ):

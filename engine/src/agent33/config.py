@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_log_level: str = "info"
     api_secret_key: str = "change-me-in-production"  # WARNING: override in production via env var
+    cors_allowed_origins: str = ""  # comma-separated; empty = allow all (dev only)
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
@@ -73,6 +74,15 @@ class Settings(BaseSettings):
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
+
+    def check_production_secrets(self) -> list[str]:
+        """Return warnings for insecure default secrets."""
+        warnings = []
+        if self.api_secret_key == "change-me-in-production":
+            warnings.append("api_secret_key is using the default value")
+        if self.jwt_secret == "change-me-in-production":
+            warnings.append("jwt_secret is using the default value")
+        return warnings
 
 
 settings = Settings()
