@@ -31,12 +31,24 @@
 - [x] Registry includes role, capabilities, constraints, and owner fields (AGT-001 to AGT-010).
 - [x] Routing map references the registry entries (quick reference table with registry IDs).
 - [x] Update workflow for adding agents is documented (Agent Onboarding section).
+- [x] 25-entry spec capability taxonomy (P/I/V/R/X) with human-readable catalog.
+- [x] Agent definitions loaded from JSON at startup via configurable directory.
+- [x] FastAPI search endpoints: by role, capability, category, status, agent ID.
+- [x] Workflow executor bridge: definition registry fallback for invoke-agent steps.
+- [x] Backward-compatible role mapping (worker->implementer, validator->qa).
+- [x] 28 tests covering model, search, discover, routes, and workflow bridge.
 
 ## Dependencies
 - Phase 10
 
 ## Blocks
 - Phase 12
+
+## Implementation Status
+- **PR #21** merged 2026-02-12 — cherry-picked from stale `feat/phase-11-agent-registry`, rebased onto current main, added tests and input validation.
+- Engine files: `agents/capabilities.py`, `agents/definition.py`, `agents/registry.py`, `api/routes/agents.py`, `workflows/actions/invoke_agent.py`, `main.py`, `config.py`
+- Agent definitions: `orchestrator.json`, `director.json`, `worker.json`, `qa.json`, `researcher.json`, `browser-agent.json`
+- Tests: `tests/test_agent_registry.py` (28 tests)
 
 ## Orchestration Guidance
 - Architecture agent validates taxonomy consistency.
@@ -49,7 +61,7 @@
 - Prefer explicit ownership and accountability fields.
 
 ## Review Checklist
-- [ ] Interfaces/contracts reviewed and approved.
-- [ ] Tests/fixtures or evidence added.
-- [ ] Documentation updated and verified.
-- [ ] Scope remains within this phase only.
+- [x] Interfaces/contracts reviewed and approved.
+- [x] Tests/fixtures or evidence added.
+- [x] Documentation updated and verified.
+- [x] Scope remains within this phase only.

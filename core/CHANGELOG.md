@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### Session: 2026-02-12 — PR Review, Merge Sprint, Phase 11 Implementation
+| Action | Detail |
+| --- | --- |
+| PR #19 merged | Complete 10 partial competitive features (CA-007 through CA-060) — backpressure, filters, IO manager, migration, partitioning, state machine extensions, file change sensor, metrics, state model testing |
+| PR #17 merged | Hygiene & validation — gitignore, pycache cleanup, lint/type fixes, `zip(strict=True)` |
+| PR #13 merged | Phase 21 extensibility patterns integration (Tiers 1-4) — relationship types, agent memory protocol, artifact index, change event types |
+| PR #18 merged | Integration wiring — security middleware, DB/Redis/NATS connections, agent-workflow bridge, CORS fix, URL redaction, prompt injection guard |
+| Post-merge fixes | Missing `import time` in metrics.py, AsyncMock->MagicMock for httpx sync `.json()` in reader/search tests |
+| PR #21 merged | Phase 11 agent registry — 25-entry capability taxonomy, expanded roles, registry search, FastAPI DI, workflow bridge, 6 agent definitions, 28 tests |
+| Branch cleanup | Deleted 16 merged branches (4 PR branches + 12 old feature branches), 1 stale branch replaced |
+| Test status | 100 passed, 0 failed on main |
+
 ### Research Intake
 | Date | Action | Source | Target | Rationale | Relationships |
 | --- | --- | --- | --- | --- | --- |
