@@ -77,13 +77,20 @@ class ArtifactFilter:
         self._max_age = max_age
         return self
 
-    def by_regex(self, pattern: str) -> ArtifactFilter:
+    def by_regex(self, pattern: str, *, timeout: float = 1.0) -> ArtifactFilter:
         """Filter by regex pattern matched against artifact name.
 
         Parameters
         ----------
         pattern:
-            Regular expression string.
+            Regular expression string. Must be a valid, safe regex.
+        timeout:
+            Not currently enforced; reserved for future use.
+
+        Raises
+        ------
+        re.error
+            If the pattern is not a valid regular expression.
         """
         compiled = re.compile(pattern)
         self._predicates.append(lambda a: compiled.search(a.name) is not None)
@@ -113,33 +120,33 @@ class ArtifactFilter:
         list[Artifact]
             Filtered artifacts.
         """
-        result = list(artifacts)
+        filtered = iter(artifacts)
 
         # Include filter
         if self._include_patterns:
-            result = [
-                a for a in result
+            filtered = (
+                a for a in filtered
                 if any(fnmatch.fnmatch(a.name, p) for p in self._include_patterns)
-            ]
+            )
 
         # Exclude filter
         if self._exclude_patterns:
-            result = [
-                a for a in result
+            filtered = (
+                a for a in filtered
                 if not any(fnmatch.fnmatch(a.name, p) for p in self._exclude_patterns)
-            ]
+            )
 
         # Type filter
         if self._type_filter:
-            result = [a for a in result if a.artifact_type in self._type_filter]
+            filtered = (a for a in filtered if a.artifact_type in self._type_filter)
 
         # Age filter
         if self._max_age is not None:
             cutoff = time.time() - self._max_age
-            result = [a for a in result if a.created_at >= cutoff]
+            filtered = (a for a in filtered if a.created_at >= cutoff)
 
         # Predicate filters (including regex)
         for pred in self._predicates:
-            result = [a for a in result if pred(a)]
+            filtered = (a for a in filtered if pred(a))
 
-        return result
+        return list(filtered)

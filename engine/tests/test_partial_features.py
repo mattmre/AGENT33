@@ -6,9 +6,6 @@ import asyncio
 import time
 from typing import Any
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # CA-007: Artifact-Graph Diffing
 # ---------------------------------------------------------------------------
@@ -117,7 +114,7 @@ def test_partition_executor_static_keys():
     async def run(key: str) -> dict[str, Any]:
         return {"region": key, "status": "ok"}
 
-    results = asyncio.get_event_loop().run_until_complete(executor.execute(run))
+    results = asyncio.run(executor.execute(run))
     assert len(results) == 3
     assert all(r.status == "success" for r in results)
     keys = {r.key for r in results}
@@ -136,7 +133,7 @@ def test_partition_executor_dynamic_discovery():
     async def run(key: str) -> dict[str, Any]:
         return {"shard": key}
 
-    results = asyncio.get_event_loop().run_until_complete(executor.execute(run))
+    results = asyncio.run(executor.execute(run))
     assert len(results) == 2
 
 
@@ -242,7 +239,7 @@ def test_backpressure_controller():
         assert not ctrl.is_pressured()
         assert await ctrl.acquire() is True
 
-    asyncio.get_event_loop().run_until_complete(_test())
+    asyncio.run(_test())
 
 
 # ---------------------------------------------------------------------------
@@ -278,12 +275,12 @@ def test_history_state_shallow():
 # ---------------------------------------------------------------------------
 
 def test_state_model_tester_detects_unreachable():
+    from agent33.testing.state_model import StateModelTester
     from agent33.workflows.state_machine import (
         StatechartDefinition,
         StateNode,
         Transition,
     )
-    from agent33.testing.state_model import StateModelTester
 
     defn = StatechartDefinition(
         id="test",
@@ -304,8 +301,8 @@ def test_state_model_tester_detects_unreachable():
 
 
 def test_state_model_tester_detects_deadlock():
-    from agent33.workflows.state_machine import StatechartDefinition, StateNode
     from agent33.testing.state_model import StateModelTester
+    from agent33.workflows.state_machine import StatechartDefinition, StateNode
 
     defn = StatechartDefinition(
         id="test",

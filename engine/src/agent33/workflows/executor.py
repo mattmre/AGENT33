@@ -346,16 +346,15 @@ class WorkflowExecutor:
 
 
 class BackpressureController:
-    """Token-bucket rate limiter that emits backpressure signals.
+    """Concurrency limiter that emits backpressure signals.
 
     Upstream producers can check ``is_pressured()`` or await
     ``wait_for_capacity()`` before submitting more work.
     """
 
-    def __init__(self, max_tokens: int = 10, refill_rate: float = 1.0) -> None:
+    def __init__(self, max_tokens: int = 10) -> None:
         self._max_tokens = max_tokens
         self._tokens = max_tokens
-        self._refill_rate = refill_rate
         self._lock = asyncio.Lock()
         self._capacity_event = asyncio.Event()
         self._capacity_event.set()

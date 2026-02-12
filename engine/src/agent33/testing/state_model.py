@@ -164,7 +164,7 @@ class StateModelTester:
             for s in visited
             if (n := self._definition.states.get(s)) is not None
             for t in n.on.values()
-            if (t if isinstance(t, str) else t.target) == start and s != start
+            if (t if isinstance(t, str) else t.target) == start
         }
 
         if not can_return:

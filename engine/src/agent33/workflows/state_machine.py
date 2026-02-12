@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -220,7 +220,7 @@ class HistoryState(BaseModel):
     id: str
     parent_state: str
     deep: bool = False
-    _saved_configuration: dict[str, str] = {}
+    _saved_configuration: dict[str, str] = PrivateAttr(default_factory=dict)
 
     model_config = {"arbitrary_types_allowed": True}
 

@@ -38,11 +38,11 @@ class MemoryIOManager(IOManager):
         self._store: dict[str, Any] = {}
 
     def load_input(self, context: IOContext) -> Any:
-        key = f"{context.run_id}:{context.step_id}:{context.key}"
+        key = f"{context.run_id}/{context.step_id}/{context.key}"
         return self._store.get(key)
 
     def handle_output(self, context: IOContext, result: Any) -> None:
-        key = f"{context.run_id}:{context.step_id}:{context.key}"
+        key = f"{context.run_id}/{context.step_id}/{context.key}"
         self._store[key] = result
 
     @property
@@ -59,7 +59,15 @@ class FileIOManager(IOManager):
         self._base.mkdir(parents=True, exist_ok=True)
 
     def _path_for(self, context: IOContext) -> Path:
-        return self._base / context.run_id / f"{context.step_id}_{context.key}.json"
+        base_resolved = self._base.resolve()
+        target_path = (
+            base_resolved / context.run_id / f"{context.step_id}_{context.key}.json"
+        ).resolve()
+        try:
+            target_path.relative_to(base_resolved)
+        except ValueError:
+            raise ValueError("Access denied: Path is outside the base directory") from None
+        return target_path
 
     def load_input(self, context: IOContext) -> Any:
         p = self._path_for(context)

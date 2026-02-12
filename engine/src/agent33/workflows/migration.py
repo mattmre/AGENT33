@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Callable
-
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 MigrationFn = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -28,7 +28,6 @@ class WorkflowMigration:
 
     def __init__(self) -> None:
         self._migrations: dict[tuple[str, str], MigrationStep] = {}
-        self._version_order: list[str] = []
 
     def register(
         self,
@@ -57,10 +56,6 @@ class WorkflowMigration:
             downgrade_fn=downgrade_fn,
         )
         self._migrations[(from_version, to_version)] = step
-
-        for v in (from_version, to_version):
-            if v not in self._version_order:
-                self._version_order.append(v)
 
     def _find_path(self, from_v: str, to_v: str) -> list[tuple[str, str]]:
         """Find the migration path between two versions."""

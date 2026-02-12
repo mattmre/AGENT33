@@ -218,8 +218,7 @@ class ArtifactGraph:
         changed: set[str] = set()
         for aid, current_hash in self._states.items():
             prev = self._previous_states.get(aid)
-            if (prev is not None and prev != current_hash
-                    or prev is None and aid in self._previous_states):
+            if prev is not None and prev != current_hash:
                 changed.add(aid)
 
         # Also include artifacts that have a state but no previous state
