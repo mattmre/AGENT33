@@ -53,4 +53,4 @@ See `rules/README.md` for customization guidance and per-project overrides.
 | depends-on | `core/agents/AGENT_MEMORY_PROTOCOL.md` | Knowledge management protocol |
 | depends-on | `core/orchestrator/RELATIONSHIP_TYPES.md` | Relationship taxonomy |
 | exemplifies | `core/orchestrator/README.md` | Orchestration system entry point |
-| explains | Agent autonomy patterns | Governance for agent behavior |
+| explains | . | Governance for agent autonomy patterns |

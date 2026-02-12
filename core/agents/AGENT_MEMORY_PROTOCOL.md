@@ -33,8 +33,8 @@ Instructs agents on autonomous knowledge management within AGENT-33 sessions.
 | Knowledge Type | Location |
 |----------------|----------|
 | Codebase conventions | Agent memory tool (if available) |
-| Artifact relationships | CHANGELOG.md Relationships column |
-| Session learnings | next-session-narrative.md |
+| Artifact relationships | Source artifact's `## Relationships` section |
+| Session learnings | `agent-learning.md` (for reusable insights) |
 | New artifacts | Appropriate core/ subdirectory |
 
 ## Relationship Creation

@@ -27,5 +27,5 @@ When canonicalizing, document relationships:
 | Type | Target | Notes |
 |------|--------|-------|
 | depends-on | `core/orchestrator/RELATIONSHIP_TYPES.md` | Relationship taxonomy |
-| explains | Canonicalization workflow | Immutability and provenance rules |
+| explains | . | Immutability and provenance rules for the canonicalization workflow |
 | contextualizes | `sync-plan.md` | Related sync policies |

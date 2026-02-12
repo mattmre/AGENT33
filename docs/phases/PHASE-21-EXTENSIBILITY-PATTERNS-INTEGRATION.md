@@ -42,7 +42,7 @@ Define semantic relationship primitives for connecting AGENT-33 artifacts:
 | Relationship | Meaning | Example |
 |--------------|---------|---------|
 | `depends-on` | Phase → prerequisite phases | Phase-05 depends-on Phase-03 |
-| `derived-from` | Artifact → source template | prompt-pack-v2 derived-from prompt-pack-v1 |
+| `derived-from` | Artifact → source template | canonical-doc derived-from collected/source.md |
 | `supersedes` | Updated artifact → deprecated version | CLAUDE-v2.md supersedes CLAUDE-v1.md |
 | `exemplifies` | Concrete example → abstract pattern | tdd-workflow.md exemplifies workflow-template.md |
 | `contextualizes` | Research → feature being designed | memorizer-dossier contextualizes Phase-21 |
@@ -50,9 +50,9 @@ Define semantic relationship primitives for connecting AGENT-33 artifacts:
 | `chunk-of` | Section → parent document | For large document decomposition |
 
 **Acceptance Criteria**:
-- [ ] Relationship types documented with examples
-- [ ] Usage guidance added to `core/arch/templates.md`
-- [ ] CHANGELOG updated
+- [x] Relationship types documented with examples
+- [x] Usage guidance added to `core/arch/templates.md`
+- [x] CHANGELOG updated
 
 #### 1.2 Preserve-Original-During-Refinement Policy
 **Files**: 
@@ -64,9 +64,9 @@ Formalize the rule that originals in `collected/` are never modified:
 - Provenance chain maintained from collected → core → distributed
 
 **Acceptance Criteria**:
-- [ ] Policy explicitly states immutability of collected/
-- [ ] Relationship links documented in canonicalization workflow
-- [ ] CHANGELOG updated
+- [x] Policy explicitly states immutability of collected/
+- [x] Relationship links documented in canonicalization workflow
+- [x] CHANGELOG updated
 
 ---
 
@@ -88,10 +88,10 @@ Create AGENT.md-style briefing instructing agents on knowledge management:
 ```
 
 **Acceptance Criteria**:
-- [ ] Protocol document created
-- [ ] Linked from ORCHESTRATION_INDEX.md
-- [ ] Integrated with policy-pack-v1/AGENTS.md
-- [ ] CHANGELOG updated
+- [x] Protocol document created
+- [x] Linked from ORCHESTRATION_INDEX.md
+- [x] Integrated with policy-pack-v1/AGENTS.md
+- [x] CHANGELOG updated
 
 ---
 
@@ -108,10 +108,10 @@ Create metadata index for efficient artifact discovery:
 | phase-21 | Extensibility Integration | phase | research, core | 2026-01-20 | - |
 
 **Acceptance Criteria**:
-- [ ] Index format documented
-- [ ] Initial population with core artifacts
-- [ ] Search/filter guidance added
-- [ ] CHANGELOG updated
+- [x] Index format documented
+- [x] Initial population with core artifacts
+- [x] Search/filter guidance added
+- [x] CHANGELOG updated
 
 ---
 
@@ -132,10 +132,10 @@ Define event types for document versioning (inspired by MemoryEvent pattern):
 | `artifact_reverted` | Rollback | "Reverted to v2" |
 
 **Acceptance Criteria**:
-- [ ] Event types documented
-- [ ] Integration with CHANGELOG.md format
-- [ ] Human-readable display text convention
-- [ ] CHANGELOG updated
+- [x] Event types documented
+- [x] Integration with CHANGELOG.md format
+- [x] Human-readable display text convention
+- [x] CHANGELOG updated
 
 ---
 
@@ -171,12 +171,12 @@ When artifact count warrants it:
 - Keep artifacts composable and model-agnostic
 
 ## Review Checklist
-- [ ] Patterns adapted correctly from memorizer-v1 research
-- [ ] No service/database dependencies introduced
-- [ ] Consistent with existing AGENT-33 conventions
-- [ ] Documentation clear and actionable
-- [ ] CHANGELOG entries complete
-- [ ] ORCHESTRATION_INDEX.md updated with new links
+- [x] Patterns adapted correctly from memorizer-v1 research
+- [x] No service/database dependencies introduced
+- [x] Consistent with existing AGENT-33 conventions
+- [x] Documentation clear and actionable
+- [x] CHANGELOG entries complete
+- [x] ORCHESTRATION_INDEX.md updated with new links
 
 ## Risk Assessment
 

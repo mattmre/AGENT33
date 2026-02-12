@@ -23,9 +23,9 @@
 | 2026-01-20 | core/ORCHESTRATION_INDEX.md | content_updated | Added Agent Memory section |
 | 2026-01-20 | core/ARTIFACT_INDEX.md | artifact_created | Phase 21 Tier 3 - Lightweight artifact index |
 | 2026-01-20 | core/arch/CHANGE_EVENT_TYPES.md | artifact_created | Phase 21 Tier 4 - Typed change events |
-| 2026-01-20 | dedup-policy.md | Updated | Added immutability principle and relationship types |
-| 2026-01-20 | sync-plan.md | Updated | Added relationship tracking and immutability |
-| 2026-01-20 | docs/phases/README.md | Updated | Added Phase 21 to index |
+| 2026-01-20 | dedup-policy.md | content_updated | Added immutability principle and relationship types |
+| 2026-01-20 | sync-plan.md | content_updated | Added relationship tracking and immutability |
+| 2026-01-20 | docs/phases/README.md | content_updated | Added Phase 21 to index |
 
 ### Canonicalization Decisions
 | Date | Canonical File | Sources Considered | Rationale (Recency/Completeness/Reuse) | Notes |

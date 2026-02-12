@@ -161,11 +161,11 @@ When needed:
 
 ## Success Criteria
 
-- [ ] All Tier 1-2 deliverables complete and reviewed
-- [ ] Relationship types used in at least 3 existing documents
-- [ ] Agent memory protocol referenced in policy pack
-- [ ] CHANGELOG reflects all changes with rationale
-- [ ] No service/database dependencies introduced
+- [x] All Tier 1-2 deliverables complete and reviewed
+- [x] Relationship types used in at least 3 existing documents
+- [x] Agent memory protocol referenced in policy pack
+- [x] CHANGELOG reflects all changes with rationale
+- [x] No service/database dependencies introduced
 
 ---
 

@@ -7,7 +7,7 @@ Defines semantic relationship primitives for connecting AGENT-33 artifacts. Use 
 | Relationship | Meaning | Direction | Example |
 |--------------|---------|-----------|---------|
 | `depends-on` | Artifact requires another to function | child → parent | Phase-05 depends-on Phase-03 |
-| `derived-from` | Artifact was created from another | new → source | prompt-pack-v2 derived-from prompt-pack-v1 |
+| `derived-from` | Artifact was created from another | new → source | canonical-doc derived-from collected/source.md |
 | `supersedes` | Artifact replaces a deprecated version | new → old | CLAUDE-v2.md supersedes CLAUDE-v1.md |
 | `exemplifies` | Concrete example of an abstract pattern | example → pattern | tdd-workflow.md exemplifies workflow-template.md |
 | `contextualizes` | Provides background for design decisions | research → feature | memorizer-dossier contextualizes Phase-21 |
