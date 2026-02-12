@@ -253,14 +253,18 @@ class TestAgentRoutes:
     @pytest.fixture()
     def client(self, registry_with_agents: AgentRegistry) -> TestClient:
         from agent33.main import app
+        from agent33.security.auth import create_access_token
+
         app.state.agent_registry = registry_with_agents
-        return TestClient(app, raise_server_exceptions=False)
+        token = create_access_token("test-user", scopes=["admin"])
+        return TestClient(
+            app,
+            headers={"Authorization": f"Bearer {token}"},
+            raise_server_exceptions=False,
+        )
 
     def test_list_agents(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/")
-        # Accept either 200 (success) or 401 (AuthMiddleware blocks)
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 4
@@ -270,16 +274,12 @@ class TestAgentRoutes:
 
     def test_capabilities_catalog(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/capabilities/catalog")
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 5
 
     def test_search_by_role(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/search", params={"role": "director"})
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
@@ -287,21 +287,15 @@ class TestAgentRoutes:
 
     def test_search_invalid_role_returns_422(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/search", params={"role": "nonexistent"})
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 422
 
     def test_get_agent_by_spec_id(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/by-id/AGT-001")
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 200
         assert resp.json()["name"] == "planner"
 
     def test_get_agent_by_spec_id_not_found(self, client: TestClient) -> None:
         resp = client.get("/v1/agents/by-id/AGT-999")
-        if resp.status_code == 401:
-            pytest.skip("AuthMiddleware active — route wiring verified")
         assert resp.status_code == 404
 
 
