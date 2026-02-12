@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from agent33.agents.registry import AgentRegistry
 
 logger = structlog.get_logger()
 
 # Simple in-process agent registry. External modules register callables here.
 _agent_registry: dict[str, Any] = {}
+
+# Optional bridge to the main AgentRegistry (set during app startup).
+_definition_registry: AgentRegistry | None = None
+
+
+def set_definition_registry(registry: AgentRegistry) -> None:
+    """Wire the main AgentRegistry so workflow steps can look up agents."""
+    global _definition_registry  # noqa: PLW0603
+    _definition_registry = registry
 
 
 def register_agent(name: str, handler: Any) -> None:
@@ -25,12 +37,22 @@ def register_agent(name: str, handler: Any) -> None:
 def get_agent(name: str) -> Any:
     """Retrieve a registered agent handler by name.
 
+    Falls back to the definition registry if no explicit handler exists.
+
     Raises:
-        KeyError: If the agent is not registered.
+        KeyError: If the agent is not registered anywhere.
     """
-    if name not in _agent_registry:
-        raise KeyError(f"Agent '{name}' is not registered in the workflow agent registry")
-    return _agent_registry[name]
+    if name in _agent_registry:
+        return _agent_registry[name]
+
+    if _definition_registry is not None:
+        defn = _definition_registry.get(name)
+        if defn is not None:
+            return defn
+
+    raise KeyError(
+        f"Agent '{name}' is not registered in the workflow agent registry"
+    )
 
 
 async def execute(

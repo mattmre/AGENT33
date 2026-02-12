@@ -78,9 +78,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("nats_init_failed", error=str(exc))
     app.state.nats_bus = nats_bus
 
+    # -- Agent registry ----------------------------------------------------
+    from pathlib import Path
+
+    from agent33.agents.registry import AgentRegistry
+
+    agent_registry = AgentRegistry()
+    defs_dir = Path(settings.agent_definitions_dir)
+    if defs_dir.is_dir():
+        count = agent_registry.discover(defs_dir)
+        logger.info("agent_registry_loaded", count=count, path=str(defs_dir))
+    else:
+        logger.warning("agent_definitions_dir_not_found", path=str(defs_dir))
+    app.state.agent_registry = agent_registry
+
     # -- Agent runtime / workflow integration ------------------------------
     from agent33.llm.router import ModelRouter
-    from agent33.workflows.actions.invoke_agent import register_agent
+    from agent33.workflows.actions.invoke_agent import (
+        register_agent,
+        set_definition_registry,
+    )
+
+    set_definition_registry(agent_registry)
 
     model_router = ModelRouter()
     app.state.model_router = model_router
