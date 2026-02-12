@@ -33,7 +33,10 @@ class AgentRegistry:
                 definition = AgentDefinition.load_from_file(json_file)
                 self._agents[definition.name] = definition
                 loaded += 1
-                logger.info("loaded agent definition: %s (v%s)", definition.name, definition.version)
+                logger.info(
+                    "loaded agent definition: %s (v%s)",
+                    definition.name, definition.version,
+                )
             except Exception:
                 logger.exception("failed to load agent definition from %s", json_file)
 

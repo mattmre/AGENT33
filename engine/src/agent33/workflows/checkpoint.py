@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -33,7 +33,7 @@ class WorkflowCheckpoint(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 
@@ -78,7 +78,7 @@ class CheckpointManager:
             workflow_id=workflow_id,
             step_id=step_id,
             state_json=json.dumps(state, default=str),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         async with self._session_factory() as session:

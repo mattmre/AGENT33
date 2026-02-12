@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
-from typing import Any
 
 from agent33.tools.base import Tool
 
@@ -41,7 +40,7 @@ class ToolRegistry:
         count = 0
         eps = importlib.metadata.entry_points()
         # Python 3.12+ returns a SelectableGroups / dict; 3.9+ has .select()
-        selected = eps.select(group=group) if hasattr(eps, "select") else eps.get(group, [])
+        selected = eps.select(group=group) if hasattr(eps, "select") else eps.get(group, [])  # type: ignore[arg-type]
         for ep in selected:
             try:
                 obj = ep.load()

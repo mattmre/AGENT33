@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from agent33.workflows.dag import DAGBuilder
 from agent33.workflows.definition import WorkflowStep
 
@@ -66,7 +64,7 @@ def _make_diamond_dag(n: int) -> list[WorkflowStep]:
 
     while step_count < n - 1:
         current_layer: list[str] = []
-        for j in range(min(layer_size, n - 1 - step_count)):
+        for _j in range(min(layer_size, n - 1 - step_count)):
             step_id = f"s-{step_count:04d}"
             steps.append(
                 WorkflowStep(

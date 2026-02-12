@@ -5,11 +5,13 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent33.agents.definition import AgentDefinition
 from agent33.llm.base import ChatMessage, LLMResponse
-from agent33.llm.router import ModelRouter
+
+if TYPE_CHECKING:
+    from agent33.agents.definition import AgentDefinition
+    from agent33.llm.router import ModelRouter
 
 logger = logging.getLogger(__name__)
 

@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, PrivateAttr
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = structlog.get_logger()
 
 

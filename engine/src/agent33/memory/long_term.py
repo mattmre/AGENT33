@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
-from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, text
+from sqlalchemy import Column, DateTime, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 try:
@@ -33,7 +33,7 @@ class MemoryRecord(_Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 
@@ -72,11 +72,10 @@ class LongTermMemory:
             embedding=embedding,
             metadata_=metadata or {},
         )
-        async with self._session_factory() as session:
-            async with session.begin():
-                session.add(record)
-                await session.flush()
-                record_id: int = record.id  # type: ignore[assignment]
+        async with self._session_factory() as session, session.begin():
+            session.add(record)
+            await session.flush()
+            record_id: int = record.id  # type: ignore[assignment]
         return record_id
 
     async def search(

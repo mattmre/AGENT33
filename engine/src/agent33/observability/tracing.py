@@ -7,7 +7,7 @@ from typing import Any
 try:
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
     _HAS_OTEL = True
 except ImportError:  # pragma: no cover

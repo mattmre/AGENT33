@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
-from typing import Any, Generator
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @dataclass

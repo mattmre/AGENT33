@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from agent33.messaging.models import PairingRequest
 
@@ -28,10 +29,8 @@ class PairingManager:
     async def stop(self) -> None:
         if self._cleanup_task is not None:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
             self._cleanup_task = None
 
     def generate_code(self, platform: str, user_id: str) -> str:
@@ -40,7 +39,7 @@ class PairingManager:
         If the user already has an active code it is replaced.
         """
         code = f"{secrets.randbelow(1_000_000):06d}"
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=_TTL_MINUTES)
+        expires_at = datetime.now(UTC) + timedelta(minutes=_TTL_MINUTES)
         self._codes[code] = PairingRequest(
             platform=platform,
             user_id=user_id,
@@ -64,7 +63,7 @@ class PairingManager:
         request = self._codes.get(code)
         if request is None:
             return False
-        if datetime.now(timezone.utc) > request.expires_at:
+        if datetime.now(UTC) > request.expires_at:
             del self._codes[code]
             return False
         if request.user_id != user_id:
@@ -73,7 +72,7 @@ class PairingManager:
         return True
 
     def _purge_expired(self) -> int:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired = [k for k, v in self._codes.items() if now > v.expires_at]
         for k in expired:
             del self._codes[k]

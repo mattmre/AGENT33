@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi.testclient import TestClient
+if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
 
 
 def test_chat_completions_returns_openai_format(client: TestClient) -> None:
-    mock_response = AsyncMock()
+    mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.raise_for_status = lambda: None
+    mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {
         "message": {"role": "assistant", "content": "Hello!"},
         "prompt_eval_count": 10,

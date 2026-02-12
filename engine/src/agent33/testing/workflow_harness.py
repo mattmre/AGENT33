@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent33.workflows.dag import DAGBuilder
 from agent33.workflows.definition import WorkflowDefinition, WorkflowStep
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +176,8 @@ class WorkflowTestHarness:
 
     def _require_definition(self) -> WorkflowDefinition:
         if self._definition is None:
-            raise RuntimeError("No workflow loaded. Call load_workflow() or load_definition() first.")
+            msg = "No workflow loaded. Call load_workflow() or load_definition() first."
+            raise RuntimeError(msg)
         return self._definition
 
     @staticmethod

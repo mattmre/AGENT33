@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from agent33.messaging.models import Message, OutgoingMessage
+if TYPE_CHECKING:
+    from agent33.messaging.models import Message
 
 
 @runtime_checkable
