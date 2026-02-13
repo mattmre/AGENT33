@@ -69,7 +69,7 @@ async def test_local_fallback(
     mock_resp = AsyncMock()
     mock_resp.status_code = 200
     mock_resp.text = "<html><body><p>Test content here</p></body></html>"
-    mock_resp.raise_for_status = AsyncMock()
+    mock_resp.raise_for_status = MagicMock()
 
     with patch("agent33.tools.builtin.reader.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()

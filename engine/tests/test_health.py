@@ -12,11 +12,18 @@ def test_health_returns_200(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
     data = r.json()
-    assert "status" in data
-    assert "services" in data
+    assert data["status"] in ("healthy", "degraded")
+    assert isinstance(data["services"], dict)
+    for svc_name, svc_status in data["services"].items():
+        assert svc_status in ("ok", "degraded", "unavailable"), (
+            f"Unexpected status {svc_status!r} for service {svc_name!r}"
+        )
 
 
 def test_health_lists_all_services(client: TestClient) -> None:
     data = client.get("/health").json()
-    for svc in ("ollama", "redis", "postgres", "nats"):
-        assert svc in data["services"]
+    expected = {"ollama", "redis", "postgres", "nats"}
+    assert expected == data["services"].keys(), (
+        f"Service list mismatch. Missing: {expected - data['services'].keys()}, "
+        f"Extra: {data['services'].keys() - expected}"
+    )
