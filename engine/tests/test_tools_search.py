@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent33.tools.base import ToolContext, ToolResult
+from agent33.tools.base import ToolContext
 from agent33.tools.builtin.search import SearchTool
 
 
@@ -30,7 +30,9 @@ async def test_missing_query(tool: SearchTool, context: ToolContext) -> None:
 
 
 @patch("agent33.tools.builtin.search.settings")
-async def test_search_returns_results(mock_settings: AsyncMock, tool: SearchTool, context: ToolContext) -> None:
+async def test_search_returns_results(
+    mock_settings: AsyncMock, tool: SearchTool, context: ToolContext
+) -> None:
     mock_settings.searxng_url = "http://searxng:8080"
 
     mock_resp = MagicMock()
@@ -57,7 +59,9 @@ async def test_search_returns_results(mock_settings: AsyncMock, tool: SearchTool
 
 
 @patch("agent33.tools.builtin.search.settings")
-async def test_search_connection_error(mock_settings: AsyncMock, tool: SearchTool, context: ToolContext) -> None:
+async def test_search_connection_error(
+    mock_settings: AsyncMock, tool: SearchTool, context: ToolContext
+) -> None:
     mock_settings.searxng_url = "http://searxng:8080"
 
     with patch("agent33.tools.builtin.search.httpx.AsyncClient") as mock_client_cls:

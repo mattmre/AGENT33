@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent33.tools.base import ToolContext, ToolResult
 
@@ -15,14 +14,12 @@ logger = logging.getLogger(__name__)
 
 _PLAYWRIGHT_AVAILABLE = True
 try:
-    from playwright.async_api import (  # type: ignore[import-untyped]
-        Browser,
-        Page,
-        Playwright,
-        async_playwright,
-    )
+    from playwright.async_api import async_playwright  # type: ignore[import-untyped]
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
+
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, Page, Playwright
 
 _DEFAULT_TIMEOUT_MS = 30_000
 _SESSION_TTL_SECONDS = 300  # 5 minutes idle
@@ -32,9 +29,9 @@ _SESSION_TTL_SECONDS = 300  # 5 minutes idle
 class BrowserSession:
     """Holds a persistent browser and page for multi-step automation."""
 
-    pw: Any  # Playwright context manager
-    browser: Any  # Browser instance
-    page: Any  # Page instance
+    pw: Playwright  # Playwright context manager
+    browser: Browser  # Browser instance
+    page: Page  # Page instance
     last_used: float = field(default_factory=time.monotonic)
 
 
@@ -205,7 +202,7 @@ class BrowserTool:
                 await browser.close()
 
     async def _run_interactive(
-        self, page: Any, action: str, params: dict[str, Any], timeout_ms: int
+        self, page: Page, action: str, params: dict[str, Any], timeout_ms: int
     ) -> ToolResult:
         selector: str = params.get("selector", "")
 

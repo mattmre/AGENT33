@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _APO_PROMPT = """\
-You are optimizing an AI agent's system prompt. Analyze the high-reward and low-reward examples below, then generate an improved system prompt.
+You are optimizing an AI agent's system prompt. Analyze the high-reward and \
+low-reward examples below, then generate an improved system prompt.
 
 Current system prompt:
 {current_prompt}

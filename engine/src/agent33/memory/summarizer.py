@@ -81,7 +81,9 @@ class SessionSummarizer:
 
         return result
 
-    async def auto_summarize(self, session_id: str, observations: list[Observation]) -> dict[str, Any]:
+    async def auto_summarize(
+        self, session_id: str, observations: list[Observation]
+    ) -> dict[str, Any]:
         """Summarize and store the result in long-term memory."""
         result = await self.summarize(observations)
 

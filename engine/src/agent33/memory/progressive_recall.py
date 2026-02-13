@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent33.memory.long_term import LongTermMemory
     from agent33.memory.embeddings import EmbeddingProvider
+    from agent33.memory.long_term import LongTermMemory
 
 logger = logging.getLogger(__name__)
 
