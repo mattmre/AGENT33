@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from agent33.workflows.state_machine import StatechartDefinition
+    from agent33.workflows.state_machine import StatechartDefinition, StateNode
 
 
 @dataclass
@@ -82,7 +82,7 @@ class StateModelTester:
             reachable.add(state_name)
             visit_counts[state_name] = visit_counts.get(state_name, 0) + 1
 
-            state_node = self._definition.states.get(state_name)
+            state_node: StateNode | None = self._definition.states.get(state_name)
             if state_node is None:
                 continue
 
