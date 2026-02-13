@@ -36,7 +36,7 @@ Saved to `docs/sessions/`:
 | PR | Branch | Title | Tests | Review Status |
 |----|--------|-------|-------|---------------|
 | #22 | fix/lint-cleanup | Resolve all 34 lint errors | 100 pass | 1 review (Gemini: 2 comments) |
-| #23 | fix/test-quality | Test quality — AsyncMock, assertions, auth | 35 pass | 1 review (Gemini: 1 comment) |
+| #23 | fix/test-quality | Test quality — AsyncMock, assertions, auth | 100 pass | 1 review (Gemini: 1 comment) |
 | #24 | fix/security-hardening | Security hardening — injection, SSRF, CORS | 111 pass (+11) | Pending review |
 | #25 | feat/phase-12-tool-registry-ops | Phase 12 — Tool Registry Ops | 122 pass (+22) | Pending review |
 | #26 | docs/session-2026-02-12 | Session docs + next-session update | docs only | Pending review |
