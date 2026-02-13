@@ -20,7 +20,7 @@ from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
-from agent33.security.injection import scan_input
+from agent33.security.injection import scan_inputs_recursive
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -169,15 +169,13 @@ async def invoke_agent(
     if definition is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
 
-    # Scan inputs for prompt injection
-    for value in body.inputs.values():
-        if isinstance(value, str):
-            scan = scan_input(value)
-            if not scan.is_safe:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Input rejected: {', '.join(scan.threats)}",
-                )
+    # Scan inputs for prompt injection (recursive to catch nested payloads)
+    scan = scan_inputs_recursive(body.inputs)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input rejected: {', '.join(scan.threats)}",
+        )
 
     runtime = AgentRuntime(
         definition=definition,

@@ -100,3 +100,24 @@ def scan_input(text: str) -> ScanResult:
     threats.extend(_check_encoded_payloads(text))
 
     return ScanResult(is_safe=len(threats) == 0, threats=threats)
+
+
+def scan_inputs_recursive(data: object) -> ScanResult:
+    """Recursively scan all string values in a nested structure.
+
+    Walks dicts, lists, and raw strings to catch injection payloads
+    buried in nested input structures.
+    """
+    if isinstance(data, str):
+        return scan_input(data)
+    if isinstance(data, dict):
+        for value in data.values():
+            result = scan_inputs_recursive(value)
+            if not result.is_safe:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = scan_inputs_recursive(item)
+            if not result.is_safe:
+                return result
+    return ScanResult(is_safe=True)

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_log_level: str = "info"
     api_secret_key: str = "change-me-in-production"  # WARNING: override in production via env var
-    cors_allowed_origins: str = ""  # comma-separated; empty = allow all (dev only)
+    cors_allowed_origins: str = ""  # comma-separated; empty = deny all origins (secure default)
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
