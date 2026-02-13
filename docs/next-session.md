@@ -1,79 +1,82 @@
 # Next Session Briefing
 
-Last updated: 2026-02-12T17:23
+Last updated: 2026-02-13T12:10
 
 ## Current State
-- **Branch**: `main` — clean, all tests passing (100 passed, 0 failed)
-- **Open PRs**: 5 (all mergeable, awaiting review)
-  - #22: Lint cleanup — 1 review (Gemini, 2 comments to address)
-  - #23: Test quality — 1 review (Gemini, 1 comment to address)
-  - #24: Security hardening — pending review
-  - #25: Phase 12 — Tool Registry Operations — pending review
-  - #26: Session docs — pending review
-- **Open branches**: 5 feature branches + main
-- **Phase 12**: Implementation complete (PR #25)
-- **Phases 1-11, 21**: Complete and merged
+- **Branch**: `feat/phase-13-code-execution` (working branch)
+- **Main**: clean, 143 tests passing
+- **Open PRs**: 1
+  - #27: Phase 13 — Code execution layer and tools-as-code (197 tests, 0 lint errors)
+- **Phases 1-13, 21**: Complete (Phase 13 pending merge via PR #27)
+- **Phases 14-20**: Planned (see `docs/phases/`)
 
-## What Was Done This Session
-1. Dispatched 7 agents (3 researchers + 4 implementers) using agentic orchestration
-2. Created 3 research docs in `docs/sessions/research-*.md`
-3. Implemented 4 workstreams → 5 PRs:
-   - PR #22: 34 lint errors → 0 (16 files)
-   - PR #23: AsyncMock fix, behavioral assertions, auth fixture (3 files)
-   - PR #24: Prompt injection integration, SSRF deny-by-default, CORS config, secret validation (9 files, 11 new tests)
-   - PR #25: ToolRegistryEntry model, enhanced registry, 6 YAML tool defs, 22 new tests
-   - PR #26: Session docs and next-session update
-4. Total: 33 new tests, 122 pass on each branch
+## What Was Done This Session (2026-02-13, Session 2)
+1. Implemented Phase 13 code execution layer — 17 files, 1,812 lines added
+2. New `engine/src/agent33/execution/` package:
+   - `models.py` — SandboxConfig, ExecutionContract, ExecutionResult, AdapterDefinition
+   - `validation.py` — IV-01 through IV-05 input validation
+   - `adapters/base.py` — abstract BaseAdapter
+   - `adapters/cli.py` — CLIAdapter with subprocess, timeout, output truncation
+   - `executor.py` — CodeExecutor pipeline (validate → status → resolve → sandbox merge → dispatch → audit)
+   - `disclosure.py` — progressive disclosure L0-L3
+3. Workflow integration: `EXECUTE_CODE` enum, `execute_code.py` action, dispatch wiring, main.py startup
+4. 54 new tests across 5 files, 197 total passing
+5. PR #27 created
 
-## Priority 1: Address Reviewer Feedback on PRs #22 and #23
+## Previous Session (2026-02-13, Session 1)
+- Addressed Gemini review comments on PRs #22-#26 (11 comments total)
+- Merged all 5 PRs to main: lint cleanup, test quality, security hardening, Phase 12, session docs
+- Baseline: 143 tests passing, 0 lint errors
 
-### PR #22 — Gemini (2 comments)
-1. **`engine/src/agent33/testing/state_model.py`**: Re-add `StateNode` and `Transition` to the TYPE_CHECKING block (were removed as unused imports, but useful for type hints)
-2. **`engine/src/agent33/tools/builtin/browser.py`**: Re-introduce `Browser`, `Page`, `Playwright` imports in a TYPE_CHECKING block and type the `BrowserSession` dataclass fields instead of `Any`
+## Priority 1: Review & Merge PR #27 (Phase 13)
+- Review the PR, then merge to main
+- After merge, delete the `feat/phase-13-code-execution` branch
+- Verify 197 tests still pass on main
 
-### PR #23 — Gemini (1 comment)
-1. **`engine/tests/test_health.py`**: Change `expected.issubset(data["services"].keys())` to exact equality `expected == data["services"].keys()` so the test catches extra/unexpected services
+## Priority 2: Phase 14 — Security Hardening & Prompt Injection Defense
 
-### After addressing feedback:
-- Merge PRs in order: #26 (docs) → #22 → #23 → #24 → #25
-- Resolve any merge conflicts at each step
+Per `docs/phases/PHASE-14-SECURITY-HARDENING-AND-PROMPT-INJECTION-DEFENSE.md`:
+- **Depends on**: Phase 13 (PR #27)
+- **Blocks**: Phase 15
+- **Owner**: Security Agent (T22)
+- **Spec acceptance criteria already checked** — Phase 14 spec docs exist, but engine runtime gaps remain
 
-## Priority 2: Phase 13 — Code Execution Layer & Tools-as-Code
+### Remaining Engine Security Gaps (from `docs/sessions/research-security-gaps.md`)
 
-Per `docs/phases/PHASE-13-CODE-EXECUTION-LAYER-AND-TOOLS-AS-CODE.md`:
-- **Depends on**: Phase 12 (implemented in PR #25)
-- **Blocks**: Phase 14
-- **Owner**: Runtime Agent (T21)
-- **Deliverables**: Code execution contract, adapter template, progressive disclosure workflow, caching/deterministic run guidance
-- **Key artifacts**: `core/orchestrator/CODE_EXECUTION_CONTRACT.md`, `core/orchestrator/TOOLS_AS_CODE.md`
-- **Review gate**: Runtime review required
+**IDOR ownership validation** — 8 endpoints with no access control:
+| Endpoint | File | Issue |
+|----------|------|-------|
+| GET /v1/memory/sessions/{id}/observations | memory_search.py:53-76 | No ownership check |
+| POST /v1/memory/sessions/{id}/summarize | memory_search.py:79-98 | No ownership check |
+| GET /v1/agents/by-id/{id} | agents.py:115-127 | No access control |
+| GET /v1/agents/{name} | agents.py:138-147 | No access control |
+| POST /v1/agents/{name}/invoke | agents.py:160-190 | No ownership check |
+| GET /v1/workflows/{name} | workflows.py:68-74 | No access control |
+| POST /v1/workflows/{name}/execute | workflows.py:102-132 | No ownership check |
+| DELETE /v1/auth/api-keys/{key_id} | auth.py:79-84 | No ownership check |
+
+**Approval gates** (AG-01 through AG-05):
+- Documented in `core/orchestrator/SECURITY_HARDENING.md` but not implemented
+- Need code enforcement for risky actions (tool execution, network access, file writes, etc.)
+
+**Additional scope:**
+- Secret pattern scanning in output/logs
+- Sandbox enforcement integration with Phase 13 execution layer
+- Command allowlist wiring (CodeExecutor supports it, needs policy configuration)
 
 ### Suggested Approach
-1. Read Phase 13 spec and existing `core/orchestrator/TOOLS_AS_CODE.md`
-2. Read the existing `core/orchestrator/CODE_EXECUTION_CONTRACT.md` if it exists
-3. Design execution contract (inputs, outputs, sandbox limits)
-4. Create adapter template with example
-5. Implement progressive disclosure for tool schemas (L0→L3)
-6. Add deterministic execution and caching guidance
-7. Write tests
+1. Design ownership check middleware or decorator pattern
+2. Implement IDOR protections on all 8 endpoints
+3. Implement approval gate enforcement (at least AG-01 for tool execution)
+4. Wire command allowlist into CodeExecutor via config
+5. Add secret scanning in execution output
+6. Write tests for each protection (mock tenant context)
 
-## Priority 3: Remaining Security Work (deferred from this session)
-
-PR #24 addressed prompt injection, SSRF, CORS, and secrets but these gaps remain:
-- **IDOR ownership validation** on 8 endpoints:
-  - `memory_search.py:53-76, 79-98` — session access without ownership check
-  - `agents.py:115-190` — agent access/invoke without access control
-  - `workflows.py:68-132` — workflow access/execute without access control
-  - `auth.py:79-84` — API key deletion without ownership check
-- **Approval gates** (AG-01–AG-05) — documented in `core/orchestrator/SECURITY_HARDENING.md` but not implemented
-- **Secret pattern scanning** in output/logs
-- **Full Phase 14** scope (depends on Phase 13 completion)
-
-## Priority 4: Other Candidates
+## Priority 3: Other Candidates
 - **Test coverage tracking**: Add pytest-cov configuration to pyproject.toml
 - **Ruff config enhancement**: Add RUF, PLW rule sets
 - **Plugin system audit**: How plugins integrate with tool registry
-- **Branch cleanup**: After merging PRs, delete 5 merged branches
+- **ToolRegistry ↔ CodeExecutor wiring**: Currently `tool_registry=None` at startup — wire once both are mature
 
 ## Key Files to Know
 | Purpose | Path |
@@ -85,18 +88,25 @@ PR #24 addressed prompt injection, SSRF, CORS, and secrets but these gaps remain
 | Tool registry | `engine/src/agent33/tools/registry.py` |
 | Tool registry entry | `engine/src/agent33/tools/registry_entry.py` |
 | Tool definitions | `engine/tool-definitions/*.yml` |
+| **Execution layer** | `engine/src/agent33/execution/` |
+| **CodeExecutor** | `engine/src/agent33/execution/executor.py` |
+| **Execution models** | `engine/src/agent33/execution/models.py` |
+| **Input validation** | `engine/src/agent33/execution/validation.py` |
+| **CLI adapter** | `engine/src/agent33/execution/adapters/cli.py` |
 | Security: injection | `engine/src/agent33/security/injection.py` |
 | Security: middleware | `engine/src/agent33/security/middleware.py` |
+| Security: allowlists | `engine/src/agent33/security/allowlists.py` |
+| Security spec | `core/orchestrator/SECURITY_HARDENING.md` |
 | Phase plans | `docs/phases/` |
 | Phase dependency chain | `docs/phases/PHASE-11-20-WORKFLOW-PLAN.md` |
 | Session logs | `docs/sessions/` |
-| Research findings | `docs/sessions/research-*.md` |
 | CHANGELOG | `core/CHANGELOG.md` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q           # full suite (~9 min, 122 tests after PRs merge)
-python -m pytest tests/ -x -q        # stop on first failure
-python -m ruff check src/ tests/     # lint (0 errors after PR #22 merges)
+python -m pytest tests/ -q               # full suite (~9 min, 197 tests)
+python -m pytest tests/ -x -q            # stop on first failure
+python -m pytest tests/test_execution_*.py -x -q  # Phase 13 tests only (54 tests)
+python -m ruff check src/ tests/         # lint (0 errors)
 ```
