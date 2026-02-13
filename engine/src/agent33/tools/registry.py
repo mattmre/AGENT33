@@ -4,10 +4,51 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from agent33.tools.base import Tool
+from agent33.tools.registry_entry import (
+    ToolProvenance,
+    ToolRegistryEntry,
+    ToolStatus,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _yaml_to_entry(data: dict[str, Any], source: str = "") -> ToolRegistryEntry:
+    """Convert a parsed YAML dict into a *ToolRegistryEntry*."""
+    provenance_raw = data.get("provenance", {})
+    provenance = ToolProvenance(
+        repo_url=provenance_raw.get("repo_url", ""),
+        commit_or_tag=provenance_raw.get("commit_or_tag", ""),
+        checksum=provenance_raw.get("checksum", ""),
+        license=provenance_raw.get("license", ""),
+    )
+
+    name: str = data.get("name", "")
+    status_raw = data.get("status", "active")
+    try:
+        status = ToolStatus(status_raw)
+    except ValueError:
+        logger.warning(
+            "Invalid status value '%s' in %s, defaulting to 'active'.",
+            status_raw, source or "<unknown>",
+        )
+        status = ToolStatus.ACTIVE
+
+    return ToolRegistryEntry(
+        tool_id=name,
+        name=name,
+        version=data.get("version", "0.0"),
+        description=data.get("description", ""),
+        owner=data.get("owner", ""),
+        provenance=provenance,
+        status=status,
+    )
 
 
 class ToolRegistry:
@@ -15,6 +56,11 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
+        self._entries: dict[str, ToolRegistryEntry] = {}
+
+    # ------------------------------------------------------------------
+    # Existing API (unchanged)
+    # ------------------------------------------------------------------
 
     def register(self, tool: Tool) -> None:
         """Register a tool instance. Overwrites any existing tool with the same name."""
@@ -49,4 +95,69 @@ class ToolRegistry:
                 count += 1
             except Exception:
                 logger.exception("Failed to load tool entry point: %s", ep.name)
+        return count
+
+    # ------------------------------------------------------------------
+    # Phase 12 – metadata & change-control API
+    # ------------------------------------------------------------------
+
+    def register_with_entry(self, tool: Tool, entry: ToolRegistryEntry) -> None:
+        """Register a tool together with its Phase 12 metadata entry."""
+        self._tools[tool.name] = tool
+        self._entries[entry.name] = entry
+        logger.info("Registered tool with entry: %s (v%s)", entry.name, entry.version)
+
+    def get_entry(self, name: str) -> ToolRegistryEntry | None:
+        """Return the metadata entry for *name*, or ``None``."""
+        return self._entries.get(name)
+
+    def list_entries(self) -> list[ToolRegistryEntry]:
+        """Return all metadata entries."""
+        return list(self._entries.values())
+
+    def set_status(self, name: str, status: ToolStatus, message: str = "") -> bool:
+        """Change the status of a registered entry.
+
+        Returns ``True`` if the entry was found and updated, ``False`` otherwise.
+        """
+        entry = self._entries.get(name)
+        if entry is None:
+            return False
+        self._entries[name] = entry.model_copy(
+            update={"status": status, "deprecation_message": message},
+        )
+        logger.info("Tool %s status → %s", name, status.value)
+        return True
+
+    def load_definitions(self, definitions_dir: str) -> int:
+        """Load YAML tool definitions from *definitions_dir*.
+
+        Each ``.yml`` / ``.yaml`` file is parsed into a
+        :class:`ToolRegistryEntry` and stored.  Files that fail to parse are
+        logged and skipped.
+
+        Returns the number of entries successfully loaded.
+        """
+        dir_path = Path(definitions_dir)
+        if not dir_path.is_dir():
+            logger.warning("Definitions directory does not exist: %s", definitions_dir)
+            return 0
+
+        count = 0
+        for yml_file in sorted(dir_path.iterdir()):
+            if yml_file.suffix not in {".yml", ".yaml"}:
+                continue
+            try:
+                data = yaml.safe_load(yml_file.read_text(encoding="utf-8"))
+                if not isinstance(data, dict) or "name" not in data:
+                    logger.warning("Skipping invalid definition: %s", yml_file.name)
+                    continue
+                entry = _yaml_to_entry(data, source=str(yml_file))
+                self._entries[entry.name] = entry
+                count += 1
+                logger.debug("Loaded definition: %s from %s", entry.name, yml_file.name)
+            except yaml.YAMLError:
+                logger.exception("Failed to parse YAML definition: %s", yml_file.name)
+            except Exception:
+                logger.exception("Failed to load definition: %s", yml_file.name)
         return count
