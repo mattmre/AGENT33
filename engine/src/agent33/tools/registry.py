@@ -34,6 +34,10 @@ def _yaml_to_entry(data: dict[str, Any], source: str = "") -> ToolRegistryEntry:
     try:
         status = ToolStatus(status_raw)
     except ValueError:
+        logger.warning(
+            "Invalid status value '%s' in %s, defaulting to 'active'.",
+            status_raw, source or "<unknown>",
+        )
         status = ToolStatus.ACTIVE
 
     return ToolRegistryEntry(
@@ -152,6 +156,8 @@ class ToolRegistry:
                 self._entries[entry.name] = entry
                 count += 1
                 logger.debug("Loaded definition: %s from %s", entry.name, yml_file.name)
+            except yaml.YAMLError:
+                logger.exception("Failed to parse YAML definition: %s", yml_file.name)
             except Exception:
                 logger.exception("Failed to load definition: %s", yml_file.name)
         return count

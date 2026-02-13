@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import date  # noqa: TC003 – Pydantic needs runtime access
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,7 +31,7 @@ class ToolScope(BaseModel):
 
     commands: list[str] = Field(default_factory=list)
     endpoints: list[str] = Field(default_factory=list)
-    data_access: str = "none"  # read | write | none
+    data_access: Literal["read", "write", "none"] = "none"
     network: bool = False
     filesystem: list[str] = Field(default_factory=list)
 
