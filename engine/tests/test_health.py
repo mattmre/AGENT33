@@ -23,6 +23,7 @@ def test_health_returns_200(client: TestClient) -> None:
 def test_health_lists_all_services(client: TestClient) -> None:
     data = client.get("/health").json()
     expected = {"ollama", "redis", "postgres", "nats"}
-    assert expected.issubset(data["services"].keys()), (
-        f"Missing services: {expected - data['services'].keys()}"
+    assert expected == data["services"].keys(), (
+        f"Service list mismatch. Missing: {expected - data['services'].keys()}, "
+        f"Extra: {data['services'].keys() - expected}"
     )
