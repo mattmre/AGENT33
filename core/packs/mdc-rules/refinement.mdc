@@ -17,7 +17,7 @@ These rules guide AI agents when performing refinement workflows on AGENT-33 art
 Refinement applies to:
 - Framework prompts (`core/prompts/`)
 - Research dossiers (`core/research/`)
-- Phase documentation (`core/phases/`)
+- Phase documentation (`docs/phases/`)
 - Template files (`core/templates/`)
 
 Refinement does NOT apply to:

@@ -94,7 +94,7 @@ When artifacts have relationships to other documents, add a Relationships sectio
 | Type | Target | Notes |
 |------|--------|-------|
 | derived-from | collected/repo/path.md | Source artifact |
-| depends-on | core/phases/PHASE-03.md | Prerequisite |
+| depends-on | docs/phases/PHASE-03-SPEC-FIRST-ORCHESTRATION-WORKFLOW.md | Prerequisite |
 ```
 
 Common relationship types:

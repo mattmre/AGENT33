@@ -53,9 +53,9 @@ steps:
 
 For remote validation:
 
-- `./agent.schema.json`
-- `./workflow.schema.json`
-- `./orchestrator.schema.json`
+- `./core/schemas/agent.schema.json`
+- `./core/schemas/workflow.schema.json`
+- `./core/schemas/orchestrator.schema.json`
 
 ## IDE Configuration
 

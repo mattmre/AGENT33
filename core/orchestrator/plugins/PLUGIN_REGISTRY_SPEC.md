@@ -411,7 +411,7 @@ plugin:
     reviewer: operator
     approval_status: approved
   tags: [notification, slack, integration]
-  documentation_url: https://github.com/agent-33/agent-33/blob/main/docs/plugins/slack-notify
+  documentation_url: https://github.com/agent-33/agent-33/blob/main/docs/plugins/slack-notify.md
   repository_url: https://github.com/agent-33/plugin-slack-notify
   checksum: sha256:abc123def456...
 ```

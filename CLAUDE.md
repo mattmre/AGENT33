@@ -1,33 +1,94 @@
-# AGENT-33
+# CLAUDE.md
 
-Multi-agent orchestration framework — governance layer, evidence capture, session-spanning workflows.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository Structure
+## Project Overview
 
-- `core/` — Framework specifications, orchestrator rules, workflow templates
-- `collected/` — Dynamic intake directory (populated by `agent33 intake <repo>`)
-- `docs/` — Phase planning, self-improvement protocols, research templates
-- `docs/self-improvement/` — Continuous improvement loop, intake, testing, offline mode
-- `engine/` — Runtime engine (FastAPI, workflow executor, LLM routing, memory/RAG, security)
-- `scripts/` — Utility scripts
+AGENT-33 is a multi-agent orchestration framework with a governance layer, evidence capture, and session-spanning workflows. The repo has two main layers:
 
-## Self-Improvement Philosophy
+- `core/` — Framework specifications, orchestrator rules, workflow templates (Markdown-native, no runtime)
+- `engine/` — Python/FastAPI runtime engine (the actual software)
 
-AGENT-33 generates knowledge on demand rather than storing static snapshots. The system
-learns *how* to analyze rather than caching *what* was analyzed. See
-`docs/self-improvement/README.md` for the continuous improvement loop and protocols.
+## Common Commands
 
-## Engine Quick Start
+All engine commands run from `engine/`:
 
 ```bash
-cd engine
-cp .env.example .env
-docker compose up -d
-docker compose exec ollama ollama pull llama3.2
-curl http://localhost:8000/health
+# Tests
+python -m pytest tests/ -q                          # full suite (~197 tests)
+python -m pytest tests/test_execution_executor.py -q  # single test file
+python -m pytest tests/ -k "test_name" -q           # single test by name
+python -m pytest tests/ -x -q                       # stop on first failure
+
+# Lint & format
+python -m ruff check src/ tests/                    # lint (0 errors expected)
+python -m ruff check --fix src/ tests/              # auto-fix
+python -m ruff format src/ tests/                   # format
+mypy src/                                           # type check (strict)
+
+# Docker (from engine/)
+docker compose up -d                                # start all services
+docker compose up -d postgres redis nats ollama     # infra only (for local dev)
+uvicorn agent33.main:app --reload --host 0.0.0.0 --port 8000  # local dev server
+
+# CLI
+pip install -e ".[dev]"                             # install in dev mode
+agent33 status                                      # health check
 ```
 
-See `engine/README.md` for full documentation.
+## Architecture
+
+### Engine Package Layout (`engine/src/agent33/`)
+
+**Entry point**: `main.py` — FastAPI app with lifespan that initializes DB, Redis, NATS, agent registry, code executor, agent-workflow bridge, AirLLM, memory, and training subsystems.
+
+**Config**: `config.py` — Pydantic Settings, `env_prefix=""`, loads from `.env`. Variable names map directly to uppercase env vars.
+
+**Key subsystems**:
+- `agents/` — Agent registry (`registry.py` auto-discovers JSON defs from `agent_definitions_dir`), definition model, runtime (prompt construction + LLM invocation)
+- `workflows/` — DAG-based workflow engine: definition model, topological sort, step executor with retries/timeouts, expression evaluator, state machine, checkpoint persistence. Actions in `actions/` (invoke_agent, run_command, validate, transform, conditional, parallel_group, wait, execute_code)
+- `execution/` — Code execution layer (Phase 13): `models.py` (SandboxConfig, ExecutionContract, ExecutionResult), `validation.py` (IV-01..05 input validation), `adapters/` (BaseAdapter, CLIAdapter with subprocess), `executor.py` (CodeExecutor pipeline), `disclosure.py` (progressive disclosure L0-L3)
+- `llm/` — Provider abstraction: Ollama, OpenAI-compatible, ModelRouter
+- `memory/` — Short-term buffer, pgvector long-term store, embeddings, RAG pipeline, session state, ingestion, retention
+- `security/` — JWT/API-key auth, AuthMiddleware, encryption, vault, permissions, prompt injection detection, allowlists
+- `tools/` — Tool framework: registry, governance/allowlist enforcement, builtins (shell, file_ops, web_fetch, browser)
+- `messaging/` — External integrations (Telegram, Discord, Slack, WhatsApp) via NATS bus
+- `automation/` — APScheduler, webhooks, dead-letter queue, event sensors
+- `observability/` — structlog, tracing, metrics, lineage, replay, alerts
+
+### Multi-Tenancy
+
+AuthMiddleware resolves tenant from API key or JWT. All DB models have `tenant_id`. Route tests that don't provide auth will get 401.
+
+### Agent Definitions
+
+6 JSON files in `engine/agent-definitions/` (orchestrator, director, code-worker, qa, researcher, browser-agent). Auto-discovered at startup via `agent_definitions_dir` config. Capability taxonomy: 25 entries across P/I/V/R/X categories in `agents/capabilities.py`.
+
+### Agent Routes DI Pattern
+
+Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. The workflow bridge (`invoke_agent.py`) has `set_definition_registry()` as a fallback.
+
+## Tool Configuration
+
+- **Build**: hatchling (`pyproject.toml`)
+- **Python**: >=3.11
+- **Ruff**: line-length 99, target py311, rule sets: E, F, W, I, N, UP, B, A, SIM, TCH
+- **mypy**: strict mode, pydantic plugin
+- **pytest**: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
+- **DB migrations**: Alembic in `engine/alembic/versions/`
+
+## Development Phases
+
+Phase plans live in `docs/phases/`. Phases 1-13 and 21 are complete. Phases 14-20 are planned. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
+
+### Phase Dependency Chain (11-20)
+11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
+
+## Windows Platform Notes
+
+- `create_subprocess_shell` doesn't raise `FileNotFoundError` — detect missing commands via stderr "is not recognized" pattern
+- Use `subprocess.list2cmdline()` for proper quoting
+- Merge env with `os.environ` to preserve PATH when spawning subprocesses
 
 ---
 

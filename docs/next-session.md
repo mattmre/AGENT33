@@ -1,45 +1,115 @@
 # Next Session Briefing
 
-Last updated: 2026-02-13T12:10
+Last updated: 2026-02-13T18:00
 
 ## Current State
-- **Branch**: `feat/phase-13-code-execution` (working branch)
+- **Branch**: `feat/phase-13-code-execution` (working branch, has uncommitted cleanup changes)
 - **Main**: clean, 143 tests passing
 - **Open PRs**: 1
   - #27: Phase 13 — Code execution layer and tools-as-code (197 tests, 0 lint errors)
 - **Phases 1-13, 21**: Complete (Phase 13 pending merge via PR #27)
 - **Phases 14-20**: Planned (see `docs/phases/`)
 
-## What Was Done This Session (2026-02-13, Session 2)
-1. Implemented Phase 13 code execution layer — 17 files, 1,812 lines added
-2. New `engine/src/agent33/execution/` package:
-   - `models.py` — SandboxConfig, ExecutionContract, ExecutionResult, AdapterDefinition
-   - `validation.py` — IV-01 through IV-05 input validation
-   - `adapters/base.py` — abstract BaseAdapter
-   - `adapters/cli.py` — CLIAdapter with subprocess, timeout, output truncation
-   - `executor.py` — CodeExecutor pipeline (validate → status → resolve → sandbox merge → dispatch → audit)
-   - `disclosure.py` — progressive disclosure L0-L3
-3. Workflow integration: `EXECUTE_CODE` enum, `execute_code.py` action, dispatch wiring, main.py startup
-4. 54 new tests across 5 files, 197 total passing
-5. PR #27 created
+## What Was Done This Session (2026-02-13, Session 3)
+1. **CLAUDE.md overhaul** — Added required prefix, common commands, architecture overview, tool config, phase dependency chain, Windows platform notes
+2. **RSMFConverter cleanup** — Deleted `core/phases/` (40 phase files + README) and `core/user-guide/` (4 stub files) — all leftover from a different project
+3. **Full repo security scan** (4 parallel agents) — scanned for credentials, PII, internal project refs, infrastructure exposure
+4. **Sensitive data remediation**:
+   - Removed `agent-33` GitHub handle from 6 tool definition YAMLs
+   - Removed `agent-33.dev` unregistered domain from 11 files (schemas, agent defs, plugin spec)
+   - Normalized `<owner>` placeholders to `agent-33` in 3 files
+   - Removed `EDCTool` internal project reference from `RELATIONSHIP_TYPES.md`
+   - Fixed stale `core/phases/` references in `templates.md` and `refinement.mdc` → `docs/phases/`
+5. **Verified clean**: zero remaining references to `agent-33`, `agent-33.dev`, `<owner>` URLs, or any private repos
 
-## Previous Session (2026-02-13, Session 1)
-- Addressed Gemini review comments on PRs #22-#26 (11 comments total)
-- Merged all 5 PRs to main: lint cleanup, test quality, security hardening, Phase 12, session docs
-- Baseline: 143 tests passing, 0 lint errors
+### Security Scan Findings (for Phase 14 scope)
+The infrastructure scan also flagged code security issues (not data leaks):
+- SHA-256 password hashing without salt in `auth.py:64` — needs bcrypt/argon2
+- `change-me-in-production` defaults warn but don't block startup
+- NATS monitoring port 8222 exposed without auth
+- CORS `allow_methods=["*"]`, `allow_headers=["*"]`
+- `run_command.py` env replacement drops PATH on Windows
+- Auth bypass for all paths starting with `/docs` (prefix too broad)
+These are tracked for Phase 14 implementation.
 
-## Priority 1: Review & Merge PR #27 (Phase 13)
+## Priority 1: Research & Analysis Sprint
+
+Analyze the following repos and papers for patterns, techniques, and features to integrate into AGENT-33. Use the `agent33 intake` workflow or research dossier templates in `docs/research/templates/`.
+
+### Research Papers
+| Resource | Focus Area | URL |
+|----------|-----------|-----|
+| Multi-Agent RL Survey | Multi-agent coordination, RL for agent orchestration | https://arxiv.org/abs/2602.11865 |
+| Building Skills for Claude (Anthropic) | Claude skill architecture, plugin patterns | https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf |
+
+### Repos — Agent Frameworks & Orchestration
+| Repo | Focus Area | URL |
+|------|-----------|-----|
+| openai/swarm | Multi-agent orchestration patterns, handoffs | https://github.com/openai/swarm |
+| agent0ai/agent-zero | Autonomous agent framework | https://github.com/agent0ai/agent-zero |
+| parcadei/Continuous-Claude-v3 | Continuous Claude patterns | https://github.com/parcadei/Continuous-Claude-v3 |
+| anthropics/claude-code | Claude Code CLI, agent SDK | https://github.com/anthropics/claude-code |
+| anomalyco/opencode | Open-source code agent | https://github.com/anomalyco/opencode |
+| alexzhang13/rlm | RL for language models | https://github.com/alexzhang13/rlm |
+| Tencent/WeKnora | Knowledge-augmented agents | https://github.com/Tencent/WeKnora |
+| HKUDS/AI-Researcher | AI research agent | https://github.com/HKUDS/AI-Researcher |
+
+### Repos — Skills, Plugins & Workflows
+| Repo | Focus Area | URL |
+|------|-----------|-----|
+| anthropics/claude-plugins-official | Official Claude plugin patterns | https://github.com/anthropics/claude-plugins-official |
+| ComposioHQ/awesome-claude-skills | Claude skill catalog | https://github.com/ComposioHQ/awesome-claude-skills |
+| nextlevelbuilder/ui-ux-pro-max-skill | UI/UX skill for Claude | https://github.com/nextlevelbuilder/ui-ux-pro-max-skill |
+| triggerdotdev/trigger.dev | Background job orchestration, workflow patterns | https://github.com/triggerdotdev/trigger.dev |
+| breaking-brake/cc-wf-studio | Claude Code workflow studio | https://github.com/breaking-brake/cc-wf-studio/ |
+| Zie619/n8n-workflows | N8N workflow patterns | https://github.com/Zie619/n8n-workflows |
+
+### Repos — Tools & Capabilities
+| Repo | Focus Area | URL |
+|------|-----------|-----|
+| raphaelmansuy/edgequake | Edge AI patterns | https://github.com/raphaelmansuy/edgequake |
+| LaurieWired/GhidraMCP | MCP server for reverse engineering | https://github.com/LaurieWired/GhidraMCP |
+| katanaml/sparrow | Document processing, OCR pipeline | https://github.com/katanaml/sparrow |
+| PaddlePaddle/PaddleOCR | OCR engine | https://github.com/PaddlePaddle/PaddleOCR |
+| Varun-Patkar/ChromePilot | Browser automation agent | https://github.com/Varun-Patkar/ChromePilot |
+| HKUDS/RAG-Anything | RAG pipeline patterns | https://github.com/HKUDS/RAG-Anything |
+| livekit/livekit | Real-time communication, voice/video | https://github.com/livekit/livekit |
+| yt-dlp/yt-dlp | Media download/processing | https://github.com/yt-dlp/yt-dlp |
+
+### Repos — Security & DevOps
+| Repo | Focus Area | URL |
+|------|-----------|-----|
+| aquasecurity/trivy | Security scanning, vulnerability detection | https://github.com/aquasecurity/trivy |
+| madster456/envhush-cli | Secret/env management | https://github.com/madster456/envhush-cli |
+| makeplane/plane | Project management, issue tracking | https://github.com/makeplane/plane |
+| x1xhlol/system-prompts-and-models-of-ai-tools | System prompt patterns | https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools |
+
+### Suggested Analysis Approach
+1. **Triage**: Quickly assess each repo's relevance to AGENT-33 (skip if minimal overlap)
+2. **Dossier**: For high-relevance repos, create research dossiers in `docs/research/repo_dossiers/`
+3. **Extract patterns**: Identify specific patterns, architectures, or features to adopt
+4. **Integration report**: Write a summary mapping findings to AGENT-33 phases/components
+5. **Phase updates**: Update relevant phase docs with new insights
+
+### Key Questions to Answer
+- What orchestration patterns from swarm/agent-zero can improve our workflow engine?
+- What skill/plugin architecture from Claude's ecosystem should we adopt?
+- What RAG patterns from RAG-Anything can improve our memory/RAG pipeline?
+- What security scanning from trivy can inform Phase 14?
+- What browser automation patterns from ChromePilot/GhidraMCP can improve our browser tool?
+- What workflow patterns from trigger.dev/n8n can improve our automation layer?
+
+## Priority 2: Review & Merge PR #27 (Phase 13)
 - Review the PR, then merge to main
 - After merge, delete the `feat/phase-13-code-execution` branch
 - Verify 197 tests still pass on main
 
-## Priority 2: Phase 14 — Security Hardening & Prompt Injection Defense
+## Priority 3: Phase 14 — Security Hardening & Prompt Injection Defense
 
 Per `docs/phases/PHASE-14-SECURITY-HARDENING-AND-PROMPT-INJECTION-DEFENSE.md`:
 - **Depends on**: Phase 13 (PR #27)
 - **Blocks**: Phase 15
 - **Owner**: Security Agent (T22)
-- **Spec acceptance criteria already checked** — Phase 14 spec docs exist, but engine runtime gaps remain
 
 ### Remaining Engine Security Gaps (from `docs/sessions/research-security-gaps.md`)
 
@@ -55,28 +125,13 @@ Per `docs/phases/PHASE-14-SECURITY-HARDENING-AND-PROMPT-INJECTION-DEFENSE.md`:
 | POST /v1/workflows/{name}/execute | workflows.py:102-132 | No ownership check |
 | DELETE /v1/auth/api-keys/{key_id} | auth.py:79-84 | No ownership check |
 
-**Approval gates** (AG-01 through AG-05):
-- Documented in `core/orchestrator/SECURITY_HARDENING.md` but not implemented
-- Need code enforcement for risky actions (tool execution, network access, file writes, etc.)
-
-**Additional scope:**
-- Secret pattern scanning in output/logs
-- Sandbox enforcement integration with Phase 13 execution layer
-- Command allowlist wiring (CodeExecutor supports it, needs policy configuration)
-
-### Suggested Approach
-1. Design ownership check middleware or decorator pattern
-2. Implement IDOR protections on all 8 endpoints
-3. Implement approval gate enforcement (at least AG-01 for tool execution)
-4. Wire command allowlist into CodeExecutor via config
-5. Add secret scanning in execution output
-6. Write tests for each protection (mock tenant context)
-
-## Priority 3: Other Candidates
-- **Test coverage tracking**: Add pytest-cov configuration to pyproject.toml
-- **Ruff config enhancement**: Add RUF, PLW rule sets
-- **Plugin system audit**: How plugins integrate with tool registry
-- **ToolRegistry ↔ CodeExecutor wiring**: Currently `tool_registry=None` at startup — wire once both are mature
+**Code security issues from this session's scan:**
+- SHA-256 password hashing → bcrypt/argon2 (`auth.py:64`)
+- Default secrets warn-only → enforce in production mode (`config.py:16,33`)
+- NATS port 8222 exposed without auth (`docker-compose.yml:77-79`)
+- Overly permissive CORS methods/headers (`main.py:261-262`)
+- `run_command.py` env replacement drops PATH on Windows (`:49-58`)
+- Auth bypass prefix too broad for `/docs` (`middleware.py:18`)
 
 ## Key Files to Know
 | Purpose | Path |
@@ -100,6 +155,7 @@ Per `docs/phases/PHASE-14-SECURITY-HARDENING-AND-PROMPT-INJECTION-DEFENSE.md`:
 | Phase plans | `docs/phases/` |
 | Phase dependency chain | `docs/phases/PHASE-11-20-WORKFLOW-PLAN.md` |
 | Session logs | `docs/sessions/` |
+| Research dossiers | `docs/research/repo_dossiers/` |
 | CHANGELOG | `core/CHANGELOG.md` |
 
 ## Test Commands

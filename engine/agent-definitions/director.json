@@ -1,5 +1,5 @@
 {
-  "$schema": "./agent.schema.json",
+  "$schema": "./schemas/agent.schema.json",
   "name": "director",
   "version": "1.0.0",
   "role": "director",
