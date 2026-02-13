@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from agent33.workflows.actions import (
     conditional,
+    execute_code,
     invoke_agent,
     parallel_group,
     run_command,
@@ -334,6 +335,15 @@ class WorkflowExecutor:
                 duration_seconds=step.duration_seconds,
                 wait_condition=step.wait_condition,
                 timeout_seconds=step.timeout_seconds,
+                dry_run=dry_run,
+            )
+
+        if action == StepAction.EXECUTE_CODE:
+            return await execute_code.execute(
+                tool_id=step.tool_id,
+                adapter_id=step.adapter_id,
+                inputs=resolved_inputs,
+                sandbox=step.sandbox,
                 dry_run=dry_run,
             )
 

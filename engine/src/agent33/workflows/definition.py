@@ -20,6 +20,7 @@ class StepAction(str, Enum):
     CONDITIONAL = "conditional"
     PARALLEL_GROUP = "parallel-group"
     WAIT = "wait"
+    EXECUTE_CODE = "execute-code"
 
 
 class ExecutionMode(str, Enum):
@@ -70,6 +71,10 @@ class WorkflowStep(BaseModel):
     # For wait action
     duration_seconds: int | None = None
     wait_condition: str | None = None
+    # For execute-code action
+    tool_id: str | None = None
+    adapter_id: str | None = None
+    sandbox: dict[str, Any] | None = None
 
     model_config = {"populate_by_name": True}
 

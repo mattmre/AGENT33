@@ -106,6 +106,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     set_definition_registry(agent_registry)
 
+    # -- Code execution layer ------------------------------------------
+    from agent33.execution.executor import CodeExecutor
+    from agent33.workflows.actions import execute_code
+
+    code_executor = CodeExecutor(tool_registry=None)
+    app.state.code_executor = code_executor
+    execute_code.set_executor(code_executor)
+    logger.info("code_executor_initialized")
+
     model_router = ModelRouter()
     app.state.model_router = model_router
 
