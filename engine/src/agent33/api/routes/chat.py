@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent33.config import settings
+from agent33.security.injection import scan_input
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 
@@ -38,6 +39,15 @@ async def chat_completions(request: ChatRequest) -> dict[str, Any]:
     }
     if request.max_tokens:
         payload["options"]["num_predict"] = request.max_tokens  # type: ignore[index]
+
+    # Scan for prompt injection
+    for msg in request.messages:
+        scan = scan_input(msg.content)
+        if not scan.is_safe:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Input rejected: {', '.join(scan.threats)}",
+            )
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:

@@ -17,7 +17,7 @@ def tool() -> ReaderTool:
 
 @pytest.fixture
 def context() -> ToolContext:
-    return ToolContext()
+    return ToolContext(domain_allowlist=["example.com"])
 
 
 async def test_name(tool: ReaderTool) -> None:

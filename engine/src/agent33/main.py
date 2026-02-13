@@ -47,6 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     logger.info("agent33_starting")
 
+    # Warn about insecure defaults
+    secret_warnings = settings.check_production_secrets()
+    for warning in secret_warnings:
+        logger.warning("SECURITY: %s — override via environment variable", warning)
+
     # -- Database (PostgreSQL + pgvector) ----------------------------------
     long_term_memory = LongTermMemory(settings.database_url)
     try:
@@ -237,9 +242,12 @@ app = FastAPI(
 
 # -- Middleware (order matters: last added = first executed) --------------------
 
+_cors_origins = (
+    settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else []
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

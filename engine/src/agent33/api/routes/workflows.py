@@ -8,6 +8,7 @@ import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from agent33.security.injection import scan_inputs_recursive
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 
@@ -107,6 +108,14 @@ async def execute_workflow(
     workflow = _registry.get(name)
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
+
+    # Scan inputs for prompt injection (recursive to catch nested payloads)
+    scan = scan_inputs_recursive(request.inputs)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input rejected: {', '.join(scan.threats)}",
+        )
 
     # Optionally override dry_run
     if request.dry_run:
