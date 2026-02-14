@@ -1,14 +1,14 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T18:00
+Last updated: 2026-02-14T19:00
 
 ## Current State
 - **Branch**: `main`
-- **Main**: 533 tests passing, 0 lint errors
+- **Main**: 627 tests passing, 0 lint errors
 - **Open PRs**: 0
 - **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
-- **Phases 1-17, 21**: Complete
-- **Phases 18-20**: Planned
+- **Phases 1-18, 21**: Complete
+- **Phases 19-20**: Planned
 - **Research**: 29 dossiers + 5 strategy docs complete
 
 ## What Was Done This Session (2026-02-14, Session 9)
@@ -35,13 +35,25 @@ Built the evaluation framework in `engine/src/agent33/evaluation/`:
 | 6 | Evaluation service | `evaluation/service.py` | Full pipeline: runs, metrics, gates, regressions, baselines |
 | 7 | Evaluation API | `api/routes/evaluations.py` | 12 REST endpoints under `/v1/evaluations` |
 
-## Priority 1: Next Phase (Phase 18 — Autonomy Budget Enforcement & Policy Automation)
+### Phase 18 Complete — Autonomy Budget Enforcement & Policy Automation (94 new tests)
 
-Phase dependency chain: ~~14 (Security)~~ → ~~15 (Review)~~ → ~~16 (Observability)~~ → ~~17 (Evaluation Gates)~~ → **18 (Autonomy Enforcement)** → 19 (Release Automation) → 20 (Continuous Improvement)
+Built the autonomy budget enforcement layer in `engine/src/agent33/autonomy/`:
+
+| # | Component | Module | Description |
+|---|-----------|--------|-------------|
+| 1 | Data models | `autonomy/models.py` | 7 enums, 10+ Pydantic models for budgets, enforcement, preflight |
+| 2 | Preflight checker | `autonomy/preflight.py` | PF-01..PF-10 checks |
+| 3 | Runtime enforcer | `autonomy/enforcement.py` | EF-01..EF-08 enforcement points for file/command/network scope |
+| 4 | Autonomy service | `autonomy/service.py` | Budget CRUD, lifecycle state machine, preflight, enforcement, escalation |
+| 5 | Autonomy API | `api/routes/autonomy.py` | 18 REST endpoints under `/v1/autonomy` |
+
+## Priority 1: Next Phase (Phase 19 — Release Automation)
+
+Phase dependency chain: ~~14 (Security)~~ -> ~~15 (Review)~~ -> ~~16 (Observability)~~ -> ~~17 (Evaluation Gates)~~ -> ~~18 (Autonomy Enforcement)~~ -> **19 (Release Automation)** -> 20 (Continuous Improvement)
 
 ## Priority 2: ZeroClaw Feature Parity
 
-Remaining ZeroClaw parity items to integrate into Phases 18-20:
+Remaining ZeroClaw parity items to integrate into Phases 19-20:
 
 | # | Item | Source | Priority | Effort |
 |---|------|--------|----------|--------|
@@ -67,14 +79,16 @@ Remaining ZeroClaw parity items to integrate into Phases 18-20:
 | Review automation | `engine/src/agent33/review/` |
 | Observability | `engine/src/agent33/observability/` |
 | Evaluation suite | `engine/src/agent33/evaluation/` |
+| Autonomy enforcement | `engine/src/agent33/autonomy/` |
 | Security | `engine/src/agent33/security/` |
 | Phase plans | `docs/phases/` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~14 min, 533 tests)
+python -m pytest tests/ -q               # full suite (~14 min, 627 tests)
 python -m pytest tests/ -x -q            # stop on first failure
+python -m pytest tests/test_phase18_autonomy.py -x -q  # Phase 18 tests (94 tests)
 python -m pytest tests/test_phase17_evaluation.py -x -q  # Phase 17 tests (77 tests)
 python -m pytest tests/test_phase16_observability.py -x -q  # Phase 16 tests (54 tests)
 python -m pytest tests/test_phase15_review.py -x -q  # Phase 15 tests (65 tests)

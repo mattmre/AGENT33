@@ -18,6 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from agent33.api.routes import (
     agents,
     auth,
+    autonomy,
     chat,
     dashboard,
     evaluations,
@@ -308,4 +309,5 @@ app.include_router(memory_search.router)
 app.include_router(reviews.router)
 app.include_router(traces.router)
 app.include_router(evaluations.router)
+app.include_router(autonomy.router)
 app.include_router(training.router)
