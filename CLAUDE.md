@@ -87,6 +87,17 @@ PostgreSQL → Redis → NATS → AgentRegistry → CodeExecutor → ModelRouter
 - **pytest**: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
 - **DB migrations**: Alembic in `engine/alembic/versions/`
 
+## Benchmarking (SkillsBench)
+
+AGENT-33 is being evaluated and improved against [SkillsBench](https://github.com/benchflow-ai/skillsbench), the first benchmark for evaluating how well agents use skills. Key references:
+
+- `docs/research/skillsbench-analysis.md` — Full analysis (2,000+ lines), comparison matrix, adaptation roadmap
+- `docs/next-session.md` — Current priorities including SkillsBench adaptation
+
+SkillsBench tests 86 tasks across 62+ categories (scientific computing, security, finance, media, etc.) using binary reward (all-or-nothing pytest verification) with 5 trials per agent/model. It evaluates **skills impact** = pass_rate_with_skills - pass_rate_without_skills.
+
+AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBench's proven patterns (iterative tool-use loops, 4-stage hybrid skill matching, context window management, CTRF reporting) while preserving AGENT-33's architectural strengths (multi-agent DAGs, multi-tenancy, enterprise security). The goal is general capability improvement, not benchmark overfitting.
+
 ## Development Phases
 
 Phase plans live in `docs/phases/`. All 21 phases are complete. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.

@@ -1,29 +1,58 @@
 # Next Session Briefing
 
-Last updated: 2026-02-15T02:00
+Last updated: 2026-02-15T04:00
 
 ## Current State
-- **Branch**: `main` (PR [#6](https://github.com/mattmre/AGENT33/pull/6) open, not yet merged)
-- **Feature branch**: `feat/sessions-10-12-zeroclaw-parity-integration-wiring`
+- **Branch**: `feat/sessions-10-12-zeroclaw-parity-integration-wiring`
+- **PR**: [#6](https://github.com/mattmre/AGENT33/pull/6) open (sessions 10-12 work), not yet merged
 - **Tests**: 973 passing, 0 lint errors
 - **All 21 Phases**: Complete
 - **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
 - **Integration Wiring**: Complete — all subsystems connected in main.py lifespan
-- **Research**: 29 dossiers + 5 strategy docs committed
+- **Research**: 29 dossiers + 5 strategy docs + SkillsBench analysis committed
 
-## What Was Done (Sessions 10-12)
-
-See `docs/sessions/sessions-10-12-2026-02-14-15.md` for full details.
+## What Was Done (Sessions 10-13)
 
 **Session 10** — Hybrid RAG: BM25 engine, hybrid search (RRF), embedding cache, token-aware chunking (57 tests)
 **Session 11** — ZeroClaw parity: JSON Schema tools, 22+ provider registry, skills/plugin system, channel health checks (141 tests)
 **Session 12** — Integration wiring: all subsystems wired into main.py lifespan, agent runtime bridge and invoke route updated (10 tests)
+**Session 13** — SkillsBench analysis: comprehensive 108KB research document comparing AGENT-33 vs SkillsBench (benchflow-ai/skillsbench), prioritized adaptation roadmap, CLAUDE.md updated
 
 ## First Action: Merge PR #6
 
-PR [#6](https://github.com/mattmre/AGENT33/pull/6) contains all work from sessions 10-12 (38 files, +5,193/-130). Merge to main before starting new work. Then switch back to `main` branch.
+PR [#6](https://github.com/mattmre/AGENT33/pull/6) contains all work from sessions 10-13 (includes SkillsBench research). Merge to main before starting new work. Then switch back to `main` branch.
 
 ## Next Priorities
+
+### Priority 0: SkillsBench Adaptation (from Session 13 Analysis)
+
+Full analysis at `docs/research/skillsbench-analysis.md` (108KB, 2,073 lines). The 5 P0 items that directly improve AGENT-33's competitive performance:
+
+1. **Iterative tool-use loop for AgentRuntime** (3 days)
+   - Current: `AgentRuntime.invoke()` makes a single LLM call and returns
+   - Needed: Iterative loop — LLM call → parse tool calls → execute → observe → repeat
+   - This is the single largest capability gap. Without it, AGENT-33 cannot complete any multi-step task
+   - Implementation: New `invoke_iterative()` method in `agents/runtime.py`, new `agents/tool_loop.py`
+
+2. **4-stage hybrid skill matching** (2 days)
+   - Current: BM25 + vector via RRF (2 stages)
+   - Needed: Add 2 LLM-based refinement stages (lenient selection → strict quality filter)
+   - Prevents irrelevant/leaking skills from being injected
+   - Implementation: New `skills/matching.py` using existing `HybridSearcher` + `ModelRouter`
+
+3. **Context window management** (2 days)
+   - Current: No context management — messages grow unbounded
+   - Needed: Message unwinding, handoff summaries, proactive summarization when tokens run low
+   - Implementation: New `agents/context_manager.py`
+
+4. **Task completion double-confirmation** (0.5 days)
+   - Prevents premature task exit — agent must explicitly confirm it's done
+   - Implementation: Enhancement to iterative tool loop
+
+5. **Multi-trial evaluation methodology** (1 day)
+   - Binary reward (0 or 1, all tests must pass) with 5 trials per configuration
+   - Skills impact = pass_rate_with_skills - pass_rate_without_skills
+   - Implementation: New `evaluation/multi_trial.py`, CTRF reporting format
 
 ### Priority 1: Architecture Gaps (from Research Sprint)
 
@@ -64,6 +93,15 @@ Currently the ingestion pipeline (`memory/ingestion.py`) provides chunking but d
 - Wire `TokenAwareChunker` into a complete `IngestDocument` pipeline
 - Add an `/v1/memory/ingest` endpoint
 
+### Priority 5: SkillsBench P1 Items
+
+After P0 is complete, these strengthen the architecture:
+- Answer leakage prevention in skill injection
+- Failure mode taxonomy alignment with SkillsBench enum
+- LiteLLM integration (optional, for true multi-provider routing)
+- CTRF test result format for standardized reporting
+- Skill quality validation pipeline (12-criterion analysis from SkillsBench contrib agents)
+
 ## Key Files to Know
 
 | Purpose | Path |
@@ -86,6 +124,7 @@ Currently the ingestion pipeline (`memory/ingestion.py`) provides chunking but d
 | Health checks | `engine/src/agent33/api/routes/health.py` |
 | Workflow actions | `engine/src/agent33/workflows/actions/` |
 | Integration wiring tests | `engine/tests/test_integration_wiring.py` |
+| **SkillsBench analysis** | `docs/research/skillsbench-analysis.md` |
 | Session logs | `docs/sessions/` |
 | Phase plans | `docs/phases/` |
 | Research dossiers | `docs/research/repo_dossiers/` |
