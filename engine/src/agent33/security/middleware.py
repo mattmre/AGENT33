@@ -34,7 +34,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Allow public endpoints through without auth
-        if path in _PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+        if (
+            path in _PUBLIC_PATHS
+            or path == "/docs"
+            or path.startswith("/docs/")
+            or path == "/redoc"
+            or path.startswith("/redoc/")
+        ):
             return await call_next(request)
 
         # Try Bearer token
