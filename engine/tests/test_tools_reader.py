@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pydantic import SecretStr
-
 import pytest
+from pydantic import SecretStr
 
 from agent33.tools.base import ToolContext
 from agent33.tools.builtin.reader import ReaderTool

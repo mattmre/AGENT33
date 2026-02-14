@@ -1,44 +1,45 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T14:00
+Last updated: 2026-02-14T16:00
 
 ## Current State
 - **Branch**: `main`
-- **Main**: 337 tests passing, 0 lint errors
+- **Main**: 402 tests passing, 0 lint errors
 - **Open PRs**: 0
 - **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
-- **Phases 1-14, 21**: Complete
-- **Phases 15-20**: Planned
+- **Phases 1-15, 21**: Complete
+- **Phases 16-20**: Planned
 - **Research**: 29 dossiers + 5 strategy docs complete
 
-## What Was Done This Session (2026-02-14, Session 8)
+## What Was Done This Session (2026-02-14, Session 9)
 
-### Phase 14 Complete — 12 Security Hardening Items Implemented
+### Phase 15 Complete — Review Automation & Two-Layer Review (65 new tests)
 
-All 12 Phase 14 items implemented with 59 new tests:
+Built the `engine/src/agent33/review/` module implementing the two-layer review workflow:
 
-| # | Item | Files Changed |
-|---|------|---------------|
-| 1 | Multi-segment command validation (blocks `|`, `&&`, `||`, `;`, `$()`, backticks) | `shell.py`, `governance.py` |
-| 2 | Autonomy levels (ReadOnly/Supervised/Full) per-agent | `definition.py`, `governance.py`, `runtime.py` |
-| 3 | Rate limiting with sliding-window + burst control | `governance.py`, `config.py` |
-| 4 | Path traversal hardening (null bytes, `..`, symlinks, `relative_to()`) | `file_ops.py` |
-| 5 | `tenant_id` in TokenPayload for multi-tenant isolation | `auth.py` |
-| 6 | Session ownership model (observations filtered by authenticated user) | `memory_search.py` |
-| 7 | `run_command.py` merges env with `os.environ` (preserves PATH on Windows) | `run_command.py` |
-| 8 | API key expiration support (time-based TTL) | `auth.py` |
-| 9 | Deny-first permission evaluation (deny rules checked before allow) | `permissions.py` |
-| 10 | Pairing brute-force lockout (5 failures = 15min lockout) | `pairing.py` |
-| 11 | Request size limit middleware (configurable, default 10MB) | `main.py`, `config.py` |
-| 12 | `SecretStr` for all sensitive config fields | `config.py`, `auth.py`, `agents.py`, `reader.py`, `jina_embeddings.py` |
+| # | Component | Module | Description |
+|---|-----------|--------|-------------|
+| 1 | Review models | `review/models.py` | ReviewRecord, RiskLevel (5 levels), RiskTrigger (14 categories), SignoffState (10 states), ReviewDecision, L1/L2 checklists |
+| 2 | Risk assessor | `review/risk.py` | Maps triggers to risk levels; determines L1/L2 requirements |
+| 3 | Reviewer assignment | `review/assignment.py` | 14-entry assignment matrix matching change types to agent/human reviewers |
+| 4 | Signoff state machine | `review/state_machine.py` | Enforces valid state transitions; terminal MERGED state |
+| 5 | Review service | `review/service.py` | Full lifecycle: create, assess, assign L1/L2, submit, approve, merge |
+| 6 | Review API | `api/routes/reviews.py` | 12 REST endpoints under `/v1/reviews` with scope-based auth |
+| 7 | Router registration | `main.py` | Reviews router added to FastAPI app |
 
-## Priority 1: Next Phase (Phase 15 — Review Automation)
+Key design decisions:
+- **Risk levels**: none → L1 off; low → L1 only; medium → L1 + L2 agent; high → L1 + L2 human; critical → L1 + designated human
+- **State machine**: DRAFT → READY → L1_REVIEW → L1_APPROVED → [L2_REVIEW → L2_APPROVED →] APPROVED → MERGED
+- **Escalation**: L1 reviewer can escalate (forces L2 requirement even if originally not needed)
+- **Tenant isolation**: Reviews filtered by `tenant_id` from authenticated user
 
-Phase dependency chain: ~~14 (Security)~~ → **15 (Review Automation)** → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
+## Priority 1: Next Phase (Phase 16 — Observability & Trace Pipeline)
 
-## Priority 2: ZeroClaw Feature Parity (Post-Phase 14)
+Phase dependency chain: ~~14 (Security)~~ → ~~15 (Review Automation)~~ → **16 (Observability)** → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
 
-Remaining ZeroClaw parity items to integrate into Phases 15-20:
+## Priority 2: ZeroClaw Feature Parity
+
+Remaining ZeroClaw parity items to integrate into Phases 16-20:
 
 | # | Item | Source | Priority | Effort |
 |---|------|--------|----------|--------|
@@ -80,6 +81,7 @@ Formula: **ZeroClaw's breadth + AGENT-33's depth = superior system**
 | Agent definitions | `engine/agent-definitions/*.json` |
 | Tool registry | `engine/src/agent33/tools/registry.py` |
 | Execution layer | `engine/src/agent33/execution/` |
+| Review automation | `engine/src/agent33/review/` |
 | Security: middleware | `engine/src/agent33/security/middleware.py` |
 | Security: permissions | `engine/src/agent33/security/permissions.py` |
 | Security: auth | `engine/src/agent33/security/auth.py` |
@@ -92,8 +94,9 @@ Formula: **ZeroClaw's breadth + AGENT-33's depth = superior system**
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~13 min, 337 tests)
+python -m pytest tests/ -q               # full suite (~13 min, 402 tests)
 python -m pytest tests/ -x -q            # stop on first failure
+python -m pytest tests/test_phase15_review.py -x -q  # Phase 15 tests (65 tests)
 python -m pytest tests/test_phase14_security.py -x -q  # Phase 14 tests (59 tests)
 python -m pytest tests/test_execution_*.py -x -q  # Phase 13 tests only (54 tests)
 python -m ruff check src/ tests/         # lint (0 errors)
