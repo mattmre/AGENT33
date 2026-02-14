@@ -56,6 +56,7 @@ agent33 status                                      # health check
 - `automation/` — APScheduler, webhooks, dead-letter queue, event sensors
 - `review/` — Two-layer review automation (Phase 15): risk assessment, reviewer assignment, signoff state machine, review service, API endpoints
 - `observability/` — structlog, tracing, metrics, lineage, replay, alerts, trace pipeline (Phase 16): trace models, failure taxonomy (10 categories), trace collector, retention policies, trace API
+- `evaluation/` — Evaluation suite and regression gates (Phase 17): golden tasks (GT-01..GT-07), golden cases (GC-01..GC-04), metrics calculator (M-01..M-05), gate enforcer with thresholds, regression detector (RI-01..RI-05), evaluation service, API endpoints
 
 ### Multi-Tenancy
 
@@ -80,7 +81,7 @@ Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. 
 
 ## Development Phases
 
-Phase plans live in `docs/phases/`. Phases 1-16 and 21 are complete. Phases 17-20 are planned. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
+Phase plans live in `docs/phases/`. Phases 1-17 and 21 are complete. Phases 18-20 are planned. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
 
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)

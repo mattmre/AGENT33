@@ -20,6 +20,7 @@ from agent33.api.routes import (
     auth,
     chat,
     dashboard,
+    evaluations,
     health,
     memory_search,
     reviews,
@@ -306,4 +307,5 @@ app.include_router(dashboard.router)
 app.include_router(memory_search.router)
 app.include_router(reviews.router)
 app.include_router(traces.router)
+app.include_router(evaluations.router)
 app.include_router(training.router)
