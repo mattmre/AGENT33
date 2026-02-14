@@ -1,140 +1,145 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T00:30
+Last updated: 2026-02-15T04:00
 
 ## Current State
-- **Branch**: `main`, clean working tree
-- **Main**: 278 tests passing, 0 lint errors
-- **Open PRs**: 0
-- **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
-- **Phases 1-13, 21**: Complete
-- **Phase 14**: Partially complete (core security items merged, remaining items listed below)
-- **Phases 15-20**: Planned
+- **Branch**: `feat/sessions-10-12-zeroclaw-parity-integration-wiring`
+- **PR**: [#6](https://github.com/mattmre/AGENT33/pull/6) open (sessions 10-12 work), not yet merged
+- **Tests**: 973 passing, 0 lint errors
+- **All 21 Phases**: Complete
+- **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
+- **Integration Wiring**: Complete — all subsystems connected in main.py lifespan
+- **Research**: 29 dossiers + 5 strategy docs + SkillsBench analysis committed
 
-## What Was Done This Session (2026-02-13, Session 6)
+## What Was Done (Sessions 10-13)
 
-### Cycle A Implementation Sprint
-Orchestrated 8 agents (4 research + 4 implementation) to implement the top 5 priority items from the research sprint findings. See `docs/sessions/session-6-2026-02-13.md` for full details.
+**Session 10** — Hybrid RAG: BM25 engine, hybrid search (RRF), embedding cache, token-aware chunking (57 tests)
+**Session 11** — ZeroClaw parity: JSON Schema tools, 22+ provider registry, skills/plugin system, channel health checks (141 tests)
+**Session 12** — Integration wiring: all subsystems wired into main.py lifespan, agent runtime bridge and invoke route updated (10 tests)
+**Session 13** — SkillsBench analysis: comprehensive 108KB research document comparing AGENT-33 vs SkillsBench (benchflow-ai/skillsbench), prioritized adaptation roadmap, CLAUDE.md updated
 
-**Completed and merged:**
-1. Governance constraints wired into LLM prompts (11-section structured prompt, safety guardrails)
-2. Progressive recall wired into `AgentRuntime.invoke()` (memory context injection)
-3. IDOR vulnerabilities fixed on all 8 endpoints (`require_scope()` enforcement)
-4. HTTP client pooling + embedding batching (persistent clients, Ollama batch API)
-5. Trivy CI security scanning (4-job workflow, CORS/auth/NATS hardening)
+## First Action: Merge PR #6
 
-All 4 PRs merged to main with zero conflicts. 278 tests, lint clean.
+PR [#6](https://github.com/mattmre/AGENT33/pull/6) contains all work from sessions 10-13 (includes SkillsBench research). Merge to main before starting new work. Then switch back to `main` branch.
 
-## Priority 1: Re-generate Lost Research Artifacts
+## Next Priorities
 
-The 28 research dossiers and 3 strategy documents from the research sprint were lost during branch sorting. Key findings are preserved in `MEMORY.md`. The repos to re-analyze:
+### Priority 0: SkillsBench Adaptation (from Session 13 Analysis)
 
-### Repos — Agent Frameworks & Orchestration
-| Repo | Focus Area | URL |
-|------|-----------|-----|
-| openai/swarm | Multi-agent orchestration patterns, handoffs | https://github.com/openai/swarm |
-| agent0ai/agent-zero | Autonomous agent framework | https://github.com/agent0ai/agent-zero |
-| parcadei/Continuous-Claude-v3 | Continuous Claude patterns | https://github.com/parcadei/Continuous-Claude-v3 |
-| anthropics/claude-code | Claude Code CLI, agent SDK | https://github.com/anthropics/claude-code |
-| anomalyco/opencode | Open-source code agent | https://github.com/anomalyco/opencode |
-| alexzhang13/rlm | RL for language models | https://github.com/alexzhang13/rlm |
-| Tencent/WeKnora | Knowledge-augmented agents | https://github.com/Tencent/WeKnora |
-| HKUDS/AI-Researcher | AI research agent | https://github.com/HKUDS/AI-Researcher |
+Full analysis at `docs/research/skillsbench-analysis.md` (108KB, 2,073 lines). The 5 P0 items that directly improve AGENT-33's competitive performance:
 
-### Repos — Skills, Plugins & Workflows
-| Repo | Focus Area | URL |
-|------|-----------|-----|
-| anthropics/claude-plugins-official | Official Claude plugin patterns | https://github.com/anthropics/claude-plugins-official |
-| ComposioHQ/awesome-claude-skills | Claude skill catalog | https://github.com/ComposioHQ/awesome-claude-skills |
-| nextlevelbuilder/ui-ux-pro-max-skill | UI/UX skill for Claude | https://github.com/nextlevelbuilder/ui-ux-pro-max-skill |
-| triggerdotdev/trigger.dev | Background job orchestration | https://github.com/triggerdotdev/trigger.dev |
-| breaking-brake/cc-wf-studio | Claude Code workflow studio | https://github.com/breaking-brake/cc-wf-studio/ |
-| Zie619/n8n-workflows | N8N workflow patterns | https://github.com/Zie619/n8n-workflows |
+1. **Iterative tool-use loop for AgentRuntime** (3 days)
+   - Current: `AgentRuntime.invoke()` makes a single LLM call and returns
+   - Needed: Iterative loop — LLM call → parse tool calls → execute → observe → repeat
+   - This is the single largest capability gap. Without it, AGENT-33 cannot complete any multi-step task
+   - Implementation: New `invoke_iterative()` method in `agents/runtime.py`, new `agents/tool_loop.py`
 
-### Repos — Tools & Capabilities
-| Repo | Focus Area | URL |
-|------|-----------|-----|
-| raphaelmansuy/edgequake | Edge AI patterns | https://github.com/raphaelmansuy/edgequake |
-| LaurieWired/GhidraMCP | MCP server for reverse engineering | https://github.com/LaurieWired/GhidraMCP |
-| katanaml/sparrow | Document processing, OCR pipeline | https://github.com/katanaml/sparrow |
-| PaddlePaddle/PaddleOCR | OCR engine | https://github.com/PaddlePaddle/PaddleOCR |
-| Varun-Patkar/ChromePilot | Browser automation agent | https://github.com/Varun-Patkar/ChromePilot |
-| HKUDS/RAG-Anything | RAG pipeline patterns | https://github.com/HKUDS/RAG-Anything |
-| livekit/livekit | Real-time communication, voice/video | https://github.com/livekit/livekit |
-| yt-dlp/yt-dlp | Media download/processing | https://github.com/yt-dlp/yt-dlp |
+2. **4-stage hybrid skill matching** (2 days)
+   - Current: BM25 + vector via RRF (2 stages)
+   - Needed: Add 2 LLM-based refinement stages (lenient selection → strict quality filter)
+   - Prevents irrelevant/leaking skills from being injected
+   - Implementation: New `skills/matching.py` using existing `HybridSearcher` + `ModelRouter`
 
-### Repos — Security & DevOps
-| Repo | Focus Area | URL |
-|------|-----------|-----|
-| aquasecurity/trivy | Security scanning, vulnerability detection | https://github.com/aquasecurity/trivy |
-| madster456/envhush-cli | Secret/env management | https://github.com/madster456/envhush-cli |
-| makeplane/plane | Project management, issue tracking | https://github.com/makeplane/plane |
-| x1xhlol/system-prompts-and-models-of-ai-tools | System prompt patterns | https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools |
+3. **Context window management** (2 days)
+   - Current: No context management — messages grow unbounded
+   - Needed: Message unwinding, handoff summaries, proactive summarization when tokens run low
+   - Implementation: New `agents/context_manager.py`
 
-### Research Papers
-| Resource | Focus Area | URL |
-|----------|-----------|-----|
-| Multi-Agent RL Survey | Multi-agent coordination, RL for agent orchestration | https://arxiv.org/abs/2602.11865 |
-| Building Skills for Claude (Anthropic) | Claude skill architecture, plugin patterns | https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf |
+4. **Task completion double-confirmation** (0.5 days)
+   - Prevents premature task exit — agent must explicitly confirm it's done
+   - Implementation: Enhancement to iterative tool loop
 
-**Important**: Commit dossiers immediately after generation to prevent data loss.
+5. **Multi-trial evaluation methodology** (1 day)
+   - Binary reward (0 or 1, all tests must pass) with 5 trials per configuration
+   - Skills impact = pass_rate_with_skills - pass_rate_without_skills
+   - Implementation: New `evaluation/multi_trial.py`, CTRF reporting format
 
-## Priority 3: Complete Phase 14 — Remaining Items
+### Priority 1: Architecture Gaps (from Research Sprint)
 
-PRs #2-#5 address the most critical Phase 14 items. Remaining work:
+These are the remaining critical gaps identified across 29 research dossiers:
 
-### Not Yet Addressed
-| Item | Severity | File | Notes |
-|------|----------|------|-------|
-| `run_command.py` env drops PATH on Windows | MEDIUM | `execution/actions/run_command.py:49-58` | Merge env with `os.environ` |
-| `tenant_id` missing from TokenPayload | HIGH | `security/auth.py:19-25` | Multi-tenancy gap — no tenant in JWT/API key |
-| API key expiration support | MEDIUM | `security/auth.py:54-101` | Keys have `exp=0` (never expire) |
-| Deny-first permission evaluation | MEDIUM | `security/permissions.py` | Current model is scope-in-set; add deny rules |
-| Rate limiting on invoke/execute | MEDIUM | `api/routes/agents.py`, `workflows.py` | No rate limiting on costly LLM operations |
-| `SecretStr` for sensitive config | LOW | `config.py:16,33` | `jwt_secret`/`api_secret_key` visible in logs |
-| Session ownership model | HIGH | `api/routes/memory_search.py` | Sessions have no owner — scope check present but no ownership filter |
+1. **No document processing** — can't ingest PDFs/images
+   - Research: Sparrow (pipeline-based), PaddleOCR (layout analysis), RAG-Anything (multi-modal)
+   - Implementation: Add adapters to `memory/ingestion.py` for PDF extraction and image OCR
+   - Dependencies: `pymupdf` or `pdfplumber` for PDF, optional `pytesseract` for images
 
-### Already Addressed by PRs #2-#5
-- [x] `require_scope()` wired into all routes (PR #5)
-- [x] SHA-256 → PBKDF2-HMAC-SHA256 password hashing (PR #5)
-- [x] Default secrets enforcement in production mode (PR #5)
-- [x] NATS port bound to localhost (PR #2)
-- [x] CORS methods/headers restricted (PR #2)
-- [x] `/docs` auth bypass prefix fixed (PR #2)
-- [x] Ownership-aware API key revocation (PR #5)
-- [x] Governance constraints injected into prompts (PR #4)
-- [x] Safety guardrails in every agent prompt (PR #4)
+2. **Workflow engine gaps** — no sub-workflows, http-request, merge/join actions
+   - Research: n8n-workflows (compositional workflow patterns)
+   - Implementation: New actions in `workflows/actions/` (sub_workflow, http_request, merge)
+   - Key: sub-workflow action enables recursive DAG composition
 
-## Priority 4: Phase 15 — Review Automation & Two-Layer Review
+3. **No conversational routing** — only static DAGs, no LLM-decided agent handoffs
+   - Research: OpenAI Swarm (handoff functions), Agent-Zero (dynamic routing)
+   - Implementation: Add a `route` action type that uses LLM to select next agent
+   - Key: This is AGENT-33's biggest architectural differentiator gap
 
-After Phase 14 is complete, Phase 15 is next in the dependency chain:
-11 → 12 → 13 → **14** → **15** → 16 → 17 → 18 → 19 → 20
+### Priority 2: BM25 Warm-Up from Existing Memories
 
-See `docs/phases/PHASE-15-REVIEW-AUTOMATION-AND-TWO-LAYER-REVIEW.md`.
+BM25 index starts empty. For deployments with existing pgvector data:
+- Add `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
+- Add startup warm-up loop in `main.py` lifespan (with configurable limit)
+- Ensure ingestion pipeline adds to BM25 when storing new documents
+
+### Priority 3: Remaining ZeroClaw Parity
+
+| # | Item | Priority | Effort |
+|---|------|----------|--------|
+| 20 | Matrix channel adapter | P3 | 2 days |
+
+### Priority 4: Ingestion Pipeline Completeness
+
+Currently the ingestion pipeline (`memory/ingestion.py`) provides chunking but doesn't handle the full store-and-index flow:
+- Chunk text → embed → store in pgvector → add to BM25 index
+- Wire `TokenAwareChunker` into a complete `IngestDocument` pipeline
+- Add an `/v1/memory/ingest` endpoint
+
+### Priority 5: SkillsBench P1 Items
+
+After P0 is complete, these strengthen the architecture:
+- Answer leakage prevention in skill injection
+- Failure mode taxonomy alignment with SkillsBench enum
+- LiteLLM integration (optional, for true multi-provider routing)
+- CTRF test result format for standardized reporting
+- Skill quality validation pipeline (12-criterion analysis from SkillsBench contrib agents)
 
 ## Key Files to Know
+
 | Purpose | Path |
 | --- | --- |
 | Entry point | `engine/src/agent33/main.py` |
 | Config | `engine/src/agent33/config.py` |
 | Agent runtime | `engine/src/agent33/agents/runtime.py` |
-| Agent registry | `engine/src/agent33/agents/registry.py` |
-| Agent definitions | `engine/agent-definitions/*.json` |
-| Tool registry | `engine/src/agent33/tools/registry.py` |
-| Execution layer | `engine/src/agent33/execution/` |
-| Security: middleware | `engine/src/agent33/security/middleware.py` |
-| Security: permissions | `engine/src/agent33/security/permissions.py` |
-| Security: auth | `engine/src/agent33/security/auth.py` |
-| Security: injection | `engine/src/agent33/security/injection.py` |
-| Phase plans | `docs/phases/` |
+| Agent invoke route | `engine/src/agent33/api/routes/agents.py` |
+| Skill definition | `engine/src/agent33/skills/definition.py` |
+| Skill registry | `engine/src/agent33/skills/registry.py` |
+| Skill injector | `engine/src/agent33/skills/injection.py` |
+| Provider catalog | `engine/src/agent33/llm/providers.py` |
+| Tool schema | `engine/src/agent33/tools/schema.py` |
+| BM25 index | `engine/src/agent33/memory/bm25.py` |
+| Hybrid search | `engine/src/agent33/memory/hybrid.py` |
+| Embedding cache | `engine/src/agent33/memory/cache.py` |
+| RAG pipeline | `engine/src/agent33/memory/rag.py` |
+| Progressive recall | `engine/src/agent33/memory/progressive_recall.py` |
+| Ingestion / chunking | `engine/src/agent33/memory/ingestion.py` |
+| Health checks | `engine/src/agent33/api/routes/health.py` |
+| Workflow actions | `engine/src/agent33/workflows/actions/` |
+| Integration wiring tests | `engine/tests/test_integration_wiring.py` |
+| **SkillsBench analysis** | `docs/research/skillsbench-analysis.md` |
 | Session logs | `docs/sessions/` |
+| Phase plans | `docs/phases/` |
 | Research dossiers | `docs/research/repo_dossiers/` |
+| Research strategy | `docs/research/adaptive-evolution-strategy.md` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~9 min, 197 tests on main)
-python -m pytest tests/ -x -q            # stop on first failure
-python -m pytest tests/test_execution_*.py -x -q  # Phase 13 tests only (54 tests)
-python -m ruff check src/ tests/         # lint (0 errors)
+python -m pytest tests/ -q                            # full suite (~973 tests)
+python -m pytest tests/ -x -q                         # stop on first failure
+python -m pytest tests/test_integration_wiring.py -x -q  # integration wiring (19 tests)
+python -m pytest tests/test_skills.py -x -q           # skills tests (48 tests)
+python -m pytest tests/test_channel_health.py -x -q   # channel health tests (32 tests)
+python -m pytest tests/test_tool_schema.py -x -q      # tool schema tests (37 tests)
+python -m pytest tests/test_provider_catalog.py -x -q # provider catalog tests (24 tests)
+python -m pytest tests/test_hybrid_rag.py -x -q       # hybrid RAG tests (57 tests)
+python -m ruff check src/ tests/                       # lint (0 errors)
 ```

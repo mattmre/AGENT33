@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from agent33.messaging.models import Message
+from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,56 @@ class SlackAdapter:
             hashlib.sha256,
         ).hexdigest()
         return hmac.compare_digest(computed, signature)
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> ChannelHealthResult:
+        """Probe Slack API via auth.test and return health status."""
+        if self._client is None:
+            return ChannelHealthResult(
+                platform="slack",
+                status="unavailable",
+                detail="Adapter not started",
+                queue_depth=self._queue.qsize(),
+            )
+        start = time.monotonic()
+        try:
+            resp = await self._client.post("/auth.test")
+            latency = (time.monotonic() - start) * 1000
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("ok"):
+                    return ChannelHealthResult(
+                        platform="slack",
+                        status="ok",
+                        latency_ms=round(latency, 2),
+                        queue_depth=self._queue.qsize(),
+                    )
+                return ChannelHealthResult(
+                    platform="slack",
+                    status="degraded",
+                    latency_ms=round(latency, 2),
+                    detail=f"auth.test failed: {data.get('error', 'unknown')}",
+                    queue_depth=self._queue.qsize(),
+                )
+            return ChannelHealthResult(
+                platform="slack",
+                status="degraded",
+                latency_ms=round(latency, 2),
+                detail=f"API returned status {resp.status_code}",
+                queue_depth=self._queue.qsize(),
+            )
+        except Exception as exc:
+            latency = (time.monotonic() - start) * 1000
+            return ChannelHealthResult(
+                platform="slack",
+                status="unavailable",
+                latency_ms=round(latency, 2),
+                detail=str(exc),
+                queue_depth=self._queue.qsize(),
+            )
 
     # ------------------------------------------------------------------
     # Internal

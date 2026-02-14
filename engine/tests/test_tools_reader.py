@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from agent33.tools.base import ToolContext
 from agent33.tools.builtin.reader import ReaderTool
@@ -40,7 +41,7 @@ async def test_domain_allowlist_blocks(tool: ReaderTool) -> None:
 async def test_jina_api_mode(
     mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext
 ) -> None:
-    mock_settings.jina_api_key = "test-key"
+    mock_settings.jina_api_key = SecretStr("test-key")
     mock_settings.jina_reader_url = "https://r.jina.ai"
 
     mock_resp = MagicMock()
@@ -64,7 +65,7 @@ async def test_jina_api_mode(
 async def test_local_fallback(
     mock_settings: AsyncMock, tool: ReaderTool, context: ToolContext
 ) -> None:
-    mock_settings.jina_api_key = ""
+    mock_settings.jina_api_key = SecretStr("")
 
     mock_resp = AsyncMock()
     mock_resp.status_code = 200

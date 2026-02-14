@@ -11,16 +11,23 @@ if TYPE_CHECKING:
     from agent33.llm.router import ModelRouter
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from agent33.api.routes import (
     agents,
     auth,
+    autonomy,
     chat,
     dashboard,
+    evaluations,
     health,
+    improvements,
     memory_search,
+    releases,
+    reviews,
+    traces,
     training,
     webhooks,
     workflows,
@@ -118,7 +125,95 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     model_router = ModelRouter()
     app.state.model_router = model_router
 
-    _register_agent_runtime_bridge(model_router, register_agent, registry=agent_registry)
+    # -- Embedding provider + cache ----------------------------------------
+    from agent33.memory.embeddings import EmbeddingProvider
+
+    embedding_provider = EmbeddingProvider(
+        base_url=settings.ollama_base_url,
+        max_connections=settings.http_max_connections,
+        max_keepalive_connections=settings.http_max_keepalive,
+    )
+    app.state.embedding_provider = embedding_provider
+
+    active_embedder: Any = embedding_provider
+    if settings.embedding_cache_enabled:
+        from agent33.memory.cache import EmbeddingCache
+
+        embedding_cache = EmbeddingCache(
+            provider=embedding_provider,
+            max_size=settings.embedding_cache_max_size,
+        )
+        active_embedder = embedding_cache
+        app.state.embedding_cache = embedding_cache
+
+    logger.info("embedding_provider_initialized", cache=settings.embedding_cache_enabled)
+
+    # -- BM25 + Hybrid + RAG ----------------------------------------------
+    from agent33.memory.bm25 import BM25Index
+    from agent33.memory.rag import RAGPipeline
+
+    bm25_index = BM25Index()
+    app.state.bm25_index = bm25_index
+
+    hybrid_searcher = None
+    if settings.rag_hybrid_enabled:
+        from agent33.memory.hybrid import HybridSearcher
+
+        hybrid_searcher = HybridSearcher(
+            long_term_memory=long_term_memory,
+            embedding_provider=active_embedder,
+            bm25_index=bm25_index,
+            vector_weight=settings.rag_vector_weight,
+            rrf_k=settings.rag_rrf_k,
+        )
+        app.state.hybrid_searcher = hybrid_searcher
+
+    rag_pipeline = RAGPipeline(
+        embedding_provider=active_embedder,
+        long_term_memory=long_term_memory,
+        top_k=settings.rag_top_k,
+        similarity_threshold=settings.rag_similarity_threshold,
+        hybrid_searcher=hybrid_searcher,
+    )
+    app.state.rag_pipeline = rag_pipeline
+    logger.info(
+        "rag_pipeline_initialized",
+        hybrid=settings.rag_hybrid_enabled,
+        top_k=settings.rag_top_k,
+    )
+
+    # -- Progressive recall ------------------------------------------------
+    from agent33.memory.progressive_recall import ProgressiveRecall
+
+    progressive_recall = ProgressiveRecall(
+        long_term_memory=long_term_memory,
+        embedding_provider=active_embedder,
+    )
+    app.state.progressive_recall = progressive_recall
+
+    # -- Skill registry + injector -----------------------------------------
+    from agent33.skills.injection import SkillInjector
+    from agent33.skills.registry import SkillRegistry
+
+    skill_registry = SkillRegistry()
+    skills_dir = Path(settings.skill_definitions_dir)
+    if skills_dir.is_dir():
+        skill_count = skill_registry.discover(skills_dir)
+        logger.info("skill_registry_loaded", count=skill_count, path=str(skills_dir))
+    app.state.skill_registry = skill_registry
+
+    skill_injector = SkillInjector(skill_registry)
+    app.state.skill_injector = skill_injector
+    logger.info("skill_injector_initialized")
+
+    # -- Agent-workflow bridge (with subsystem injection) -------------------
+    _register_agent_runtime_bridge(
+        model_router,
+        register_agent,
+        registry=agent_registry,
+        skill_injector=skill_injector,
+        progressive_recall=progressive_recall,
+    )
     logger.info("agent_workflow_bridge_registered")
 
     # --- AirLLM provider (optional) ---
@@ -177,6 +272,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if scheduler is not None:
         await scheduler.stop()
 
+    # Close embedding provider (cache.close() delegates to provider.close())
+    _embedder = getattr(app.state, "embedding_cache", None) or getattr(
+        app.state, "embedding_provider", None
+    )
+    if _embedder is not None:
+        await _embedder.close()
+        logger.info("embedding_provider_closed")
+
     if nats_bus.is_connected:
         await nats_bus.close()
         logger.info("nats_closed")
@@ -200,6 +303,8 @@ def _register_agent_runtime_bridge(
     model_router: ModelRouter,
     register_fn: Callable[..., object],
     registry: Any = None,
+    skill_injector: Any = None,
+    progressive_recall: Any = None,
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
@@ -242,11 +347,34 @@ def _register_agent_runtime_bridge(
                 },
                 constraints=AgentConstraints(),
             )
-        runtime = AgentRuntime(definition=definition, router=model_router, model=model)
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            model=model,
+            skill_injector=skill_injector,
+            progressive_recall=progressive_recall,
+        )
         result = await runtime.invoke(inputs)
         return result.output
 
     register_fn("__default__", _bridge)
+
+
+# -- Request size limit middleware ----------------------------------------------
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds the configured limit."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > settings.max_request_size_bytes:
+            return Response(
+                content='{"detail":"Request body too large"}',
+                status_code=413,
+                media_type="application/json",
+            )
+        return await call_next(request)
 
 
 # -- Application factory ------------------------------------------------------
@@ -271,6 +399,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
+app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # -- Routers -------------------------------------------------------------------
@@ -283,4 +412,10 @@ app.include_router(auth.router)
 app.include_router(webhooks.router)
 app.include_router(dashboard.router)
 app.include_router(memory_search.router)
+app.include_router(reviews.router)
+app.include_router(traces.router)
+app.include_router(evaluations.router)
+app.include_router(autonomy.router)
+app.include_router(releases.router)
+app.include_router(improvements.router)
 app.include_router(training.router)

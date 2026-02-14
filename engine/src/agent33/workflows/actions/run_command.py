@@ -45,17 +45,21 @@ async def execute(
     if dry_run:
         return {"dry_run": True, "command": command}
 
-    # Build environment variables from inputs (stringify values)
-    env_vars: dict[str, str] = {
-        k: str(v) for k, v in inputs.items() if isinstance(v, (str, int, float, bool))
-    }
+    # Build environment variables: merge inputs into the current process env
+    # so that PATH and other system variables are preserved (critical on Windows).
+    import os
+
+    env_vars: dict[str, str] = {**os.environ}
+    for k, v in inputs.items():
+        if isinstance(v, (str, int, float, bool)):
+            env_vars[k] = str(v)
 
     if sys.platform == "win32":
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env_vars if env_vars else None,
+            env=env_vars,
         )
     else:
         args = shlex.split(command)
@@ -63,7 +67,7 @@ async def execute(
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env_vars if env_vars else None,
+            env=env_vars,
         )
 
     try:

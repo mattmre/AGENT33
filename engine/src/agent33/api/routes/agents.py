@@ -33,10 +33,10 @@ _model_router.register("ollama", OllamaProvider(
     default_model=settings.ollama_default_model,
 ))
 
-if settings.openai_api_key:
+if settings.openai_api_key.get_secret_value():
     from agent33.llm.openai import OpenAIProvider
 
-    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key}
+    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key.get_secret_value()}
     if settings.openai_base_url:
         _openai_kwargs["base_url"] = settings.openai_base_url
     _model_router.register("openai", OpenAIProvider(**_openai_kwargs))
@@ -163,6 +163,7 @@ async def register_agent(
 async def invoke_agent(
     name: str,
     body: InvokeRequest,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> InvokeResponse:
     """Invoke a registered agent with the given inputs."""
@@ -178,11 +179,17 @@ async def invoke_agent(
             detail=f"Input rejected: {', '.join(scan.threats)}",
         )
 
+    # Pull subsystems from app state for agent runtime
+    skill_injector = getattr(request.app.state, "skill_injector", None)
+    progressive_recall = getattr(request.app.state, "progressive_recall", None)
+
     runtime = AgentRuntime(
         definition=definition,
         router=_model_router,
         model=body.model,
         temperature=body.temperature,
+        skill_injector=skill_injector,
+        progressive_recall=progressive_recall,
     )
 
     try:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import date  # noqa: TC003 – Pydantic needs runtime access
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -60,3 +60,11 @@ class ToolRegistryEntry(BaseModel):
     next_review: date | None = None
     deprecation_message: str = ""
     tags: list[str] = Field(default_factory=list)
+    parameters_schema: dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON Schema for tool input parameters.",
+    )
+    result_schema: dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON Schema for tool output.",
+    )

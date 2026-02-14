@@ -129,6 +129,79 @@ class TestLifespanState:
         assert hasattr(app.state, "redis")
 
 
+class TestEmbeddingSubsystem:
+    """Verify embedding provider, cache, and RAG wiring."""
+
+    def test_state_has_embedding_provider(self, patched_app):
+        app, _, _ = patched_app
+        assert hasattr(app.state, "embedding_provider")
+        from agent33.memory.embeddings import EmbeddingProvider
+
+        assert isinstance(app.state.embedding_provider, EmbeddingProvider)
+
+    def test_state_has_embedding_cache_when_enabled(self, patched_app):
+        """When embedding_cache_enabled (default True), cache should be on state."""
+        app, _, _ = patched_app
+        from agent33.config import settings
+
+        if settings.embedding_cache_enabled:
+            assert hasattr(app.state, "embedding_cache")
+            from agent33.memory.cache import EmbeddingCache
+
+            assert isinstance(app.state.embedding_cache, EmbeddingCache)
+
+    def test_state_has_bm25_index(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.memory.bm25 import BM25Index
+
+        assert isinstance(app.state.bm25_index, BM25Index)
+        assert app.state.bm25_index.size == 0  # starts empty
+
+    def test_state_has_rag_pipeline(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.memory.rag import RAGPipeline
+
+        assert isinstance(app.state.rag_pipeline, RAGPipeline)
+
+    def test_state_has_hybrid_searcher_when_enabled(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.config import settings
+
+        if settings.rag_hybrid_enabled:
+            assert hasattr(app.state, "hybrid_searcher")
+            from agent33.memory.hybrid import HybridSearcher
+
+            assert isinstance(app.state.hybrid_searcher, HybridSearcher)
+
+    def test_state_has_progressive_recall(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.memory.progressive_recall import ProgressiveRecall
+
+        assert isinstance(app.state.progressive_recall, ProgressiveRecall)
+
+
+class TestSkillSubsystem:
+    """Verify skill registry and injector wiring."""
+
+    def test_state_has_skill_registry(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.skills.registry import SkillRegistry
+
+        assert isinstance(app.state.skill_registry, SkillRegistry)
+
+    def test_state_has_skill_injector(self, patched_app):
+        app, _, _ = patched_app
+        from agent33.skills.injection import SkillInjector
+
+        assert isinstance(app.state.skill_injector, SkillInjector)
+
+    def test_skill_registry_starts_empty_when_no_dir(self, patched_app):
+        """When the skills directory doesn't exist, registry should be empty."""
+        app, _, _ = patched_app
+        # Default skill_definitions_dir = "skills" which doesn't exist in test env
+        assert app.state.skill_registry.count == 0
+
+
 class TestAgentWorkflowBridge:
     """Verify the agent runtime bridge is registered in invoke_agent registry."""
 
@@ -138,3 +211,74 @@ class TestAgentWorkflowBridge:
         _app, _, _ = patched_app
         handler = get_agent("__default__")
         assert callable(handler)
+
+
+class TestAgentInvokeSubsystemPassthrough:
+    """Verify the invoke endpoint passes subsystems to AgentRuntime."""
+
+    def test_invoke_route_passes_skill_injector(self, patched_app):
+        """The invoke route should pull skill_injector from app.state."""
+        from unittest.mock import patch as mock_patch
+
+        from agent33.agents.definition import (
+            AgentConstraints,
+            AgentDefinition,
+            AgentParameter,
+            AgentRole,
+        )
+        from agent33.agents.runtime import AgentResult
+
+        app, client, _ = patched_app
+
+        # Register a dummy agent
+        dummy_def = AgentDefinition(
+            name="test-agent",
+            version="1.0.0",
+            role=AgentRole.WORKER,
+            description="test",
+            inputs={"prompt": AgentParameter(type="string", description="input")},
+            outputs={"result": AgentParameter(type="string", description="output")},
+            constraints=AgentConstraints(),
+        )
+        app.state.agent_registry.register(dummy_def)
+
+        mock_result = AgentResult(
+            output={"result": "ok"},
+            raw_response='{"result":"ok"}',
+            tokens_used=10,
+            model="test",
+        )
+
+        with mock_patch(
+            "agent33.api.routes.agents.AgentRuntime", autospec=True,
+        ) as mock_runtime_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_runtime_cls.return_value = mock_instance
+
+            resp = client.post(
+                "/v1/agents/test-agent/invoke",
+                json={"inputs": {"prompt": "hello"}},
+                headers={"Authorization": "Bearer " + _make_test_token()},
+            )
+
+            assert resp.status_code == 200
+            # Verify subsystems were passed to AgentRuntime constructor
+            call_kwargs = mock_runtime_cls.call_args.kwargs
+            assert "skill_injector" in call_kwargs
+            assert "progressive_recall" in call_kwargs
+            assert call_kwargs["skill_injector"] is app.state.skill_injector
+            assert call_kwargs["progressive_recall"] is app.state.progressive_recall
+
+
+def _make_test_token() -> str:
+    """Create a valid JWT for testing."""
+    import jwt
+
+    from agent33.config import settings
+
+    return jwt.encode(
+        {"sub": "test-user", "scopes": ["admin"]},
+        settings.jwt_secret.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )

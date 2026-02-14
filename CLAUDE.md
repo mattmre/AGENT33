@@ -15,7 +15,7 @@ All engine commands run from `engine/`:
 
 ```bash
 # Tests
-python -m pytest tests/ -q                          # full suite (~197 tests)
+python -m pytest tests/ -q                          # full suite (~973 tests)
 python -m pytest tests/test_execution_executor.py -q  # single test file
 python -m pytest tests/ -k "test_name" -q           # single test by name
 python -m pytest tests/ -x -q                       # stop on first failure
@@ -40,7 +40,7 @@ agent33 status                                      # health check
 
 ### Engine Package Layout (`engine/src/agent33/`)
 
-**Entry point**: `main.py` — FastAPI app with lifespan that initializes DB, Redis, NATS, agent registry, code executor, agent-workflow bridge, AirLLM, memory, and training subsystems.
+**Entry point**: `main.py` — FastAPI app with lifespan that initializes DB, Redis, NATS, agent registry, code executor, model router, embedding provider (+cache), BM25 index, hybrid searcher, RAG pipeline, progressive recall, skill registry (+injector), agent-workflow bridge, AirLLM, memory (observation/summarizer), and training subsystems.
 
 **Config**: `config.py` — Pydantic Settings, `env_prefix=""`, loads from `.env`. Variable names map directly to uppercase env vars.
 
@@ -48,13 +48,19 @@ agent33 status                                      # health check
 - `agents/` — Agent registry (`registry.py` auto-discovers JSON defs from `agent_definitions_dir`), definition model, runtime (prompt construction + LLM invocation)
 - `workflows/` — DAG-based workflow engine: definition model, topological sort, step executor with retries/timeouts, expression evaluator, state machine, checkpoint persistence. Actions in `actions/` (invoke_agent, run_command, validate, transform, conditional, parallel_group, wait, execute_code)
 - `execution/` — Code execution layer (Phase 13): `models.py` (SandboxConfig, ExecutionContract, ExecutionResult), `validation.py` (IV-01..05 input validation), `adapters/` (BaseAdapter, CLIAdapter with subprocess), `executor.py` (CodeExecutor pipeline), `disclosure.py` (progressive disclosure L0-L3)
-- `llm/` — Provider abstraction: Ollama, OpenAI-compatible, ModelRouter
-- `memory/` — Short-term buffer, pgvector long-term store, embeddings, RAG pipeline, session state, ingestion, retention
+- `skills/` — Skills/plugin system: SkillDefinition model, SKILL.md/YAML loader with frontmatter parsing, SkillRegistry (discover, CRUD, search), SkillInjector (L0/L1/L2 progressive disclosure, tool context resolution), wired into AgentRuntime
+- `llm/` — Provider abstraction: Ollama, OpenAI-compatible, ModelRouter, provider catalog (22+ providers with auto-registration from env vars)
+- `memory/` — Short-term buffer, pgvector long-term store, embeddings (with LRU cache), hybrid RAG pipeline (BM25 + vector via RRF), token-aware chunking (1200 tokens), BM25 index, session state, ingestion, retention
 - `security/` — JWT/API-key auth, AuthMiddleware, encryption, vault, permissions, prompt injection detection, allowlists
-- `tools/` — Tool framework: registry, governance/allowlist enforcement, builtins (shell, file_ops, web_fetch, browser)
-- `messaging/` — External integrations (Telegram, Discord, Slack, WhatsApp) via NATS bus
+- `tools/` — Tool framework: registry with JSON Schema validation (SchemaAwareTool protocol, validated_execute), governance/allowlist enforcement, builtins (shell, file_ops, web_fetch, browser)
+- `messaging/` — External integrations (Telegram, Discord, Slack, WhatsApp) via NATS bus, per-channel health checks (health_check() on MessagingAdapter protocol)
 - `automation/` — APScheduler, webhooks, dead-letter queue, event sensors
-- `observability/` — structlog, tracing, metrics, lineage, replay, alerts
+- `review/` — Two-layer review automation (Phase 15): risk assessment, reviewer assignment, signoff state machine, review service, API endpoints
+- `observability/` — structlog, tracing, metrics, lineage, replay, alerts, trace pipeline (Phase 16): trace models, failure taxonomy (10 categories), trace collector, retention policies, trace API
+- `evaluation/` — Evaluation suite and regression gates (Phase 17): golden tasks (GT-01..GT-07), golden cases (GC-01..GC-04), metrics calculator (M-01..M-05), gate enforcer with thresholds, regression detector (RI-01..RI-05), evaluation service, API endpoints
+- `autonomy/` — Autonomy budget enforcement (Phase 18): budget lifecycle state machine (DRAFT→ACTIVE→COMPLETED), preflight checks (PF-01..PF-10), runtime enforcer (EF-01..EF-08) for file/command/network scope, stop conditions, escalation management, API endpoints
+- `release/` — Release & sync automation (Phase 19): release lifecycle state machine (PLANNED→FROZEN→RC→VALIDATING→RELEASED→ROLLED_BACK), pre-release checklist (RL-01..RL-08), sync engine with dry-run and fnmatch matching, rollback manager with decision matrix, release service, API endpoints
+- `improvement/` — Continuous improvement (Phase 20): research intake lifecycle (SUBMITTED→TRIAGED→ANALYZING→ACCEPTED/DEFERRED/REJECTED→TRACKED), lessons learned with action tracking, improvement checklists (CI-01..CI-15), metrics tracker (IM-01..IM-05 with trend computation), roadmap refresh records, API endpoints
 
 ### Multi-Tenancy
 
@@ -66,7 +72,11 @@ AuthMiddleware resolves tenant from API key or JWT. All DB models have `tenant_i
 
 ### Agent Routes DI Pattern
 
-Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. The workflow bridge (`invoke_agent.py`) has `set_definition_registry()` as a fallback.
+Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. The invoke route pulls `skill_injector` and `progressive_recall` from `app.state` and passes them to `AgentRuntime`. The workflow bridge (`invoke_agent.py`) has `set_definition_registry()` as a fallback.
+
+### Lifespan Initialization Order
+
+PostgreSQL → Redis → NATS → AgentRegistry → CodeExecutor → ModelRouter → EmbeddingProvider (+EmbeddingCache) → BM25Index → HybridSearcher → RAGPipeline → ProgressiveRecall → SkillRegistry (+SkillInjector) → Agent-Workflow Bridge → AirLLM (optional) → Memory (ObservationCapture, SessionSummarizer) → Training (optional). Subsystems stored on `app.state`, shut down in reverse order.
 
 ## Tool Configuration
 
@@ -77,9 +87,20 @@ Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. 
 - **pytest**: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
 - **DB migrations**: Alembic in `engine/alembic/versions/`
 
+## Benchmarking (SkillsBench)
+
+AGENT-33 is being evaluated and improved against [SkillsBench](https://github.com/benchflow-ai/skillsbench), the first benchmark for evaluating how well agents use skills. Key references:
+
+- `docs/research/skillsbench-analysis.md` — Full analysis (2,000+ lines), comparison matrix, adaptation roadmap
+- `docs/next-session.md` — Current priorities including SkillsBench adaptation
+
+SkillsBench tests 86 tasks across 62+ categories (scientific computing, security, finance, media, etc.) using binary reward (all-or-nothing pytest verification) with 5 trials per agent/model. It evaluates **skills impact** = pass_rate_with_skills - pass_rate_without_skills.
+
+AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBench's proven patterns (iterative tool-use loops, 4-stage hybrid skill matching, context window management, CTRF reporting) while preserving AGENT-33's architectural strengths (multi-agent DAGs, multi-tenancy, enterprise security). The goal is general capability improvement, not benchmark overfitting.
+
 ## Development Phases
 
-Phase plans live in `docs/phases/`. Phases 1-13 and 21 are complete. Phases 14-20 are planned. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
+Phase plans live in `docs/phases/`. All 21 phases are complete. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
 
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)

@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from typing import Any
 
 import httpx
 
-from agent33.messaging.models import Message
+from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,51 @@ class TelegramAdapter:
                 metadata={"raw": payload},
             )
         )
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> ChannelHealthResult:
+        """Probe Telegram API via getMe and return health status."""
+        if self._client is None:
+            return ChannelHealthResult(
+                platform="telegram",
+                status="unavailable",
+                detail="Adapter not started",
+                queue_depth=self._queue.qsize(),
+            )
+        start = time.monotonic()
+        try:
+            resp = await self._client.get(f"{self._base}/getMe")
+            latency = (time.monotonic() - start) * 1000
+            if resp.status_code == 200 and resp.json().get("ok"):
+                poll_alive = (
+                    self._poll_task is not None and not self._poll_task.done()
+                )
+                return ChannelHealthResult(
+                    platform="telegram",
+                    status="ok" if self._running and poll_alive else "degraded",
+                    latency_ms=round(latency, 2),
+                    detail="" if self._running and poll_alive else "Poll loop not running",
+                    queue_depth=self._queue.qsize(),
+                )
+            return ChannelHealthResult(
+                platform="telegram",
+                status="degraded",
+                latency_ms=round(latency, 2),
+                detail=f"API returned status {resp.status_code}",
+                queue_depth=self._queue.qsize(),
+            )
+        except Exception as exc:
+            latency = (time.monotonic() - start) * 1000
+            return ChannelHealthResult(
+                platform="telegram",
+                status="unavailable",
+                latency_ms=round(latency, 2),
+                detail=str(exc),
+                queue_depth=self._queue.qsize(),
+            )
 
     # ------------------------------------------------------------------
     # Internal

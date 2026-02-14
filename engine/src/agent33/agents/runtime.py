@@ -73,6 +73,21 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
         if gov.approval_required:
             parts.append(f"- Requires approval for: {', '.join(gov.approval_required)}")
 
+    # --- Autonomy Level ---
+    parts.append(f"\n# Autonomy Level: {definition.autonomy_level.value}")
+    if definition.autonomy_level.value == "read-only":
+        parts.append(
+            "- You may ONLY read data. Do NOT execute commands,"
+            " write files, or modify state."
+        )
+    elif definition.autonomy_level.value == "supervised":
+        parts.append(
+            "- Destructive operations require explicit user approval"
+            " before execution."
+        )
+    else:
+        parts.append("- Full autonomy within governance constraints.")
+
     # --- Ownership ---
     own = definition.ownership
     if own.owner or own.escalation_target:
@@ -174,6 +189,8 @@ class AgentRuntime:
         trace_emitter: Any | None = None,
         session_id: str = "",
         progressive_recall: Any | None = None,
+        skill_injector: Any | None = None,
+        active_skills: list[str] | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -183,6 +200,8 @@ class AgentRuntime:
         self._trace_emitter = trace_emitter
         self._session_id = session_id
         self._progressive_recall = progressive_recall
+        self._skill_injector = skill_injector
+        self._active_skills = active_skills or definition.skills
 
     @property
     def definition(self) -> AgentDefinition:
@@ -191,6 +210,19 @@ class AgentRuntime:
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
         system_prompt = _build_system_prompt(self._definition)
+
+        # Inject skill context if injector is available
+        if self._skill_injector is not None:
+            # L0: list all preloaded skills for this agent
+            if self._definition.skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
+                    self._definition.skills
+                )
+            # L1: inject full instructions for actively invoked skills
+            for skill_name in self._active_skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
+                    skill_name
+                )
 
         # Inject memory context if progressive recall is available
         if self._progressive_recall is not None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from agent33.messaging.models import Message
+    from agent33.messaging.models import ChannelHealthResult, Message
 
 
 @runtime_checkable
@@ -31,4 +31,8 @@ class MessagingAdapter(Protocol):
 
     async def stop(self) -> None:
         """Gracefully shut down the adapter."""
+        ...
+
+    async def health_check(self) -> ChannelHealthResult:
+        """Probe upstream API connectivity and return health status."""
         ...

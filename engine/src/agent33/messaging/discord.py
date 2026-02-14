@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import httpx
 
-from agent33.messaging.models import Message
+from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,47 @@ class DiscordAdapter:
             return True
         except Exception:
             return False
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> ChannelHealthResult:
+        """Probe Discord API via GET /users/@me and return health status."""
+        if self._client is None:
+            return ChannelHealthResult(
+                platform="discord",
+                status="unavailable",
+                detail="Adapter not started",
+                queue_depth=self._queue.qsize(),
+            )
+        start = time.monotonic()
+        try:
+            resp = await self._client.get("/users/@me")
+            latency = (time.monotonic() - start) * 1000
+            if resp.status_code == 200:
+                return ChannelHealthResult(
+                    platform="discord",
+                    status="ok",
+                    latency_ms=round(latency, 2),
+                    queue_depth=self._queue.qsize(),
+                )
+            return ChannelHealthResult(
+                platform="discord",
+                status="degraded",
+                latency_ms=round(latency, 2),
+                detail=f"API returned status {resp.status_code}",
+                queue_depth=self._queue.qsize(),
+            )
+        except Exception as exc:
+            latency = (time.monotonic() - start) * 1000
+            return ChannelHealthResult(
+                platform="discord",
+                status="unavailable",
+                latency_ms=round(latency, 2),
+                detail=str(exc),
+                queue_depth=self._queue.qsize(),
+            )
 
     # ------------------------------------------------------------------
     # Internal

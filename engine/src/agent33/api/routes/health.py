@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
@@ -10,6 +11,14 @@ from fastapi import APIRouter
 from agent33.config import settings
 
 router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
+
+
+def _get_adapters() -> dict[str, Any]:
+    """Import the adapter registry lazily to avoid circular imports."""
+    from agent33.api.routes.webhooks import _adapters
+
+    return _adapters
 
 
 @router.get("/health")
@@ -61,5 +70,32 @@ async def health() -> dict[str, Any]:
     except Exception:
         checks["nats"] = "unavailable"
 
+    # Messaging channels
+    adapters = _get_adapters()
+    for platform, adapter in adapters.items():
+        try:
+            result = await adapter.health_check()
+            checks[f"channel:{platform}"] = result.status
+        except Exception:
+            checks[f"channel:{platform}"] = "unavailable"
+
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "healthy" if all_ok else "degraded", "services": checks}
+
+
+@router.get("/health/channels")
+async def channel_health() -> dict[str, Any]:
+    """Detailed health check for all registered messaging channels."""
+    adapters = _get_adapters()
+    results: dict[str, Any] = {}
+    for platform, adapter in adapters.items():
+        try:
+            result = await adapter.health_check()
+            results[platform] = result.model_dump()
+        except Exception as exc:
+            results[platform] = {
+                "platform": platform,
+                "status": "unavailable",
+                "detail": str(exc),
+            }
+    return {"channels": results}

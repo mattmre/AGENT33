@@ -77,7 +77,7 @@ class ReaderTool:
                 f"{context.domain_allowlist}"
             )
 
-        if settings.jina_api_key:
+        if settings.jina_api_key.get_secret_value():
             return await self._jina_fetch(url)
 
         return await self._local_fetch(url)
@@ -89,7 +89,7 @@ class ReaderTool:
     async def _jina_fetch(self, url: str) -> ToolResult:
         jina_url = f"{settings.jina_reader_url.rstrip('/')}/{url}"
         headers = {
-            "Authorization": f"Bearer {settings.jina_api_key}",
+            "Authorization": f"Bearer {settings.jina_api_key.get_secret_value()}",
             "Accept": "application/json",
         }
         try:
