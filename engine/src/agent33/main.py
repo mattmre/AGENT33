@@ -24,6 +24,7 @@ from agent33.api.routes import (
     evaluations,
     health,
     memory_search,
+    releases,
     reviews,
     traces,
     training,
@@ -310,4 +311,5 @@ app.include_router(reviews.router)
 app.include_router(traces.router)
 app.include_router(evaluations.router)
 app.include_router(autonomy.router)
+app.include_router(releases.router)
 app.include_router(training.router)
