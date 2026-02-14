@@ -92,10 +92,16 @@ def validate_api_key(key: str) -> TokenPayload | None:
     )
 
 
-def revoke_api_key(key_id: str) -> bool:
-    """Revoke an API key by its *key_id*.  Returns ``True`` if found."""
+def revoke_api_key(key_id: str, requesting_subject: str | None = None) -> bool:
+    """Revoke an API key by its *key_id*.  Returns ``True`` if found.
+
+    If *requesting_subject* is provided, only allow revocation if the key
+    belongs to that subject or if requesting_subject is None (admin bypass).
+    """
     for h, entry in list(_api_keys.items()):
         if entry["key_id"] == key_id:
+            if requesting_subject is not None and entry["subject"] != requesting_subject:
+                return False  # not owned by requester
             del _api_keys[h]
             return True
     return False

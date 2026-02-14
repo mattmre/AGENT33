@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent33.security.injection import scan_inputs_recursive
+from agent33.security.permissions import require_scope
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 
@@ -51,7 +52,7 @@ class WorkflowSummary(BaseModel):
     triggers: dict[str, Any] = {}
 
 
-@router.get("/")
+@router.get("/", dependencies=[require_scope("workflows:read")])
 async def list_workflows() -> list[WorkflowSummary]:
     """List all registered workflows."""
     return [
@@ -66,7 +67,7 @@ async def list_workflows() -> list[WorkflowSummary]:
     ]
 
 
-@router.get("/{name}")
+@router.get("/{name}", dependencies=[require_scope("workflows:read")])
 async def get_workflow(name: str) -> dict[str, Any]:
     """Get a workflow definition by name."""
     workflow = _registry.get(name)
@@ -75,7 +76,7 @@ async def get_workflow(name: str) -> dict[str, Any]:
     return workflow.model_dump()
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[require_scope("workflows:write")])
 async def create_workflow(request: WorkflowCreateRequest) -> dict[str, Any]:
     """Register a new workflow definition."""
     try:
@@ -100,7 +101,7 @@ async def create_workflow(request: WorkflowCreateRequest) -> dict[str, Any]:
     }
 
 
-@router.post("/{name}/execute")
+@router.post("/{name}/execute", dependencies=[require_scope("workflows:execute")])
 async def execute_workflow(
     name: str, request: WorkflowExecuteRequest
 ) -> dict[str, Any]:

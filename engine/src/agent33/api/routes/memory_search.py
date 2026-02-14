@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from agent33.security.permissions import require_scope
+
 router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
 
@@ -26,7 +28,11 @@ class SummarizeResponse(BaseModel):
     tags: list[str]
 
 
-@router.post("/search", response_model=MemorySearchResponse)
+@router.post(
+    "/search",
+    response_model=MemorySearchResponse,
+    dependencies=[require_scope("agents:read")],
+)
 async def search_memory(req: MemorySearchRequest) -> MemorySearchResponse:
     """Search memory with progressive recall at specified detail level."""
     # Progressive recall is wired via app.state in main.py
@@ -50,7 +56,7 @@ async def search_memory(req: MemorySearchRequest) -> MemorySearchResponse:
     )
 
 
-@router.get("/sessions/{session_id}/observations")
+@router.get("/sessions/{session_id}/observations", dependencies=[require_scope("agents:read")])
 async def list_observations(session_id: str) -> dict[str, Any]:
     """List observations for a session."""
     from agent33.main import app
@@ -76,7 +82,11 @@ async def list_observations(session_id: str) -> dict[str, Any]:
     return {"session_id": session_id, "observations": observations}
 
 
-@router.post("/sessions/{session_id}/summarize", response_model=SummarizeResponse)
+@router.post(
+    "/sessions/{session_id}/summarize",
+    response_model=SummarizeResponse,
+    dependencies=[require_scope("agents:write")],
+)
 async def summarize_session(session_id: str) -> SummarizeResponse:
     """Trigger summarization for a session's observations."""
     from agent33.main import app

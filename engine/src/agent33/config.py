@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # Agent definitions
     agent_definitions_dir: str = "agent-definitions"
 
+    # Environment
+    environment: str = "development"
+
     # Self-improvement
     self_improve_enabled: bool = True
     self_improve_scope: str = "prompts,workflows,templates"
@@ -76,12 +79,17 @@ class Settings(BaseSettings):
     analysis_template_dir: str = "docs/research/templates"
 
     def check_production_secrets(self) -> list[str]:
-        """Return warnings for insecure default secrets."""
+        """Check for default secrets.  Raises in production mode."""
         warnings = []
         if self.api_secret_key == "change-me-in-production":
             warnings.append("api_secret_key is using the default value")
         if self.jwt_secret == "change-me-in-production":
             warnings.append("jwt_secret is using the default value")
+        if warnings and self.environment == "production":
+            raise RuntimeError(
+                "FATAL: Default secrets in production mode. "
+                f"Override via environment variables: {', '.join(warnings)}"
+            )
         return warnings
 
 

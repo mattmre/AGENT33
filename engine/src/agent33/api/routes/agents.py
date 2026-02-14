@@ -21,6 +21,7 @@ from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
 from agent33.security.injection import scan_inputs_recursive
+from agent33.security.permissions import require_scope
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -81,7 +82,7 @@ async def capabilities_catalog() -> dict[str, list[dict[str, str]]]:
     return get_catalog_by_category()
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[require_scope("agents:read")])
 async def search_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
     role: str | None = Query(default=None, description="Filter by role"),
@@ -113,7 +114,7 @@ async def search_agents(
     return [_agent_summary(d) for d in results]
 
 
-@router.get("/by-id/{agent_id}")
+@router.get("/by-id/{agent_id}", dependencies=[require_scope("agents:read")])
 async def get_agent_by_id(
     agent_id: str,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
@@ -128,7 +129,7 @@ async def get_agent_by_id(
     return definition.model_dump(mode="json")
 
 
-@router.get("/")
+@router.get("/", dependencies=[require_scope("agents:read")])
 async def list_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> list[dict[str, Any]]:
@@ -136,7 +137,7 @@ async def list_agents(
     return [_agent_summary(d) for d in registry.list_all()]
 
 
-@router.get("/{name}")
+@router.get("/{name}", dependencies=[require_scope("agents:read")])
 async def get_agent(
     name: str,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
@@ -148,7 +149,7 @@ async def get_agent(
     return definition.model_dump(mode="json")
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[require_scope("agents:write")])
 async def register_agent(
     definition: AgentDefinition,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
@@ -158,7 +159,7 @@ async def register_agent(
     return {"status": "registered", "name": definition.name}
 
 
-@router.post("/{name}/invoke")
+@router.post("/{name}/invoke", dependencies=[require_scope("agents:invoke")])
 async def invoke_agent(
     name: str,
     body: InvokeRequest,

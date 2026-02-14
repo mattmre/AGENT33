@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from agent33.security.auth import (
@@ -13,6 +14,7 @@ from agent33.security.auth import (
     generate_api_key,
     revoke_api_key,
 )
+from agent33.security.permissions import _get_token_payload, require_scope
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -61,15 +63,22 @@ async def login(body: LoginRequest) -> TokenResponse:
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    password_hash = hashlib.sha256(body.password.encode()).hexdigest()
-    if password_hash != user["password_hash"]:
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256", body.password.encode(), b"agent33-salt", 100_000
+    ).hex()
+    if not hmac.compare_digest(password_hash, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     token = create_access_token(subject=body.username, scopes=user["scopes"])
     return TokenResponse(access_token=token)
 
 
-@router.post("/api-keys", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/api-keys",
+    response_model=ApiKeyResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_scope("admin")],
+)
 async def create_api_key(body: ApiKeyRequest) -> ApiKeyResponse:
     """Generate a new API key."""
     result = generate_api_key(subject=body.subject, scopes=body.scopes)
@@ -77,8 +86,11 @@ async def create_api_key(body: ApiKeyRequest) -> ApiKeyResponse:
 
 
 @router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_api_key(key_id: str) -> None:
+async def delete_api_key(key_id: str, request: Request) -> None:
     """Revoke an API key by its identifier."""
-    found = revoke_api_key(key_id)
+    payload = _get_token_payload(request)
+    # Admins can revoke any key; non-admins only their own
+    subject = None if "admin" in payload.scopes else payload.sub
+    found = revoke_api_key(key_id, requesting_subject=subject)
     if not found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
