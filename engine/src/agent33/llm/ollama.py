@@ -26,10 +26,23 @@ class OllamaProvider:
         base_url: str = _DEFAULT_BASE_URL,
         default_model: str = "llama3.2",
         timeout: float = _DEFAULT_TIMEOUT,
+        max_connections: int = 20,
+        max_keepalive_connections: int = 10,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._default_model = default_model
         self._timeout = timeout
+        self._client = httpx.AsyncClient(
+            timeout=timeout,
+            limits=httpx.Limits(
+                max_connections=max_connections,
+                max_keepalive_connections=max_keepalive_connections,
+            ),
+        )
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._client.aclose()
 
     # -- helpers ----------------------------------------------------------
 
@@ -38,12 +51,11 @@ class OllamaProvider:
         last_exc: Exception | None = None
         for attempt in range(_MAX_ATTEMPTS):
             try:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    response = await client.post(
-                        f"{self._base_url}{path}", json=payload
-                    )
-                    response.raise_for_status()
-                    return response.json()  # type: ignore[no-any-return]
+                response = await self._client.post(
+                    f"{self._base_url}{path}", json=payload
+                )
+                response.raise_for_status()
+                return response.json()  # type: ignore[no-any-return]
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
@@ -65,10 +77,9 @@ class OllamaProvider:
         last_exc: Exception | None = None
         for attempt in range(_MAX_ATTEMPTS):
             try:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    response = await client.get(f"{self._base_url}{path}")
-                    response.raise_for_status()
-                    return response.json()  # type: ignore[no-any-return]
+                response = await self._client.get(f"{self._base_url}{path}")
+                response.raise_for_status()
+                return response.json()  # type: ignore[no-any-return]
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:

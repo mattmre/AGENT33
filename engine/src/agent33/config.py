@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_provider: str = "ollama"  # "ollama" | "jina"
 
+    # HTTP client pool settings
+    http_max_connections: int = 20
+    http_max_keepalive: int = 10
+    embedding_batch_size: int = 100
+
     # Training (self-evolving loop)
     training_enabled: bool = True
     training_optimize_interval: int = 100
