@@ -1,59 +1,55 @@
 # Next Session Briefing
 
-Last updated: 2026-02-15T01:00
+Last updated: 2026-02-15T02:00
 
 ## Current State
-- **Branch**: `main`
-- **Main**: ~973 tests passing, 0 lint errors
-- **Open PRs**: 0
+- **Branch**: `main` (PR [#6](https://github.com/mattmre/AGENT33/pull/6) open, not yet merged)
+- **Feature branch**: `feat/sessions-10-12-zeroclaw-parity-integration-wiring`
+- **Tests**: 973 passing, 0 lint errors
 - **All 21 Phases**: Complete
-- **Research**: 29 dossiers + 5 strategy docs complete
-- **Integration Wiring**: Complete (Session 12)
+- **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
+- **Integration Wiring**: Complete — all subsystems connected in main.py lifespan
+- **Research**: 29 dossiers + 5 strategy docs committed
 
-## What Was Done This Session (2026-02-15, Session 12)
+## What Was Done (Sessions 10-12)
 
-### Session 12: Integration Wiring (10 new tests)
+See `docs/sessions/sessions-10-12-2026-02-14-15.md` for full details.
 
-Connected all previously-built subsystems into the application lifecycle (`main.py`):
+**Session 10** — Hybrid RAG: BM25 engine, hybrid search (RRF), embedding cache, token-aware chunking (57 tests)
+**Session 11** — ZeroClaw parity: JSON Schema tools, 22+ provider registry, skills/plugin system, channel health checks (141 tests)
+**Session 12** — Integration wiring: all subsystems wired into main.py lifespan, agent runtime bridge and invoke route updated (10 tests)
 
-| # | Subsystem | Wired To | Details |
-|---|-----------|----------|---------|
-| 1 | EmbeddingProvider | `app.state.embedding_provider` | Pooled httpx client using config settings (http_max_connections, http_max_keepalive) |
-| 2 | EmbeddingCache | `app.state.embedding_cache` | LRU cache wrapping provider when `embedding_cache_enabled` (default True) |
-| 3 | BM25Index | `app.state.bm25_index` | Starts empty, populated incrementally via ingestion pipeline |
-| 4 | HybridSearcher | `app.state.hybrid_searcher` | Created when `rag_hybrid_enabled` (default True), combines BM25 + pgvector |
-| 5 | RAGPipeline | `app.state.rag_pipeline` | Uses cached embedder, long-term memory, hybrid searcher, config thresholds |
-| 6 | ProgressiveRecall | `app.state.progressive_recall` | 3-layer token-efficient retrieval, passed to AgentRuntime |
-| 7 | SkillRegistry | `app.state.skill_registry` | Auto-discovers from `skill_definitions_dir`, starts empty if dir missing |
-| 8 | SkillInjector | `app.state.skill_injector` | Wraps SkillRegistry, passed to AgentRuntime |
+## First Action: Merge PR #6
 
-**Agent Runtime Integration**:
-- `_register_agent_runtime_bridge()` now accepts and passes `skill_injector` and `progressive_recall` to `AgentRuntime`
-- `agents.py` invoke endpoint pulls `skill_injector` and `progressive_recall` from `app.state` and passes to `AgentRuntime`
-- Embedding provider closed on shutdown (cache.close() delegates to provider.close())
-
-**Tests added** to `test_integration_wiring.py`:
-- TestEmbeddingSubsystem (6 tests): provider, cache, BM25, RAG pipeline, hybrid searcher, progressive recall
-- TestSkillSubsystem (3 tests): registry, injector, empty-when-no-dir
-- TestAgentInvokeSubsystemPassthrough (1 test): verifies invoke route passes subsystems to AgentRuntime
-
-### Previous Sessions (10-11): See git history
+PR [#6](https://github.com/mattmre/AGENT33/pull/6) contains all work from sessions 10-12 (38 files, +5,193/-130). Merge to main before starting new work. Then switch back to `main` branch.
 
 ## Next Priorities
 
-### Priority 1: Critical Architecture Gaps (from Research Sprint)
+### Priority 1: Architecture Gaps (from Research Sprint)
 
-1. **Governance-Prompt Disconnect** — RESOLVED in Session 10
-2. **Integration Wiring** — RESOLVED in Session 12
-3. **No document processing** — can't ingest PDFs/images (Sparrow, PaddleOCR patterns)
-4. **Workflow engine gaps** — no sub-workflows, http-request, merge/join (n8n-workflows)
-5. **No conversational routing** — only static DAGs, no LLM-decided handoffs (Swarm)
+These are the remaining critical gaps identified across 29 research dossiers:
+
+1. **No document processing** — can't ingest PDFs/images
+   - Research: Sparrow (pipeline-based), PaddleOCR (layout analysis), RAG-Anything (multi-modal)
+   - Implementation: Add adapters to `memory/ingestion.py` for PDF extraction and image OCR
+   - Dependencies: `pymupdf` or `pdfplumber` for PDF, optional `pytesseract` for images
+
+2. **Workflow engine gaps** — no sub-workflows, http-request, merge/join actions
+   - Research: n8n-workflows (compositional workflow patterns)
+   - Implementation: New actions in `workflows/actions/` (sub_workflow, http_request, merge)
+   - Key: sub-workflow action enables recursive DAG composition
+
+3. **No conversational routing** — only static DAGs, no LLM-decided agent handoffs
+   - Research: OpenAI Swarm (handoff functions), Agent-Zero (dynamic routing)
+   - Implementation: Add a `route` action type that uses LLM to select next agent
+   - Key: This is AGENT-33's biggest architectural differentiator gap
 
 ### Priority 2: BM25 Warm-Up from Existing Memories
 
-The BM25 index currently starts empty and relies on new ingestion to populate. For existing deployments with data in pgvector, add:
-- `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
-- Startup warm-up loop that populates BM25 from existing records (with configurable limit)
+BM25 index starts empty. For deployments with existing pgvector data:
+- Add `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
+- Add startup warm-up loop in `main.py` lifespan (with configurable limit)
+- Ensure ingestion pipeline adds to BM25 when storing new documents
 
 ### Priority 3: Remaining ZeroClaw Parity
 
@@ -61,7 +57,15 @@ The BM25 index currently starts empty and relies on new ingestion to populate. F
 |---|------|----------|--------|
 | 20 | Matrix channel adapter | P3 | 2 days |
 
+### Priority 4: Ingestion Pipeline Completeness
+
+Currently the ingestion pipeline (`memory/ingestion.py`) provides chunking but doesn't handle the full store-and-index flow:
+- Chunk text → embed → store in pgvector → add to BM25 index
+- Wire `TokenAwareChunker` into a complete `IngestDocument` pipeline
+- Add an `/v1/memory/ingest` endpoint
+
 ## Key Files to Know
+
 | Purpose | Path |
 | --- | --- |
 | Entry point | `engine/src/agent33/main.py` |
@@ -78,9 +82,14 @@ The BM25 index currently starts empty and relies on new ingestion to populate. F
 | Embedding cache | `engine/src/agent33/memory/cache.py` |
 | RAG pipeline | `engine/src/agent33/memory/rag.py` |
 | Progressive recall | `engine/src/agent33/memory/progressive_recall.py` |
+| Ingestion / chunking | `engine/src/agent33/memory/ingestion.py` |
 | Health checks | `engine/src/agent33/api/routes/health.py` |
+| Workflow actions | `engine/src/agent33/workflows/actions/` |
 | Integration wiring tests | `engine/tests/test_integration_wiring.py` |
+| Session logs | `docs/sessions/` |
 | Phase plans | `docs/phases/` |
+| Research dossiers | `docs/research/repo_dossiers/` |
+| Research strategy | `docs/research/adaptive-evolution-strategy.md` |
 
 ## Test Commands
 ```bash
