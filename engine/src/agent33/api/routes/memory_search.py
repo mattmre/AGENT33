@@ -92,7 +92,7 @@ async def list_observations(session_id: str, request: Request) -> dict[str, Any]
         }
         for o in capture._buffer
         if o.session_id == session_id
-        and (not user_subject or getattr(o, "user_subject", user_subject) == user_subject)
+        and (not user_subject or getattr(o, "user_subject", None) == user_subject)
     ]
     return {"session_id": session_id, "observations": observations}
 
@@ -120,7 +120,7 @@ async def summarize_session(session_id: str, request: Request) -> SummarizeRespo
         o
         for o in capture._buffer
         if o.session_id == session_id
-        and (not user_subject or getattr(o, "user_subject", user_subject) == user_subject)
+        and (not user_subject or getattr(o, "user_subject", None) == user_subject)
     ]
     if not observations:
         raise HTTPException(404, f"No observations for session {session_id}")
