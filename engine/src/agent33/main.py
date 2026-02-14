@@ -23,6 +23,7 @@ from agent33.api.routes import (
     health,
     memory_search,
     reviews,
+    traces,
     training,
     webhooks,
     workflows,
@@ -304,4 +305,5 @@ app.include_router(webhooks.router)
 app.include_router(dashboard.router)
 app.include_router(memory_search.router)
 app.include_router(reviews.router)
+app.include_router(traces.router)
 app.include_router(training.router)

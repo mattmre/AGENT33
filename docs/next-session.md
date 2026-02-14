@@ -1,14 +1,14 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T16:00
+Last updated: 2026-02-14T17:00
 
 ## Current State
 - **Branch**: `main`
-- **Main**: 402 tests passing, 0 lint errors
+- **Main**: 456 tests passing, 0 lint errors
 - **Open PRs**: 0
 - **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
-- **Phases 1-15, 21**: Complete
-- **Phases 16-20**: Planned
+- **Phases 1-16, 21**: Complete
+- **Phases 17-20**: Planned
 - **Research**: 29 dossiers + 5 strategy docs complete
 
 ## What Was Done This Session (2026-02-14, Session 9)
@@ -27,19 +27,26 @@ Built the `engine/src/agent33/review/` module implementing the two-layer review 
 | 6 | Review API | `api/routes/reviews.py` | 12 REST endpoints under `/v1/reviews` with scope-based auth |
 | 7 | Router registration | `main.py` | Reviews router added to FastAPI app |
 
-Key design decisions:
-- **Risk levels**: none → L1 off; low → L1 only; medium → L1 + L2 agent; high → L1 + L2 human; critical → L1 + designated human
-- **State machine**: DRAFT → READY → L1_REVIEW → L1_APPROVED → [L2_REVIEW → L2_APPROVED →] APPROVED → MERGED
-- **Escalation**: L1 reviewer can escalate (forces L2 requirement even if originally not needed)
-- **Tenant isolation**: Reviews filtered by `tenant_id` from authenticated user
+### Phase 16 Complete — Observability & Trace Pipeline (54 new tests)
 
-## Priority 1: Next Phase (Phase 16 — Observability & Trace Pipeline)
+Built the trace pipeline in `engine/src/agent33/observability/`:
 
-Phase dependency chain: ~~14 (Security)~~ → ~~15 (Review Automation)~~ → **16 (Observability)** → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
+| # | Component | Module | Description |
+|---|-----------|--------|-------------|
+| 1 | Trace models | `observability/trace_models.py` | TraceRecord, TraceStep, TraceAction, 6 trace statuses, 4 action statuses, 9 artifact types |
+| 2 | Failure taxonomy | `observability/failure.py` | 10 failure categories (F-ENV..F-UNK), 4 severity levels, retryable/escalation metadata |
+| 3 | Trace collector | `observability/trace_collector.py` | In-memory CRUD with tenant/status/task filters, auto-step creation, failure recording |
+| 4 | Retention policies | `observability/retention.py` | 9 artifact types, tiered storage (hot/warm/cold), 7d–permanent retention |
+| 5 | Trace API | `api/routes/traces.py` | 7 REST endpoints under `/v1/traces` with scope-based auth |
+| 6 | Router registration | `main.py` | Traces router added to FastAPI app |
+
+## Priority 1: Next Phase (Phase 17 — Evaluation Suite Expansion & Regression Gates)
+
+Phase dependency chain: ~~14 (Security)~~ → ~~15 (Review Automation)~~ → ~~16 (Observability)~~ → **17 (Evaluation Gates)** → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
 
 ## Priority 2: ZeroClaw Feature Parity
 
-Remaining ZeroClaw parity items to integrate into Phases 16-20:
+Remaining ZeroClaw parity items to integrate into Phases 17-20:
 
 | # | Item | Source | Priority | Effort |
 |---|------|--------|----------|--------|
@@ -82,6 +89,7 @@ Formula: **ZeroClaw's breadth + AGENT-33's depth = superior system**
 | Tool registry | `engine/src/agent33/tools/registry.py` |
 | Execution layer | `engine/src/agent33/execution/` |
 | Review automation | `engine/src/agent33/review/` |
+| Observability | `engine/src/agent33/observability/` |
 | Security: middleware | `engine/src/agent33/security/middleware.py` |
 | Security: permissions | `engine/src/agent33/security/permissions.py` |
 | Security: auth | `engine/src/agent33/security/auth.py` |
@@ -94,8 +102,9 @@ Formula: **ZeroClaw's breadth + AGENT-33's depth = superior system**
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~13 min, 402 tests)
+python -m pytest tests/ -q               # full suite (~14 min, 456 tests)
 python -m pytest tests/ -x -q            # stop on first failure
+python -m pytest tests/test_phase16_observability.py -x -q  # Phase 16 tests (54 tests)
 python -m pytest tests/test_phase15_review.py -x -q  # Phase 15 tests (65 tests)
 python -m pytest tests/test_phase14_security.py -x -q  # Phase 14 tests (59 tests)
 python -m pytest tests/test_execution_*.py -x -q  # Phase 13 tests only (54 tests)
