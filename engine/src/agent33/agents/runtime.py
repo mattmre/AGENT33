@@ -73,6 +73,21 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
         if gov.approval_required:
             parts.append(f"- Requires approval for: {', '.join(gov.approval_required)}")
 
+    # --- Autonomy Level ---
+    parts.append(f"\n# Autonomy Level: {definition.autonomy_level.value}")
+    if definition.autonomy_level.value == "read-only":
+        parts.append(
+            "- You may ONLY read data. Do NOT execute commands,"
+            " write files, or modify state."
+        )
+    elif definition.autonomy_level.value == "supervised":
+        parts.append(
+            "- Destructive operations require explicit user approval"
+            " before execution."
+        )
+    else:
+        parts.append("- Full autonomy within governance constraints.")
+
     # --- Ownership ---
     own = definition.ownership
     if own.owner or own.escalation_target:

@@ -33,10 +33,10 @@ _model_router.register("ollama", OllamaProvider(
     default_model=settings.ollama_default_model,
 ))
 
-if settings.openai_api_key:
+if settings.openai_api_key.get_secret_value():
     from agent33.llm.openai import OpenAIProvider
 
-    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key}
+    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key.get_secret_value()}
     if settings.openai_base_url:
         _openai_kwargs["base_url"] = settings.openai_base_url
     _model_router.register("openai", OpenAIProvider(**_openai_kwargs))

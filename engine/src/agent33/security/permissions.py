@@ -1,4 +1,4 @@
-"""Scope-based permission system."""
+"""Scope-based permission system with deny-first evaluation."""
 
 from __future__ import annotations
 
@@ -20,13 +20,22 @@ SCOPES: set[str] = {
 }
 
 
-def check_permission(required_scope: str, token_scopes: list[str]) -> bool:
+def check_permission(
+    required_scope: str,
+    token_scopes: list[str],
+    deny_scopes: list[str] | None = None,
+) -> bool:
     """Return ``True`` if *token_scopes* satisfy *required_scope*.
 
-    The ``admin`` scope implicitly grants all permissions.
+    Evaluation order (deny-first):
+    1. If the required scope is in *deny_scopes*, **deny** immediately.
+    2. The ``admin`` scope implicitly grants all permissions (unless denied).
+    3. Otherwise, check if *required_scope* is in *token_scopes*.
     """
+    if deny_scopes and required_scope in deny_scopes:
+        return False
     if "admin" in token_scopes:
-        return True
+        return not (deny_scopes and "admin" in deny_scopes)
     return required_scope in token_scopes
 
 

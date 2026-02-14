@@ -39,7 +39,7 @@ class JinaEmbeddingProvider:
 
     def _headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {settings.jina_api_key}",
+            "Authorization": f"Bearer {settings.jina_api_key.get_secret_value()}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }

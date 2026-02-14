@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -13,8 +14,9 @@ class Settings(BaseSettings):
     # API
     api_port: int = 8000
     api_log_level: str = "info"
-    api_secret_key: str = "change-me-in-production"  # WARNING: override in production via env var
+    api_secret_key: SecretStr = SecretStr("change-me-in-production")
     cors_allowed_origins: str = ""  # comma-separated; empty = deny all origins (secure default)
+    max_request_size_bytes: int = 10 * 1024 * 1024  # 10 MB default
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
@@ -30,16 +32,20 @@ class Settings(BaseSettings):
     nats_url: str = "nats://nats:4222"
 
     # Security
-    jwt_secret: str = "change-me-in-production"  # WARNING: override in production via env var
+    jwt_secret: SecretStr = SecretStr("change-me-in-production")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
-    encryption_key: str = ""
+    encryption_key: SecretStr = SecretStr("")
+
+    # Rate limiting (per-tenant, sliding window)
+    rate_limit_per_minute: int = 60  # max tool executions per minute
+    rate_limit_burst: int = 10  # max burst above per-minute rate
 
     # SearXNG
     searxng_url: str = "http://searxng:8080"
 
     # Optional cloud LLM
-    openai_api_key: str = ""
+    openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
 
     # AirLLM (layer-sharded large model inference)
@@ -51,7 +57,7 @@ class Settings(BaseSettings):
     airllm_prefetch: bool = True
 
     # Jina
-    jina_api_key: str = ""
+    jina_api_key: SecretStr = SecretStr("")
     jina_reader_url: str = "https://r.jina.ai"
 
     # Embeddings
@@ -86,9 +92,9 @@ class Settings(BaseSettings):
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
         warnings = []
-        if self.api_secret_key == "change-me-in-production":
+        if self.api_secret_key.get_secret_value() == "change-me-in-production":
             warnings.append("api_secret_key is using the default value")
-        if self.jwt_secret == "change-me-in-production":
+        if self.jwt_secret.get_secret_value() == "change-me-in-production":
             warnings.append("jwt_secret is using the default value")
         if warnings and self.environment == "production":
             raise RuntimeError(

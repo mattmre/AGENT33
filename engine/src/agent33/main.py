@@ -11,8 +11,9 @@ if TYPE_CHECKING:
     from agent33.llm.router import ModelRouter
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from agent33.api.routes import (
     agents,
@@ -249,6 +250,23 @@ def _register_agent_runtime_bridge(
     register_fn("__default__", _bridge)
 
 
+# -- Request size limit middleware ----------------------------------------------
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds the configured limit."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > settings.max_request_size_bytes:
+            return Response(
+                content='{"detail":"Request body too large"}',
+                status_code=413,
+                media_type="application/json",
+            )
+        return await call_next(request)
+
+
 # -- Application factory ------------------------------------------------------
 
 app = FastAPI(
@@ -271,6 +289,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
+app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # -- Routers -------------------------------------------------------------------

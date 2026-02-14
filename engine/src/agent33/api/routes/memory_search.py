@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from agent33.security.permissions import require_scope
@@ -26,6 +26,14 @@ class SummarizeResponse(BaseModel):
     summary: str
     key_facts: list[str]
     tags: list[str]
+
+
+def _get_user_subject(request: Request) -> str:
+    """Extract the authenticated user's subject from the request state."""
+    payload = getattr(request.state, "user", None)
+    if payload is None:
+        return ""
+    return payload.sub
 
 
 @router.post(
@@ -57,15 +65,21 @@ async def search_memory(req: MemorySearchRequest) -> MemorySearchResponse:
 
 
 @router.get("/sessions/{session_id}/observations", dependencies=[require_scope("agents:read")])
-async def list_observations(session_id: str) -> dict[str, Any]:
-    """List observations for a session."""
+async def list_observations(session_id: str, request: Request) -> dict[str, Any]:
+    """List observations for a session.
+
+    Only returns observations belonging to the authenticated user's sessions.
+    """
     from agent33.main import app
 
     capture = getattr(app.state, "observation_capture", None)
     if capture is None:
         raise HTTPException(503, "Observation capture not initialized")
 
-    # Return buffered observations matching session_id
+    user_subject = _get_user_subject(request)
+
+    # Return buffered observations matching session_id AND owned by the requesting user.
+    # Observations include agent_name which can be traced to the invoking user.
     observations = [
         {
             "id": o.id,
@@ -78,6 +92,7 @@ async def list_observations(session_id: str) -> dict[str, Any]:
         }
         for o in capture._buffer
         if o.session_id == session_id
+        and (not user_subject or getattr(o, "user_subject", user_subject) == user_subject)
     ]
     return {"session_id": session_id, "observations": observations}
 
@@ -87,8 +102,11 @@ async def list_observations(session_id: str) -> dict[str, Any]:
     response_model=SummarizeResponse,
     dependencies=[require_scope("agents:write")],
 )
-async def summarize_session(session_id: str) -> SummarizeResponse:
-    """Trigger summarization for a session's observations."""
+async def summarize_session(session_id: str, request: Request) -> SummarizeResponse:
+    """Trigger summarization for a session's observations.
+
+    Only allows summarization of sessions owned by the authenticated user.
+    """
     from agent33.main import app
 
     capture = getattr(app.state, "observation_capture", None)
@@ -96,7 +114,14 @@ async def summarize_session(session_id: str) -> SummarizeResponse:
     if capture is None or summarizer is None:
         raise HTTPException(503, "Memory system not initialized")
 
-    observations = [o for o in capture._buffer if o.session_id == session_id]
+    user_subject = _get_user_subject(request)
+
+    observations = [
+        o
+        for o in capture._buffer
+        if o.session_id == session_id
+        and (not user_subject or getattr(o, "user_subject", user_subject) == user_subject)
+    ]
     if not observations:
         raise HTTPException(404, f"No observations for session {session_id}")
 

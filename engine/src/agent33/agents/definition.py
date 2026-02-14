@@ -98,6 +98,17 @@ class SpecCapability(str, Enum):
         return CapabilityCategory(self.value[0])
 
 
+class AutonomyLevel(str, Enum):
+    """Autonomy level controlling what an agent may do without approval.
+
+    Modelled after ZeroClaw's security policy tiers.
+    """
+
+    READ_ONLY = "read-only"  # agent can only read data, no writes/executions
+    SUPERVISED = "supervised"  # agent can act but requires approval for destructive ops
+    FULL = "full"  # agent has full autonomy within its governance constraints
+
+
 class AgentStatus(str, Enum):
     """Lifecycle status for an agent definition."""
 
@@ -195,6 +206,7 @@ class AgentDefinition(BaseModel):
     )
     ownership: AgentOwnership = Field(default_factory=AgentOwnership)
     status: AgentStatus = Field(default=AgentStatus.ACTIVE)
+    autonomy_level: AutonomyLevel = Field(default=AutonomyLevel.SUPERVISED)
 
     @model_validator(mode="before")
     @classmethod

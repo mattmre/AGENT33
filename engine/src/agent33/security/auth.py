@@ -22,6 +22,7 @@ class TokenPayload(BaseModel):
     sub: str
     scopes: list[str] = []
     exp: int = 0
+    tenant_id: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -29,16 +30,24 @@ class TokenPayload(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def create_access_token(subject: str, scopes: list[str] | None = None) -> str:
+def create_access_token(
+    subject: str,
+    scopes: list[str] | None = None,
+    tenant_id: str = "",
+) -> str:
     """Create a signed JWT for *subject* with the given *scopes*."""
     now = int(time.time())
-    payload = {
+    payload: dict = {
         "sub": subject,
         "scopes": scopes or [],
         "iat": now,
         "exp": now + settings.jwt_expire_minutes * 60,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    if tenant_id:
+        payload["tenant_id"] = tenant_id
+    return jwt.encode(
+        payload, settings.jwt_secret.get_secret_value(), algorithm=settings.jwt_algorithm
+    )
 
 
 def verify_token(token: str) -> TokenPayload:
@@ -46,7 +55,11 @@ def verify_token(token: str) -> TokenPayload:
 
     Raises ``jwt.InvalidTokenError`` on failure.
     """
-    data = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    data = jwt.decode(
+        token,
+        settings.jwt_secret.get_secret_value(),
+        algorithms=[settings.jwt_algorithm],
+    )
     return TokenPayload(**data)
 
 
@@ -54,7 +67,7 @@ def verify_token(token: str) -> TokenPayload:
 # API key management (in-memory)
 # ---------------------------------------------------------------------------
 
-# Mapping from key-hash -> {"key_id": str, "subject": str, "scopes": [...]}
+# Mapping from key-hash -> {"key_id": str, "subject": str, "scopes": [...], ...}
 _api_keys: dict[str, dict] = {}
 
 
@@ -62,21 +75,41 @@ def _hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-def generate_api_key(subject: str, scopes: list[str] | None = None) -> dict:
+def generate_api_key(
+    subject: str,
+    scopes: list[str] | None = None,
+    tenant_id: str = "",
+    expires_in_seconds: int | None = None,
+) -> dict:
     """Generate a new API key and return its metadata including the raw key.
 
-    Returns ``{"key_id": ..., "key": ..., "subject": ..., "scopes": [...]}``.
+    Returns ``{"key_id": ..., "key": ..., "subject": ..., "scopes": [...], ...}``.
     The raw ``key`` is only available at creation time.
+
+    If *expires_in_seconds* is provided, the key will be rejected after that
+    duration.  ``None`` means the key never expires.
     """
     raw_key = f"a33_{secrets.token_urlsafe(32)}"
     key_id = secrets.token_hex(8)
     hashed = _hash_key(raw_key)
+    created_at = int(time.time())
+    expires_at = (created_at + expires_in_seconds) if expires_in_seconds else 0
     _api_keys[hashed] = {
         "key_id": key_id,
         "subject": subject,
         "scopes": scopes or [],
+        "tenant_id": tenant_id,
+        "created_at": created_at,
+        "expires_at": expires_at,
     }
-    return {"key_id": key_id, "key": raw_key, "subject": subject, "scopes": scopes or []}
+    return {
+        "key_id": key_id,
+        "key": raw_key,
+        "subject": subject,
+        "scopes": scopes or [],
+        "tenant_id": tenant_id,
+        "expires_at": expires_at,
+    }
 
 
 def validate_api_key(key: str) -> TokenPayload | None:
@@ -85,10 +118,17 @@ def validate_api_key(key: str) -> TokenPayload | None:
     entry = _api_keys.get(hashed)
     if entry is None:
         return None
+    # Check expiration
+    expires_at = entry.get("expires_at", 0)
+    if expires_at and int(time.time()) > expires_at:
+        # Key has expired — remove it and reject
+        del _api_keys[hashed]
+        return None
     return TokenPayload(
         sub=entry["subject"],
         scopes=entry["scopes"],
-        exp=0,
+        exp=expires_at,
+        tenant_id=entry.get("tenant_id", ""),
     )
 
 

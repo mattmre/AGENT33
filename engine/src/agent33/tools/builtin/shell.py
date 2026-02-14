@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import shlex
 from typing import Any
 
 from agent33.tools.base import ToolContext, ToolResult
 
 _DEFAULT_TIMEOUT = 30
+
+# Patterns that indicate command chaining / subshell injection
+_SUBSHELL_PATTERNS = re.compile(r"\$\(|`")
+_CHAIN_OPERATORS = re.compile(r"\s*([|;&]|&&|\|\|)\s*")
 
 
 class ShellTool:
@@ -39,18 +44,48 @@ class ShellTool:
 
         timeout: int = params.get("timeout", _DEFAULT_TIMEOUT)
 
-        # Parse the executable name for allowlist checking
+        # Block subshell injection ($(...) and backticks)
+        if _SUBSHELL_PATTERNS.search(command):
+            return ToolResult.fail(
+                "Subshell patterns ($() and backticks) are not allowed"
+            )
+
+        # Multi-segment validation: split on chain operators and validate each segment
+        try:
+            segments = _CHAIN_OPERATORS.split(command)
+        except re.error:
+            return ToolResult.fail("Invalid command syntax")
+
+        executables: list[str] = []
+        for segment in segments:
+            segment = segment.strip()
+            if not segment or segment in ("|", "&", ";", "&&", "||"):
+                continue
+            try:
+                parts = shlex.split(segment)
+            except ValueError as exc:
+                return ToolResult.fail(f"Invalid command syntax: {exc}")
+            if parts:
+                executables.append(parts[0])
+
+        if not executables:
+            return ToolResult.fail("No executable found in command")
+
+        # Validate ALL executables against allowlist (not just the first one)
+        if context.command_allowlist:
+            for executable in executables:
+                if executable not in context.command_allowlist:
+                    return ToolResult.fail(
+                        f"Command '{executable}' is not in the allowlist. "
+                        f"Allowed: {', '.join(context.command_allowlist)}"
+                    )
+
+        # Use only the first executable for subprocess (we pass full command
+        # through shlex.split for proper handling)
         try:
             parts = shlex.split(command)
         except ValueError as exc:
             return ToolResult.fail(f"Invalid command syntax: {exc}")
-
-        executable = parts[0]
-        if context.command_allowlist and executable not in context.command_allowlist:
-            return ToolResult.fail(
-                f"Command '{executable}' is not in the allowlist. "
-                f"Allowed: {', '.join(context.command_allowlist)}"
-            )
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -66,7 +101,7 @@ class ShellTool:
             proc.kill()  # type: ignore[union-attr]
             return ToolResult.fail(f"Command timed out after {timeout}s")
         except FileNotFoundError:
-            return ToolResult.fail(f"Command not found: {executable}")
+            return ToolResult.fail(f"Command not found: {executables[0]}")
         except OSError as exc:
             return ToolResult.fail(f"OS error: {exc}")
 
