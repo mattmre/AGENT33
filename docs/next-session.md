@@ -1,46 +1,33 @@
 # Next Session Briefing
 
-Last updated: 2026-02-13T18:00
+Last updated: 2026-02-14T00:30
 
 ## Current State
-- **Branch**: `feat/phase-13-code-execution` (working branch, has uncommitted cleanup changes)
-- **Main**: clean, 143 tests passing
-- **Open PRs**: 1
-  - #27: Phase 13 — Code execution layer and tools-as-code (197 tests, 0 lint errors)
-- **Phases 1-13, 21**: Complete (Phase 13 pending merge via PR #27)
-- **Phases 14-20**: Planned (see `docs/phases/`)
+- **Branch**: `main`, clean working tree
+- **Main**: 278 tests passing, 0 lint errors
+- **Open PRs**: 0
+- **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
+- **Phases 1-13, 21**: Complete
+- **Phase 14**: Partially complete (core security items merged, remaining items listed below)
+- **Phases 15-20**: Planned
 
-## What Was Done This Session (2026-02-13, Session 3)
-1. **CLAUDE.md overhaul** — Added required prefix, common commands, architecture overview, tool config, phase dependency chain, Windows platform notes
-2. **RSMFConverter cleanup** — Deleted `core/phases/` (40 phase files + README) and `core/user-guide/` (4 stub files) — all leftover from a different project
-3. **Full repo security scan** (4 parallel agents) — scanned for credentials, PII, internal project refs, infrastructure exposure
-4. **Sensitive data remediation**:
-   - Removed `agent-33` GitHub handle from 6 tool definition YAMLs
-   - Removed `agent-33.dev` unregistered domain from 11 files (schemas, agent defs, plugin spec)
-   - Normalized `<owner>` placeholders to `agent-33` in 3 files
-   - Removed `EDCTool` internal project reference from `RELATIONSHIP_TYPES.md`
-   - Fixed stale `core/phases/` references in `templates.md` and `refinement.mdc` → `docs/phases/`
-5. **Verified clean**: zero remaining references to `agent-33`, `agent-33.dev`, `<owner>` URLs, or any private repos
+## What Was Done This Session (2026-02-13, Session 6)
 
-### Security Scan Findings (for Phase 14 scope)
-The infrastructure scan also flagged code security issues (not data leaks):
-- SHA-256 password hashing without salt in `auth.py:64` — needs bcrypt/argon2
-- `change-me-in-production` defaults warn but don't block startup
-- NATS monitoring port 8222 exposed without auth
-- CORS `allow_methods=["*"]`, `allow_headers=["*"]`
-- `run_command.py` env replacement drops PATH on Windows
-- Auth bypass for all paths starting with `/docs` (prefix too broad)
-These are tracked for Phase 14 implementation.
+### Cycle A Implementation Sprint
+Orchestrated 8 agents (4 research + 4 implementation) to implement the top 5 priority items from the research sprint findings. See `docs/sessions/session-6-2026-02-13.md` for full details.
 
-## Priority 1: Research & Analysis Sprint
+**Completed and merged:**
+1. Governance constraints wired into LLM prompts (11-section structured prompt, safety guardrails)
+2. Progressive recall wired into `AgentRuntime.invoke()` (memory context injection)
+3. IDOR vulnerabilities fixed on all 8 endpoints (`require_scope()` enforcement)
+4. HTTP client pooling + embedding batching (persistent clients, Ollama batch API)
+5. Trivy CI security scanning (4-job workflow, CORS/auth/NATS hardening)
 
-Analyze the following repos and papers for patterns, techniques, and features to integrate into AGENT-33. Use the `agent33 intake` workflow or research dossier templates in `docs/research/templates/`.
+All 4 PRs merged to main with zero conflicts. 278 tests, lint clean.
 
-### Research Papers
-| Resource | Focus Area | URL |
-|----------|-----------|-----|
-| Multi-Agent RL Survey | Multi-agent coordination, RL for agent orchestration | https://arxiv.org/abs/2602.11865 |
-| Building Skills for Claude (Anthropic) | Claude skill architecture, plugin patterns | https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf |
+## Priority 1: Re-generate Lost Research Artifacts
+
+The 28 research dossiers and 3 strategy documents from the research sprint were lost during branch sorting. Key findings are preserved in `MEMORY.md`. The repos to re-analyze:
 
 ### Repos — Agent Frameworks & Orchestration
 | Repo | Focus Area | URL |
@@ -60,7 +47,7 @@ Analyze the following repos and papers for patterns, techniques, and features to
 | anthropics/claude-plugins-official | Official Claude plugin patterns | https://github.com/anthropics/claude-plugins-official |
 | ComposioHQ/awesome-claude-skills | Claude skill catalog | https://github.com/ComposioHQ/awesome-claude-skills |
 | nextlevelbuilder/ui-ux-pro-max-skill | UI/UX skill for Claude | https://github.com/nextlevelbuilder/ui-ux-pro-max-skill |
-| triggerdotdev/trigger.dev | Background job orchestration, workflow patterns | https://github.com/triggerdotdev/trigger.dev |
+| triggerdotdev/trigger.dev | Background job orchestration | https://github.com/triggerdotdev/trigger.dev |
 | breaking-brake/cc-wf-studio | Claude Code workflow studio | https://github.com/breaking-brake/cc-wf-studio/ |
 | Zie619/n8n-workflows | N8N workflow patterns | https://github.com/Zie619/n8n-workflows |
 
@@ -84,84 +71,69 @@ Analyze the following repos and papers for patterns, techniques, and features to
 | makeplane/plane | Project management, issue tracking | https://github.com/makeplane/plane |
 | x1xhlol/system-prompts-and-models-of-ai-tools | System prompt patterns | https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools |
 
-### Suggested Analysis Approach
-1. **Triage**: Quickly assess each repo's relevance to AGENT-33 (skip if minimal overlap)
-2. **Dossier**: For high-relevance repos, create research dossiers in `docs/research/repo_dossiers/`
-3. **Extract patterns**: Identify specific patterns, architectures, or features to adopt
-4. **Integration report**: Write a summary mapping findings to AGENT-33 phases/components
-5. **Phase updates**: Update relevant phase docs with new insights
+### Research Papers
+| Resource | Focus Area | URL |
+|----------|-----------|-----|
+| Multi-Agent RL Survey | Multi-agent coordination, RL for agent orchestration | https://arxiv.org/abs/2602.11865 |
+| Building Skills for Claude (Anthropic) | Claude skill architecture, plugin patterns | https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf |
 
-### Key Questions to Answer
-- What orchestration patterns from swarm/agent-zero can improve our workflow engine?
-- What skill/plugin architecture from Claude's ecosystem should we adopt?
-- What RAG patterns from RAG-Anything can improve our memory/RAG pipeline?
-- What security scanning from trivy can inform Phase 14?
-- What browser automation patterns from ChromePilot/GhidraMCP can improve our browser tool?
-- What workflow patterns from trigger.dev/n8n can improve our automation layer?
+**Important**: Commit dossiers immediately after generation to prevent data loss.
 
-## Priority 2: Review & Merge PR #27 (Phase 13)
-- Review the PR, then merge to main
-- After merge, delete the `feat/phase-13-code-execution` branch
-- Verify 197 tests still pass on main
+## Priority 3: Complete Phase 14 — Remaining Items
 
-## Priority 3: Phase 14 — Security Hardening & Prompt Injection Defense
+PRs #2-#5 address the most critical Phase 14 items. Remaining work:
 
-Per `docs/phases/PHASE-14-SECURITY-HARDENING-AND-PROMPT-INJECTION-DEFENSE.md`:
-- **Depends on**: Phase 13 (PR #27)
-- **Blocks**: Phase 15
-- **Owner**: Security Agent (T22)
+### Not Yet Addressed
+| Item | Severity | File | Notes |
+|------|----------|------|-------|
+| `run_command.py` env drops PATH on Windows | MEDIUM | `execution/actions/run_command.py:49-58` | Merge env with `os.environ` |
+| `tenant_id` missing from TokenPayload | HIGH | `security/auth.py:19-25` | Multi-tenancy gap — no tenant in JWT/API key |
+| API key expiration support | MEDIUM | `security/auth.py:54-101` | Keys have `exp=0` (never expire) |
+| Deny-first permission evaluation | MEDIUM | `security/permissions.py` | Current model is scope-in-set; add deny rules |
+| Rate limiting on invoke/execute | MEDIUM | `api/routes/agents.py`, `workflows.py` | No rate limiting on costly LLM operations |
+| `SecretStr` for sensitive config | LOW | `config.py:16,33` | `jwt_secret`/`api_secret_key` visible in logs |
+| Session ownership model | HIGH | `api/routes/memory_search.py` | Sessions have no owner — scope check present but no ownership filter |
 
-### Remaining Engine Security Gaps (from `docs/sessions/research-security-gaps.md`)
+### Already Addressed by PRs #2-#5
+- [x] `require_scope()` wired into all routes (PR #5)
+- [x] SHA-256 → PBKDF2-HMAC-SHA256 password hashing (PR #5)
+- [x] Default secrets enforcement in production mode (PR #5)
+- [x] NATS port bound to localhost (PR #2)
+- [x] CORS methods/headers restricted (PR #2)
+- [x] `/docs` auth bypass prefix fixed (PR #2)
+- [x] Ownership-aware API key revocation (PR #5)
+- [x] Governance constraints injected into prompts (PR #4)
+- [x] Safety guardrails in every agent prompt (PR #4)
 
-**IDOR ownership validation** — 8 endpoints with no access control:
-| Endpoint | File | Issue |
-|----------|------|-------|
-| GET /v1/memory/sessions/{id}/observations | memory_search.py:53-76 | No ownership check |
-| POST /v1/memory/sessions/{id}/summarize | memory_search.py:79-98 | No ownership check |
-| GET /v1/agents/by-id/{id} | agents.py:115-127 | No access control |
-| GET /v1/agents/{name} | agents.py:138-147 | No access control |
-| POST /v1/agents/{name}/invoke | agents.py:160-190 | No ownership check |
-| GET /v1/workflows/{name} | workflows.py:68-74 | No access control |
-| POST /v1/workflows/{name}/execute | workflows.py:102-132 | No ownership check |
-| DELETE /v1/auth/api-keys/{key_id} | auth.py:79-84 | No ownership check |
+## Priority 4: Phase 15 — Review Automation & Two-Layer Review
 
-**Code security issues from this session's scan:**
-- SHA-256 password hashing → bcrypt/argon2 (`auth.py:64`)
-- Default secrets warn-only → enforce in production mode (`config.py:16,33`)
-- NATS port 8222 exposed without auth (`docker-compose.yml:77-79`)
-- Overly permissive CORS methods/headers (`main.py:261-262`)
-- `run_command.py` env replacement drops PATH on Windows (`:49-58`)
-- Auth bypass prefix too broad for `/docs` (`middleware.py:18`)
+After Phase 14 is complete, Phase 15 is next in the dependency chain:
+11 → 12 → 13 → **14** → **15** → 16 → 17 → 18 → 19 → 20
+
+See `docs/phases/PHASE-15-REVIEW-AUTOMATION-AND-TWO-LAYER-REVIEW.md`.
 
 ## Key Files to Know
 | Purpose | Path |
 | --- | --- |
 | Entry point | `engine/src/agent33/main.py` |
 | Config | `engine/src/agent33/config.py` |
+| Agent runtime | `engine/src/agent33/agents/runtime.py` |
 | Agent registry | `engine/src/agent33/agents/registry.py` |
 | Agent definitions | `engine/agent-definitions/*.json` |
 | Tool registry | `engine/src/agent33/tools/registry.py` |
-| Tool registry entry | `engine/src/agent33/tools/registry_entry.py` |
-| Tool definitions | `engine/tool-definitions/*.yml` |
-| **Execution layer** | `engine/src/agent33/execution/` |
-| **CodeExecutor** | `engine/src/agent33/execution/executor.py` |
-| **Execution models** | `engine/src/agent33/execution/models.py` |
-| **Input validation** | `engine/src/agent33/execution/validation.py` |
-| **CLI adapter** | `engine/src/agent33/execution/adapters/cli.py` |
-| Security: injection | `engine/src/agent33/security/injection.py` |
+| Execution layer | `engine/src/agent33/execution/` |
 | Security: middleware | `engine/src/agent33/security/middleware.py` |
-| Security: allowlists | `engine/src/agent33/security/allowlists.py` |
-| Security spec | `core/orchestrator/SECURITY_HARDENING.md` |
+| Security: permissions | `engine/src/agent33/security/permissions.py` |
+| Security: auth | `engine/src/agent33/security/auth.py` |
+| Security: injection | `engine/src/agent33/security/injection.py` |
 | Phase plans | `docs/phases/` |
-| Phase dependency chain | `docs/phases/PHASE-11-20-WORKFLOW-PLAN.md` |
 | Session logs | `docs/sessions/` |
 | Research dossiers | `docs/research/repo_dossiers/` |
-| CHANGELOG | `core/CHANGELOG.md` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~9 min, 197 tests)
+python -m pytest tests/ -q               # full suite (~9 min, 197 tests on main)
 python -m pytest tests/ -x -q            # stop on first failure
 python -m pytest tests/test_execution_*.py -x -q  # Phase 13 tests only (54 tests)
 python -m ruff check src/ tests/         # lint (0 errors)
