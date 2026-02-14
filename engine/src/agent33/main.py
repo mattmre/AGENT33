@@ -23,6 +23,7 @@ from agent33.api.routes import (
     dashboard,
     evaluations,
     health,
+    improvements,
     memory_search,
     releases,
     reviews,
@@ -312,4 +313,5 @@ app.include_router(traces.router)
 app.include_router(evaluations.router)
 app.include_router(autonomy.router)
 app.include_router(releases.router)
+app.include_router(improvements.router)
 app.include_router(training.router)

@@ -1,14 +1,13 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T20:00
+Last updated: 2026-02-14T21:00
 
 ## Current State
 - **Branch**: `main`
-- **Main**: 693 tests passing, 0 lint errors
+- **Main**: 765 tests passing, 0 lint errors
 - **Open PRs**: 0
 - **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
-- **Phases 1-19, 21**: Complete
-- **Phase 20**: Planned
+- **All 21 Phases**: Complete
 - **Research**: 29 dossiers + 5 strategy docs complete
 
 ## What Was Done This Session (2026-02-14, Session 9)
@@ -23,29 +22,11 @@ Built the trace pipeline in `engine/src/agent33/observability/`: trace models, f
 
 ### Phase 17 Complete — Evaluation Suite Expansion & Regression Gates (77 new tests)
 
-Built the evaluation framework in `engine/src/agent33/evaluation/`:
-
-| # | Component | Module | Description |
-|---|-----------|--------|-------------|
-| 1 | Data models | `evaluation/models.py` | 10 enums, 10 Pydantic models for gates, metrics, regressions, baselines |
-| 2 | Golden tasks | `evaluation/golden_tasks.py` | GT-01..GT-07 tasks, GC-01..GC-04 cases, tag-based lookups |
-| 3 | Metrics calculator | `evaluation/metrics.py` | M-01 through M-05 computation |
-| 4 | Gate enforcer | `evaluation/gates.py` | 8 default thresholds (v1.0.0), gate execution matrix |
-| 5 | Regression detector | `evaluation/regression.py` | RI-01, RI-02, RI-04 detection; RegressionRecorder with triage |
-| 6 | Evaluation service | `evaluation/service.py` | Full pipeline: runs, metrics, gates, regressions, baselines |
-| 7 | Evaluation API | `api/routes/evaluations.py` | 12 REST endpoints under `/v1/evaluations` |
+Built the evaluation framework in `engine/src/agent33/evaluation/`.
 
 ### Phase 18 Complete — Autonomy Budget Enforcement & Policy Automation (94 new tests)
 
-Built the autonomy budget enforcement layer in `engine/src/agent33/autonomy/`:
-
-| # | Component | Module | Description |
-|---|-----------|--------|-------------|
-| 1 | Data models | `autonomy/models.py` | 7 enums, 10+ Pydantic models for budgets, enforcement, preflight |
-| 2 | Preflight checker | `autonomy/preflight.py` | PF-01..PF-10 checks |
-| 3 | Runtime enforcer | `autonomy/enforcement.py` | EF-01..EF-08 enforcement points for file/command/network scope |
-| 4 | Autonomy service | `autonomy/service.py` | Budget CRUD, lifecycle state machine, preflight, enforcement, escalation |
-| 5 | Autonomy API | `api/routes/autonomy.py` | 18 REST endpoints under `/v1/autonomy` |
+Built the autonomy budget enforcement layer in `engine/src/agent33/autonomy/`.
 
 ### Phase 19 Complete — Release & Sync Automation (66 new tests)
 
@@ -60,13 +41,42 @@ Built the release automation layer in `engine/src/agent33/release/`:
 | 5 | Release service | `release/service.py` | CRUD, lifecycle state machine, checklist, sync delegation, rollback delegation |
 | 6 | Release API | `api/routes/releases.py` | 18 REST endpoints under `/v1/releases` |
 
-## Priority 1: Next Phase (Phase 20 — Continuous Improvement)
+### Phase 20 Complete — Continuous Improvement & Research Intake (72 new tests)
 
-Phase dependency chain: ~~14 (Security)~~ -> ~~15 (Review)~~ -> ~~16 (Observability)~~ -> ~~17 (Evaluation Gates)~~ -> ~~18 (Autonomy Enforcement)~~ -> ~~19 (Release Automation)~~ -> **20 (Continuous Improvement)**
+Built the improvement layer in `engine/src/agent33/improvement/`:
 
-## Priority 2: ZeroClaw Feature Parity
+| # | Component | Module | Description |
+|---|-----------|--------|-------------|
+| 1 | Data models | `improvement/models.py` | 8 enums, 12+ Pydantic models for intakes, lessons, metrics, checklists, refreshes |
+| 2 | Checklists | `improvement/checklists.py` | CI-01..CI-15 canonical checks (per-release, monthly, quarterly) |
+| 3 | Metrics tracker | `improvement/metrics.py` | IM-01..IM-05 metrics, trend computation, snapshot storage |
+| 4 | Improvement service | `improvement/service.py` | Intake lifecycle, lessons CRUD, checklist management, metrics, roadmap refresh |
+| 5 | Improvement API | `api/routes/improvements.py` | 22 REST endpoints under `/v1/improvements` |
 
-Remaining ZeroClaw parity items to integrate into Phase 20:
+## All Phases Complete
+
+All 21 development phases are now complete:
+
+| Phase | Title | Tests |
+|-------|-------|-------|
+| 1-10 | Foundation through Governance | ~197 |
+| 11 | Agent Registry & Capability Catalog | — |
+| 12 | Tool Registry Operations | — |
+| 13 | Code Execution Layer | 36 |
+| 14 | Security Hardening | 59 |
+| 15 | Review Automation | 65 |
+| 16 | Observability & Trace Pipeline | 54 |
+| 17 | Evaluation Suite & Regression Gates | 77 |
+| 18 | Autonomy Budget Enforcement | 94 |
+| 19 | Release & Sync Automation | 66 |
+| 20 | Continuous Improvement | 72 |
+| 21 | Extensibility Patterns | — |
+
+## Next Priorities
+
+### Priority 1: ZeroClaw Feature Parity
+
+Remaining ZeroClaw parity items:
 
 | # | Item | Source | Priority | Effort |
 |---|------|--------|----------|--------|
@@ -78,6 +88,20 @@ Remaining ZeroClaw parity items to integrate into Phase 20:
 | 18 | Skills/plugin system | ZeroClaw `skills/mod.rs` | P2 | 4 days |
 | 19 | Channel health checks | ZeroClaw `channels/mod.rs` | P2 | 1.5 days |
 | 20 | Matrix channel adapter | ZeroClaw `channels/matrix.rs` | P3 | 2 days |
+
+### Priority 2: Critical Architecture Gaps (from Research Sprint)
+
+1. **Governance-Prompt Disconnect** — governance constraints exist but aren't injected into LLM prompts
+2. **RAG is first-gen** — needs hybrid search, reranking, tokenizer-aware chunking
+3. **No document processing** — can't ingest PDFs/images
+4. **Workflow engine gaps** — no sub-workflows, http-request, merge/join
+5. **No conversational routing** — only static DAGs, no LLM-decided handoffs
+
+### Priority 3: Performance Quick Wins
+
+- Batch embedding (67x speedup potential)
+- httpx connection pooling for Ollama
+- Tokenizer-aware chunking (1200 tokens vs 500 chars)
 
 ## Key Files to Know
 | Purpose | Path |
@@ -94,18 +118,17 @@ Remaining ZeroClaw parity items to integrate into Phase 20:
 | Evaluation suite | `engine/src/agent33/evaluation/` |
 | Autonomy enforcement | `engine/src/agent33/autonomy/` |
 | Release automation | `engine/src/agent33/release/` |
+| Continuous improvement | `engine/src/agent33/improvement/` |
 | Security | `engine/src/agent33/security/` |
 | Phase plans | `docs/phases/` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~14 min, 693 tests)
+python -m pytest tests/ -q               # full suite (~14 min, 765 tests)
 python -m pytest tests/ -x -q            # stop on first failure
+python -m pytest tests/test_phase20_improvements.py -x -q  # Phase 20 tests (72 tests)
 python -m pytest tests/test_phase19_release.py -x -q  # Phase 19 tests (66 tests)
 python -m pytest tests/test_phase18_autonomy.py -x -q  # Phase 18 tests (94 tests)
-python -m pytest tests/test_phase17_evaluation.py -x -q  # Phase 17 tests (77 tests)
-python -m pytest tests/test_phase16_observability.py -x -q  # Phase 16 tests (54 tests)
-python -m pytest tests/test_phase15_review.py -x -q  # Phase 15 tests (65 tests)
 python -m ruff check src/ tests/         # lint (0 errors)
 ```

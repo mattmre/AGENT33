@@ -59,6 +59,7 @@ agent33 status                                      # health check
 - `evaluation/` — Evaluation suite and regression gates (Phase 17): golden tasks (GT-01..GT-07), golden cases (GC-01..GC-04), metrics calculator (M-01..M-05), gate enforcer with thresholds, regression detector (RI-01..RI-05), evaluation service, API endpoints
 - `autonomy/` — Autonomy budget enforcement (Phase 18): budget lifecycle state machine (DRAFT→ACTIVE→COMPLETED), preflight checks (PF-01..PF-10), runtime enforcer (EF-01..EF-08) for file/command/network scope, stop conditions, escalation management, API endpoints
 - `release/` — Release & sync automation (Phase 19): release lifecycle state machine (PLANNED→FROZEN→RC→VALIDATING→RELEASED→ROLLED_BACK), pre-release checklist (RL-01..RL-08), sync engine with dry-run and fnmatch matching, rollback manager with decision matrix, release service, API endpoints
+- `improvement/` — Continuous improvement (Phase 20): research intake lifecycle (SUBMITTED→TRIAGED→ANALYZING→ACCEPTED/DEFERRED/REJECTED→TRACKED), lessons learned with action tracking, improvement checklists (CI-01..CI-15), metrics tracker (IM-01..IM-05 with trend computation), roadmap refresh records, API endpoints
 
 ### Multi-Tenancy
 
@@ -83,7 +84,7 @@ Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. 
 
 ## Development Phases
 
-Phase plans live in `docs/phases/`. Phases 1-19 and 21 are complete. Phase 20 is planned. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
+Phase plans live in `docs/phases/`. All 21 phases are complete. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
 
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
