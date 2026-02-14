@@ -19,6 +19,29 @@ class FileOpsTool:
     def description(self) -> str:
         return "Read, write, or list files on the local filesystem."
 
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["read", "write", "list"],
+                    "description": "File operation to perform.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Target file or directory path.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Content to write (for 'write' operation).",
+                    "default": "",
+                },
+            },
+            "required": ["operation", "path"],
+        }
+
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Run a file operation.
 

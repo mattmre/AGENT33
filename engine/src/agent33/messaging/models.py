@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,3 +34,13 @@ class PairingRequest(BaseModel):
     user_id: str
     code: str
     expires_at: datetime
+
+
+class ChannelHealthResult(BaseModel):
+    """Health check result for a messaging channel."""
+
+    platform: str
+    status: Literal["ok", "degraded", "unavailable"]
+    latency_ms: float | None = None
+    detail: str = ""
+    queue_depth: int = 0

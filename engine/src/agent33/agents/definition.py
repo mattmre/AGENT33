@@ -208,6 +208,9 @@ class AgentDefinition(BaseModel):
     status: AgentStatus = Field(default=AgentStatus.ACTIVE)
     autonomy_level: AutonomyLevel = Field(default=AutonomyLevel.SUPERVISED)
 
+    # Skills that are preloaded into this agent's context (by name).
+    skills: list[str] = Field(default_factory=list)
+
     @model_validator(mode="before")
     @classmethod
     def normalise_deprecated_roles(cls, data: Any) -> Any:

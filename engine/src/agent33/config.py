@@ -68,6 +68,21 @@ class Settings(BaseSettings):
     http_max_keepalive: int = 10
     embedding_batch_size: int = 100
 
+    # Embedding cache
+    embedding_cache_enabled: bool = True
+    embedding_cache_max_size: int = 1024
+
+    # RAG / Hybrid search
+    rag_top_k: int = 5
+    rag_similarity_threshold: float = 0.3
+    rag_hybrid_enabled: bool = True
+    rag_vector_weight: float = 0.7  # BM25 weight = 1 - vector_weight
+    rag_rrf_k: int = 60
+
+    # Chunking
+    chunk_tokens: int = 1200
+    chunk_overlap_tokens: int = 100
+
     # Training (self-evolving loop)
     training_enabled: bool = True
     training_optimize_interval: int = 100
@@ -77,6 +92,10 @@ class Settings(BaseSettings):
 
     # Agent definitions
     agent_definitions_dir: str = "agent-definitions"
+
+    # Skills
+    skill_definitions_dir: str = "skills"
+    skill_max_instructions_chars: int = 16000
 
     # Environment
     environment: str = "development"

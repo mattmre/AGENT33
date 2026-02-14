@@ -15,7 +15,7 @@ All engine commands run from `engine/`:
 
 ```bash
 # Tests
-python -m pytest tests/ -q                          # full suite (~197 tests)
+python -m pytest tests/ -q                          # full suite (~973 tests)
 python -m pytest tests/test_execution_executor.py -q  # single test file
 python -m pytest tests/ -k "test_name" -q           # single test by name
 python -m pytest tests/ -x -q                       # stop on first failure
@@ -40,7 +40,7 @@ agent33 status                                      # health check
 
 ### Engine Package Layout (`engine/src/agent33/`)
 
-**Entry point**: `main.py` — FastAPI app with lifespan that initializes DB, Redis, NATS, agent registry, code executor, agent-workflow bridge, AirLLM, memory, and training subsystems.
+**Entry point**: `main.py` — FastAPI app with lifespan that initializes DB, Redis, NATS, agent registry, code executor, model router, embedding provider (+cache), BM25 index, hybrid searcher, RAG pipeline, progressive recall, skill registry (+injector), agent-workflow bridge, AirLLM, memory (observation/summarizer), and training subsystems.
 
 **Config**: `config.py` — Pydantic Settings, `env_prefix=""`, loads from `.env`. Variable names map directly to uppercase env vars.
 
@@ -48,11 +48,12 @@ agent33 status                                      # health check
 - `agents/` — Agent registry (`registry.py` auto-discovers JSON defs from `agent_definitions_dir`), definition model, runtime (prompt construction + LLM invocation)
 - `workflows/` — DAG-based workflow engine: definition model, topological sort, step executor with retries/timeouts, expression evaluator, state machine, checkpoint persistence. Actions in `actions/` (invoke_agent, run_command, validate, transform, conditional, parallel_group, wait, execute_code)
 - `execution/` — Code execution layer (Phase 13): `models.py` (SandboxConfig, ExecutionContract, ExecutionResult), `validation.py` (IV-01..05 input validation), `adapters/` (BaseAdapter, CLIAdapter with subprocess), `executor.py` (CodeExecutor pipeline), `disclosure.py` (progressive disclosure L0-L3)
-- `llm/` — Provider abstraction: Ollama, OpenAI-compatible, ModelRouter
-- `memory/` — Short-term buffer, pgvector long-term store, embeddings, RAG pipeline, session state, ingestion, retention
+- `skills/` — Skills/plugin system: SkillDefinition model, SKILL.md/YAML loader with frontmatter parsing, SkillRegistry (discover, CRUD, search), SkillInjector (L0/L1/L2 progressive disclosure, tool context resolution), wired into AgentRuntime
+- `llm/` — Provider abstraction: Ollama, OpenAI-compatible, ModelRouter, provider catalog (22+ providers with auto-registration from env vars)
+- `memory/` — Short-term buffer, pgvector long-term store, embeddings (with LRU cache), hybrid RAG pipeline (BM25 + vector via RRF), token-aware chunking (1200 tokens), BM25 index, session state, ingestion, retention
 - `security/` — JWT/API-key auth, AuthMiddleware, encryption, vault, permissions, prompt injection detection, allowlists
-- `tools/` — Tool framework: registry, governance/allowlist enforcement, builtins (shell, file_ops, web_fetch, browser)
-- `messaging/` — External integrations (Telegram, Discord, Slack, WhatsApp) via NATS bus
+- `tools/` — Tool framework: registry with JSON Schema validation (SchemaAwareTool protocol, validated_execute), governance/allowlist enforcement, builtins (shell, file_ops, web_fetch, browser)
+- `messaging/` — External integrations (Telegram, Discord, Slack, WhatsApp) via NATS bus, per-channel health checks (health_check() on MessagingAdapter protocol)
 - `automation/` — APScheduler, webhooks, dead-letter queue, event sensors
 - `review/` — Two-layer review automation (Phase 15): risk assessment, reviewer assignment, signoff state machine, review service, API endpoints
 - `observability/` — structlog, tracing, metrics, lineage, replay, alerts, trace pipeline (Phase 16): trace models, failure taxonomy (10 categories), trace collector, retention policies, trace API
@@ -71,7 +72,11 @@ AuthMiddleware resolves tenant from API key or JWT. All DB models have `tenant_i
 
 ### Agent Routes DI Pattern
 
-Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. The workflow bridge (`invoke_agent.py`) has `set_definition_registry()` as a fallback.
+Routes use `Depends(get_registry)` which reads from `app.state.agent_registry`. The invoke route pulls `skill_injector` and `progressive_recall` from `app.state` and passes them to `AgentRuntime`. The workflow bridge (`invoke_agent.py`) has `set_definition_registry()` as a fallback.
+
+### Lifespan Initialization Order
+
+PostgreSQL → Redis → NATS → AgentRegistry → CodeExecutor → ModelRouter → EmbeddingProvider (+EmbeddingCache) → BM25Index → HybridSearcher → RAGPipeline → ProgressiveRecall → SkillRegistry (+SkillInjector) → Agent-Workflow Bridge → AirLLM (optional) → Memory (ObservationCapture, SessionSummarizer) → Training (optional). Subsystems stored on `app.state`, shut down in reverse order.
 
 ## Tool Configuration
 

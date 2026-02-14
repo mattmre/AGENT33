@@ -1,107 +1,65 @@
 # Next Session Briefing
 
-Last updated: 2026-02-14T21:00
+Last updated: 2026-02-15T01:00
 
 ## Current State
 - **Branch**: `main`
-- **Main**: 765 tests passing, 0 lint errors
+- **Main**: ~973 tests passing, 0 lint errors
 - **Open PRs**: 0
-- **Merged PRs**: #2 (Trivy), #3 (Performance), #4 (Governance), #5 (IDOR)
 - **All 21 Phases**: Complete
 - **Research**: 29 dossiers + 5 strategy docs complete
+- **Integration Wiring**: Complete (Session 12)
 
-## What Was Done This Session (2026-02-14, Session 9)
+## What Was Done This Session (2026-02-15, Session 12)
 
-### Phase 15 Complete — Review Automation & Two-Layer Review (65 new tests)
+### Session 12: Integration Wiring (10 new tests)
 
-Built the `engine/src/agent33/review/` module implementing the two-layer review workflow.
+Connected all previously-built subsystems into the application lifecycle (`main.py`):
 
-### Phase 16 Complete — Observability & Trace Pipeline (54 new tests)
+| # | Subsystem | Wired To | Details |
+|---|-----------|----------|---------|
+| 1 | EmbeddingProvider | `app.state.embedding_provider` | Pooled httpx client using config settings (http_max_connections, http_max_keepalive) |
+| 2 | EmbeddingCache | `app.state.embedding_cache` | LRU cache wrapping provider when `embedding_cache_enabled` (default True) |
+| 3 | BM25Index | `app.state.bm25_index` | Starts empty, populated incrementally via ingestion pipeline |
+| 4 | HybridSearcher | `app.state.hybrid_searcher` | Created when `rag_hybrid_enabled` (default True), combines BM25 + pgvector |
+| 5 | RAGPipeline | `app.state.rag_pipeline` | Uses cached embedder, long-term memory, hybrid searcher, config thresholds |
+| 6 | ProgressiveRecall | `app.state.progressive_recall` | 3-layer token-efficient retrieval, passed to AgentRuntime |
+| 7 | SkillRegistry | `app.state.skill_registry` | Auto-discovers from `skill_definitions_dir`, starts empty if dir missing |
+| 8 | SkillInjector | `app.state.skill_injector` | Wraps SkillRegistry, passed to AgentRuntime |
 
-Built the trace pipeline in `engine/src/agent33/observability/`: trace models, failure taxonomy (10 categories), trace collector, retention policies, trace API.
+**Agent Runtime Integration**:
+- `_register_agent_runtime_bridge()` now accepts and passes `skill_injector` and `progressive_recall` to `AgentRuntime`
+- `agents.py` invoke endpoint pulls `skill_injector` and `progressive_recall` from `app.state` and passes to `AgentRuntime`
+- Embedding provider closed on shutdown (cache.close() delegates to provider.close())
 
-### Phase 17 Complete — Evaluation Suite Expansion & Regression Gates (77 new tests)
+**Tests added** to `test_integration_wiring.py`:
+- TestEmbeddingSubsystem (6 tests): provider, cache, BM25, RAG pipeline, hybrid searcher, progressive recall
+- TestSkillSubsystem (3 tests): registry, injector, empty-when-no-dir
+- TestAgentInvokeSubsystemPassthrough (1 test): verifies invoke route passes subsystems to AgentRuntime
 
-Built the evaluation framework in `engine/src/agent33/evaluation/`.
-
-### Phase 18 Complete — Autonomy Budget Enforcement & Policy Automation (94 new tests)
-
-Built the autonomy budget enforcement layer in `engine/src/agent33/autonomy/`.
-
-### Phase 19 Complete — Release & Sync Automation (66 new tests)
-
-Built the release automation layer in `engine/src/agent33/release/`:
-
-| # | Component | Module | Description |
-|---|-----------|--------|-------------|
-| 1 | Data models | `release/models.py` | 8 enums, 8+ Pydantic models for releases, sync, rollback |
-| 2 | Pre-release checklist | `release/checklist.py` | RL-01..RL-08 checks, RL-07 major-only, ChecklistEvaluator |
-| 3 | Sync engine | `release/sync.py` | Rule matching (fnmatch), dry-run support, execution, validation, checksum |
-| 4 | Rollback manager | `release/rollback.py` | Decision matrix (severity x impact), lifecycle (create/approve/step/complete/fail) |
-| 5 | Release service | `release/service.py` | CRUD, lifecycle state machine, checklist, sync delegation, rollback delegation |
-| 6 | Release API | `api/routes/releases.py` | 18 REST endpoints under `/v1/releases` |
-
-### Phase 20 Complete — Continuous Improvement & Research Intake (72 new tests)
-
-Built the improvement layer in `engine/src/agent33/improvement/`:
-
-| # | Component | Module | Description |
-|---|-----------|--------|-------------|
-| 1 | Data models | `improvement/models.py` | 8 enums, 12+ Pydantic models for intakes, lessons, metrics, checklists, refreshes |
-| 2 | Checklists | `improvement/checklists.py` | CI-01..CI-15 canonical checks (per-release, monthly, quarterly) |
-| 3 | Metrics tracker | `improvement/metrics.py` | IM-01..IM-05 metrics, trend computation, snapshot storage |
-| 4 | Improvement service | `improvement/service.py` | Intake lifecycle, lessons CRUD, checklist management, metrics, roadmap refresh |
-| 5 | Improvement API | `api/routes/improvements.py` | 22 REST endpoints under `/v1/improvements` |
-
-## All Phases Complete
-
-All 21 development phases are now complete:
-
-| Phase | Title | Tests |
-|-------|-------|-------|
-| 1-10 | Foundation through Governance | ~197 |
-| 11 | Agent Registry & Capability Catalog | — |
-| 12 | Tool Registry Operations | — |
-| 13 | Code Execution Layer | 36 |
-| 14 | Security Hardening | 59 |
-| 15 | Review Automation | 65 |
-| 16 | Observability & Trace Pipeline | 54 |
-| 17 | Evaluation Suite & Regression Gates | 77 |
-| 18 | Autonomy Budget Enforcement | 94 |
-| 19 | Release & Sync Automation | 66 |
-| 20 | Continuous Improvement | 72 |
-| 21 | Extensibility Patterns | — |
+### Previous Sessions (10-11): See git history
 
 ## Next Priorities
 
-### Priority 1: ZeroClaw Feature Parity
+### Priority 1: Critical Architecture Gaps (from Research Sprint)
 
-Remaining ZeroClaw parity items:
+1. **Governance-Prompt Disconnect** — RESOLVED in Session 10
+2. **Integration Wiring** — RESOLVED in Session 12
+3. **No document processing** — can't ingest PDFs/images (Sparrow, PaddleOCR patterns)
+4. **Workflow engine gaps** — no sub-workflows, http-request, merge/join (n8n-workflows)
+5. **No conversational routing** — only static DAGs, no LLM-decided handoffs (Swarm)
 
-| # | Item | Source | Priority | Effort |
-|---|------|--------|----------|--------|
-| 13 | Hybrid search (BM25 + vector) | ZeroClaw `memory/vector.rs` | P0 | 3 days |
-| 14 | Embedding cache with LRU | ZeroClaw `memory/sqlite.rs` | P1 | 1.5 days |
-| 15 | Tokenizer-aware chunking | ZeroClaw `memory/chunker.rs` | P1 | 1 day |
-| 16 | JSON Schema on Tool protocol | ZeroClaw `tools/traits.rs` | P1 | 2 days |
-| 17 | Provider registry expansion (22+) | ZeroClaw providers | P1 | 2 days |
-| 18 | Skills/plugin system | ZeroClaw `skills/mod.rs` | P2 | 4 days |
-| 19 | Channel health checks | ZeroClaw `channels/mod.rs` | P2 | 1.5 days |
-| 20 | Matrix channel adapter | ZeroClaw `channels/matrix.rs` | P3 | 2 days |
+### Priority 2: BM25 Warm-Up from Existing Memories
 
-### Priority 2: Critical Architecture Gaps (from Research Sprint)
+The BM25 index currently starts empty and relies on new ingestion to populate. For existing deployments with data in pgvector, add:
+- `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
+- Startup warm-up loop that populates BM25 from existing records (with configurable limit)
 
-1. **Governance-Prompt Disconnect** — governance constraints exist but aren't injected into LLM prompts
-2. **RAG is first-gen** — needs hybrid search, reranking, tokenizer-aware chunking
-3. **No document processing** — can't ingest PDFs/images
-4. **Workflow engine gaps** — no sub-workflows, http-request, merge/join
-5. **No conversational routing** — only static DAGs, no LLM-decided handoffs
+### Priority 3: Remaining ZeroClaw Parity
 
-### Priority 3: Performance Quick Wins
-
-- Batch embedding (67x speedup potential)
-- httpx connection pooling for Ollama
-- Tokenizer-aware chunking (1200 tokens vs 500 chars)
+| # | Item | Priority | Effort |
+|---|------|----------|--------|
+| 20 | Matrix channel adapter | P3 | 2 days |
 
 ## Key Files to Know
 | Purpose | Path |
@@ -109,26 +67,31 @@ Remaining ZeroClaw parity items:
 | Entry point | `engine/src/agent33/main.py` |
 | Config | `engine/src/agent33/config.py` |
 | Agent runtime | `engine/src/agent33/agents/runtime.py` |
-| Agent registry | `engine/src/agent33/agents/registry.py` |
-| Agent definitions | `engine/agent-definitions/*.json` |
-| Tool registry | `engine/src/agent33/tools/registry.py` |
-| Execution layer | `engine/src/agent33/execution/` |
-| Review automation | `engine/src/agent33/review/` |
-| Observability | `engine/src/agent33/observability/` |
-| Evaluation suite | `engine/src/agent33/evaluation/` |
-| Autonomy enforcement | `engine/src/agent33/autonomy/` |
-| Release automation | `engine/src/agent33/release/` |
-| Continuous improvement | `engine/src/agent33/improvement/` |
-| Security | `engine/src/agent33/security/` |
+| Agent invoke route | `engine/src/agent33/api/routes/agents.py` |
+| Skill definition | `engine/src/agent33/skills/definition.py` |
+| Skill registry | `engine/src/agent33/skills/registry.py` |
+| Skill injector | `engine/src/agent33/skills/injection.py` |
+| Provider catalog | `engine/src/agent33/llm/providers.py` |
+| Tool schema | `engine/src/agent33/tools/schema.py` |
+| BM25 index | `engine/src/agent33/memory/bm25.py` |
+| Hybrid search | `engine/src/agent33/memory/hybrid.py` |
+| Embedding cache | `engine/src/agent33/memory/cache.py` |
+| RAG pipeline | `engine/src/agent33/memory/rag.py` |
+| Progressive recall | `engine/src/agent33/memory/progressive_recall.py` |
+| Health checks | `engine/src/agent33/api/routes/health.py` |
+| Integration wiring tests | `engine/tests/test_integration_wiring.py` |
 | Phase plans | `docs/phases/` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q               # full suite (~14 min, 765 tests)
-python -m pytest tests/ -x -q            # stop on first failure
-python -m pytest tests/test_phase20_improvements.py -x -q  # Phase 20 tests (72 tests)
-python -m pytest tests/test_phase19_release.py -x -q  # Phase 19 tests (66 tests)
-python -m pytest tests/test_phase18_autonomy.py -x -q  # Phase 18 tests (94 tests)
-python -m ruff check src/ tests/         # lint (0 errors)
+python -m pytest tests/ -q                            # full suite (~973 tests)
+python -m pytest tests/ -x -q                         # stop on first failure
+python -m pytest tests/test_integration_wiring.py -x -q  # integration wiring (19 tests)
+python -m pytest tests/test_skills.py -x -q           # skills tests (48 tests)
+python -m pytest tests/test_channel_health.py -x -q   # channel health tests (32 tests)
+python -m pytest tests/test_tool_schema.py -x -q      # tool schema tests (37 tests)
+python -m pytest tests/test_provider_catalog.py -x -q # provider catalog tests (24 tests)
+python -m pytest tests/test_hybrid_rag.py -x -q       # hybrid RAG tests (57 tests)
+python -m ruff check src/ tests/                       # lint (0 errors)
 ```

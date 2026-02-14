@@ -9,12 +9,13 @@ from typing import Any
 
 import yaml
 
-from agent33.tools.base import Tool
+from agent33.tools.base import Tool, ToolContext, ToolResult
 from agent33.tools.registry_entry import (
     ToolProvenance,
     ToolRegistryEntry,
     ToolStatus,
 )
+from agent33.tools.schema import get_tool_schema, validate_params
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,35 @@ class ToolRegistry:
         )
         logger.info("Tool %s status → %s", name, status.value)
         return True
+
+    async def validated_execute(
+        self,
+        name: str,
+        params: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        """Validate params against the tool's schema, then execute.
+
+        If the tool has a declared JSON Schema (via the tool itself or
+        its registry entry), parameters are validated before execution.
+        Invalid parameters return a ``ToolResult.fail`` without calling
+        the tool.
+        """
+        tool = self._tools.get(name)
+        if tool is None:
+            return ToolResult.fail(f"Tool '{name}' not found in registry")
+
+        entry = self._entries.get(name)
+        schema = get_tool_schema(tool, entry)
+
+        if schema:
+            result = validate_params(params, schema)
+            if not result.valid:
+                return ToolResult.fail(
+                    f"Parameter validation failed: {'; '.join(result.errors)}"
+                )
+
+        return await tool.execute(params, context)
 
     def load_definitions(self, definitions_dir: str) -> int:
         """Load YAML tool definitions from *definitions_dir*.

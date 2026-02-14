@@ -6,11 +6,12 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import time
 from typing import Any
 
 import httpx
 
-from agent33.messaging.models import Message
+from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,49 @@ class WhatsAppAdapter:
         if mode == "subscribe" and token == self._verify_token:
             return challenge
         return None
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> ChannelHealthResult:
+        """Probe WhatsApp Cloud API via phone number info endpoint."""
+        if self._client is None:
+            return ChannelHealthResult(
+                platform="whatsapp",
+                status="unavailable",
+                detail="Adapter not started",
+                queue_depth=self._queue.qsize(),
+            )
+        start = time.monotonic()
+        try:
+            resp = await self._client.get(
+                f"{_API_BASE}/{self._phone_number_id}",
+            )
+            latency = (time.monotonic() - start) * 1000
+            if resp.status_code == 200:
+                return ChannelHealthResult(
+                    platform="whatsapp",
+                    status="ok",
+                    latency_ms=round(latency, 2),
+                    queue_depth=self._queue.qsize(),
+                )
+            return ChannelHealthResult(
+                platform="whatsapp",
+                status="degraded",
+                latency_ms=round(latency, 2),
+                detail=f"API returned status {resp.status_code}",
+                queue_depth=self._queue.qsize(),
+            )
+        except Exception as exc:
+            latency = (time.monotonic() - start) * 1000
+            return ChannelHealthResult(
+                platform="whatsapp",
+                status="unavailable",
+                latency_ms=round(latency, 2),
+                detail=str(exc),
+                queue_depth=self._queue.qsize(),
+            )
 
     # ------------------------------------------------------------------
     # Internal

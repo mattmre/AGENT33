@@ -52,3 +52,29 @@ class Tool(Protocol):
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Run the tool with the given parameters and context."""
         ...
+
+
+@runtime_checkable
+class SchemaAwareTool(Tool, Protocol):
+    """Extended tool protocol with JSON Schema parameter declaration.
+
+    Tools that implement this protocol declare their expected input
+    schema, enabling automatic validation before execution.
+    """
+
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        """JSON Schema describing accepted parameters.
+
+        Example::
+
+            {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Command to run"},
+                    "timeout": {"type": "integer", "default": 30},
+                },
+                "required": ["command"],
+            }
+        """
+        ...

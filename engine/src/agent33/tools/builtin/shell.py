@@ -27,6 +27,25 @@ class ShellTool:
     def description(self) -> str:
         return "Run a shell command and capture its output."
 
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The shell command to execute.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Maximum seconds to wait (default 30).",
+                    "default": 30,
+                    "minimum": 1,
+                },
+            },
+            "required": ["command"],
+        }
+
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Run a shell command.
 
