@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     model_router = ModelRouter()
     app.state.model_router = model_router
 
-    _register_agent_runtime_bridge(model_router, register_agent)
+    _register_agent_runtime_bridge(model_router, register_agent, registry=agent_registry)
     logger.info("agent_workflow_bridge_registered")
 
     # --- AirLLM provider (optional) ---
@@ -199,12 +199,14 @@ def _redact_url(url: str) -> str:
 def _register_agent_runtime_bridge(
     model_router: ModelRouter,
     register_fn: Callable[..., object],
+    registry: Any = None,
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
     The bridge intercepts calls from the workflow executor's invoke-agent
-    action.  It builds a lightweight AgentDefinition on the fly and delegates
-    to AgentRuntime.invoke so that real LLM calls happen.
+    action.  It first looks up the agent in the registry to use the real
+    definition (with governance, ownership, safety rules).  Falls back to
+    a lightweight throwaway definition only when the name is not registered.
     """
     from agent33.agents.definition import (
         AgentConstraints,
@@ -218,21 +220,28 @@ def _register_agent_runtime_bridge(
         agent_name = inputs.pop("agent_name", "workflow-agent")
         model = inputs.pop("model", settings.ollama_default_model)
 
-        definition = AgentDefinition(
-            name=agent_name,
-            version="0.1.0",
-            role=AgentRole.WORKER,
-            description=f"Dynamically invoked agent '{agent_name}'",
-            inputs={
-                k: AgentParameter(type="string", description="Workflow input")
-                for k in inputs
-                if k.isidentifier()
-            },
-            outputs={
-                "result": AgentParameter(type="string", description="result"),
-            },
-            constraints=AgentConstraints(),
-        )
+        # Try to look up actual registered definition first
+        definition = None
+        if registry is not None:
+            definition = registry.get(agent_name)
+
+        if definition is None:
+            # Fall back to throwaway definition for unknown agents
+            definition = AgentDefinition(
+                name=agent_name,
+                version="0.1.0",
+                role=AgentRole.WORKER,
+                description=f"Dynamically invoked agent '{agent_name}'",
+                inputs={
+                    k: AgentParameter(type="string", description="Workflow input")
+                    for k in inputs
+                    if k.isidentifier()
+                },
+                outputs={
+                    "result": AgentParameter(type="string", description="result"),
+                },
+                constraints=AgentConstraints(),
+            )
         runtime = AgentRuntime(definition=definition, router=model_router, model=model)
         result = await runtime.invoke(inputs)
         return result.output
