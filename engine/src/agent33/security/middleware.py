@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS: set[str] = {"/health", "/docs", "/redoc", "/openapi.json"}
+_PUBLIC_PATHS: set[str] = {"/health", "/docs", "/redoc", "/openapi.json", "/v1/auth/token"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
