@@ -39,6 +39,7 @@ class _CannedProvider:
         model: str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         user_content = ""
         for msg in reversed(messages):

@@ -11,7 +11,12 @@ from agent33.llm.base import ChatMessage, LLMResponse
 
 if TYPE_CHECKING:
     from agent33.agents.definition import AgentDefinition
+    from agent33.agents.tool_loop import ToolLoopConfig
+    from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
+    from agent33.tools.base import ToolContext
+    from agent33.tools.governance import ToolGovernance
+    from agent33.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,20 @@ class AgentResult:
     raw_response: str
     tokens_used: int
     model: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class IterativeAgentResult:
+    """Result of invoking an agent with the iterative tool-use loop."""
+
+    output: dict[str, Any]
+    raw_response: str
+    tokens_used: int
+    model: str
+    iterations: int
+    tool_calls_made: int
+    tools_used: list[str]
+    termination_reason: str
 
 
 def _build_system_prompt(definition: AgentDefinition) -> str:
@@ -191,6 +210,10 @@ class AgentRuntime:
         progressive_recall: Any | None = None,
         skill_injector: Any | None = None,
         active_skills: list[str] | None = None,
+        tool_registry: ToolRegistry | None = None,
+        tool_governance: ToolGovernance | None = None,
+        tool_context: ToolContext | None = None,
+        runtime_enforcer: RuntimeEnforcer | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -202,6 +225,10 @@ class AgentRuntime:
         self._progressive_recall = progressive_recall
         self._skill_injector = skill_injector
         self._active_skills = active_skills or definition.skills
+        self._tool_registry = tool_registry
+        self._tool_governance = tool_governance
+        self._tool_context = tool_context
+        self._runtime_enforcer = runtime_enforcer
 
     @property
     def definition(self) -> AgentDefinition:
@@ -316,6 +343,142 @@ class AgentRuntime:
                 )
                 self._trace_emitter.emit_result(
                     self._definition.name, response.content
+                )
+            except Exception:
+                logger.debug("failed to emit trace", exc_info=True)
+
+        return result
+
+    async def invoke_iterative(
+        self,
+        inputs: dict[str, Any],
+        config: ToolLoopConfig | None = None,
+    ) -> IterativeAgentResult:
+        """Run the agent with the iterative tool-use loop.
+
+        Unlike :meth:`invoke`, this method repeatedly calls the LLM, parses
+        tool calls from the response, executes them via the ToolRegistry
+        (with governance and autonomy checks), and feeds the results back
+        until the LLM signals completion or a limit is reached.
+
+        Requires ``tool_registry`` to be set on this runtime instance.
+
+        Raises
+        ------
+        RuntimeError
+            If ``tool_registry`` was not provided at construction time.
+        ValueError
+            If required inputs are missing.
+        """
+        if self._tool_registry is None:
+            raise RuntimeError(
+                "invoke_iterative() requires tool_registry — "
+                "pass it when constructing AgentRuntime"
+            )
+
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        # --- Build system prompt (same as invoke) ---
+        system_prompt = _build_system_prompt(self._definition)
+
+        # Inject skill context if injector is available
+        if self._skill_injector is not None:
+            if self._definition.skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
+                    self._definition.skills
+                )
+            for skill_name in self._active_skills:
+                system_prompt += (
+                    "\n\n" + self._skill_injector.build_skill_instructions_block(skill_name)
+                )
+
+        # Inject memory context if progressive recall is available
+        if self._progressive_recall is not None:
+            try:
+                user_query = json.dumps(inputs) if inputs else ""
+                recall_results = await self._progressive_recall.search(
+                    user_query, level="index", top_k=5
+                )
+                if recall_results:
+                    memory_lines = ["\n# Prior Context (from memory)"]
+                    for rr in recall_results:
+                        memory_lines.append(f"- {rr.content}")
+                    system_prompt += "\n" + "\n".join(memory_lines)
+            except Exception:
+                logger.debug("failed to retrieve memory context", exc_info=True)
+
+        # Validate required inputs
+        for name, param in self._definition.inputs.items():
+            if param.required and name not in inputs:
+                raise ValueError(f"Missing required input: {name}")
+
+        user_content = json.dumps(inputs, indent=2)
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_content),
+        ]
+
+        # --- Create and run the tool loop ---
+        loop_config = config or ToolLoopConfig()
+        loop = ToolLoop(
+            router=self._router,
+            tool_registry=self._tool_registry,
+            tool_governance=self._tool_governance,
+            tool_context=self._tool_context,
+            observation_capture=self._observation_capture,
+            runtime_enforcer=self._runtime_enforcer,
+            config=loop_config,
+            agent_name=self._definition.name,
+            session_id=self._session_id,
+        )
+
+        max_tokens = self._definition.constraints.max_tokens
+        loop_result = await loop.run(
+            messages=messages,
+            model=self._model,
+            temperature=self._temperature,
+            max_tokens=max_tokens,
+        )
+
+        result = IterativeAgentResult(
+            output=loop_result.output,
+            raw_response=loop_result.raw_response,
+            tokens_used=loop_result.tokens_used,
+            model=loop_result.model,
+            iterations=loop_result.iterations,
+            tool_calls_made=loop_result.tool_calls_made,
+            tools_used=loop_result.tools_used,
+            termination_reason=loop_result.termination_reason,
+        )
+
+        # Record observation for completed iterative invocation
+        if self._observation_capture is not None:
+            try:
+                from agent33.memory.observation import Observation
+
+                obs = Observation(
+                    session_id=self._session_id,
+                    agent_name=self._definition.name,
+                    event_type="iterative_completion",
+                    content=loop_result.raw_response[:2000],
+                    metadata={
+                        "model": loop_result.model,
+                        "tokens": loop_result.tokens_used,
+                        "iterations": loop_result.iterations,
+                        "tool_calls": loop_result.tool_calls_made,
+                        "termination": loop_result.termination_reason,
+                    },
+                    tags=[],
+                )
+                await self._observation_capture.record(obs)
+            except Exception:
+                logger.debug("failed to record observation", exc_info=True)
+
+        # Emit trace spans
+        if self._trace_emitter is not None:
+            try:
+                self._trace_emitter.emit_result(
+                    self._definition.name, loop_result.raw_response
                 )
             except Exception:
                 logger.debug("failed to emit trace", exc_info=True)
