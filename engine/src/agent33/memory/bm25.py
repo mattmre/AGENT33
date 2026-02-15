@@ -119,6 +119,7 @@ class BM25Index:
         self._doc_freqs: dict[str, int] = {}
         self._n: int = 0
         self._avgdl: float = 0.0
+        self._total_dl: int = 0  # track total doc length incrementally
 
     # ── Corpus building ──────────────────────────────────────────────
 
@@ -132,23 +133,48 @@ class BM25Index:
         doc_idx = self._n
         self._docs.append((content, metadata or {}))
         self._tokenized.append(tokens)
-        self._doc_lens.append(len(tokens))
+        doc_len = len(tokens)
+        self._doc_lens.append(doc_len)
         self._n += 1
+        self._total_dl += doc_len
 
         # Update document frequency counts (each unique term in the doc).
         for term in set(tokens):
             self._doc_freqs[term] = self._doc_freqs.get(term, 0) + 1
 
-        # Recompute average document length.
-        self._avgdl = sum(self._doc_lens) / self._n
+        # Update average document length incrementally (O(1)).
+        self._avgdl = self._total_dl / self._n
         return doc_idx
 
     def add_documents(
         self,
         documents: list[tuple[str, dict[str, Any] | None]],
     ) -> list[int]:
-        """Bulk-add documents.  Returns list of document indices."""
-        return [self.add_document(text, meta) for text, meta in documents]
+        """Bulk-add documents.  Returns list of document indices.
+
+        Defers avgdl computation until after all documents are added,
+        avoiding redundant recalculation per insert.
+        """
+        indices: list[int] = []
+        for content, metadata in documents:
+            tokens = tokenize(content)
+            doc_idx = self._n
+            self._docs.append((content, metadata or {}))
+            self._tokenized.append(tokens)
+            doc_len = len(tokens)
+            self._doc_lens.append(doc_len)
+            self._n += 1
+            self._total_dl += doc_len
+
+            for term in set(tokens):
+                self._doc_freqs[term] = self._doc_freqs.get(term, 0) + 1
+
+            indices.append(doc_idx)
+
+        # Compute avgdl once at end of batch.
+        if self._n > 0:
+            self._avgdl = self._total_dl / self._n
+        return indices
 
     @property
     def size(self) -> int:
@@ -224,3 +250,4 @@ class BM25Index:
         self._doc_freqs.clear()
         self._n = 0
         self._avgdl = 0.0
+        self._total_dl = 0

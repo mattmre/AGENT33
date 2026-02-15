@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from agent33.security.permissions import require_scope
 
@@ -130,4 +130,120 @@ async def summarize_session(session_id: str, request: Request) -> SummarizeRespo
         summary=result.get("summary", ""),
         key_facts=result.get("key_facts", []),
         tags=result.get("tags", []),
+    )
+
+
+# ── Ingestion pipeline ──────────────────────────────────────────────────
+
+
+class IngestRequest(BaseModel):
+    content: str
+    content_type: Literal["text/plain", "text/markdown"] = "text/plain"
+    metadata: dict[str, Any] = {}
+    chunk_strategy: Literal["token_aware", "character"] = "token_aware"
+    chunk_size: int = 1200  # tokens for token_aware, chars for character
+    chunk_overlap: int = 100
+
+    @field_validator("chunk_size")
+    @classmethod
+    def chunk_size_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("chunk_size must be greater than 0")
+        return v
+
+    @field_validator("chunk_overlap")
+    @classmethod
+    def chunk_overlap_must_be_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        return v
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be less than "
+                f"chunk_size ({self.chunk_size})"
+            )
+
+
+class IngestResponse(BaseModel):
+    chunks_created: int
+    record_ids: list[int]
+    bm25_indexed: bool
+
+
+@router.post(
+    "/ingest",
+    response_model=IngestResponse,
+    status_code=201,
+    dependencies=[require_scope("agents:write")],
+)
+async def ingest_document(req: IngestRequest, request: Request) -> IngestResponse:
+    """Ingest a document: chunk -> embed -> store in pgvector -> add to BM25."""
+    from agent33.main import app
+    from agent33.memory.ingestion import DocumentIngester, TokenAwareChunker
+
+    long_term_memory = getattr(app.state, "long_term_memory", None)
+    if long_term_memory is None:
+        raise HTTPException(503, "Memory system not initialized")
+
+    # Get the active embedder (cache-wrapped or raw provider)
+    embedder = getattr(app.state, "embedding_cache", None) or getattr(
+        app.state, "embedding_provider", None
+    )
+    if embedder is None:
+        raise HTTPException(503, "Embedding provider not initialized")
+
+    bm25_index = getattr(app.state, "bm25_index", None)
+
+    # Chunk the content
+    if req.chunk_strategy == "token_aware":
+        chunker = TokenAwareChunker(
+            chunk_tokens=req.chunk_size,
+            overlap_tokens=req.chunk_overlap,
+        )
+        if req.content_type == "text/markdown":
+            chunks = chunker.chunk_markdown(req.content)
+        else:
+            chunks = chunker.chunk_text(req.content)
+    else:
+        ingester = DocumentIngester()
+        if req.content_type == "text/markdown":
+            chunks = ingester.ingest_markdown(
+                req.content,
+                chunk_size=req.chunk_size,
+                overlap=req.chunk_overlap,
+            )
+        else:
+            chunks = ingester.ingest_text(
+                req.content,
+                chunk_size=req.chunk_size,
+                overlap=req.chunk_overlap,
+            )
+
+    if not chunks:
+        return IngestResponse(chunks_created=0, record_ids=[], bm25_indexed=False)
+
+    # Embed all chunks
+    texts = [c.text for c in chunks]
+    embeddings = await embedder.embed_batch(texts)
+
+    # Store in pgvector
+    record_ids: list[int] = []
+    for chunk, embedding in zip(chunks, embeddings, strict=True):
+        meta = {**req.metadata, **chunk.metadata}
+        rid = await long_term_memory.store(chunk.text, embedding, meta)
+        record_ids.append(rid)
+
+    # Add to BM25 index
+    bm25_indexed = False
+    if bm25_index is not None:
+        for chunk in chunks:
+            bm25_index.add_document(chunk.text, {**req.metadata, **chunk.metadata})
+        bm25_indexed = True
+
+    return IngestResponse(
+        chunks_created=len(chunks),
+        record_ids=record_ids,
+        bm25_indexed=bm25_indexed,
     )

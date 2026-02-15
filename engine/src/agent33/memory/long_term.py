@@ -93,14 +93,36 @@ class LongTermMemory:
             "LIMIT :k"
         )
         async with self._session_factory() as session:
-            result = await session.execute(
-                sql, {"emb": embedding_literal, "k": top_k}
-            )
+            result = await session.execute(sql, {"emb": embedding_literal, "k": top_k})
             rows = result.fetchall()
         return [
-            SearchResult(text=row[0], score=float(row[1]), metadata=row[2] or {})
-            for row in rows
+            SearchResult(text=row[0], score=float(row[2]), metadata=row[1] or {}) for row in rows
         ]
+
+    async def scan(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[SearchResult]:
+        """Paginated read of all stored content for BM25 warm-up.
+
+        Returns SearchResult objects (text, score=0.0, metadata) ordered by id.
+        """
+        sql = text(
+            "SELECT content, metadata FROM memory_records ORDER BY id LIMIT :limit OFFSET :offset"
+        )
+        async with self._session_factory() as session:
+            result = await session.execute(sql, {"limit": limit, "offset": offset})
+            rows = result.fetchall()
+        return [SearchResult(text=row[0], score=0.0, metadata=row[1] or {}) for row in rows]
+
+    async def count(self) -> int:
+        """Return total number of stored memory records."""
+        sql = text("SELECT COUNT(*) FROM memory_records")
+        async with self._session_factory() as session:
+            result = await session.execute(sql)
+            row = result.fetchone()
+        return row[0] if row else 0
 
     async def close(self) -> None:
         """Dispose of the engine connection pool."""
