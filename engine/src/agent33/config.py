@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     chunk_tokens: int = 1200
     chunk_overlap_tokens: int = 100
 
+    # BM25 warm-up
+    bm25_warmup_enabled: bool = True
+    bm25_warmup_max_records: int = 10_000
+    bm25_warmup_page_size: int = 200
+
     # Training (self-evolving loop)
     training_enabled: bool = True
     training_optimize_interval: int = 100
