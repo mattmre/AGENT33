@@ -1,106 +1,112 @@
 # Next Session Briefing
 
-Last updated: 2026-02-15T04:00
+Last updated: 2026-02-15T05:30
 
 ## Current State
-- **Branch**: `feat/sessions-10-12-zeroclaw-parity-integration-wiring`
-- **PR**: [#6](https://github.com/mattmre/AGENT33/pull/6) open (sessions 10-12 work), not yet merged
+- **Branch**: `main` (clean working tree)
+- **PR #6**: Merged (sessions 10-14 work)
 - **Tests**: 973 passing, 0 lint errors
 - **All 21 Phases**: Complete
 - **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
 - **Integration Wiring**: Complete — all subsystems connected in main.py lifespan
-- **Research**: 29 dossiers + 5 strategy docs + SkillsBench analysis committed
+- **SkillsBench Analysis**: Complete — 108KB research doc with adaptation roadmap
+- **Security**: IDOR fix merged (memory observation filtering)
 
-## What Was Done (Sessions 10-13)
+## What Was Done (Sessions 10-14)
 
 **Session 10** — Hybrid RAG: BM25 engine, hybrid search (RRF), embedding cache, token-aware chunking (57 tests)
 **Session 11** — ZeroClaw parity: JSON Schema tools, 22+ provider registry, skills/plugin system, channel health checks (141 tests)
 **Session 12** — Integration wiring: all subsystems wired into main.py lifespan, agent runtime bridge and invoke route updated (10 tests)
 **Session 13** — SkillsBench analysis: comprehensive 108KB research document comparing AGENT-33 vs SkillsBench (benchflow-ai/skillsbench), prioritized adaptation roadmap, CLAUDE.md updated
-
-## First Action: Merge PR #6
-
-PR [#6](https://github.com/mattmre/AGENT33/pull/6) contains all work from sessions 10-13 (includes SkillsBench research). Merge to main before starting new work. Then switch back to `main` branch.
+**Session 14** — PR review: fixed IDOR vulnerability in memory_search.py (Gemini Code Assist finding), merged PR #6 to main
 
 ## Next Priorities
 
-### Priority 0: SkillsBench Adaptation (from Session 13 Analysis)
+### Priority 0: Iterative Tool-Use Loop (THE critical gap)
 
-Full analysis at `docs/research/skillsbench-analysis.md` (108KB, 2,073 lines). The 5 P0 items that directly improve AGENT-33's competitive performance:
+This is the single largest capability gap. Without it, AGENT-33 cannot complete any multi-step task. Full analysis at `docs/research/skillsbench-analysis.md`.
 
-1. **Iterative tool-use loop for AgentRuntime** (3 days)
-   - Current: `AgentRuntime.invoke()` makes a single LLM call and returns
-   - Needed: Iterative loop — LLM call → parse tool calls → execute → observe → repeat
-   - This is the single largest capability gap. Without it, AGENT-33 cannot complete any multi-step task
-   - Implementation: New `invoke_iterative()` method in `agents/runtime.py`, new `agents/tool_loop.py`
+**Current**: `AgentRuntime.invoke()` makes a single LLM call and returns.
+**Needed**: Iterative loop — LLM call → parse tool calls → execute → observe → repeat until done.
 
-2. **4-stage hybrid skill matching** (2 days)
-   - Current: BM25 + vector via RRF (2 stages)
-   - Needed: Add 2 LLM-based refinement stages (lenient selection → strict quality filter)
-   - Prevents irrelevant/leaking skills from being injected
-   - Implementation: New `skills/matching.py` using existing `HybridSearcher` + `ModelRouter`
+Implementation plan:
+1. **New `agents/tool_loop.py`** — Core loop logic:
+   - Send messages to LLM via ModelRouter
+   - Parse response for tool_calls (function calling format)
+   - Execute tools via ToolRegistry (with governance/allowlist checks)
+   - Append tool results as observation messages
+   - Repeat until: (a) LLM returns text-only (no tool calls), or (b) max iterations reached, or (c) stop condition met
+   - Track iteration count, tokens used, tools invoked
 
-3. **Context window management** (2 days)
-   - Current: No context management — messages grow unbounded
-   - Needed: Message unwinding, handoff summaries, proactive summarization when tokens run low
-   - Implementation: New `agents/context_manager.py`
+2. **New `invoke_iterative()` in `agents/runtime.py`** — Wraps tool_loop with:
+   - System prompt construction (existing logic)
+   - Skill injection (existing SkillInjector)
+   - Context from progressive recall
+   - Autonomy budget enforcement integration
+   - Observation capture for each step
 
-4. **Task completion double-confirmation** (0.5 days)
-   - Prevents premature task exit — agent must explicitly confirm it's done
-   - Implementation: Enhancement to iterative tool loop
+3. **Task completion double-confirmation** — Enhancement to loop:
+   - When LLM says "done", ask one more time "Are you sure the task is complete?"
+   - Prevents premature exit on ambiguous responses
 
-5. **Multi-trial evaluation methodology** (1 day)
-   - Binary reward (0 or 1, all tests must pass) with 5 trials per configuration
-   - Skills impact = pass_rate_with_skills - pass_rate_without_skills
-   - Implementation: New `evaluation/multi_trial.py`, CTRF reporting format
+**Estimated effort**: 3-4 days
+**Test coverage needed**: Loop termination conditions, tool execution, error handling, max iterations, budget enforcement, double-confirmation
 
-### Priority 1: Architecture Gaps (from Research Sprint)
+### Priority 1: 4-Stage Hybrid Skill Matching
 
-These are the remaining critical gaps identified across 29 research dossiers:
+**Current**: BM25 + vector via RRF (2 stages in `skills/registry.py` search).
+**Needed**: Add 2 LLM-based refinement stages to prevent irrelevant/leaking skills.
+
+Stages:
+1. BM25 + vector retrieval (existing) → top-K candidates
+2. LLM lenient filter — keep anything potentially relevant
+3. Full skill content loading for surviving candidates
+4. LLM strict filter — remove skills that leak answers or are truly irrelevant
+
+Implementation: New `skills/matching.py` using existing `HybridSearcher` + `ModelRouter`.
+**Estimated effort**: 2 days
+
+### Priority 2: Context Window Management
+
+**Current**: No context management — messages grow unbounded until LLM context is exhausted.
+**Needed**: Proactive management to prevent context overflow.
+
+Features:
+- Token counting for conversation history
+- Message unwinding (remove oldest non-system messages when near limit)
+- Handoff summaries (compress older context into a summary message)
+- Proactive summarization trigger when tokens exceed threshold
+
+Implementation: New `agents/context_manager.py`.
+**Estimated effort**: 2 days
+
+### Priority 3: Architecture Gaps (from Research Sprint)
 
 1. **No document processing** — can't ingest PDFs/images
-   - Research: Sparrow (pipeline-based), PaddleOCR (layout analysis), RAG-Anything (multi-modal)
-   - Implementation: Add adapters to `memory/ingestion.py` for PDF extraction and image OCR
+   - Add adapters to `memory/ingestion.py` for PDF extraction and image OCR
    - Dependencies: `pymupdf` or `pdfplumber` for PDF, optional `pytesseract` for images
 
 2. **Workflow engine gaps** — no sub-workflows, http-request, merge/join actions
-   - Research: n8n-workflows (compositional workflow patterns)
-   - Implementation: New actions in `workflows/actions/` (sub_workflow, http_request, merge)
-   - Key: sub-workflow action enables recursive DAG composition
+   - New actions in `workflows/actions/` (sub_workflow, http_request, merge)
 
 3. **No conversational routing** — only static DAGs, no LLM-decided agent handoffs
-   - Research: OpenAI Swarm (handoff functions), Agent-Zero (dynamic routing)
-   - Implementation: Add a `route` action type that uses LLM to select next agent
-   - Key: This is AGENT-33's biggest architectural differentiator gap
+   - Add a `route` action type that uses LLM to select next agent
 
-### Priority 2: BM25 Warm-Up from Existing Memories
+### Priority 4: BM25 Warm-Up & Ingestion Pipeline
 
 BM25 index starts empty. For deployments with existing pgvector data:
 - Add `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
 - Add startup warm-up loop in `main.py` lifespan (with configurable limit)
-- Ensure ingestion pipeline adds to BM25 when storing new documents
+- Complete the ingestion pipeline: chunk → embed → store in pgvector → add to BM25
+- Add `/v1/memory/ingest` endpoint
 
-### Priority 3: Remaining ZeroClaw Parity
+### Priority 5: Multi-Trial Evaluation & Remaining Items
 
-| # | Item | Priority | Effort |
-|---|------|----------|--------|
-| 20 | Matrix channel adapter | P3 | 2 days |
-
-### Priority 4: Ingestion Pipeline Completeness
-
-Currently the ingestion pipeline (`memory/ingestion.py`) provides chunking but doesn't handle the full store-and-index flow:
-- Chunk text → embed → store in pgvector → add to BM25 index
-- Wire `TokenAwareChunker` into a complete `IngestDocument` pipeline
-- Add an `/v1/memory/ingest` endpoint
-
-### Priority 5: SkillsBench P1 Items
-
-After P0 is complete, these strengthen the architecture:
+- Multi-trial evaluation methodology (5 trials, binary reward, skills impact measurement)
 - Answer leakage prevention in skill injection
-- Failure mode taxonomy alignment with SkillsBench enum
-- LiteLLM integration (optional, for true multi-provider routing)
+- Failure mode taxonomy alignment with SkillsBench
 - CTRF test result format for standardized reporting
-- Skill quality validation pipeline (12-criterion analysis from SkillsBench contrib agents)
+- Matrix channel adapter (ZeroClaw parity #20)
 
 ## Key Files to Know
 
@@ -115,6 +121,7 @@ After P0 is complete, these strengthen the architecture:
 | Skill injector | `engine/src/agent33/skills/injection.py` |
 | Provider catalog | `engine/src/agent33/llm/providers.py` |
 | Tool schema | `engine/src/agent33/tools/schema.py` |
+| Tool registry | `engine/src/agent33/tools/registry.py` |
 | BM25 index | `engine/src/agent33/memory/bm25.py` |
 | Hybrid search | `engine/src/agent33/memory/hybrid.py` |
 | Embedding cache | `engine/src/agent33/memory/cache.py` |
