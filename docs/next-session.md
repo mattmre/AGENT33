@@ -1,112 +1,85 @@
 # Next Session Briefing
 
-Last updated: 2026-02-15T05:30
+Last updated: 2026-02-15T12:00
 
 ## Current State
 - **Branch**: `main` (clean working tree)
-- **PR #6**: Merged (sessions 10-14 work)
-- **Tests**: 973 passing, 0 lint errors
+- **Open PRs**: #7 (P0), #8 (P1), #9 (P2), #10 (P5), #11 (P3), #12 (P4)
+- **Tests**: ~1,030+ passing (across feature branches), 0 lint errors
 - **All 21 Phases**: Complete
+- **Session 15**: P0-P5 implemented (6 PRs pending review)
 - **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
-- **Integration Wiring**: Complete — all subsystems connected in main.py lifespan
-- **SkillsBench Analysis**: Complete — 108KB research doc with adaptation roadmap
-- **Security**: IDOR fix merged (memory observation filtering)
+- **AWM Analysis**: Complete — `docs/research/agent-world-model-analysis.md`
+- **SkillsBench Analysis**: Complete — `docs/research/skillsbench-analysis.md`
 
-## What Was Done (Sessions 10-14)
+## What Was Done (Session 15)
 
-**Session 10** — Hybrid RAG: BM25 engine, hybrid search (RRF), embedding cache, token-aware chunking (57 tests)
-**Session 11** — ZeroClaw parity: JSON Schema tools, 22+ provider registry, skills/plugin system, channel health checks (141 tests)
-**Session 12** — Integration wiring: all subsystems wired into main.py lifespan, agent runtime bridge and invoke route updated (10 tests)
-**Session 13** — SkillsBench analysis: comprehensive 108KB research document comparing AGENT-33 vs SkillsBench (benchflow-ai/skillsbench), prioritized adaptation roadmap, CLAUDE.md updated
-**Session 14** — PR review: fixed IDOR vulnerability in memory_search.py (Gemini Code Assist finding), merged PR #6 to main
+**P0: Iterative Tool-Use Loop** (PR #7 — `feat/p0-iterative-tool-loop`)
+- `agents/tool_loop.py` — Core iterative loop (ToolLoopConfig, ToolLoopState, ToolLoop)
+- `agents/runtime.py` — `IterativeAgentResult`, `invoke_iterative()` method
+- `api/routes/agents.py` — `POST /{name}/invoke-iterative` endpoint
+- `main.py` — LLM provider registration on model_router, ToolRegistry + ToolGovernance init
+- 64 new tests (40 tool_loop + 24 invoke_iterative)
+
+**P1: 4-Stage Hybrid Skill Matching** (PR #8 — `feat/p1-4stage-skill-matching`)
+- `skills/matching.py` — SkillMatcher with BM25 retrieval → LLM lenient → content load → LLM strict
+- Answer leakage detection in strict filter
+- 51 new tests
+
+**P2: Context Window Management** (PR #9 — `feat/p2-context-window-management`)
+- `agents/context_manager.py` — ContextBudget, ContextSnapshot, ContextManager
+- Token estimation, message unwinding, LLM handoff summaries, proactive management
+- MODEL_CONTEXT_LIMITS lookup table (15+ models)
+- 38 new tests
+
+**P3: Architecture Gaps** (PR #11 — `feat/p3-architecture-gaps`)
+- `memory/ingestion.py` — DocumentExtractor (PDF via pymupdf/pdfplumber, image OCR via pytesseract)
+- `workflows/actions/http_request.py` — HTTP request action (httpx)
+- `workflows/actions/sub_workflow.py` — Nested workflow execution
+- `workflows/actions/route.py` — LLM-based conversational routing
+- 3 new StepAction enum values, executor dispatch integration
+- 40 new tests
+
+**P4: BM25 Warm-Up & Ingestion Pipeline** (PR #12 — `feat/p4-bm25-warmup-ingestion`)
+- `memory/long_term.py` — scan(limit, offset), count()
+- `memory/warmup.py` — warm_up_bm25() for startup population
+- `config.py` — bm25_warmup_enabled, bm25_warmup_max_records, bm25_warmup_page_size
+- `main.py` — Warm-up in lifespan after BM25 index creation
+- `api/routes/memory_search.py` — POST /v1/memory/ingest (chunk → embed → pgvector → BM25)
+- 21 new tests
+
+**P5: Agent World Model Analysis** (PR #10 — `feat/p5-awm-analysis`)
+- `docs/research/agent-world-model-analysis.md` — 23-section comprehensive analysis (685 lines)
+- Covers: repo structure, 5-stage pipeline, benchmark results, security analysis, feature comparison
+- 10-item adaptation roadmap (3 tiers), philosophical framework for evolutionary absorption
 
 ## Next Priorities
 
-### Priority 0: Iterative Tool-Use Loop (THE critical gap)
+### Priority 0: Merge Session 15 PRs
+Review and merge PRs #7-#12. Resolve any merge conflicts between branches (they all branch from the same main commit, so conflicts should be minimal — mostly in main.py and config.py).
 
-This is the single largest capability gap. Without it, AGENT-33 cannot complete any multi-step task. Full analysis at `docs/research/skillsbench-analysis.md`.
-
-**Current**: `AgentRuntime.invoke()` makes a single LLM call and returns.
-**Needed**: Iterative loop — LLM call → parse tool calls → execute → observe → repeat until done.
-
-Implementation plan:
-1. **New `agents/tool_loop.py`** — Core loop logic:
-   - Send messages to LLM via ModelRouter
-   - Parse response for tool_calls (function calling format)
-   - Execute tools via ToolRegistry (with governance/allowlist checks)
-   - Append tool results as observation messages
-   - Repeat until: (a) LLM returns text-only (no tool calls), or (b) max iterations reached, or (c) stop condition met
-   - Track iteration count, tokens used, tools invoked
-
-2. **New `invoke_iterative()` in `agents/runtime.py`** — Wraps tool_loop with:
-   - System prompt construction (existing logic)
-   - Skill injection (existing SkillInjector)
-   - Context from progressive recall
-   - Autonomy budget enforcement integration
-   - Observation capture for each step
-
-3. **Task completion double-confirmation** — Enhancement to loop:
-   - When LLM says "done", ask one more time "Are you sure the task is complete?"
-   - Prevents premature exit on ambiguous responses
-
-**Estimated effort**: 3-4 days
-**Test coverage needed**: Loop termination conditions, tool execution, error handling, max iterations, budget enforcement, double-confirmation
-
-### Priority 1: 4-Stage Hybrid Skill Matching
-
-**Current**: BM25 + vector via RRF (2 stages in `skills/registry.py` search).
-**Needed**: Add 2 LLM-based refinement stages to prevent irrelevant/leaking skills.
-
-Stages:
-1. BM25 + vector retrieval (existing) → top-K candidates
-2. LLM lenient filter — keep anything potentially relevant
-3. Full skill content loading for surviving candidates
-4. LLM strict filter — remove skills that leak answers or are truly irrelevant
-
-Implementation: New `skills/matching.py` using existing `HybridSearcher` + `ModelRouter`.
-**Estimated effort**: 2 days
-
-### Priority 2: Context Window Management
-
-**Current**: No context management — messages grow unbounded until LLM context is exhausted.
-**Needed**: Proactive management to prevent context overflow.
-
-Features:
-- Token counting for conversation history
-- Message unwinding (remove oldest non-system messages when near limit)
-- Handoff summaries (compress older context into a summary message)
-- Proactive summarization trigger when tokens exceed threshold
-
-Implementation: New `agents/context_manager.py`.
-**Estimated effort**: 2 days
-
-### Priority 3: Architecture Gaps (from Research Sprint)
-
-1. **No document processing** — can't ingest PDFs/images
-   - Add adapters to `memory/ingestion.py` for PDF extraction and image OCR
-   - Dependencies: `pymupdf` or `pdfplumber` for PDF, optional `pytesseract` for images
-
-2. **Workflow engine gaps** — no sub-workflows, http-request, merge/join actions
-   - New actions in `workflows/actions/` (sub_workflow, http_request, merge)
-
-3. **No conversational routing** — only static DAGs, no LLM-decided agent handoffs
-   - Add a `route` action type that uses LLM to select next agent
-
-### Priority 4: BM25 Warm-Up & Ingestion Pipeline
-
-BM25 index starts empty. For deployments with existing pgvector data:
-- Add `LongTermMemory.scan(limit, offset)` — paginated read of all stored content
-- Add startup warm-up loop in `main.py` lifespan (with configurable limit)
-- Complete the ingestion pipeline: chunk → embed → store in pgvector → add to BM25
-- Add `/v1/memory/ingest` endpoint
-
-### Priority 5: Multi-Trial Evaluation & Remaining Items
-
+### Priority 1: Multi-Trial Evaluation & CTRF Reporting
 - Multi-trial evaluation methodology (5 trials, binary reward, skills impact measurement)
-- Answer leakage prevention in skill injection
-- Failure mode taxonomy alignment with SkillsBench
 - CTRF test result format for standardized reporting
+- Aligns with both SkillsBench and AWM evaluation paradigms
+
+### Priority 2: Integration Testing
+- End-to-end test of iterative tool loop with real tool execution
+- Test ingestion pipeline → BM25 warm-up → hybrid search flow
+- Test context manager integration with tool loop
+
+### Priority 3: AWM Adaptation (Tier 1 items)
+From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
+- A1: MCP interface interop bridge for Tool Registry
+- A2: Database-backed verification in evaluation gates
+- A3: Multi-turn evaluation scenarios for golden tasks
+- A4: Optional tiktoken integration for exact token counting
+
+### Priority 4: Remaining Items
 - Matrix channel adapter (ZeroClaw parity #20)
+- Answer leakage prevention in skill injection (already in P1 strict filter, may need runtime integration)
+- Failure mode taxonomy alignment with SkillsBench
+- BM25 warm-up from existing deployments (startup warm-up in P4, needs integration testing)
 
 ## Key Files to Know
 
@@ -115,7 +88,12 @@ BM25 index starts empty. For deployments with existing pgvector data:
 | Entry point | `engine/src/agent33/main.py` |
 | Config | `engine/src/agent33/config.py` |
 | Agent runtime | `engine/src/agent33/agents/runtime.py` |
+| **Tool loop (NEW)** | `engine/src/agent33/agents/tool_loop.py` |
+| **Context manager (NEW)** | `engine/src/agent33/agents/context_manager.py` |
+| **Skill matcher (NEW)** | `engine/src/agent33/skills/matching.py` |
+| **BM25 warm-up (NEW)** | `engine/src/agent33/memory/warmup.py` |
 | Agent invoke route | `engine/src/agent33/api/routes/agents.py` |
+| Memory/ingest route | `engine/src/agent33/api/routes/memory_search.py` |
 | Skill definition | `engine/src/agent33/skills/definition.py` |
 | Skill registry | `engine/src/agent33/skills/registry.py` |
 | Skill injector | `engine/src/agent33/skills/injection.py` |
@@ -128,25 +106,25 @@ BM25 index starts empty. For deployments with existing pgvector data:
 | RAG pipeline | `engine/src/agent33/memory/rag.py` |
 | Progressive recall | `engine/src/agent33/memory/progressive_recall.py` |
 | Ingestion / chunking | `engine/src/agent33/memory/ingestion.py` |
-| Health checks | `engine/src/agent33/api/routes/health.py` |
-| Workflow actions | `engine/src/agent33/workflows/actions/` |
-| Integration wiring tests | `engine/tests/test_integration_wiring.py` |
+| **HTTP request action (NEW)** | `engine/src/agent33/workflows/actions/http_request.py` |
+| **Sub-workflow action (NEW)** | `engine/src/agent33/workflows/actions/sub_workflow.py` |
+| **Route action (NEW)** | `engine/src/agent33/workflows/actions/route.py` |
+| Workflow executor | `engine/src/agent33/workflows/executor.py` |
+| **AWM analysis** | `docs/research/agent-world-model-analysis.md` |
 | **SkillsBench analysis** | `docs/research/skillsbench-analysis.md` |
 | Session logs | `docs/sessions/` |
-| Phase plans | `docs/phases/` |
-| Research dossiers | `docs/research/repo_dossiers/` |
-| Research strategy | `docs/research/adaptive-evolution-strategy.md` |
 
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q                            # full suite (~973 tests)
-python -m pytest tests/ -x -q                         # stop on first failure
-python -m pytest tests/test_integration_wiring.py -x -q  # integration wiring (19 tests)
-python -m pytest tests/test_skills.py -x -q           # skills tests (48 tests)
-python -m pytest tests/test_channel_health.py -x -q   # channel health tests (32 tests)
-python -m pytest tests/test_tool_schema.py -x -q      # tool schema tests (37 tests)
-python -m pytest tests/test_provider_catalog.py -x -q # provider catalog tests (24 tests)
-python -m pytest tests/test_hybrid_rag.py -x -q       # hybrid RAG tests (57 tests)
-python -m ruff check src/ tests/                       # lint (0 errors)
+python -m pytest tests/ -q                                # full suite (~1030+ tests)
+python -m pytest tests/ -x -q                             # stop on first failure
+python -m pytest tests/test_tool_loop.py -x -q            # tool loop (40 tests)
+python -m pytest tests/test_invoke_iterative.py -x -q     # invoke iterative (24 tests)
+python -m pytest tests/test_skill_matching.py -x -q       # skill matching (51 tests)
+python -m pytest tests/test_context_manager.py -x -q      # context manager (38 tests)
+python -m pytest tests/test_architecture_gaps.py -x -q    # architecture gaps (40 tests)
+python -m pytest tests/test_bm25_warmup_ingestion.py -x -q # BM25 warmup (21 tests)
+python -m pytest tests/test_integration_wiring.py -x -q   # integration wiring (19 tests)
+python -m ruff check src/ tests/                           # lint (0 errors)
 ```
