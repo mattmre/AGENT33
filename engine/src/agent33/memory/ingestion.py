@@ -4,6 +4,10 @@ Provides both character-based and token-aware chunking.  The
 :class:`TokenAwareChunker` estimates token counts using a word-based
 heuristic (``words * 1.3``) and preserves sentence boundaries when
 splitting, producing higher-quality chunks for embedding.
+
+The :class:`DocumentExtractor` handles text extraction from binary
+document formats (PDF, images via OCR, plaintext) so that downstream
+chunkers receive plain strings.
 """
 
 from __future__ import annotations
@@ -11,6 +15,10 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+
+import structlog
+
+logger = structlog.get_logger()
 
 # ── Sentence-boundary regex ──────────────────────────────────────────
 
@@ -321,3 +329,97 @@ class TokenAwareChunker:
             )
 
         return chunks
+
+
+# ── Document format extraction ──────────────────────────────────────
+
+
+class DocumentExtractor:
+    """Extracts text from various document formats.
+
+    Supports PDF (via ``pymupdf`` or ``pdfplumber``), images via OCR
+    (``pytesseract`` + ``Pillow``), and plain UTF-8 text.  Libraries are
+    imported lazily so the core package has no hard dependency on them.
+    """
+
+    def extract_pdf(self, pdf_bytes: bytes) -> str:
+        """Extract text from PDF bytes.
+
+        Tries ``pymupdf`` (fitz) first, then falls back to
+        ``pdfplumber``.
+
+        Raises:
+            ImportError: If neither library is installed.
+        """
+        try:
+            import fitz  # pymupdf
+
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            pages = [page.get_text() for page in doc]
+            doc.close()
+            logger.info("extract_pdf", library="pymupdf", pages=len(pages))
+            return "\n\n".join(pages)
+        except ImportError:
+            pass
+
+        try:
+            import io
+
+            import pdfplumber
+
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                pages = [page.extract_text() or "" for page in pdf.pages]
+            logger.info(
+                "extract_pdf",
+                library="pdfplumber",
+                pages=len(pages),
+            )
+            return "\n\n".join(pages)
+        except ImportError as exc:
+            raise ImportError(
+                "PDF extraction requires 'pymupdf' or 'pdfplumber'. "
+                "Install with: pip install pymupdf  OR  "
+                "pip install pdfplumber"
+            ) from exc
+
+    def extract_image_ocr(self, image_bytes: bytes) -> str:
+        """Extract text from image bytes via OCR.
+
+        Requires ``pytesseract`` and ``Pillow``.
+
+        Raises:
+            ImportError: If the required libraries are not installed.
+        """
+        try:
+            import io
+
+            import pytesseract
+            from PIL import Image
+
+            image = Image.open(io.BytesIO(image_bytes))
+            text = pytesseract.image_to_string(image)
+            logger.info("extract_image_ocr", text_len=len(text))
+            return text
+        except ImportError as exc:
+            raise ImportError(
+                "Image OCR requires 'pytesseract' and 'Pillow'. "
+                "Install with: pip install pytesseract Pillow"
+            ) from exc
+
+    def extract_text(self, content: bytes, content_type: str) -> str:
+        """Route extraction based on content type.
+
+        Args:
+            content: Raw bytes of the document.
+            content_type: MIME type or short alias (``"pdf"``,
+                ``"image/png"``, ``"text/plain"``, etc.).
+
+        Returns:
+            Extracted plain-text string.
+        """
+        if content_type in ("application/pdf", "pdf"):
+            return self.extract_pdf(content)
+        if content_type.startswith("image/"):
+            return self.extract_image_ocr(content)
+        # Fallback: decode as UTF-8 text
+        return content.decode("utf-8", errors="replace")
