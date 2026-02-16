@@ -302,3 +302,90 @@ async def resolve_regression(
         "regression_id": record.regression_id,
         "status": record.triage_status.value,
     }
+
+
+# ---------------------------------------------------------------------------
+# Multi-trial experiment routes
+# ---------------------------------------------------------------------------
+
+
+class StartExperimentRequest(BaseModel):
+    tasks: list[str]
+    agents: list[str]
+    models: list[str]
+    trials_per_combination: int = Field(default=5, ge=1, le=100)
+    skills_modes: list[bool] = Field(default=[True, False])
+    timeout_per_trial_seconds: int = Field(default=300, ge=1)
+    parallel_trials: int = Field(default=1, ge=1)
+
+
+@router.post(
+    "/experiments",
+    status_code=201,
+    dependencies=[require_scope("tools:execute")],
+)
+async def start_experiment(body: StartExperimentRequest) -> dict[str, Any]:
+    """Start a multi-trial experiment."""
+    from agent33.evaluation.multi_trial import ExperimentConfig
+
+    config = ExperimentConfig(
+        tasks=body.tasks,
+        agents=body.agents,
+        models=body.models,
+        trials_per_combination=body.trials_per_combination,
+        skills_modes=body.skills_modes,
+        timeout_per_trial_seconds=body.timeout_per_trial_seconds,
+        parallel_trials=body.parallel_trials,
+    )
+    run = await _service.start_multi_trial_run(config)
+    return {
+        "run_id": run.run_id,
+        "status": run.status,
+        "results_count": len(run.results),
+        "skills_impacts_count": len(run.skills_impacts),
+    }
+
+
+@router.get(
+    "/experiments/{run_id}",
+    dependencies=[require_scope("workflows:read")],
+)
+async def get_experiment(run_id: str) -> dict[str, Any]:
+    """Get multi-trial experiment status and results."""
+    run = _service.get_multi_trial_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=404, detail=f"Experiment not found: {run_id}"
+        )
+    return run.model_dump(mode="json")
+
+
+@router.get(
+    "/experiments/{run_id}/ctrf",
+    dependencies=[require_scope("workflows:read")],
+)
+async def get_experiment_ctrf(run_id: str) -> dict[str, Any]:
+    """Export multi-trial experiment as a CTRF report."""
+    report = _service.export_ctrf(run_id)
+    if report is None:
+        raise HTTPException(
+            status_code=404, detail=f"Experiment not found: {run_id}"
+        )
+    return report
+
+
+@router.get(
+    "/experiments/{run_id}/skills-impact",
+    dependencies=[require_scope("workflows:read")],
+)
+async def get_experiment_skills_impact(run_id: str) -> dict[str, Any]:
+    """Get skills impact data for a multi-trial experiment."""
+    run = _service.get_multi_trial_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=404, detail=f"Experiment not found: {run_id}"
+        )
+    return {
+        "run_id": run.run_id,
+        "impacts": [i.model_dump(mode="json") for i in run.skills_impacts],
+    }
