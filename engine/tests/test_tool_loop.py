@@ -898,6 +898,141 @@ class TestDataClasses:
         assert config.max_tool_calls_per_iteration == 5
         assert config.error_threshold == 3
         assert config.enable_double_confirmation is True
+        assert config.loop_detection_threshold == 0
+
+    def test_tool_loop_state_initialization(self) -> None:
+        state = ToolLoopState()
+        assert state.iteration == 0
+        assert state.total_tokens == 0
+        assert state.tool_calls_made == 0
+        assert state.tools_used == []
+        assert state.consecutive_errors == 0
+        assert state.confirmation_pending is False
+        assert state.call_history == []
+
+
+# ---------------------------------------------------------------------------
+# Loop detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestLoopDetection:
+    async def test_identical_tool_calls_trigger_loop_detection(self) -> None:
+        """Repeated identical tool calls trigger loop_detected termination."""
+        tc = _make_tool_call("shell", '{"command": "ls"}', "call_1")
+        tool = _make_mock_tool("shell")
+        # LLM keeps making the same call
+        router = _make_router(
+            _tool_response([tc]),
+            _tool_response([_make_tool_call("shell", '{"command": "ls"}', "call_2")]),
+            _tool_response([_make_tool_call("shell", '{"command": "ls"}', "call_3")]),
+            _text_response("done"),  # Should not reach this
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(loop_detection_threshold=3, enable_double_confirmation=False)
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        assert result.termination_reason == "loop_detected"
+        assert result.iterations == 3
+        # Only 2 tool calls executed before detection
+        assert result.tool_calls_made == 2
+
+    async def test_non_identical_calls_do_not_trigger_loop(self) -> None:
+        """Different tool calls or arguments do not trigger loop detection."""
+        tc1 = _make_tool_call("shell", '{"command": "ls"}', "c1")
+        tc2 = _make_tool_call("shell", '{"command": "pwd"}', "c2")
+        tc3 = _make_tool_call("file_ops", '{"path": "/tmp"}', "c3")
+        tool_shell = _make_mock_tool("shell")
+        tool_file = _make_mock_tool("file_ops")
+        router = _make_router(
+            _tool_response([tc1]),
+            _tool_response([tc2]),
+            _tool_response([tc3]),
+            _text_response("done"),
+        )
+        registry = _make_registry(tool_shell, tool_file)
+        config = ToolLoopConfig(loop_detection_threshold=3, enable_double_confirmation=False)
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        assert result.termination_reason == "completed"
+        assert result.tool_calls_made == 3
+
+    async def test_loop_detection_disabled_when_threshold_zero(self) -> None:
+        """Setting loop_detection_threshold to 0 disables loop detection."""
+        tool = _make_mock_tool("shell")
+        # Same call repeated 10 times
+        router = _make_router(
+            *[
+                _tool_response([_make_tool_call("shell", '{"command": "ls"}', f"c{i}")])
+                for i in range(10)
+            ],
+            _text_response("done"),
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(
+            loop_detection_threshold=0,
+            max_iterations=15,
+            enable_double_confirmation=False,
+        )
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        # Should not trigger loop detection, completes normally
+        assert result.termination_reason == "completed"
+        assert result.tool_calls_made == 10
+
+    async def test_loop_detection_with_sorted_arguments(self) -> None:
+        """Arguments are sorted before comparison to detect loops with reordered keys."""
+        # Same args but different JSON key order
+        tc1 = _make_tool_call("shell", '{"command": "ls", "timeout": 30}', "c1")
+        tc2 = _make_tool_call("shell", '{"timeout": 30, "command": "ls"}', "c2")
+        tc3 = _make_tool_call("shell", '{"command": "ls", "timeout": 30}', "c3")
+        tool = _make_mock_tool("shell")
+        router = _make_router(
+            _tool_response([tc1]),
+            _tool_response([tc2]),
+            _tool_response([tc3]),
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(loop_detection_threshold=3, enable_double_confirmation=False)
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        # Should detect the loop (same tool + same args despite ordering)
+        assert result.termination_reason == "loop_detected"
+
+    async def test_loop_resets_after_different_call(self) -> None:
+        """Loop detection counter resets when a different call is made."""
+        tc1 = _make_tool_call("shell", '{"command": "ls"}', "c1")
+        tc2 = _make_tool_call("shell", '{"command": "ls"}', "c2")
+        tc_different = _make_tool_call("shell", '{"command": "pwd"}', "c3")
+        tc3 = _make_tool_call("shell", '{"command": "ls"}', "c4")
+        tc4 = _make_tool_call("shell", '{"command": "ls"}', "c5")
+        tc5 = _make_tool_call("shell", '{"command": "ls"}', "c6")
+        tool = _make_mock_tool("shell")
+        router = _make_router(
+            _tool_response([tc1]),
+            _tool_response([tc2]),
+            _tool_response([tc_different]),  # Breaks the pattern
+            _tool_response([tc3]),
+            _tool_response([tc4]),
+            _tool_response([tc5]),  # 3rd consecutive "ls" after the break
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(loop_detection_threshold=3, enable_double_confirmation=False)
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        # Should detect loop on iterations 4, 5, 6 (after the break at iteration 3)
+        assert result.termination_reason == "loop_detected"
+        assert result.tool_calls_made == 5  # Stops before executing the 6th
 
     def test_tool_loop_config_is_frozen(self) -> None:
         config = ToolLoopConfig()

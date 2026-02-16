@@ -250,6 +250,37 @@ class TestBuildSystemPrompt:
         # Fields not set should not appear
         assert "Allowed commands:" not in prompt
 
+    def test_governance_includes_tool_policies(self) -> None:
+        """Tool policies appear in governance constraints section."""
+        d = _make_definition(
+            governance=GovernanceConstraints(
+                scope="workspace",
+                tool_policies={
+                    "shell": "deny",
+                    "file_ops:write": "ask",
+                    "web_*": "allow",
+                },
+            )
+        )
+        prompt = _build_system_prompt(d)
+        assert "# Governance Constraints" in prompt
+        assert "Tool policies:" in prompt
+        assert "shell: deny" in prompt
+        assert "file_ops:write: ask" in prompt
+        assert "web_*: allow" in prompt
+
+    def test_governance_only_tool_policies(self) -> None:
+        """Tool policies alone should render governance section."""
+        d = _make_definition(
+            governance=GovernanceConstraints(
+                tool_policies={"*": "ask"}
+            )
+        )
+        prompt = _build_system_prompt(d)
+        assert "# Governance Constraints" in prompt
+        assert "Tool policies:" in prompt
+        assert "*: ask" in prompt
+
 
 # ---------------------------------------------------------------------------
 # ProgressiveRecall integration tests

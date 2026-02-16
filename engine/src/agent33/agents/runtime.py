@@ -80,7 +80,7 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
 
     # --- Governance ---
     gov = definition.governance
-    if gov.scope or gov.commands or gov.network or gov.approval_required:
+    if gov.scope or gov.commands or gov.network or gov.approval_required or gov.tool_policies:
         parts.append("\n# Governance Constraints")
         if gov.scope:
             parts.append(f"- Scope: {gov.scope}")
@@ -90,6 +90,10 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
             parts.append(f"- Network access: {gov.network}")
         if gov.approval_required:
             parts.append(f"- Requires approval for: {', '.join(gov.approval_required)}")
+        if gov.tool_policies:
+            parts.append("- Tool policies:")
+            for tool_pattern, policy in gov.tool_policies.items():
+                parts.append(f"  - {tool_pattern}: {policy}")
 
     # --- Autonomy Level ---
     parts.append(f"\n# Autonomy Level: {definition.autonomy_level.value}")

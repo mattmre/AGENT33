@@ -16,6 +16,7 @@ class ToolContext:
     path_allowlist: list[str] = dataclasses.field(default_factory=list)
     domain_allowlist: list[str] = dataclasses.field(default_factory=list)
     working_dir: Path = dataclasses.field(default_factory=Path.cwd)
+    tool_policies: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
