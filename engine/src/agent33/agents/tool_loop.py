@@ -18,6 +18,8 @@ from agent33.tools.base import ToolResult
 from agent33.tools.schema import generate_tool_description
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.memory.observation import ObservationCapture
@@ -28,11 +30,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CONFIRMATION_PROMPT = (
-    "Before I accept your answer, please verify:\n"
-    "1. Have you completed all parts of the task?\n"
-    "2. Have you verified your results (e.g., by reading output files)?\n"
-    "If the task is not fully complete, continue working. "
-    "If it is complete, restate your final answer."
+    "You indicated you have completed the task. Please respond with "
+    "exactly one of the following formats:\n\n"
+    "COMPLETED: [your final answer]\n"
+    "CONTINUE: [what you still need to do]\n\n"
+    "If the task is not fully complete, use CONTINUE and keep working. "
+    "If it is complete, use COMPLETED and restate your final answer."
 )
 
 
@@ -102,6 +105,7 @@ class ToolLoop:
         config: ToolLoopConfig | None = None,
         agent_name: str = "",
         session_id: str = "",
+        leakage_detector: Callable[[str], bool] | None = None,
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -112,6 +116,7 @@ class ToolLoop:
         self._config = config or ToolLoopConfig()
         self._agent_name = agent_name
         self._session_id = session_id
+        self._leakage_detector = leakage_detector
 
     # ------------------------------------------------------------------
     # Public API
@@ -244,8 +249,24 @@ class ToolLoop:
                     messages.append(ChatMessage(role="assistant", content=response.content))
                     messages.append(ChatMessage(role="user", content=CONFIRMATION_PROMPT))
                 else:
-                    # Done -- the LLM has confirmed or double-confirm is off
-                    output = self._parse_output(response.content)
+                    # Parse structured confirmation response
+                    final_text = response.content
+                    confirmed = _parse_confirmation(final_text)
+
+                    if confirmed is False:
+                        # LLM said CONTINUE — keep going
+                        state.confirmation_pending = False
+                        messages.append(
+                            ChatMessage(role="assistant", content=response.content)
+                        )
+                        continue
+
+                    # confirmed is True or None (ambiguous -> accept)
+                    if confirmed is True:
+                        # Strip the COMPLETED: prefix for cleaner output
+                        final_text = _strip_completion_prefix(final_text)
+
+                    output = self._parse_output(final_text)
                     return ToolLoopResult(
                         output=output,
                         raw_response=response.content,
@@ -400,6 +421,23 @@ class ToolLoop:
             if self._tool_governance is not None:
                 self._tool_governance.log_execution(tool_name, parsed_args, result)
 
+            # --- Check for answer leakage in tool output ---
+            if (
+                self._leakage_detector is not None
+                and result.success
+                and result.output
+                and self._leakage_detector(result.output)
+            ):
+                logger.info("Leakage detected in tool output for %s", tool_name)
+                result = ToolResult.ok(
+                    "[Tool output filtered: potential answer leakage detected]"
+                )
+                await self._record_observation(
+                    event_type="leakage_detected",
+                    content=f"Answer leakage filtered from {tool_name} output",
+                    metadata={"tool": tool_name, "call_id": call_id},
+                )
+
             # --- Record observation ---
             await self._record_observation(
                 event_type="tool_call",
@@ -510,3 +548,38 @@ class ToolLoop:
             tools_used=list(state.tools_used),
             termination_reason=reason,
         )
+
+
+# ---------------------------------------------------------------------------
+# Structured confirmation parsing (Gap 4 Stage 1)
+# ---------------------------------------------------------------------------
+
+
+def _parse_confirmation(text: str) -> bool | None:
+    """Parse a structured COMPLETED/CONTINUE response.
+
+    Returns
+    -------
+    True  — LLM confirmed completion ("COMPLETED: ...")
+    False — LLM wants to continue ("CONTINUE: ...")
+    None  — Ambiguous (no structured prefix found, treat as completed)
+    """
+    stripped = text.strip()
+    upper = stripped.upper()
+
+    if upper.startswith("CONTINUE:") or upper.startswith("CONTINUE "):
+        return False
+    if upper.startswith("COMPLETED:") or upper.startswith("COMPLETED "):
+        return True
+    return None
+
+
+def _strip_completion_prefix(text: str) -> str:
+    """Remove the ``COMPLETED:`` prefix from a confirmation response."""
+    stripped = text.strip()
+    upper = stripped.upper()
+    if upper.startswith("COMPLETED:"):
+        return stripped[len("COMPLETED:"):].strip()
+    if upper.startswith("COMPLETED "):
+        return stripped[len("COMPLETED "):].strip()
+    return stripped
