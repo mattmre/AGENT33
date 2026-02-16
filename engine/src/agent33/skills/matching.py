@@ -469,14 +469,26 @@ class SkillMatcher:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Try finding JSON object in text
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            try:
-                parsed = json.loads(match.group(0))
-                if isinstance(parsed, dict) and "keep" in parsed:
-                    return parsed
-            except (json.JSONDecodeError, TypeError):
-                pass
+        # Try finding JSON object in text using balanced brace matching.
+        # A non-greedy match would break on nested objects, so we find
+        # each opening brace and try parsing from there.
+        for i, ch in enumerate(text):
+            if ch == "{":
+                # Try progressively longer substrings starting from this brace
+                depth = 0
+                for j in range(i, len(text)):
+                    if text[j] == "{":
+                        depth += 1
+                    elif text[j] == "}":
+                        depth -= 1
+                    if depth == 0:
+                        candidate = text[i : j + 1]
+                        try:
+                            parsed = json.loads(candidate)
+                            if isinstance(parsed, dict) and "keep" in parsed:
+                                return parsed
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                        break
 
         return {}
