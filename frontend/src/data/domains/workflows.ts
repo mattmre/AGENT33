@@ -3,7 +3,7 @@ import type { DomainConfig } from "../../types";
 export const workflowsDomain: DomainConfig = {
   id: "workflows",
   title: "Workflows",
-  description: "Workflow registry and execution.",
+  description: "Workflow registry, execution, and scheduling orchestration.",
   operations: [
     {
       id: "workflows-list",
@@ -70,7 +70,56 @@ export const workflowsDomain: DomainConfig = {
         },
         null,
         2
-      )
+      ),
+      uxHint: "workflow-execute"
+    },
+    {
+      id: "workflows-schedule-create",
+      title: "Schedule Workflow",
+      method: "POST",
+      path: "/v1/workflows/{name}/schedule",
+      description: "Create repeating cron/interval execution for a workflow.",
+      defaultPathParams: {
+        name: "hello-flow"
+      },
+      defaultBody: JSON.stringify(
+        {
+          interval_seconds: 900,
+          inputs: {
+            name: "AGENT-33"
+          }
+        },
+        null,
+        2
+      ),
+      uxHint: "workflow-schedule"
+    },
+    {
+      id: "workflows-schedule-list",
+      title: "List Schedules",
+      method: "GET",
+      path: "/v1/workflows/schedules",
+      description: "List active workflow schedules."
+    },
+    {
+      id: "workflows-schedule-delete",
+      title: "Delete Schedule",
+      method: "DELETE",
+      path: "/v1/workflows/schedules/{job_id}",
+      description: "Delete a schedule by job ID.",
+      defaultPathParams: {
+        job_id: "replace-with-job-id"
+      }
+    },
+    {
+      id: "workflows-history",
+      title: "Workflow History",
+      method: "GET",
+      path: "/v1/workflows/{name}/history",
+      description: "Recent execution history for a workflow.",
+      defaultPathParams: {
+        name: "hello-flow"
+      }
     }
   ]
 };

@@ -29,12 +29,14 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 textarea,
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--border);
   background: #0b1e27;
@@ -257,10 +259,50 @@ button:disabled {
   gap: 0.6rem;
 }
 
+.json-tools {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.json-tools button {
+  border-color: #2a4858;
+  background: #102834;
+  color: #c7e6ee;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.helper-panel {
+  border: 1px solid #2d4f60;
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: rgba(8, 24, 32, 0.6);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.helper-panel h4 {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #98c4d2;
+}
+
+.helper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.55rem;
+}
+
 .operation-actions {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+}
+
+.operation-note {
+  margin: 0;
+  color: #9cd9c9;
+  font-size: 0.8rem;
 }
 
 .method-badge {

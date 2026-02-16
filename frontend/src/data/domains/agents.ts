@@ -95,6 +95,31 @@ export const agentsDomain: DomainConfig = {
         null,
         2
       )
+    },
+    {
+      id: "agents-invoke-iterative",
+      title: "Invoke Agent (Iterative)",
+      method: "POST",
+      path: "/v1/agents/{name}/invoke-iterative",
+      description: "Iterative tool-use loop invocation for autonomous problem solving.",
+      defaultPathParams: {
+        name: "orchestrator"
+      },
+      defaultBody: JSON.stringify(
+        {
+          inputs: {
+            task: "Iteratively solve and validate a workflow execution plan."
+          },
+          model: "qwen3-coder:30b",
+          temperature: 0.2,
+          max_iterations: 8,
+          max_tool_calls_per_iteration: 4,
+          enable_double_confirmation: true
+        },
+        null,
+        2
+      ),
+      uxHint: "agent-iterative"
     }
   ]
 };

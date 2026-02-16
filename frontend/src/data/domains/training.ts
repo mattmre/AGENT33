@@ -3,7 +3,7 @@ import type { DomainConfig } from "../../types";
 export const trainingDomain: DomainConfig = {
   id: "training",
   title: "Training",
-  description: "Rollout, optimization, metrics, reverts.",
+  description: "Self-adaptive rollout, optimization, metrics, and prompt revert controls.",
   operations: [
     {
       id: "training-rollout",
@@ -16,7 +16,9 @@ export const trainingDomain: DomainConfig = {
       },
       defaultBody: JSON.stringify(
         {
-          prompt: "Improve reliability"
+          inputs: {
+            task: "Improve workflow reliability and summarize confidence."
+          }
         },
         null,
         2
@@ -31,7 +33,14 @@ export const trainingDomain: DomainConfig = {
       defaultPathParams: {
         agent: "orchestrator"
       },
-      defaultBody: "{}"
+      defaultBody: JSON.stringify(
+        {
+          current_prompt: "You are an orchestrator focused on safe and reliable execution.",
+          iterations: 3
+        },
+        null,
+        2
+      )
     },
     {
       id: "training-rollouts",

@@ -1,4 +1,5 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type OperationUxHint = "workflow-execute" | "workflow-schedule" | "agent-iterative";
 
 export interface OperationConfig {
   id: string;
@@ -9,6 +10,7 @@ export interface OperationConfig {
   defaultPathParams?: Record<string, string>;
   defaultQuery?: Record<string, string>;
   defaultBody?: string;
+  uxHint?: OperationUxHint;
 }
 
 export interface DomainConfig {
