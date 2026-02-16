@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent33.agents.tokenizer import TokenCounter
 
 
 @dataclass
@@ -28,6 +32,13 @@ class ShortTermMemory:
     """Maintains conversation history with token-aware trimming."""
 
     messages: list[Message] = field(default_factory=list)
+    token_counter: TokenCounter | None = field(default=None, repr=False)
+
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using the configured counter, or the legacy heuristic."""
+        if self.token_counter is not None:
+            return self.token_counter.count(text)
+        return _estimate_tokens(text)
 
     def add(self, role: str, content: str) -> None:
         """Append a message to the conversation history."""
@@ -35,7 +46,7 @@ class ShortTermMemory:
 
     def token_count(self) -> int:
         """Return estimated total token count across all messages."""
-        return sum(_estimate_tokens(m.content) for m in self.messages)
+        return sum(self._count_tokens(m.content) for m in self.messages)
 
     def get_context(self, max_tokens: int) -> list[dict[str, str]]:
         """Return messages fitting within *max_tokens*, trimming oldest first."""
@@ -43,7 +54,7 @@ class ShortTermMemory:
         running = 0
         # Walk from newest to oldest so we keep recent context.
         for msg in reversed(self.messages):
-            cost = _estimate_tokens(msg.content)
+            cost = self._count_tokens(msg.content)
             if running + cost > max_tokens:
                 break
             result.append(msg)

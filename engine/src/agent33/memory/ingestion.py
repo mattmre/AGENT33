@@ -15,8 +15,12 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import structlog
+
+if TYPE_CHECKING:
+    from agent33.agents.tokenizer import TokenCounter
 
 logger = structlog.get_logger()
 
@@ -148,9 +152,17 @@ class TokenAwareChunker:
         self,
         chunk_tokens: int = 1200,
         overlap_tokens: int = 100,
+        token_counter: TokenCounter | None = None,
     ) -> None:
         self._chunk_tokens = max(1, chunk_tokens)
         self._overlap_tokens = min(overlap_tokens, chunk_tokens // 2)
+        self._token_counter = token_counter
+
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using the configured counter, or the legacy heuristic."""
+        if self._token_counter is not None:
+            return self._token_counter.count(text)
+        return _estimate_tokens(text)
 
     def chunk_text(self, text: str) -> list[Chunk]:
         """Split *text* into token-aware chunks with sentence preservation."""
@@ -165,7 +177,7 @@ class TokenAwareChunker:
         char_offset = 0
 
         for sentence in sentences:
-            sentence_tokens = _estimate_tokens(sentence)
+            sentence_tokens = self._count_tokens(sentence)
 
             # If a single sentence exceeds the limit, force-split it.
             if sentence_tokens > self._chunk_tokens and not current_sentences:
@@ -196,7 +208,7 @@ class TokenAwareChunker:
                 overlap_sents: list[str] = []
                 overlap_tok = 0
                 for prev in reversed(current_sentences):
-                    prev_tok = _estimate_tokens(prev)
+                    prev_tok = self._count_tokens(prev)
                     if overlap_tok + prev_tok > self._overlap_tokens:
                         break
                     overlap_sents.insert(0, prev)
@@ -253,7 +265,7 @@ class TokenAwareChunker:
         chunks: list[Chunk] = []
         idx = 0
         for section in sections:
-            section_tokens = _estimate_tokens(section)
+            section_tokens = self._count_tokens(section)
             if section_tokens <= self._chunk_tokens:
                 chunks.append(
                     Chunk(
@@ -292,7 +304,7 @@ class TokenAwareChunker:
         idx = start_idx
 
         for word in words:
-            word_tokens = _estimate_tokens(word)
+            word_tokens = self._count_tokens(word)
             if current_tokens + word_tokens > self._chunk_tokens and current_words:
                 chunk_text = " ".join(current_words)
                 chunks.append(
@@ -359,8 +371,7 @@ class DocumentExtractor:
         """
         if len(pdf_bytes) > self._MAX_PDF_BYTES:
             raise ValueError(
-                f"PDF exceeds maximum size ({len(pdf_bytes)} bytes, "
-                f"limit {self._MAX_PDF_BYTES})"
+                f"PDF exceeds maximum size ({len(pdf_bytes)} bytes, limit {self._MAX_PDF_BYTES})"
             )
 
         try:
@@ -368,9 +379,7 @@ class DocumentExtractor:
 
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 if len(doc) > self._MAX_PDF_PAGES:
-                    raise ValueError(
-                        f"PDF has {len(doc)} pages (limit {self._MAX_PDF_PAGES})"
-                    )
+                    raise ValueError(f"PDF has {len(doc)} pages (limit {self._MAX_PDF_PAGES})")
                 pages = [page.get_text() for page in doc]
             logger.info("extract_pdf", library="pymupdf", pages=len(pages))
             return "\n\n".join(pages)

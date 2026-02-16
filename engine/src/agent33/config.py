@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     skill_definitions_dir: str = "skills"
     skill_max_instructions_chars: int = 16000
 
+    # MCP (Model Context Protocol) servers
+    mcp_servers: str = ""  # Comma-separated server URLs
+    mcp_timeout_seconds: float = 30.0
+    mcp_auto_discover: bool = True
+
     # Environment
     environment: str = "development"
 
