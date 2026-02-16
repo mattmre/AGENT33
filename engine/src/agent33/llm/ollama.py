@@ -165,7 +165,12 @@ class OllamaProvider:
         if max_tokens is not None:
             payload["options"]["num_predict"] = max_tokens
         if tools is not None:
-            payload["tools"] = tools
+            # Wrap raw function defs in OpenAI-style tool objects for
+            # consistency with the OpenAI provider format.
+            payload["tools"] = [
+                t if "type" in t else {"type": "function", "function": t}
+                for t in tools
+            ]
 
         data = await self._post("/api/chat", payload)
 

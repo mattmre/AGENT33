@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent33.agents.capabilities import get_catalog_by_category
 from agent33.agents.definition import (
@@ -59,7 +59,7 @@ def get_registry(request: Request) -> AgentRegistry:
 class InvokeRequest(BaseModel):
     """Body for the invoke endpoint."""
 
-    inputs: dict[str, Any] = {}
+    inputs: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     temperature: float = 0.7
 
@@ -76,7 +76,7 @@ class InvokeResponse(BaseModel):
 class InvokeIterativeRequest(BaseModel):
     """Body for the iterative invoke endpoint."""
 
-    inputs: dict[str, Any] = {}
+    inputs: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     temperature: float = 0.7
     max_iterations: int = 20
@@ -203,13 +203,15 @@ async def invoke_agent(
             detail=f"Input rejected: {', '.join(scan.threats)}",
         )
 
-    # Pull subsystems from app state for agent runtime
+    # Pull subsystems from app state for agent runtime, falling back to
+    # module-level singleton for backward compatibility.
+    model_router = getattr(request.app.state, "model_router", _model_router)
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
     runtime = AgentRuntime(
         definition=definition,
-        router=_model_router,
+        router=model_router,
         model=body.model,
         temperature=body.temperature,
         skill_injector=skill_injector,

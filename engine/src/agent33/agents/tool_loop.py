@@ -203,19 +203,25 @@ class ToolLoop:
                 ):
                     return self._build_result(state, last_raw, last_model, "budget_exceeded")
 
-                # Append assistant message with tool_calls
+                # Only include tool_calls that were actually processed in
+                # the assistant message.  OpenAI-style APIs require every
+                # tool_call id to have a matching role="tool" result; if
+                # we cap at max_tool_calls_per_iteration the rest must
+                # not appear in the conversation.
+                assert response.tool_calls is not None  # guarded by has_tool_calls
+                processed_tool_calls = response.tool_calls[: len(tool_results)]
+
                 messages.append(
                     ChatMessage(
                         role="assistant",
                         content=response.content,
-                        tool_calls=response.tool_calls,
+                        tool_calls=processed_tool_calls,
                     )
                 )
 
                 # Append tool result messages
-                assert response.tool_calls is not None  # guarded by has_tool_calls
                 for i, tool_result in enumerate(tool_results):
-                    tc = response.tool_calls[i] if i < len(response.tool_calls) else None
+                    tc = processed_tool_calls[i] if i < len(processed_tool_calls) else None
                     tc_id = tc.id if tc else ""
                     tc_name = tc.function.name if tc else ""
                     content = (
@@ -321,9 +327,10 @@ class ToolLoop:
                 continue
 
             # --- Governance check ---
-            if self._tool_governance is not None and self._tool_context is not None:
+            if self._tool_governance is not None:
+                gov_context = self._tool_context or self._default_context()
                 allowed = self._tool_governance.pre_execute_check(
-                    tool_name, parsed_args, self._tool_context
+                    tool_name, parsed_args, gov_context
                 )
                 if not allowed:
                     logger.info("Governance denied tool call: %s", tool_name)
@@ -345,8 +352,25 @@ class ToolLoop:
             if self._runtime_enforcer is not None:
                 from agent33.autonomy.models import EnforcementResult
 
-                # Use command check for general tool enforcement
-                enforce_result = self._runtime_enforcer.check_command(tool_name)
+                # Dispatch enforcement by tool type so the enforcer
+                # checks the actual resource (command string, file path,
+                # URL) rather than the tool name.
+                enforce_result = EnforcementResult.ALLOWED
+                if tool_name == "shell" and "command" in parsed_args:
+                    enforce_result = self._runtime_enforcer.check_command(
+                        parsed_args["command"]
+                    )
+                elif tool_name in ("file_read", "file_write", "file_ops"):
+                    path = parsed_args.get("path", parsed_args.get("file", ""))
+                    if tool_name == "file_read":
+                        enforce_result = self._runtime_enforcer.check_file_read(path)
+                    else:
+                        enforce_result = self._runtime_enforcer.check_file_write(path)
+                elif tool_name == "web_fetch":
+                    url = parsed_args.get("url", "")
+                    enforce_result = self._runtime_enforcer.check_network(url)
+                else:
+                    enforce_result = self._runtime_enforcer.check_command(tool_name)
                 if enforce_result == EnforcementResult.BLOCKED:
                     logger.info("Autonomy enforcer blocked tool call: %s", tool_name)
                     result = ToolResult(
