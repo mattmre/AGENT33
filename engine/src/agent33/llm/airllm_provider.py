@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
 
@@ -114,6 +115,7 @@ class AirLLMProvider:
         model: str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """Generate a completion using layer-sharded inference."""
         await self._ensure_loaded()

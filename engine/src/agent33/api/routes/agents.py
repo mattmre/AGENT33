@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent33.agents.capabilities import get_catalog_by_category
 from agent33.agents.definition import (
@@ -59,7 +59,7 @@ def get_registry(request: Request) -> AgentRegistry:
 class InvokeRequest(BaseModel):
     """Body for the invoke endpoint."""
 
-    inputs: dict[str, Any] = {}
+    inputs: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     temperature: float = 0.7
 
@@ -71,6 +71,30 @@ class InvokeResponse(BaseModel):
     output: dict[str, Any]
     tokens_used: int
     model: str
+
+
+class InvokeIterativeRequest(BaseModel):
+    """Body for the iterative invoke endpoint."""
+
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    model: str | None = None
+    temperature: float = 0.7
+    max_iterations: int = 20
+    max_tool_calls_per_iteration: int = 5
+    enable_double_confirmation: bool = True
+
+
+class InvokeIterativeResponse(BaseModel):
+    """Response from the iterative invoke endpoint."""
+
+    agent: str
+    output: dict[str, Any]
+    tokens_used: int
+    model: str
+    iterations: int
+    tool_calls_made: int
+    tools_used: list[str]
+    termination_reason: str
 
 
 # -- routes ---------------------------------------------------------------
@@ -179,13 +203,15 @@ async def invoke_agent(
             detail=f"Input rejected: {', '.join(scan.threats)}",
         )
 
-    # Pull subsystems from app state for agent runtime
+    # Pull subsystems from app state for agent runtime, falling back to
+    # module-level singleton for backward compatibility.
+    model_router = getattr(request.app.state, "model_router", _model_router)
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
     runtime = AgentRuntime(
         definition=definition,
-        router=_model_router,
+        router=model_router,
         model=body.model,
         temperature=body.temperature,
         skill_injector=skill_injector,
@@ -204,6 +230,88 @@ async def invoke_agent(
         output=result.output,
         tokens_used=result.tokens_used,
         model=result.model,
+    )
+
+
+@router.post(
+    "/{name}/invoke-iterative",
+    dependencies=[require_scope("agents:invoke")],
+)
+async def invoke_agent_iterative(
+    name: str,
+    body: InvokeIterativeRequest,
+    request: Request,
+    registry: AgentRegistry = Depends(get_registry),  # noqa: B008
+) -> InvokeIterativeResponse:
+    """Invoke a registered agent with the iterative tool-use loop.
+
+    Unlike the standard invoke, this endpoint repeatedly calls the LLM,
+    parsing and executing tool calls until the task is complete or a
+    limit is reached.
+    """
+    definition = registry.get(name)
+    if definition is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    scan = scan_inputs_recursive(body.inputs)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input rejected: {', '.join(scan.threats)}",
+        )
+
+    # Pull subsystems from app state
+    model_router = getattr(request.app.state, "model_router", None)
+    if model_router is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model router not initialized",
+        )
+    tool_registry = getattr(request.app.state, "tool_registry", None)
+    if tool_registry is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Tool registry not initialized",
+        )
+    tool_governance = getattr(request.app.state, "tool_governance", None)
+    skill_injector = getattr(request.app.state, "skill_injector", None)
+    progressive_recall = getattr(request.app.state, "progressive_recall", None)
+
+    from agent33.agents.tool_loop import ToolLoopConfig
+
+    loop_config = ToolLoopConfig(
+        max_iterations=body.max_iterations,
+        max_tool_calls_per_iteration=body.max_tool_calls_per_iteration,
+        enable_double_confirmation=body.enable_double_confirmation,
+    )
+
+    runtime = AgentRuntime(
+        definition=definition,
+        router=model_router,
+        model=body.model,
+        temperature=body.temperature,
+        skill_injector=skill_injector,
+        progressive_recall=progressive_recall,
+        tool_registry=tool_registry,
+        tool_governance=tool_governance,
+    )
+
+    try:
+        result = await runtime.invoke_iterative(body.inputs, config=loop_config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return InvokeIterativeResponse(
+        agent=name,
+        output=result.output,
+        tokens_used=result.tokens_used,
+        model=result.model,
+        iterations=result.iterations,
+        tool_calls_made=result.tool_calls_made,
+        tools_used=result.tools_used,
+        termination_reason=result.termination_reason,
     )
 
 

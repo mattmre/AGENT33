@@ -82,6 +82,7 @@ class ModelRouter:
         model: str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """Route to the correct provider and generate a completion."""
         provider = self.route(model)
@@ -90,4 +91,5 @@ class ModelRouter:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            tools=tools,
         )

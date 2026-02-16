@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from agent33.llm.base import ChatMessage, LLMResponse
+from agent33.llm.base import ChatMessage, LLMResponse, ToolCall, ToolCallFunction
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,53 @@ class OllamaProvider:
 
     # -- public API -------------------------------------------------------
 
+    @staticmethod
+    def _serialize_message(m: ChatMessage) -> dict[str, Any]:
+        """Serialize a ChatMessage to Ollama's message format."""
+        msg: dict[str, Any] = {"role": m.role, "content": m.content}
+        # Include tool_calls on assistant messages when present
+        if m.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in m.tool_calls
+            ]
+        # Include tool_call_id on tool result messages
+        if m.tool_call_id:
+            msg["tool_call_id"] = m.tool_call_id
+        if m.name:
+            msg["name"] = m.name
+        return msg
+
+    @staticmethod
+    def _parse_tool_calls(raw_calls: list[dict[str, Any]]) -> list[ToolCall]:
+        """Parse tool calls from an Ollama response message."""
+        result: list[ToolCall] = []
+        for i, tc in enumerate(raw_calls):
+            func_data = tc.get("function", {})
+            # Ollama may return arguments as dict or string
+            args = func_data.get("arguments", "{}")
+            if isinstance(args, dict):
+                import json
+
+                args = json.dumps(args)
+            result.append(
+                ToolCall(
+                    id=tc.get("id", f"call_{i}"),
+                    function=ToolCallFunction(
+                        name=func_data.get("name", ""),
+                        arguments=args,
+                    ),
+                )
+            )
+        return result
+
     async def complete(
         self,
         messages: list[ChatMessage],
@@ -105,26 +152,46 @@ class OllamaProvider:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """Generate a chat completion via Ollama."""
         resolved_model = model or self._default_model
         payload: dict[str, Any] = {
             "model": resolved_model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [self._serialize_message(m) for m in messages],
             "stream": False,
             "options": {"temperature": temperature},
         }
         if max_tokens is not None:
             payload["options"]["num_predict"] = max_tokens
+        if tools is not None:
+            # Wrap raw function defs in OpenAI-style tool objects for
+            # consistency with the OpenAI provider format.
+            payload["tools"] = [
+                t if "type" in t else {"type": "function", "function": t}
+                for t in tools
+            ]
 
         data = await self._post("/api/chat", payload)
 
-        content = data.get("message", {}).get("content", "")
+        message_data = data.get("message", {})
+        content = message_data.get("content", "")
+
+        # Parse tool calls from response if present
+        raw_tool_calls = message_data.get("tool_calls")
+        parsed_tool_calls: list[ToolCall] | None = None
+        if raw_tool_calls:
+            parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
+
+        finish_reason = "tool_calls" if parsed_tool_calls else "stop"
+
         return LLMResponse(
             content=content,
             model=resolved_model,
             prompt_tokens=data.get("prompt_eval_count", 0),
             completion_tokens=data.get("eval_count", 0),
+            tool_calls=parsed_tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def list_models(self) -> list[str]:

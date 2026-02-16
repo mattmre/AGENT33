@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from agent33.llm.base import ChatMessage, LLMResponse
 
 
@@ -33,6 +35,7 @@ class MockLLMProvider:
         model: str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """Return a deterministic response based on the response map.
 

@@ -123,7 +123,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("code_executor_initialized")
 
     model_router = ModelRouter()
+
+    # Register LLM providers on the shared model router
+    from agent33.llm.ollama import OllamaProvider
+
+    model_router.register(
+        "ollama",
+        OllamaProvider(
+            base_url=settings.ollama_base_url,
+            default_model=settings.ollama_default_model,
+        ),
+    )
+    if settings.openai_api_key.get_secret_value():
+        from agent33.llm.openai import OpenAIProvider
+
+        _openai_kwargs: dict[str, Any] = {
+            "api_key": settings.openai_api_key.get_secret_value(),
+        }
+        if settings.openai_base_url:
+            _openai_kwargs["base_url"] = settings.openai_base_url
+        model_router.register("openai", OpenAIProvider(**_openai_kwargs))
+
     app.state.model_router = model_router
+    logger.info("model_router_initialized")
+
+    # -- Tool registry + governance ----------------------------------------
+    from agent33.tools.governance import ToolGovernance
+    from agent33.tools.registry import ToolRegistry
+
+    tool_registry = ToolRegistry()
+    tool_registry.discover_from_entrypoints()
+    app.state.tool_registry = tool_registry
+
+    tool_governance = ToolGovernance()
+    app.state.tool_governance = tool_governance
+    logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
     # -- Embedding provider + cache ----------------------------------------
     from agent33.memory.embeddings import EmbeddingProvider
