@@ -18,6 +18,7 @@ from agent33.tools.base import ToolResult
 from agent33.tools.schema import generate_tool_description
 
 if TYPE_CHECKING:
+    from agent33.agents.context_manager import ContextManager
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.memory.observation import ObservationCapture
@@ -102,6 +103,7 @@ class ToolLoop:
         config: ToolLoopConfig | None = None,
         agent_name: str = "",
         session_id: str = "",
+        context_manager: ContextManager | None = None,
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -112,6 +114,7 @@ class ToolLoop:
         self._config = config or ToolLoopConfig()
         self._agent_name = agent_name
         self._session_id = session_id
+        self._context_manager = context_manager
 
     # ------------------------------------------------------------------
     # Public API
@@ -257,6 +260,10 @@ class ToolLoop:
                         termination_reason="completed",
                     )
 
+            # --- Context management after message changes ---------------------
+            if self._context_manager is not None:
+                messages = await self._context_manager.manage(messages)
+
             # --- Check termination conditions ---------------------------------
             if state.consecutive_errors >= self._config.error_threshold:
                 return self._build_result(state, last_raw, last_model, "error")
@@ -357,9 +364,7 @@ class ToolLoop:
                 # URL) rather than the tool name.
                 enforce_result = EnforcementResult.ALLOWED
                 if tool_name == "shell" and "command" in parsed_args:
-                    enforce_result = self._runtime_enforcer.check_command(
-                        parsed_args["command"]
-                    )
+                    enforce_result = self._runtime_enforcer.check_command(parsed_args["command"])
                 elif tool_name in ("file_read", "file_write", "file_ops"):
                     path = parsed_args.get("path", parsed_args.get("file", ""))
                     if tool_name == "file_read":
