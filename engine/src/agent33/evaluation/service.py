@@ -2,12 +2,16 @@
 
 This service ties together the golden task registry, metrics calculator,
 gate enforcer, and regression detector into a single evaluation pipeline.
+It also supports multi-trial experiments with CTRF reporting.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
+from agent33.evaluation.ctrf import CTRFGenerator
+from agent33.evaluation.experiment import ExperimentRunner
 from agent33.evaluation.gates import GateEnforcer
 from agent33.evaluation.golden_tasks import GOLDEN_CASES, GOLDEN_TASKS, tasks_by_tag
 from agent33.evaluation.metrics import MetricsCalculator
@@ -18,6 +22,11 @@ from agent33.evaluation.models import (
     GoldenTag,
     MetricId,
     TaskRunResult,
+)
+from agent33.evaluation.multi_trial import (
+    ExperimentConfig,
+    MultiTrialExecutor,
+    MultiTrialRun,
 )
 from agent33.evaluation.regression import RegressionDetector, RegressionRecorder
 
@@ -42,6 +51,8 @@ class EvaluationService:
         self._recorder = RegressionRecorder()
         self._runs: dict[str, EvaluationRun] = {}
         self._baselines: dict[str, BaselineSnapshot] = {}
+        self._multi_trial_runs: dict[str, MultiTrialRun] = {}
+        self._ctrf = CTRFGenerator()
 
     @property
     def recorder(self) -> RegressionRecorder:
@@ -192,3 +203,46 @@ class EvaluationService:
             self._baselines.values(), key=lambda b: b.created_at, reverse=True
         )
         return baselines[:limit]
+
+    # ------------------------------------------------------------------
+    # Multi-trial experiments
+    # ------------------------------------------------------------------
+
+    async def start_multi_trial_run(
+        self, config: ExperimentConfig
+    ) -> MultiTrialRun:
+        """Create and execute a multi-trial experiment.
+
+        Runs the full (task x agent x model x skills_mode) matrix and
+        computes skills impact metrics.
+        """
+        executor = MultiTrialExecutor()
+        runner = ExperimentRunner(executor)
+        run = await runner.run_experiment(config)
+        self._multi_trial_runs[run.run_id] = run
+        logger.info(
+            "multi_trial_run_stored id=%s results=%d",
+            run.run_id,
+            len(run.results),
+        )
+        return run
+
+    def get_multi_trial_run(self, run_id: str) -> MultiTrialRun | None:
+        """Get a multi-trial run by ID."""
+        return self._multi_trial_runs.get(run_id)
+
+    def list_multi_trial_runs(self, limit: int = 50) -> list[MultiTrialRun]:
+        """List multi-trial runs, most recent first."""
+        runs = sorted(
+            self._multi_trial_runs.values(),
+            key=lambda r: r.started_at,
+            reverse=True,
+        )
+        return runs[:limit]
+
+    def export_ctrf(self, run_id: str) -> dict[str, Any] | None:
+        """Export a multi-trial run as a CTRF report."""
+        run = self._multi_trial_runs.get(run_id)
+        if run is None:
+            return None
+        return self._ctrf.generate_report(run)
