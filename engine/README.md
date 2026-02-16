@@ -50,6 +50,8 @@ First-run local login (from `.env.example` defaults):
 - username: `admin`
 - password: `admin`
 
+**⚠️ Security Warning:** The bootstrap authentication (`admin/admin`) is for local development only. **Do not use these credentials in production or on public-facing deployments.** For production or VPS environments, disable bootstrap auth by setting `AUTH_BOOTSTRAP_ENABLED=false` in your `.env` file and configure a proper identity provider or secure token issuing mechanism.
+
 After login, use the UI domain workspace to run all API features (agents, workflows, memory,
 reviews, traces, evaluations, autonomy, releases, improvements, dashboard, training, webhooks).
 

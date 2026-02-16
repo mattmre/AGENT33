@@ -12,6 +12,7 @@ import contextlib
 import logging
 import time
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 import httpx
 
@@ -113,7 +114,12 @@ class MatrixAdapter:
         self._txn_counter += 1
         txn_id = f"agent33_{self._txn_counter}_{int(time.time() * 1000)}"
         body = {"msgtype": "m.text", "body": text}
-        path = f"/_matrix/client/v3/rooms/{channel_id}/send/m.room.message/{txn_id}"
+        encoded_channel_id = quote(channel_id, safe="")
+        encoded_txn_id = quote(txn_id, safe="")
+        path = (
+            f"/_matrix/client/v3/rooms/{encoded_channel_id}/send/"
+            f"m.room.message/{encoded_txn_id}"
+        )
 
         resp = await client.put(path, json=body)
 
@@ -158,15 +164,19 @@ class MatrixAdapter:
                 queue_depth = self._queue.qsize()
                 if self._running and sync_alive:
                     status = "ok" if queue_depth < 100 else "degraded"
+                    detail = (
+                        f"Connected as {self._user_id}"
+                        if status == "ok"
+                        else f"Queue depth {queue_depth} >= 100"
+                    )
                 else:
                     status = "degraded"
+                    detail = "Sync loop not running"
                 return ChannelHealthResult(
                     platform="matrix",
                     status=status,
                     latency_ms=round(latency, 2),
-                    detail=f"Connected as {self._user_id}"
-                    if status != "degraded"
-                    else "Sync loop not running",
+                    detail=detail,
                     queue_depth=queue_depth,
                 )
 

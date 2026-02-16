@@ -140,7 +140,8 @@ class TestSend:
 
         mock_client.put.assert_called_once()
         call_args = mock_client.put.call_args
-        assert "!room1:example.com" in call_args[0][0]
+        # Check URL encoding is applied
+        assert "%21room1%3Aexample.com" in call_args[0][0]
         assert call_args[1]["json"]["body"] == "Hello, Matrix!"
         assert call_args[1]["json"]["msgtype"] == "m.text"
 
@@ -416,6 +417,7 @@ class TestHealthCheck:
 
         assert result.status == "degraded"
         assert result.queue_depth >= 100
+        assert "queue" in result.detail.lower() or "100" in result.detail
 
     @pytest.mark.asyncio
     async def test_degraded_sync_not_running(self) -> None:

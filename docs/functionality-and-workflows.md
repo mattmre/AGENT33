@@ -140,14 +140,8 @@ Flow:
 - Training routes expect `training_runner` and `agent_optimizer`; default startup only guarantees `training_store` when enabled.
 - CLI `agent33 run` targets a legacy path (`/api/v1/workflows/run`) while workflow execution API is `/v1/workflows/{name}/execute`.
 
-## 6. Open PR Functionality Not Yet on `main`
+## 6. Pending and In-Progress Capabilities
 
-The following capabilities are under open PRs and should be treated as pending, not current runtime behavior:
+The project is under active development, and some capabilities may be in progress on feature branches. This document reflects the current operational runtime on the active branch.
 
-- Iterative tool-use loop (`PR #7`)
-- 4-stage skill matching (`PR #8`)
-- Context window management (`PR #9`)
-- Additional workflow actions (`http-request`, `sub-workflow`, `route`) and document/OCR ingestion (`PR #11`)
-- BM25 warmup + `/v1/memory/ingest` endpoint (`PR #12`)
-
-See `docs/pr-review-2026-02-15.md` for full PR-by-PR details.
+For historical context on development activity and capability evolution, refer to the PR review snapshot in `docs/pr-review-2026-02-15.md`. Note that the snapshot may not reflect the current state of open or merged pull requests.

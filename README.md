@@ -32,6 +32,12 @@ Open the control plane UI:
 
 - `http://localhost:3000`
 
+Default local credentials (from `.env.example`):
+- username: `admin`
+- password: `admin`
+
+**⚠️ Security Warning:** The bootstrap authentication (`admin/admin`) is for local development only and must not be used in production environments. For production or VPS deployments, disable bootstrap auth (`AUTH_BOOTSTRAP_ENABLED=false`) and configure a proper identity provider or token issuing mechanism.
+
 Generate a local development JWT (1 hour):
 
 ```bash
@@ -65,8 +71,9 @@ Reference material:
 
 ## Current Status
 
-- Merged functionality baseline is represented by PRs `#2` through `#6`.
-- PRs `#7` through `#12` are open and documented as pending in `docs/pr-review-2026-02-15.md`.
+The project is under active development on the unified UI platform branch. Core capabilities include agent orchestration, workflow execution, memory/RAG, and operational automation (reviews, releases, evaluations, autonomy budgets, improvements).
+
+For a historical snapshot of PR review activity as of February 15, 2026, see `docs/pr-review-2026-02-15.md`.
 
 ## License
 

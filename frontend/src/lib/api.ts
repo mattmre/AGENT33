@@ -31,7 +31,7 @@ export function interpolatePath(
 ): string {
   return template.replace(/\{([^}]+)\}/g, (_, key: string) => {
     const value = pathParams[key];
-    return encodeURIComponent(value ?? `{${key}}`);
+    return value !== undefined ? encodeURIComponent(value) : `{${key}}`;
   });
 }
 

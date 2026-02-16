@@ -12,6 +12,16 @@ describe("interpolatePath", () => {
   it("url-encodes path params", () => {
     expect(interpolatePath("/v1/files/{name}", { name: "a b.txt" })).toBe("/v1/files/a%20b.txt");
   });
+
+  it("keeps raw placeholder for missing params", () => {
+    expect(interpolatePath("/v1/items/{item_id}/sub/{sub_id}", { item_id: "123" })).toBe(
+      "/v1/items/123/sub/{sub_id}"
+    );
+  });
+
+  it("keeps raw placeholder when no params provided", () => {
+    expect(interpolatePath("/v1/resource/{id}")).toBe("/v1/resource/{id}");
+  });
 });
 
 describe("buildUrl", () => {

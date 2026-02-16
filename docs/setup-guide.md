@@ -103,10 +103,13 @@ Default local credentials (from `.env.example`):
 - username: `admin`
 - password: `admin`
 
-For production/VPS deployments, set:
+**⚠️ Security Warning:** The bootstrap authentication (`admin/admin`) is for local development only. **Do not use these credentials in production or on public-facing deployments.**
 
-- `AUTH_BOOTSTRAP_ENABLED=false`
-- a proper identity provider or token issuing path
+For production/VPS deployments, you **must**:
+
+- Set `AUTH_BOOTSTRAP_ENABLED=false` in your `.env` file
+- Configure a proper identity provider or secure token issuing mechanism
+- Change all default secrets (`API_SECRET_KEY`, `JWT_SECRET`, `ENCRYPTION_KEY`)
 
 ## 4. Verify Health
 
@@ -209,7 +212,7 @@ uvicorn agent33.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Known Setup Constraints
 
-- Default bootstrap auth is for local setup convenience; disable it in production.
+- **Default bootstrap auth (`admin/admin`) is for local setup convenience only; you must disable it in production and non-local environments.** Leaving bootstrap auth enabled with default credentials on a public-facing deployment is a critical security risk.
 - Several services are in-memory by design (workflow registry, review/release/evaluation/autonomy/improvement/traces) and reset on process restart.
 - Webhook endpoints return `503` until adapters are registered in-process.
 
