@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     # Environment
     environment: str = "development"
 
+    # Matrix messaging adapter
+    matrix_homeserver_url: str = ""  # e.g. "https://matrix.org"
+    matrix_access_token: SecretStr = SecretStr("")
+    matrix_user_id: str = ""  # e.g. "@agent33:matrix.org"
+    matrix_room_ids: str = ""  # comma-separated room IDs (empty = all joined rooms)
+    matrix_sync_timeout_ms: int = 30_000
+
     # Self-improvement
     self_improve_enabled: bool = True
     self_improve_scope: str = "prompts,workflows,templates"
