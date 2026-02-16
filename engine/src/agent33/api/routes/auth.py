@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent33.config import settings
 from agent33.security.auth import (
@@ -24,17 +25,29 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 
 _users: dict[str, dict[str, Any]] = {}
+_LEGACY_PBKDF2_SALT = b"agent33-salt"
 
 
-def _hash_password(password: str) -> str:
+def _hash_password(password: str, salt: bytes) -> str:
     return hashlib.pbkdf2_hmac(
-        "sha256", password.encode(), b"agent33-salt", 100_000
+        "sha256", password.encode(), salt, 100_000
     ).hex()
 
 
-def _parse_scopes(scopes_raw: str) -> list[str]:
+def _get_user_salt(user: dict[str, Any]) -> bytes:
+    salt_hex = user.get("salt")
+    if isinstance(salt_hex, str):
+        try:
+            return bytes.fromhex(salt_hex)
+        except ValueError:
+            pass
+    # Backward-compatible fallback for legacy in-memory test fixtures.
+    return _LEGACY_PBKDF2_SALT
+
+
+def _parse_scopes(scopes_raw: str, *, ensure_admin: bool = False) -> list[str]:
     scopes = [scope.strip() for scope in scopes_raw.split(",") if scope.strip()]
-    if "admin" not in scopes:
+    if ensure_admin and "admin" not in scopes:
         scopes.insert(0, "admin")
     return scopes
 
@@ -46,11 +59,13 @@ def _bootstrap_default_user() -> None:
     password = settings.auth_bootstrap_admin_password.get_secret_value()
     if not username or not password:
         return
+    salt = secrets.token_bytes(16)
     _users.setdefault(
         username,
         {
-            "password_hash": _hash_password(password),
-            "scopes": _parse_scopes(settings.auth_bootstrap_admin_scopes),
+            "salt": salt.hex(),
+            "password_hash": _hash_password(password, salt),
+            "scopes": _parse_scopes(settings.auth_bootstrap_admin_scopes, ensure_admin=True),
         },
     )
 
@@ -71,7 +86,7 @@ class TokenResponse(BaseModel):
 
 class ApiKeyRequest(BaseModel):
     subject: str
-    scopes: list[str] = []
+    scopes: list[str] = Field(default_factory=list)
 
 
 class ApiKeyResponse(BaseModel):
@@ -94,7 +109,7 @@ async def login(body: LoginRequest) -> TokenResponse:
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    password_hash = _hash_password(body.password)
+    password_hash = _hash_password(body.password, _get_user_salt(user))
     if not hmac.compare_digest(password_hash, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 

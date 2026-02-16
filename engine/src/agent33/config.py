@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     encryption_key: SecretStr = SecretStr("")
     auth_bootstrap_enabled: bool = False
     auth_bootstrap_admin_username: str = "admin"
-    auth_bootstrap_admin_password: SecretStr = SecretStr("admin")
+    auth_bootstrap_admin_password: SecretStr = SecretStr("")
     auth_bootstrap_admin_scopes: str = (
         "admin,agents:read,agents:write,agents:invoke,"
         "workflows:read,workflows:write,workflows:execute,tools:execute"
@@ -136,11 +136,9 @@ class Settings(BaseSettings):
             warnings.append("jwt_secret is using the default value")
         if self.auth_bootstrap_enabled:
             warnings.append("auth_bootstrap_enabled is true")
-        if (
-            self.auth_bootstrap_enabled
-            and self.auth_bootstrap_admin_password.get_secret_value() == "admin"
-        ):
-            warnings.append("auth_bootstrap_admin_password is using the default value")
+        bootstrap_password = self.auth_bootstrap_admin_password.get_secret_value()
+        if self.auth_bootstrap_enabled and bootstrap_password in {"", "admin"}:
+            warnings.append("auth_bootstrap_admin_password is empty or using default value")
         if warnings and self.environment == "production":
             raise RuntimeError(
                 "FATAL: Default secrets in production mode. "
