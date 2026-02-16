@@ -112,3 +112,43 @@
 - GitHub PR opened:
   - https://github.com/mattmre/AGENT33/pull/19
 - PR checkpoint docs captured in `docs/prs/` for review slicing.
+
+### 12) PR #19 Review Loop Remediation (2026-02-16, Session 18)
+
+**Code + Config Fixes Applied**:
+- Frontend runtime-config hardening:
+  - `frontend/docker/40-runtime-config.sh` now escapes injected `API_BASE_URL` safely.
+  - normalized script to LF line endings for container compatibility.
+- Frontend path interpolation fix:
+  - `frontend/src/lib/api.ts` keeps unresolved placeholders raw (`{key}`) instead of `%7Bkey%7D`.
+  - `frontend/src/lib/api.test.ts` updated with regression coverage.
+- Matrix adapter fixes:
+  - `engine/src/agent33/messaging/matrix.py` URL-encodes room/txn path segments in `send()`.
+  - health check degraded detail now distinguishes queue-depth degradation vs sync-loop failure.
+  - `engine/tests/test_matrix_adapter.py` updated accordingly.
+- Linux Docker compatibility:
+  - `engine/docker-compose.yml` adds `extra_hosts: host.docker.internal:host-gateway` for `api` and `devbox`.
+
+**Documentation Consistency Updates**:
+- `README.md`, `engine/README.md`, `docs/setup-guide.md`:
+  - strengthened bootstrap auth warning (`admin/admin` local-only).
+- `docs/functionality-and-workflows.md`:
+  - removed stale PR-number-based pending section.
+- `docs/pr-review-2026-02-15.md`:
+  - added historical snapshot note.
+- Tracking updates:
+  - `docs/research/session18-pr19-remediation-analysis.md`
+  - `docs/sessions/session-18-2026-02-16.md`
+  - `docs/next-session.md`
+
+**Verification Evidence**:
+- `cd frontend && npm run lint` -> pass
+- `cd frontend && npm run test -- --run src/lib/api.test.ts` -> pass (`6 passed`)
+- `cd frontend && npm run build` -> pass
+- `cd engine && python -m ruff check src/agent33/messaging/matrix.py tests/test_matrix_adapter.py` -> pass
+- `cd engine && python -m pytest tests/test_matrix_adapter.py -q` -> pass (`27 passed`, `2 warnings`)
+- `cd engine && docker compose config -q` -> pass
+- frontend Docker runtime-config quote-escaping check -> pass
+
+**Outcome**:
+PR #19 remediation implemented and validated on branch. Next step is reviewer confirmation and merge.
