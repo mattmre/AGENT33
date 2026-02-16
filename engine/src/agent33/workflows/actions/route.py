@@ -154,6 +154,18 @@ async def execute(
         confidence = 0.0
         reason = "parse_error"
 
+    # Validate the LLM's selection is in the candidate list
+    valid_names = {a["name"] for a in agent_descriptions}
+    if selected not in valid_names:
+        logger.warning(
+            "route_invalid_selection",
+            selected=selected,
+            valid=list(valid_names),
+        )
+        selected = agent_descriptions[0]["name"]
+        confidence = 0.0
+        reason = f"invalid_selection (LLM chose unknown agent, defaulting to {selected})"
+
     return {
         "selected_agent": selected,
         "confidence": confidence,

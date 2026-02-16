@@ -2,12 +2,42 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
 
 logger = structlog.get_logger()
+
+# Private/reserved IP ranges that should be blocked to prevent SSRF.
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_private_url(url: str) -> bool:
+    """Return True if the URL targets a private/reserved IP range."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if hostname is None:
+        return False
+    try:
+        addr = ipaddress.ip_address(hostname)
+        return any(addr in net for net in _BLOCKED_NETWORKS)
+    except ValueError:
+        # Not an IP literal — allow DNS names (could still resolve
+        # to private IPs but DNS resolution happens at the HTTP
+        # client level, not here).
+        return hostname.lower() in ("localhost", "localhost.")
 
 
 async def execute(
@@ -27,7 +57,10 @@ async def execute(
         headers: Optional request headers.
         body: Optional request body (dict/list sends as JSON,
             anything else as text).
-        timeout_seconds: Request timeout in seconds.
+        timeout_seconds: Per-request HTTP client timeout in seconds.
+            When using retries at the workflow step level, ensure
+            this value leaves room for multiple attempts within the
+            overall step timeout.
         inputs: Additional context (unused, kept for action signature
             consistency).
         dry_run: If True, log but skip actual request.
@@ -37,24 +70,40 @@ async def execute(
         and ``json`` (parsed JSON or None).
 
     Raises:
-        ValueError: If *url* is not provided.
+        ValueError: If *url* is not provided or targets a private IP.
     """
     if not url:
         raise ValueError("http-request action requires a 'url' field")
+
+    if _is_private_url(url):
+        raise ValueError(
+            f"SSRF protection: requests to private/reserved addresses "
+            f"are blocked ({url})"
+        )
 
     logger.info("http_request", url=url, method=method, dry_run=dry_run)
 
     if dry_run:
         return {"dry_run": True, "url": url, "method": method}
 
-    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-        kwargs: dict[str, Any] = {"headers": headers or {}}
-        if body is not None:
-            if isinstance(body, (dict, list)):
-                kwargs["json"] = body
-            else:
-                kwargs["content"] = str(body)
-        response = await client.request(method, url, **kwargs)
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds,
+            follow_redirects=False,
+        ) as client:
+            kwargs: dict[str, Any] = {"headers": headers or {}}
+            if body is not None:
+                if isinstance(body, (dict, list)):
+                    kwargs["json"] = body
+                else:
+                    kwargs["content"] = str(body)
+            response = await client.request(method, url, **kwargs)
+    except httpx.TimeoutException as exc:
+        raise RuntimeError(f"HTTP request timed out: {url}") from exc
+    except httpx.ConnectError as exc:
+        raise RuntimeError(f"Connection failed: {url} — {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"HTTP error: {url} — {exc}") from exc
 
     response_body = response.text
     try:

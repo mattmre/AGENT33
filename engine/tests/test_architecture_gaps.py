@@ -33,7 +33,10 @@ class TestExtractPdfPymupdf:
 
         mock_doc = MagicMock()
         mock_doc.__iter__ = MagicMock(return_value=iter([mock_page1, mock_page2]))
-        mock_doc.close = MagicMock()
+        mock_doc.__len__ = MagicMock(return_value=2)
+        # Support context manager (with fitz.open(...) as doc:)
+        mock_doc.__enter__ = MagicMock(return_value=mock_doc)
+        mock_doc.__exit__ = MagicMock(return_value=False)
 
         mock_fitz = MagicMock()
         mock_fitz.open.return_value = mock_doc
@@ -44,7 +47,6 @@ class TestExtractPdfPymupdf:
 
         assert result == "Page 1 content\n\nPage 2 content"
         mock_fitz.open.assert_called_once_with(stream=b"fake-pdf-bytes", filetype="pdf")
-        mock_doc.close.assert_called_once()
         mock_page1.get_text.assert_called_once()
         mock_page2.get_text.assert_called_once()
 

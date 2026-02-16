@@ -342,6 +342,11 @@ class DocumentExtractor:
     imported lazily so the core package has no hard dependency on them.
     """
 
+    # Maximum input sizes to prevent memory exhaustion from oversized files
+    _MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
+    _MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50 MB
+    _MAX_PDF_PAGES = 5000
+
     def extract_pdf(self, pdf_bytes: bytes) -> str:
         """Extract text from PDF bytes.
 
@@ -350,13 +355,23 @@ class DocumentExtractor:
 
         Raises:
             ImportError: If neither library is installed.
+            ValueError: If the PDF exceeds size limits.
         """
+        if len(pdf_bytes) > self._MAX_PDF_BYTES:
+            raise ValueError(
+                f"PDF exceeds maximum size ({len(pdf_bytes)} bytes, "
+                f"limit {self._MAX_PDF_BYTES})"
+            )
+
         try:
             import fitz  # pymupdf
 
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            pages = [page.get_text() for page in doc]
-            doc.close()
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                if len(doc) > self._MAX_PDF_PAGES:
+                    raise ValueError(
+                        f"PDF has {len(doc)} pages (limit {self._MAX_PDF_PAGES})"
+                    )
+                pages = [page.get_text() for page in doc]
             logger.info("extract_pdf", library="pymupdf", pages=len(pages))
             return "\n\n".join(pages)
         except ImportError:
@@ -389,7 +404,14 @@ class DocumentExtractor:
 
         Raises:
             ImportError: If the required libraries are not installed.
+            ValueError: If the image exceeds size limits.
         """
+        if len(image_bytes) > self._MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image exceeds maximum size ({len(image_bytes)} bytes, "
+                f"limit {self._MAX_IMAGE_BYTES})"
+            )
+
         try:
             import io
 
