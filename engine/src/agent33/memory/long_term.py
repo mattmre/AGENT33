@@ -96,7 +96,7 @@ class LongTermMemory:
             result = await session.execute(sql, {"emb": embedding_literal, "k": top_k})
             rows = result.fetchall()
         return [
-            SearchResult(text=row[0], score=float(row[1]), metadata=row[2] or {}) for row in rows
+            SearchResult(text=row[0], score=float(row[2]), metadata=row[1] or {}) for row in rows
         ]
 
     async def scan(

@@ -202,7 +202,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
             logger.info("bm25_warmup_done", records_loaded=warmup_count)
         except Exception as exc:
-            logger.warning("bm25_warmup_failed", error=str(exc))
+            logger.warning("bm25_warmup_failed", error=str(exc), exc_info=True)
 
     hybrid_searcher = None
     if settings.rag_hybrid_enabled:

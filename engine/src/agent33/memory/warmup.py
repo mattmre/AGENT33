@@ -48,9 +48,10 @@ async def warm_up_bm25(
         if not records:
             break
 
-        for record in records:
-            bm25_index.add_document(record.text, record.metadata)
-            loaded += 1
+        # Use batch add for performance (O(n) instead of O(n^2))
+        docs_to_add = [(record.text, record.metadata) for record in records]
+        bm25_index.add_documents(docs_to_add)
+        loaded += len(docs_to_add)
 
         offset += len(records)
         logger.info("bm25_warmup_progress", extra={"loaded": loaded, "batch": len(records)})
