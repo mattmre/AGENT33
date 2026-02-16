@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 # rather than running into hard limits.
 _DEFAULT_CHARS_PER_TOKEN = 3.5
 
+# Constants for summary/fallback formatting
+_MAX_MESSAGE_PREVIEW_CHARS = 500
+_MAX_FALLBACK_PREVIEW_CHARS = 100
+_MAX_FALLBACK_PREVIEW_MESSAGES = 10
+
 
 def estimate_tokens(text: str, chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
     """Estimate token count from character length.
@@ -221,18 +226,34 @@ class ContextManager:
             else:
                 non_system.append(msg)
 
-        # Remove oldest non-system messages until under target
-        while non_system and estimate_message_tokens(
+        # Track running token count to avoid O(n^2) re-estimation
+        running_tokens = estimate_message_tokens(
             system_msgs + non_system, self._chars_per_token
-        ) > target:
+        )
+
+        # Remove oldest non-system messages until under target
+        while non_system and running_tokens > target:
             removed = non_system.pop(0)
+            removed_tokens = estimate_message_tokens([removed], self._chars_per_token)
+            running_tokens -= removed_tokens
             logger.debug(
                 "Unwinding message: role=%s, tokens≈%d",
                 removed.role,
                 estimate_tokens(removed.content, self._chars_per_token),
             )
 
-        return system_msgs + non_system
+        final_messages = system_msgs + non_system
+
+        if running_tokens > target:
+            system_tokens = estimate_message_tokens(system_msgs, self._chars_per_token)
+            logger.warning(
+                "Unwind could not meet target tokens: system messages alone "
+                "use ≈%d tokens (target=%d). Consider reducing system prompt size.",
+                system_tokens,
+                target,
+            )
+
+        return final_messages
 
     # ------------------------------------------------------------------
     # Handoff summaries
@@ -260,11 +281,8 @@ class ContextManager:
         -------
         list[ChatMessage]
             Compacted conversation: system + summary + recent.
-
-        Raises
-        ------
-        RuntimeError
-            If no model router is configured and summarization is needed.
+            Falls back to a simple text summary when no model router
+            is configured.
         """
         # Partition
         system_msgs: list[ChatMessage] = []
@@ -289,6 +307,10 @@ class ContextManager:
         # Build the summary
         summary_text = await self._generate_summary(to_summarize)
 
+        # Role is intentionally "user" — not "system" — so that the
+        # summary message remains eligible for unwinding if context
+        # pressure continues to build.  The "[Context Summary]" prefix
+        # signals its origin to the LLM.
         summary_msg = ChatMessage(
             role="user",
             content=f"[Context Summary]\n{summary_text}",
@@ -303,7 +325,8 @@ class ContextManager:
             return self._fallback_summary(messages)
 
         conversation_text = "\n".join(
-            f"[{msg.role}]: {msg.content[:500]}" for msg in messages
+            f"[{msg.role}]: {msg.content[:_MAX_MESSAGE_PREVIEW_CHARS]}"
+            for msg in messages
         )
 
         try:
@@ -328,12 +351,13 @@ class ContextManager:
     def _fallback_summary(messages: list[ChatMessage]) -> str:
         """Create a basic summary without LLM when router is unavailable."""
         lines = [f"Prior conversation ({len(messages)} messages):"]
-        for msg in messages[:10]:
-            # Take first 100 chars of each message
-            preview = msg.content[:100].replace("\n", " ")
+        for msg in messages[:_MAX_FALLBACK_PREVIEW_MESSAGES]:
+            preview = msg.content[:_MAX_FALLBACK_PREVIEW_CHARS].replace("\n", " ")
             lines.append(f"- [{msg.role}] {preview}...")
-        if len(messages) > 10:
-            lines.append(f"  ... and {len(messages) - 10} more messages")
+        if len(messages) > _MAX_FALLBACK_PREVIEW_MESSAGES:
+            lines.append(
+                f"  ... and {len(messages) - _MAX_FALLBACK_PREVIEW_MESSAGES} more messages"
+            )
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
