@@ -189,6 +189,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bm25_index = BM25Index()
     app.state.bm25_index = bm25_index
 
+    # -- BM25 warm-up from existing records --
+    if settings.bm25_warmup_enabled:
+        from agent33.memory.warmup import warm_up_bm25
+
+        try:
+            warmup_count = await warm_up_bm25(
+                long_term_memory=long_term_memory,
+                bm25_index=bm25_index,
+                page_size=settings.bm25_warmup_page_size,
+                max_records=settings.bm25_warmup_max_records,
+            )
+            logger.info("bm25_warmup_done", records_loaded=warmup_count)
+        except Exception as exc:
+            logger.warning("bm25_warmup_failed", error=str(exc), exc_info=True)
+
     hybrid_searcher = None
     if settings.rag_hybrid_enabled:
         from agent33.memory.hybrid import HybridSearcher
@@ -422,9 +437,7 @@ app = FastAPI(
 
 # -- Middleware (order matters: last added = first executed) --------------------
 
-_cors_origins = (
-    settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else []
-)
+_cors_origins = settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else []
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
