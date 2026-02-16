@@ -82,6 +82,7 @@ class InvokeIterativeRequest(BaseModel):
     max_iterations: int = 20
     max_tool_calls_per_iteration: int = 5
     enable_double_confirmation: bool = True
+    loop_detection_threshold: int = 3
 
 
 class InvokeIterativeResponse(BaseModel):
@@ -277,12 +278,28 @@ async def invoke_agent_iterative(
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
+    # Build ToolContext from authenticated user and definition governance
+    from agent33.security.permissions import _get_token_payload
+    from agent33.tools.base import ToolContext
+
+    token_payload = _get_token_payload(request)
+    user_scopes = token_payload.scopes
+
+    # Extract tool_policies from definition governance
+    tool_policies = definition.governance.tool_policies if definition.governance else {}
+
+    tool_context = ToolContext(
+        user_scopes=user_scopes,
+        tool_policies=tool_policies,
+    )
+
     from agent33.agents.tool_loop import ToolLoopConfig
 
     loop_config = ToolLoopConfig(
         max_iterations=body.max_iterations,
         max_tool_calls_per_iteration=body.max_tool_calls_per_iteration,
         enable_double_confirmation=body.enable_double_confirmation,
+        loop_detection_threshold=body.loop_detection_threshold,
     )
 
     runtime = AgentRuntime(
@@ -294,6 +311,7 @@ async def invoke_agent_iterative(
         progressive_recall=progressive_recall,
         tool_registry=tool_registry,
         tool_governance=tool_governance,
+        tool_context=tool_context,
     )
 
     try:

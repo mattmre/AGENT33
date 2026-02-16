@@ -168,6 +168,7 @@ class GovernanceConstraints(BaseModel):
     commands: str = ""
     network: str = ""
     approval_required: list[str] = Field(default_factory=list)
+    tool_policies: dict[str, str] = Field(default_factory=dict)
 
 
 class AgentOwnership(BaseModel):

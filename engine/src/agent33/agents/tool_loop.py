@@ -49,6 +49,7 @@ class ToolLoopConfig:
     max_tool_calls_per_iteration: int = 5
     error_threshold: int = 3
     enable_double_confirmation: bool = True
+    loop_detection_threshold: int = 0  # 0 disables loop detection by default
 
 
 @dataclasses.dataclass(slots=True)
@@ -61,6 +62,7 @@ class ToolLoopState:
     tools_used: list[str] = dataclasses.field(default_factory=list)
     consecutive_errors: int = 0
     confirmation_pending: bool = False
+    call_history: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -195,6 +197,16 @@ class ToolLoop:
                 state.consecutive_errors = 0
                 state.confirmation_pending = False
 
+                # --- Doom-loop detection ---
+                if self._config.loop_detection_threshold > 0:
+                    loop_detected = self._check_doom_loop(response, state)
+                    if loop_detected:
+                        logger.warning(
+                            "Doom-loop detected: identical tool call repeated %d times",
+                            self._config.loop_detection_threshold,
+                        )
+                        return self._build_result(state, last_raw, last_model, "loop_detected")
+
                 tool_results = await self._execute_tool_calls(response, state)
 
                 # Check if budget enforcer blocked during tool execution
@@ -286,6 +298,44 @@ class ToolLoop:
             entry = self._tool_registry.get_entry(tool.name)
             descriptions.append(generate_tool_description(tool, entry))
         return descriptions
+
+    def _check_doom_loop(
+        self,
+        response: LLMResponse,
+        state: ToolLoopState,
+    ) -> bool:
+        """Check if the same tool call is being repeated consecutively.
+
+        Returns True if the most recent tool call signature has been repeated
+        threshold times in a row.
+        """
+        if not response.tool_calls:
+            return False
+
+        # Build canonical signature for the first tool call
+        # (agent typically repeats the same call, not multiple different ones)
+        tc = response.tool_calls[0]
+        # Sort arguments to create a stable signature
+        try:
+            import json
+
+            args_dict = json.loads(tc.function.arguments)
+            sorted_args = json.dumps(args_dict, sort_keys=True)
+        except (json.JSONDecodeError, TypeError):
+            sorted_args = tc.function.arguments
+
+        signature = f"{tc.function.name}:{sorted_args}"
+
+        # Add to history
+        state.call_history.append(signature)
+
+        # Check if the last N calls are identical
+        threshold = self._config.loop_detection_threshold
+        if len(state.call_history) < threshold:
+            return False
+
+        recent_calls = state.call_history[-threshold:]
+        return len(set(recent_calls)) == 1
 
     async def _execute_tool_calls(
         self,

@@ -567,6 +567,122 @@ class TestDenyFirstPermissions:
             deny_scopes=["tools:execute"],
         )
 
+    def test_wildcard_deny_blocks_required_scope(self) -> None:
+        from agent33.security.permissions import check_permission
+
+        # Deny tools:* blocks tools:execute
+        assert not check_permission(
+            "tools:execute",
+            ["tools:execute"],
+            deny_scopes=["tools:*"],
+        )
+
+    def test_wildcard_allow_grants_permission(self) -> None:
+        from agent33.security.permissions import check_permission
+
+        # Token has tools:* which should match tools:execute
+        assert check_permission(
+            "tools:execute",
+            ["tools:*"],
+        )
+
+    def test_decision_api_returns_ask(self) -> None:
+        from agent33.security.permissions import PermissionDecision, check_permission_decision
+
+        # Ask scope blocks execution but signals approval needed
+        decision = check_permission_decision(
+            "tools:execute",
+            ["tools:execute"],
+            ask_scopes=["tools:execute"],
+        )
+        assert decision == PermissionDecision.ASK
+
+    def test_decision_api_deny_overrides_ask(self) -> None:
+        from agent33.security.permissions import PermissionDecision, check_permission_decision
+
+        # Deny takes precedence over ask
+        decision = check_permission_decision(
+            "tools:execute",
+            ["tools:execute"],
+            deny_scopes=["tools:execute"],
+            ask_scopes=["tools:execute"],
+        )
+        assert decision == PermissionDecision.DENY
+
+
+class TestGovernanceToolPolicies:
+    """Tool-specific governance policies via context.tool_policies."""
+
+    def test_policy_deny_blocks_tool(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(
+            user_scopes=["tools:execute"],
+            tool_policies={"shell": "deny"},
+        )
+        assert not gov.pre_execute_check("shell", {"command": "ls"}, ctx)
+
+    def test_policy_ask_blocks_tool(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(
+            user_scopes=["tools:execute"],
+            tool_policies={"file_ops": "ask"},
+        )
+        assert not gov.pre_execute_check("file_ops", {"operation": "write"}, ctx)
+
+    def test_policy_allow_permits_tool(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(
+            user_scopes=["tools:execute"],
+            tool_policies={"shell": "allow"},
+        )
+        assert gov.pre_execute_check("shell", {"command": "ls"}, ctx)
+
+    def test_policy_wildcard_pattern(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(
+            user_scopes=["tools:execute"],
+            tool_policies={"file_*": "deny"},
+        )
+        assert not gov.pre_execute_check("file_ops", {"operation": "read"}, ctx)
+        assert not gov.pre_execute_check("file_write", {}, ctx)
+
+    def test_policy_operation_specific(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(
+            user_scopes=["tools:execute"],
+            tool_policies={"file_ops:write": "deny"},
+        )
+        # write blocked
+        assert not gov.pre_execute_check(
+            "file_ops", {"operation": "write", "path": "/tmp/x"}, ctx
+        )
+        # read allowed (no policy match, continues to normal checks)
+        assert gov.pre_execute_check("file_ops", {"operation": "read", "path": "/tmp/x"}, ctx)
+
+    def test_no_policies_uses_normal_checks(self) -> None:
+        from agent33.tools.base import ToolContext
+        from agent33.tools.governance import ToolGovernance
+
+        gov = ToolGovernance()
+        ctx = ToolContext(user_scopes=["tools:execute"])
+        # No policies, should pass normal scope check
+        assert gov.pre_execute_check("shell", {"command": "ls"}, ctx)
+
 
 # ============================================================================
 # Item 10: Pairing brute-force lockout

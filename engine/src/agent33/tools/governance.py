@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import logging
 import re
 import time
@@ -86,6 +87,7 @@ class ToolGovernance:
         """Return ``True`` if the current context is allowed to run the tool.
 
         Checks (in order):
+        0. Tool-specific governance policies (from context.tool_policies).
         1. Rate limiting (per-subject sliding window).
         2. Autonomy level enforcement.
         3. The user has the required scope (``tools:execute`` by default).
@@ -93,6 +95,22 @@ class ToolGovernance:
         5. For file operations, the path is within the path allowlist.
         6. For web fetch, the domain is in the domain allowlist.
         """
+        # --- Tool-specific governance policies ---
+        if context.tool_policies:
+            policy_result = self._check_tool_policy(tool_name, params, context)
+            if policy_result is not None:
+                # Policy explicitly allowed, denied, or asked
+                if policy_result == "deny":
+                    logger.warning("Tool policy denied: tool=%s", tool_name)
+                    return False
+                if policy_result == "ask":
+                    logger.info(
+                        "Tool policy requires approval: tool=%s (blocking for now)",
+                        tool_name,
+                    )
+                    return False
+                # "allow" continues to normal checks
+
         # --- Rate limiting ---
         subject = context.user_scopes[0] if context.user_scopes else "__anon__"
         if not self._rate_limiter.check(subject):
@@ -168,6 +186,86 @@ class ToolGovernance:
                 return False
 
         return True
+
+    def _check_tool_policy(
+        self,
+        tool_name: str,
+        params: dict[str, Any],
+        context: ToolContext,
+    ) -> str | None:
+        """Evaluate tool_policies for this tool invocation.
+
+        Returns:
+            "allow" if explicitly allowed
+            "deny" if explicitly denied
+            "ask" if requires approval
+            None if no matching policy (continue to normal checks)
+
+        Policy keys support:
+        - Exact tool name: "shell"
+        - Wildcard tool pattern: "file_*", "*"
+        - Tool with operation suffix: "file_ops:write", "file_ops:*"
+
+        Precedence (most specific to least):
+        1. Exact operation match: "file_ops:write"
+        2. Exact tool match: "file_ops"
+        3. Wildcard operation match: "file_*:write"
+        4. Wildcard tool match: "file_*"
+        5. Global wildcard: "*"
+        """
+        policies = context.tool_policies
+        if not policies:
+            return None
+
+        operation = params.get("operation")
+
+        # 1. Check exact operation match first (most specific)
+        if operation:
+            exact_op_key = f"{tool_name}:{operation}"
+            if exact_op_key in policies:
+                return policies[exact_op_key].lower()
+
+            exact_wildcard_op_key = f"{tool_name}:*"
+            if exact_wildcard_op_key in policies:
+                return policies[exact_wildcard_op_key].lower()
+
+        # 2. Check exact tool name match
+        if tool_name in policies:
+            return policies[tool_name].lower()
+
+        # 3. Check wildcard operation patterns (sorted by length for specificity)
+        if operation:
+            wildcard_op_keys = [
+                k for k in policies
+                if ":" in k and ("*" in k or "?" in k or "[" in k)
+            ]
+            wildcard_op_keys.sort(key=len, reverse=True)
+
+            for pattern_key in wildcard_op_keys:
+                parts = pattern_key.split(":", 1)
+                if len(parts) == 2:
+                    tool_pattern, op_pattern = parts
+                    if fnmatch.fnmatch(tool_name, tool_pattern) and (
+                        op_pattern == "*" or fnmatch.fnmatch(operation, op_pattern)
+                    ):
+                        return policies[pattern_key].lower()
+
+        # 4. Check wildcard tool patterns (sorted by length for specificity)
+        wildcard_tool_keys = [
+            k for k in policies
+            if ":" not in k and ("*" in k or "?" in k or "[" in k) and k != "*"
+        ]
+        wildcard_tool_keys.sort(key=len, reverse=True)
+
+        for pattern in wildcard_tool_keys:
+            if fnmatch.fnmatch(tool_name, pattern):
+                return policies[pattern].lower()
+
+        # 5. Check global wildcard (least specific)
+        if "*" in policies:
+            return policies["*"].lower()
+
+        return None
 
     def _validate_command(self, command: str, context: ToolContext) -> bool:
         """Validate a shell command, checking all segments against the allowlist.

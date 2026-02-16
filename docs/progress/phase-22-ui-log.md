@@ -112,3 +112,40 @@
 - GitHub PR opened:
   - https://github.com/mattmre/AGENT33/pull/19
 - PR checkpoint docs captured in `docs/prs/` for review slicing.
+
+### 12) Orchestration Upgrade (Workflow Scheduling + Iterative Controls)
+- Backend workflow orchestration improvements:
+  - Added scheduling endpoints and history in `engine/src/agent33/api/routes/workflows.py`.
+  - Added additive repeat/autonomous execution controls for `/v1/workflows/{name}/execute`.
+  - Added regression/scope test coverage in `engine/tests/test_workflow_scheduling_api.py`.
+- Frontend usability and wiring improvements:
+  - Added iterative invoke operation in agents domain.
+  - Added schedule/history operations in workflows domain.
+  - Corrected training payload defaults for rollout/optimize operations.
+  - Added guided operation controls and JSON format/reset helpers in `frontend/src/components/OperationCard.tsx`.
+  - Added UX hint typing in `frontend/src/types/index.ts` and supporting styles in `frontend/src/styles.css`.
+- Validation evidence:
+  - `cd engine && python -m ruff check src/agent33/api/routes/workflows.py tests/test_workflow_scheduling_api.py` -> pass
+  - `cd engine && python -m pytest tests/test_workflow_scheduling_api.py tests/test_idor_access_control.py -q` -> pass (`52 passed`)
+  - `cd frontend && npm run lint && npm run test -- --run && npm run build` -> pass
+
+### 13) Phase A Safety Guardrails (Wildcard Permissions + Doom-Loop Control)
+- Added wildcard-aware permission decisions (`allow` / `ask` / `deny`) while preserving deny-first behavior:
+  - `engine/src/agent33/security/permissions.py`
+- Added tool policy support in governance context and enforcement:
+  - `engine/src/agent33/tools/base.py`
+  - `engine/src/agent33/tools/governance.py`
+- Added agent-definition governance policy field and prompt rendering:
+  - `engine/src/agent33/agents/definition.py`
+  - `engine/src/agent33/agents/runtime.py`
+- Added iterative loop guardrail (identical-call doom-loop detection) with configurable threshold:
+  - `engine/src/agent33/agents/tool_loop.py`
+  - `engine/src/agent33/api/routes/agents.py`
+- Added/updated validation coverage:
+  - `engine/tests/test_phase14_security.py`
+  - `engine/tests/test_tool_loop.py`
+  - `engine/tests/test_governance_prompt.py`
+- Validation evidence:
+  - `cd engine && python -m ruff check src/agent33/security/permissions.py src/agent33/tools/base.py src/agent33/tools/governance.py src/agent33/agents/definition.py src/agent33/agents/runtime.py src/agent33/agents/tool_loop.py src/agent33/api/routes/agents.py tests/test_phase14_security.py tests/test_tool_loop.py tests/test_governance_prompt.py` -> pass
+  - `cd engine && python -m mypy src/agent33/security/permissions.py src/agent33/tools/base.py src/agent33/tools/governance.py src/agent33/agents/definition.py src/agent33/agents/runtime.py src/agent33/agents/tool_loop.py src/agent33/api/routes/agents.py` -> pass
+  - `cd engine && python -m pytest tests/test_phase14_security.py tests/test_tool_loop.py tests/test_invoke_iterative.py tests/test_governance_prompt.py tests/test_agent_registry.py -q` -> pass (`197 passed`)
