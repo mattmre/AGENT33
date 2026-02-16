@@ -13,9 +13,12 @@ from pydantic import BaseModel, Field
 from agent33.workflows.actions import (
     conditional,
     execute_code,
+    http_request,
     invoke_agent,
     parallel_group,
+    route,
     run_command,
+    sub_workflow,
     transform,
     validate,
     wait,
@@ -129,7 +132,8 @@ class WorkflowExecutor:
                         _sem = asyncio.Semaphore(parallel_limit)
 
                         async def _run_limited(
-                            sid: str, semaphore: asyncio.Semaphore = _sem,
+                            sid: str,
+                            semaphore: asyncio.Semaphore = _sem,
                         ) -> StepResult:
                             async with semaphore:
                                 return await self._execute_step(
@@ -224,9 +228,7 @@ class WorkflowExecutor:
                 coro = self._dispatch_action(step, resolved_inputs, state, dry_run)
 
                 if step.timeout_seconds:
-                    outputs = await asyncio.wait_for(
-                        coro, timeout=float(step.timeout_seconds)
-                    )
+                    outputs = await asyncio.wait_for(coro, timeout=float(step.timeout_seconds))
                 else:
                     outputs = await coro
 
@@ -243,9 +245,7 @@ class WorkflowExecutor:
                 logger.warning("step_timeout", step_id=step.id, attempt=attempt)
             except Exception as exc:
                 last_error = str(exc)
-                logger.warning(
-                    "step_error", step_id=step.id, attempt=attempt, error=last_error
-                )
+                logger.warning("step_error", step_id=step.id, attempt=attempt, error=last_error)
 
             if attempt < max_attempts:
                 await asyncio.sleep(delay)
@@ -344,6 +344,33 @@ class WorkflowExecutor:
                 adapter_id=step.adapter_id,
                 inputs=resolved_inputs,
                 sandbox=step.sandbox,
+                dry_run=dry_run,
+            )
+
+        if action == StepAction.HTTP_REQUEST:
+            return await http_request.execute(
+                url=step.url,
+                method=step.http_method,
+                headers=step.http_headers,
+                body=step.http_body,
+                timeout_seconds=step.timeout_seconds or 30,
+                inputs=resolved_inputs,
+                dry_run=dry_run,
+            )
+
+        if action == StepAction.SUB_WORKFLOW:
+            return await sub_workflow.execute(
+                workflow_definition=step.sub_workflow,
+                inputs=resolved_inputs,
+                dry_run=dry_run,
+            )
+
+        if action == StepAction.ROUTE:
+            return await route.execute(
+                query=step.query,
+                candidates=step.route_candidates,
+                model=step.route_model,
+                inputs=resolved_inputs,
                 dry_run=dry_run,
             )
 

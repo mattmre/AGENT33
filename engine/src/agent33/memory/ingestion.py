@@ -4,6 +4,10 @@ Provides both character-based and token-aware chunking.  The
 :class:`TokenAwareChunker` estimates token counts using a word-based
 heuristic (``words * 1.3``) and preserves sentence boundaries when
 splitting, producing higher-quality chunks for embedding.
+
+The :class:`DocumentExtractor` handles text extraction from binary
+document formats (PDF, images via OCR, plaintext) so that downstream
+chunkers receive plain strings.
 """
 
 from __future__ import annotations
@@ -11,6 +15,10 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+
+import structlog
+
+logger = structlog.get_logger()
 
 # ── Sentence-boundary regex ──────────────────────────────────────────
 
@@ -321,3 +329,119 @@ class TokenAwareChunker:
             )
 
         return chunks
+
+
+# ── Document format extraction ──────────────────────────────────────
+
+
+class DocumentExtractor:
+    """Extracts text from various document formats.
+
+    Supports PDF (via ``pymupdf`` or ``pdfplumber``), images via OCR
+    (``pytesseract`` + ``Pillow``), and plain UTF-8 text.  Libraries are
+    imported lazily so the core package has no hard dependency on them.
+    """
+
+    # Maximum input sizes to prevent memory exhaustion from oversized files
+    _MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
+    _MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50 MB
+    _MAX_PDF_PAGES = 5000
+
+    def extract_pdf(self, pdf_bytes: bytes) -> str:
+        """Extract text from PDF bytes.
+
+        Tries ``pymupdf`` (fitz) first, then falls back to
+        ``pdfplumber``.
+
+        Raises:
+            ImportError: If neither library is installed.
+            ValueError: If the PDF exceeds size limits.
+        """
+        if len(pdf_bytes) > self._MAX_PDF_BYTES:
+            raise ValueError(
+                f"PDF exceeds maximum size ({len(pdf_bytes)} bytes, "
+                f"limit {self._MAX_PDF_BYTES})"
+            )
+
+        try:
+            import fitz  # pymupdf
+
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                if len(doc) > self._MAX_PDF_PAGES:
+                    raise ValueError(
+                        f"PDF has {len(doc)} pages (limit {self._MAX_PDF_PAGES})"
+                    )
+                pages = [page.get_text() for page in doc]
+            logger.info("extract_pdf", library="pymupdf", pages=len(pages))
+            return "\n\n".join(pages)
+        except ImportError:
+            pass
+
+        try:
+            import io
+
+            import pdfplumber
+
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                pages = [page.extract_text() or "" for page in pdf.pages]
+            logger.info(
+                "extract_pdf",
+                library="pdfplumber",
+                pages=len(pages),
+            )
+            return "\n\n".join(pages)
+        except ImportError as exc:
+            raise ImportError(
+                "PDF extraction requires 'pymupdf' or 'pdfplumber'. "
+                "Install with: pip install pymupdf  OR  "
+                "pip install pdfplumber"
+            ) from exc
+
+    def extract_image_ocr(self, image_bytes: bytes) -> str:
+        """Extract text from image bytes via OCR.
+
+        Requires ``pytesseract`` and ``Pillow``.
+
+        Raises:
+            ImportError: If the required libraries are not installed.
+            ValueError: If the image exceeds size limits.
+        """
+        if len(image_bytes) > self._MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image exceeds maximum size ({len(image_bytes)} bytes, "
+                f"limit {self._MAX_IMAGE_BYTES})"
+            )
+
+        try:
+            import io
+
+            import pytesseract
+            from PIL import Image
+
+            image = Image.open(io.BytesIO(image_bytes))
+            text = pytesseract.image_to_string(image)
+            logger.info("extract_image_ocr", text_len=len(text))
+            return text
+        except ImportError as exc:
+            raise ImportError(
+                "Image OCR requires 'pytesseract' and 'Pillow'. "
+                "Install with: pip install pytesseract Pillow"
+            ) from exc
+
+    def extract_text(self, content: bytes, content_type: str) -> str:
+        """Route extraction based on content type.
+
+        Args:
+            content: Raw bytes of the document.
+            content_type: MIME type or short alias (``"pdf"``,
+                ``"image/png"``, ``"text/plain"``, etc.).
+
+        Returns:
+            Extracted plain-text string.
+        """
+        if content_type in ("application/pdf", "pdf"):
+            return self.extract_pdf(content)
+        if content_type.startswith("image/"):
+            return self.extract_image_ocr(content)
+        # Fallback: decode as UTF-8 text
+        return content.decode("utf-8", errors="replace")

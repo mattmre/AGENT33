@@ -21,6 +21,9 @@ class StepAction(str, Enum):
     PARALLEL_GROUP = "parallel-group"
     WAIT = "wait"
     EXECUTE_CODE = "execute-code"
+    HTTP_REQUEST = "http-request"
+    SUB_WORKFLOW = "sub-workflow"
+    ROUTE = "route"
 
 
 class ExecutionMode(str, Enum):
@@ -75,6 +78,17 @@ class WorkflowStep(BaseModel):
     tool_id: str | None = None
     adapter_id: str | None = None
     sandbox: dict[str, Any] | None = None
+    # For http-request action
+    url: str | None = None
+    http_method: str = "GET"
+    http_headers: dict[str, str] | None = None
+    http_body: Any | None = None
+    # For sub-workflow action
+    sub_workflow: dict[str, Any] | None = None
+    # For route action
+    query: str | None = None
+    route_candidates: list[str] | None = None
+    route_model: str = "llama3.2"
 
     model_config = {"populate_by_name": True}
 
@@ -148,9 +162,7 @@ class WorkflowDefinition(BaseModel):
         for step in steps:
             for dep in step.depends_on:
                 if dep not in ids:
-                    raise ValueError(
-                        f"Step '{step.id}' depends on unknown step '{dep}'"
-                    )
+                    raise ValueError(f"Step '{step.id}' depends on unknown step '{dep}'")
         return steps
 
     @classmethod
@@ -163,9 +175,7 @@ class WorkflowDefinition(BaseModel):
             try:
                 import yaml
             except ImportError as exc:
-                raise ImportError(
-                    "PyYAML is required to load YAML workflow files"
-                ) from exc
+                raise ImportError("PyYAML is required to load YAML workflow files") from exc
             data = yaml.safe_load(content)
         else:
             data = json.loads(content)
