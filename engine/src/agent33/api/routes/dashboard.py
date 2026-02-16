@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,37 @@ router = APIRouter(prefix="/v1/dashboard", tags=["dashboard"])
 _metrics = MetricsCollector()
 _lineage = ExecutionLineage()
 
-_TEMPLATE_PATH = Path(__file__).resolve().parents[4] / "templates" / "dashboard.html"
+_DASHBOARD_FILE = "dashboard.html"
+_DEFAULT_METRICS: dict[str, Any] = {
+    "active_workflows": 0,
+    "error_count": 0,
+    "token_usage": 0,
+    "request_latency": {
+        "count": 0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+    },
+}
+
+
+@lru_cache(maxsize=1)
+def _resolve_template_path() -> Path | None:
+    module_path = Path(__file__).resolve()
+    parents = module_path.parents
+    root_like = parents[4] if len(parents) > 4 else Path("/")
+    site_pkg_like = parents[3] if len(parents) > 3 else Path("/")
+    candidates = [
+        root_like / "templates" / _DASHBOARD_FILE,
+        site_pkg_like / "templates" / _DASHBOARD_FILE,
+        Path.cwd() / "templates" / _DASHBOARD_FILE,
+        Path("/app/templates") / _DASHBOARD_FILE,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
 
 
 def set_metrics(collector: MetricsCollector) -> None:
@@ -35,8 +66,9 @@ def set_lineage(lineage: ExecutionLineage) -> None:
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_page() -> HTMLResponse:
     """Serve the HTML dashboard."""
-    if _TEMPLATE_PATH.exists():
-        content = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    template_path = _resolve_template_path()
+    if template_path is not None:
+        content = template_path.read_text(encoding="utf-8")
     else:
         content = "<html><body><h1>AGENT-33 Dashboard</h1><p>Template not found.</p></body></html>"
     return HTMLResponse(content=content)
@@ -45,7 +77,8 @@ async def dashboard_page() -> HTMLResponse:
 @router.get("/metrics")
 async def dashboard_metrics() -> dict[str, Any]:
     """Return current metrics summary as JSON."""
-    return _metrics.get_summary()
+    summary = _metrics.get_summary()
+    return summary if summary else _DEFAULT_METRICS
 
 
 @router.get("/lineage/{workflow_id}")

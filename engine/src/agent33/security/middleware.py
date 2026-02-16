@@ -22,6 +22,7 @@ _PUBLIC_PATHS: set[str] = {
     "/redoc",
     "/openapi.json",
     "/v1/auth/token",
+    "/v1/dashboard/",
 }
 
 
@@ -40,9 +41,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
+        # Let CORS middleware handle preflight.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Allow public endpoints through without auth
         if (
             path in _PUBLIC_PATHS
+            or path.startswith("/v1/dashboard/")
             or path == "/docs"
             or path.startswith("/docs/")
             or path == "/redoc"

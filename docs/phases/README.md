@@ -26,10 +26,12 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 19 | Release & Sync Automation | Distribution | `PHASE-19-RELEASE-AND-SYNC-AUTOMATION.md` |
 | 20 | Continuous Improvement & Research Intake | Research | `PHASE-20-CONTINUOUS-IMPROVEMENT-AND-RESEARCH-INTAKE.md` |
 | 21 | Extensibility Patterns Integration | Research/Core | `PHASE-21-EXTENSIBILITY-PATTERNS-INTEGRATION.md` |
+| 22 | Unified UI Platform and Access Layer | Product/Runtime Access | `PHASE-22-UNIFIED-UI-PLATFORM-AND-ACCESS-LAYER.md` |
 
 ## Workflow Plans
 - `PHASE-03-08-WORKFLOW-PLAN.md` (phase sequencing, task mapping, review gates)
 - `PHASE-11-20-WORKFLOW-PLAN.md` (extended sequencing and task mapping)
+- `PHASE-21-24-WORKFLOW-PLAN.md` (post-core product/access sequencing)
 
 ## Notes
 - Generic templates live in `core/phases/` and serve as structural examples.

@@ -6,7 +6,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import require_scope
@@ -27,18 +27,18 @@ class WorkflowCreateRequest(BaseModel):
     name: str
     version: str
     description: str | None = None
-    triggers: dict[str, Any] = {}
-    inputs: dict[str, Any] = {}
-    outputs: dict[str, Any] = {}
+    triggers: dict[str, Any] = Field(default_factory=dict)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
     steps: list[dict[str, Any]]
-    execution: dict[str, Any] = {}
-    metadata: dict[str, Any] = {}
+    execution: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowExecuteRequest(BaseModel):
     """Request body for executing a workflow."""
 
-    inputs: dict[str, Any] = {}
+    inputs: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
 
 
@@ -49,7 +49,7 @@ class WorkflowSummary(BaseModel):
     version: str
     description: str | None = None
     step_count: int
-    triggers: dict[str, Any] = {}
+    triggers: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/", dependencies=[require_scope("workflows:read")])

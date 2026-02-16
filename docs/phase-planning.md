@@ -106,6 +106,17 @@ AGENT-33 is the master 'queen bee' repo that centralizes agentic workflows, orch
 - Establish research intake and periodic roadmap refresh.
 - Capture lessons learned and update governance artifacts.
 
+## Phase 21: Extensibility Patterns Integration
+- Integrate proven extensibility patterns from research dossiers.
+- Add relationship typing, provenance, and change event documentation.
+- Keep improvements documentation-first and model-agnostic.
+
+## Phase 22: Unified UI Platform & Access Layer
+- Deliver a first-party AGENT-33 frontend with full API domain coverage.
+- Provide easy human operation flows and token/API-key service access.
+- Ship containerized local/VPS deployment and full end-to-end verification.
+- Status: Completed on 2026-02-16 (see `docs/progress/phase-22-ui-log.md`).
+
 ## Phase Template Guidance (Generic)
 Use the generic phase templates in `core/phases/` for structure, and the AGENT-33 phase plans in `docs/phases/` for sequencing:
 - Start with `docs/phases/README.md` to select the next phase.

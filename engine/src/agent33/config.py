@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     encryption_key: SecretStr = SecretStr("")
+    auth_bootstrap_enabled: bool = False
+    auth_bootstrap_admin_username: str = "admin"
+    auth_bootstrap_admin_password: SecretStr = SecretStr("")
+    auth_bootstrap_admin_scopes: str = (
+        "admin,agents:read,agents:write,agents:invoke,"
+        "workflows:read,workflows:write,workflows:execute,tools:execute"
+    )
 
     # Rate limiting (per-tenant, sliding window)
     rate_limit_per_minute: int = 60  # max tool executions per minute
@@ -105,6 +112,13 @@ class Settings(BaseSettings):
     # Environment
     environment: str = "development"
 
+    # Matrix messaging adapter
+    matrix_homeserver_url: str = ""  # e.g. "https://matrix.org"
+    matrix_access_token: SecretStr = SecretStr("")
+    matrix_user_id: str = ""  # e.g. "@agent33:matrix.org"
+    matrix_room_ids: str = ""  # comma-separated room IDs (empty = all joined rooms)
+    matrix_sync_timeout_ms: int = 30_000
+
     # Self-improvement
     self_improve_enabled: bool = True
     self_improve_scope: str = "prompts,workflows,templates"
@@ -120,6 +134,11 @@ class Settings(BaseSettings):
             warnings.append("api_secret_key is using the default value")
         if self.jwt_secret.get_secret_value() == "change-me-in-production":
             warnings.append("jwt_secret is using the default value")
+        if self.auth_bootstrap_enabled:
+            warnings.append("auth_bootstrap_enabled is true")
+        bootstrap_password = self.auth_bootstrap_admin_password.get_secret_value()
+        if self.auth_bootstrap_enabled and bootstrap_password in {"", "admin"}:
+            warnings.append("auth_bootstrap_admin_password is empty or using default value")
         if warnings and self.environment == "production":
             raise RuntimeError(
                 "FATAL: Default secrets in production mode. "

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -111,11 +112,17 @@ def run(
         "-i",
         help="JSON string of workflow inputs.",
     ),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        "-t",
+        help="Bearer token for protected workflow execution. Falls back to TOKEN env var.",
+    ),
 ) -> None:
     """Execute a workflow by name via the API."""
     import httpx
 
-    payload: dict[str, object] = {"workflow": workflow}
+    payload: dict[str, object] = {"inputs": {}}
     if inputs:
         try:
             payload["inputs"] = json.loads(inputs)
@@ -123,9 +130,18 @@ def run(
             typer.echo(f"Invalid JSON inputs: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 
+    auth_token = token or os.getenv("TOKEN")
+    headers = {}
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
     try:
         with httpx.Client(base_url=base_url, timeout=120.0) as client:
-            resp = client.post("/api/v1/workflows/run", json=payload)
+            resp = client.post(
+                f"/v1/workflows/{workflow}/execute",
+                json=payload,
+                headers=headers,
+            )
             resp.raise_for_status()
             typer.echo(json.dumps(resp.json(), indent=2))
     except httpx.HTTPStatusError as exc:

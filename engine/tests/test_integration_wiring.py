@@ -108,6 +108,27 @@ class TestSecurityMiddleware:
         ]
         assert CORSMiddleware in middleware_classes
 
+    def test_preflight_options_not_rejected_by_auth(self, patched_app):
+        """CORS preflight should not be blocked by auth middleware."""
+        _app, client, _ = patched_app
+        resp = client.options(
+            "/v1/chat/completions",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert resp.status_code != 401
+        assert "Missing authentication credentials" not in resp.text
+
+    def test_dashboard_route_is_public_html(self, patched_app):
+        """Dashboard page should render as public HTML."""
+        _app, client, _ = patched_app
+        resp = client.get("/v1/dashboard/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert "AGENT-33 Dashboard" in resp.text
+
 
 class TestLifespanState:
     """Verify that lifespan populates app.state with expected attributes."""

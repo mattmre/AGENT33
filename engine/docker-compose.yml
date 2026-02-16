@@ -1,4 +1,16 @@
 services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    environment:
+      API_BASE_URL: ${FRONTEND_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      api:
+        condition: service_started
+
   api:
     build:
       context: .
@@ -10,17 +22,17 @@ services:
       DATABASE_URL: postgresql+asyncpg://agent33:agent33@postgres:5432/agent33
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
-      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       SEARXNG_URL: http://searxng:8080
       JINA_API_KEY: ${JINA_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       nats:
-        condition: service_started
-      ollama:
         condition: service_started
       searxng:
         condition: service_healthy
@@ -34,6 +46,8 @@ services:
     image: ollama/ollama:latest
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "${OLLAMA_CONTEXT_LENGTH:-32768}"
     volumes:
       - ollama_data:/root/.ollama
     deploy:
@@ -43,6 +57,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    profiles:
+      - local-ollama
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -91,6 +107,40 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  devbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.devbox
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    stdin_open: true
+    tty: true
+    environment:
+      AGENT33_API_URL: http://api:8000
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      DATABASE_URL: postgresql://agent33:agent33@postgres:5432/agent33
+      REDIS_URL: redis://redis:6379/0
+      NATS_URL: nats://nats:4222
+      DOCKER_HOST: unix:///var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    volumes:
+      - ..:/workspace
+      - shared_data:/data/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+      - devbox_home:/root
+    profiles:
+      - dev
 
   n8n:
     image: n8nio/n8n:latest
@@ -141,3 +191,4 @@ volumes:
   searxng_data:
   n8n_data:
   shared_data:
+  devbox_home:
