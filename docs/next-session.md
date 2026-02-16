@@ -1,60 +1,53 @@
 # Next Session Briefing
 
-Last updated: 2026-02-15T18:00
+Last updated: 2026-02-15T23:00
 
 ## Current State
-- **Branch**: `main` (clean working tree, 973 tests passing)
-- **Open PRs**: #7 (P0), #8 (P1), #9 (P2), #10 (P5), #11 (P3), #12 (P4)
+- **Branch**: `main` (clean, all PRs merged)
+- **Tests**: 1,187 passing, 0 lint errors
+- **Open PRs**: None
 - **All 21 Phases**: Complete
-- **Session 15**: P0-P5 implemented (6 PRs pending review/merge)
+- **Session 16**: All 6 PRs reviewed, fixed (50+ review comments addressed), merged
 - **ZeroClaw Parity**: Items 13-19 complete, #20 (Matrix) remaining
 - **Research docs**: AWM analysis, SkillsBench analysis, ZeroClaw parity analysis
-- **Test health**: 23 background runs across all branches, 0 failures
 
-## What Was Done (Session 15)
+## What Was Done (Session 16)
 
-Six priorities implemented across 6 PRs, each on its own feature branch:
+Reviewed all open PR comments from Copilot and Gemini Code Assist (50+ inline comments), applied fixes, and merged all 6 PRs to main:
 
-| PR | Priority | Feature | Tests | Branch |
-|----|----------|---------|-------|--------|
-| #7 | P0 | Iterative tool-use loop | 64 | `feat/p0-iterative-tool-loop` |
-| #8 | P1 | 4-stage hybrid skill matching | 51 | `feat/p1-4stage-skill-matching` |
-| #9 | P2 | Context window management | 38 | `feat/p2-context-window-management` |
-| #10 | P5 | AWM analysis document | 0 | `feat/p5-awm-analysis` |
-| #11 | P3 | Architecture gaps (PDF/OCR, HTTP, sub-workflow, route) | 40 | `feat/p3-architecture-gaps` |
-| #12 | P4 | BM25 warm-up & ingestion pipeline | 21 | `feat/p4-bm25-warmup-ingestion` |
+| PR | Feature | Key Fixes | Tests |
+|----|---------|-----------|-------|
+| #10 | AWM Analysis | Token counting description accuracy | 0 |
+| #7 | Iterative tool-use loop | Tool call desync, SSRF, governance bypass, Ollama format | 64 |
+| #8 | 4-stage skill matching | Balanced brace JSON parsing | 51 |
+| #9 | Context window management | O(n) unwind, docstring, named constants | 38 |
+| #11 | Architecture gaps | SSRF protection, fitz context manager, depth limiting, route validation | 40 |
+| #12 | BM25 warm-up & ingestion | Row mapping bug fix, Literal types, batch add_documents | 21 |
 
-**Total**: 214 new tests across feature branches. See `docs/sessions/session-15-2026-02-15.md` for full details.
+**Critical fixes applied:**
+- **Security**: SSRF protection with private IP blocklist, redirect prevention, route agent validation
+- **Bug**: SearchResult score/metadata swap fixed, tool call capping desync fixed
+- **Performance**: O(n) unwind, batch BM25 indexing (O(n) vs O(n^2))
+- **Validation**: Literal types, model validators, mutable default fixes
 
 ## Next Priorities
 
-### Priority 0: Merge Session 15 PRs
-Review and merge PRs #7-#12. All branch from the same main commit, so conflicts should be minimal.
-
-**Recommended merge order** (docs first, then independent modules, then files with overlap):
-1. PR #10 (P5 — docs only)
-2. PR #9 (P2 — new file `context_manager.py`)
-3. PR #8 (P1 — new file `matching.py`)
-4. PR #7 (P0 — modifies `main.py`, `config.py`, `agents.py`)
-5. PR #11 (P3 — modifies `executor.py`, `definition.py`, `ingestion.py`)
-6. PR #12 (P4 — modifies `main.py`, `config.py`, `long_term.py`, `memory_search.py`)
-
-PRs #7 and #12 both touch `main.py` and `config.py` — expect minor merge conflicts on those two files. Resolution should be straightforward (additive changes in different sections).
-
-After merging all 6 PRs, expected test count: ~1,187 (973 + 214).
-
 ### Priority 1: Integration Testing
-End-to-end tests verifying subsystems work together:
+End-to-end tests verifying subsystems work together. All pieces are now on main but haven't been tested in combination:
 - Iterative tool loop + real tool execution + context management
 - Ingestion pipeline → BM25 warm-up → hybrid search flow
 - Skill matching → skill injection → tool loop execution
 - Context manager triggering during long tool-use sessions
+
+**Why this matters**: Individual unit tests pass, but the real value is in the integration between the tool loop, skill matching, context management, and memory systems.
 
 ### Priority 2: Multi-Trial Evaluation & CTRF Reporting
 - Multi-trial evaluation methodology (5 trials, binary reward, skills impact measurement)
 - CTRF test result format for standardized reporting
 - Aligns with both SkillsBench and AWM evaluation paradigms
 - Build on existing evaluation suite (Phase 17) and golden tasks (GT-01..GT-07)
+
+**Reference**: `docs/research/skillsbench-analysis.md` sections on evaluation methodology
 
 ### Priority 3: AWM Adaptation (Tier 1 items)
 From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
@@ -64,11 +57,11 @@ From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
 - A4: Optional tiktoken integration for exact token counting
 
 ### Priority 4: Remaining Items
-- Matrix channel adapter (ZeroClaw parity #20)
+- Matrix channel adapter (ZeroClaw parity #20 — low priority)
 - Answer leakage prevention runtime integration (skill injection → tool loop)
+- Context manager ↔ tool loop integration (auto-management during iterations)
 - Failure mode taxonomy alignment with SkillsBench
 - Task completion double-confirmation enhancement
-- Context manager ↔ tool loop integration (unwinding during long sessions)
 
 ## Key Files to Know
 
@@ -77,10 +70,10 @@ From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
 | Entry point | `engine/src/agent33/main.py` |
 | Config | `engine/src/agent33/config.py` |
 | Agent runtime | `engine/src/agent33/agents/runtime.py` |
-| **Tool loop** | `engine/src/agent33/agents/tool_loop.py` |
-| **Context manager** | `engine/src/agent33/agents/context_manager.py` |
-| **Skill matcher** | `engine/src/agent33/skills/matching.py` |
-| **BM25 warm-up** | `engine/src/agent33/memory/warmup.py` |
+| Tool loop | `engine/src/agent33/agents/tool_loop.py` |
+| Context manager | `engine/src/agent33/agents/context_manager.py` |
+| Skill matcher | `engine/src/agent33/skills/matching.py` |
+| BM25 warm-up | `engine/src/agent33/memory/warmup.py` |
 | Agent invoke route | `engine/src/agent33/api/routes/agents.py` |
 | Memory/ingest route | `engine/src/agent33/api/routes/memory_search.py` |
 | Skill definition | `engine/src/agent33/skills/definition.py` |
@@ -96,6 +89,7 @@ From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
 | RAG pipeline | `engine/src/agent33/memory/rag.py` |
 | Progressive recall | `engine/src/agent33/memory/progressive_recall.py` |
 | Ingestion / chunking | `engine/src/agent33/memory/ingestion.py` |
+| Long-term memory | `engine/src/agent33/memory/long_term.py` |
 | HTTP request action | `engine/src/agent33/workflows/actions/http_request.py` |
 | Sub-workflow action | `engine/src/agent33/workflows/actions/sub_workflow.py` |
 | Route action | `engine/src/agent33/workflows/actions/route.py` |
@@ -107,7 +101,7 @@ From `docs/research/agent-world-model-analysis.md` adaptation roadmap:
 ## Test Commands
 ```bash
 cd engine
-python -m pytest tests/ -q                                # full suite (973 on main)
+python -m pytest tests/ -q                                # full suite (1,187 tests)
 python -m pytest tests/ -x -q                             # stop on first failure
 python -m pytest tests/test_tool_loop.py -x -q            # tool loop (40 tests)
 python -m pytest tests/test_invoke_iterative.py -x -q     # invoke iterative (24 tests)
@@ -119,14 +113,25 @@ python -m pytest tests/test_integration_wiring.py -x -q   # integration wiring (
 python -m ruff check src/ tests/                           # lint (0 errors)
 ```
 
-## Branch Cleanup
-After merging all PRs, these local branches can be deleted:
-```bash
-git branch -d feat/p0-iterative-tool-loop
-git branch -d feat/p1-4stage-skill-matching
-git branch -d feat/p2-context-window-management
-git branch -d feat/p3-architecture-gaps
-git branch -d feat/p4-bm25-warmup-ingestion
-git branch -d feat/p5-awm-analysis
-git branch -d feat/sessions-10-12-zeroclaw-parity-integration-wiring
+## Architecture Notes for Next Session
+
+### Subsystem Integration Map (all wired in main.py lifespan)
 ```
+PostgreSQL → Redis → NATS → AgentRegistry → CodeExecutor → ModelRouter
+  → EmbeddingProvider (+EmbeddingCache)
+  → BM25Index (+warm-up from LongTermMemory)
+  → HybridSearcher (BM25 + vector via RRF)
+  → RAGPipeline → ProgressiveRecall
+  → SkillRegistry (+SkillInjector)
+  → ToolRegistry (+ToolGovernance)
+  → Agent-Workflow Bridge
+  → AirLLM (optional) → Memory → Training (optional)
+```
+
+### New Capabilities Added (Sessions 15-16)
+1. **Iterative tool-use loop**: Agents can now call tools repeatedly until task completion (P0)
+2. **4-stage skill matching**: BM25 → LLM lenient → content load → LLM strict (P1)
+3. **Context window management**: Token tracking, message unwinding, LLM summarization (P2)
+4. **Document processing**: PDF (pymupdf/pdfplumber), OCR (pytesseract), with SSRF protection (P3)
+5. **Workflow actions**: HTTP requests, sub-workflows (depth-limited), LLM routing (P3)
+6. **BM25 warm-up**: Startup population from pgvector, batch ingestion endpoint (P4)
