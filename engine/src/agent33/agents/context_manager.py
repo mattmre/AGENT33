@@ -12,6 +12,7 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING
 
+from agent33.agents.tokenizer import EstimateTokenCounter, TokenCounter
 from agent33.llm.base import ChatMessage
 
 if TYPE_CHECKING:
@@ -156,15 +157,29 @@ class ContextManager:
         router: ModelRouter | None = None,
         summarize_model: str = "llama3.2",
         chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN,
+        token_counter: TokenCounter | None = None,
     ) -> None:
         self._budget = budget or ContextBudget()
         self._router = router
         self._summarize_model = summarize_model
         self._chars_per_token = chars_per_token
+        self._token_counter: TokenCounter = token_counter or EstimateTokenCounter(
+            chars_per_token=chars_per_token,
+        )
 
     @property
     def budget(self) -> ContextBudget:
         return self._budget
+
+    @property
+    def token_counter(self) -> TokenCounter:
+        """The token counter used by this manager."""
+        return self._token_counter
+
+    def _estimate_messages(self, messages: list[ChatMessage]) -> int:
+        """Estimate total tokens for *messages* using the configured counter."""
+        msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        return self._token_counter.count_messages(msg_dicts)
 
     # ------------------------------------------------------------------
     # Inspection
@@ -172,7 +187,7 @@ class ContextManager:
 
     def snapshot(self, messages: list[ChatMessage]) -> ContextSnapshot:
         """Take a snapshot of current context window usage."""
-        total = estimate_message_tokens(messages, self._chars_per_token)
+        total = self._estimate_messages(messages)
         headroom = max(0, self._budget.effective_limit - total)
         return ContextSnapshot(
             total_tokens=total,
@@ -212,7 +227,7 @@ class ContextManager:
             A trimmed copy of *messages*.
         """
         target = target_tokens or self._budget.effective_limit
-        current = estimate_message_tokens(messages, self._chars_per_token)
+        current = self._estimate_messages(messages)
 
         if current <= target:
             return list(messages)
@@ -227,25 +242,23 @@ class ContextManager:
                 non_system.append(msg)
 
         # Track running token count to avoid O(n^2) re-estimation
-        running_tokens = estimate_message_tokens(
-            system_msgs + non_system, self._chars_per_token
-        )
+        running_tokens = self._estimate_messages(system_msgs + non_system)
 
         # Remove oldest non-system messages until under target
         while non_system and running_tokens > target:
             removed = non_system.pop(0)
-            removed_tokens = estimate_message_tokens([removed], self._chars_per_token)
+            removed_tokens = self._estimate_messages([removed])
             running_tokens -= removed_tokens
             logger.debug(
-                "Unwinding message: role=%s, tokens≈%d",
+                "Unwinding message: role=%s, tokens~%d",
                 removed.role,
-                estimate_tokens(removed.content, self._chars_per_token),
+                self._token_counter.count(removed.content),
             )
 
         final_messages = system_msgs + non_system
 
         if running_tokens > target:
-            system_tokens = estimate_message_tokens(system_msgs, self._chars_per_token)
+            system_tokens = self._estimate_messages(system_msgs)
             logger.warning(
                 "Unwind could not meet target tokens: system messages alone "
                 "use ≈%d tokens (target=%d). Consider reducing system prompt size.",
@@ -325,8 +338,7 @@ class ContextManager:
             return self._fallback_summary(messages)
 
         conversation_text = "\n".join(
-            f"[{msg.role}]: {msg.content[:_MAX_MESSAGE_PREVIEW_CHARS]}"
-            for msg in messages
+            f"[{msg.role}]: {msg.content[:_MAX_MESSAGE_PREVIEW_CHARS]}" for msg in messages
         )
 
         try:
