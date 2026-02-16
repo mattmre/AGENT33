@@ -107,3 +107,8 @@
 - Verified with OpenClaw network wiring:
   - `docker compose -f docker-compose.yml -f docker-compose.shared-ollama.yml up -d api`
   - `/health` moved from `ollama: unavailable` to `ollama: ok`.
+
+### 11) Review Handoff
+- GitHub PR opened:
+  - https://github.com/mattmre/AGENT33/pull/19
+- PR checkpoint docs captured in `docs/prs/` for review slicing.
