@@ -126,7 +126,7 @@ agent-world-model/
 
 **Entry Point**: `awm` CLI routes to `awm.cli:main`
 
-**AGENT-33 overlap**: Both use FastAPI, SQLAlchemy, and hatchling. Key differences: AWM uses SQLite (single-process), we use PostgreSQL + pgvector (multi-tenant). AWM uses loguru, we use structlog. AWM uses tiktoken for exact token counting; we use character-ratio estimation (3.5 chars/token).
+**AGENT-33 overlap**: Both use FastAPI, SQLAlchemy, and hatchling. Key differences: AWM uses SQLite (single-process), we use PostgreSQL + pgvector (multi-tenant). AWM uses loguru, we use structlog. AWM uses tiktoken for exact token counting; we use word-based estimation (words * 1.3) in memory subsystems and character-ratio estimation (3.5 chars/token) in context management.
 
 ---
 
@@ -532,7 +532,7 @@ AWM is part of Snowflake's broader agent research portfolio:
 | **Workflow Engine** | None (CLI pipeline only) | DAG-based with topological sort, checkpoints |
 | **Skills System** | None | L0/L1/L2 progressive disclosure |
 | **Memory** | None (stateless between tasks) | Short-term buffer + pgvector long-term |
-| **Token Counting** | tiktoken (exact) | Character-ratio estimation (3.5 chars/token) |
+| **Token Counting** | tiktoken (exact) | Word-based estimation (words * 1.3); char-ratio (3.5 chars/token) in context manager |
 | **Logging** | loguru | structlog |
 | **Prompt Injection** | None | Recursive scanning |
 | **Review Process** | None | Two-layer automation (Phase 15) |
