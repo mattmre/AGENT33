@@ -131,6 +131,8 @@ class TestConfigSecurityValidation:
         s = Settings(
             api_secret_key="change-me-in-production",
             jwt_secret="change-me-in-production",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
         assert len(warnings) == 2
@@ -143,6 +145,8 @@ class TestConfigSecurityValidation:
         s = Settings(
             api_secret_key="my-real-secret-key-123",
             jwt_secret="my-real-jwt-secret-456",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
         assert len(warnings) == 0

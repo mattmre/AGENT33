@@ -682,7 +682,7 @@ class TestSecretStrConfig:
     def test_jwt_secret_is_secretstr(self) -> None:
         from agent33.config import Settings
 
-        s = Settings()
+        s = Settings(jwt_secret="change-me-in-production", auth_bootstrap_enabled=False)
         assert isinstance(s.jwt_secret, SecretStr)
         assert s.jwt_secret.get_secret_value() == "change-me-in-production"
 
@@ -725,6 +725,8 @@ class TestSecretStrConfig:
         s = Settings(
             api_secret_key="change-me-in-production",
             jwt_secret="change-me-in-production",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
         assert len(warnings) == 2
@@ -735,6 +737,8 @@ class TestSecretStrConfig:
         s = Settings(
             api_secret_key="real-secret",
             jwt_secret="real-jwt-secret",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
         assert len(warnings) == 0

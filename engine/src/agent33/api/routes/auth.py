@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
+from agent33.config import settings
 from agent33.security.auth import (
     create_access_token,
     generate_api_key,
@@ -23,6 +24,35 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 
 _users: dict[str, dict[str, Any]] = {}
+
+
+def _hash_password(password: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), b"agent33-salt", 100_000
+    ).hex()
+
+
+def _parse_scopes(scopes_raw: str) -> list[str]:
+    scopes = [scope.strip() for scope in scopes_raw.split(",") if scope.strip()]
+    if "admin" not in scopes:
+        scopes.insert(0, "admin")
+    return scopes
+
+
+def _bootstrap_default_user() -> None:
+    if not settings.auth_bootstrap_enabled:
+        return
+    username = settings.auth_bootstrap_admin_username.strip()
+    password = settings.auth_bootstrap_admin_password.get_secret_value()
+    if not username or not password:
+        return
+    _users.setdefault(
+        username,
+        {
+            "password_hash": _hash_password(password),
+            "scopes": _parse_scopes(settings.auth_bootstrap_admin_scopes),
+        },
+    )
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -59,13 +89,12 @@ class ApiKeyResponse(BaseModel):
 @router.post("/token", response_model=TokenResponse)
 async def login(body: LoginRequest) -> TokenResponse:
     """Authenticate with username/password and receive a JWT."""
+    _bootstrap_default_user()
     user = _users.get(body.username)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    password_hash = hashlib.pbkdf2_hmac(
-        "sha256", body.password.encode(), b"agent33-salt", 100_000
-    ).hex()
+    password_hash = _hash_password(body.password)
     if not hmac.compare_digest(password_hash, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 

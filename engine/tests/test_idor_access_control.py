@@ -244,6 +244,8 @@ class TestProductionSecrets:
             environment="production",
             api_secret_key="my-real-secret-key-12345",
             jwt_secret="my-real-jwt-secret-67890",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
         assert len(warnings) == 0

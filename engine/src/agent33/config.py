@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     encryption_key: SecretStr = SecretStr("")
+    auth_bootstrap_enabled: bool = False
+    auth_bootstrap_admin_username: str = "admin"
+    auth_bootstrap_admin_password: SecretStr = SecretStr("admin")
+    auth_bootstrap_admin_scopes: str = (
+        "admin,agents:read,agents:write,agents:invoke,"
+        "workflows:read,workflows:write,workflows:execute,tools:execute"
+    )
 
     # Rate limiting (per-tenant, sliding window)
     rate_limit_per_minute: int = 60  # max tool executions per minute
@@ -127,6 +134,13 @@ class Settings(BaseSettings):
             warnings.append("api_secret_key is using the default value")
         if self.jwt_secret.get_secret_value() == "change-me-in-production":
             warnings.append("jwt_secret is using the default value")
+        if self.auth_bootstrap_enabled:
+            warnings.append("auth_bootstrap_enabled is true")
+        if (
+            self.auth_bootstrap_enabled
+            and self.auth_bootstrap_admin_password.get_secret_value() == "admin"
+        ):
+            warnings.append("auth_bootstrap_admin_password is using the default value")
         if warnings and self.environment == "production":
             raise RuntimeError(
                 "FATAL: Default secrets in production mode. "
