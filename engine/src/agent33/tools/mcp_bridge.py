@@ -7,8 +7,10 @@ instances.  Communication uses JSON-RPC-style HTTP POSTs over ``httpx``.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
@@ -17,6 +19,37 @@ from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.schema import validate_params
 
 logger = logging.getLogger(__name__)
+
+_BLOCKED_NETWORKS = (
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+)
+
+
+def _validate_mcp_url(url: str) -> str:
+    """Validate URL shape and block obvious SSRF targets."""
+    normalized = url.rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"Unsupported MCP URL scheme: {parsed.scheme!r}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("MCP URL must include a hostname")
+    if hostname.lower() == "localhost":
+        raise ValueError("MCP URL host 'localhost' is blocked by SSRF policy")
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        return normalized
+    if any(addr in net for net in _BLOCKED_NETWORKS):
+        raise ValueError(f"MCP URL host '{hostname}' is blocked by SSRF policy")
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +84,7 @@ class MCPServerConnection:
         timeout: float = 30.0,
     ) -> None:
         self._name = name
-        self._url = url.rstrip("/")
+        self._url = _validate_mcp_url(url)
         self._timeout = timeout
         self._tools: list[MCPToolSpec] = []
         self._connected = False
@@ -75,8 +108,20 @@ class MCPServerConnection:
 
     async def connect(self) -> None:
         """Connect and discover tools from the MCP server."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+        self._connected = False
+        self._tools = []
         self._client = httpx.AsyncClient(timeout=self._timeout)
-        self._tools = await self.list_tools()
+        try:
+            self._tools = await self.list_tools()
+        except Exception:
+            await self._client.aclose()
+            self._client = None
+            self._connected = False
+            self._tools = []
+            raise
         self._connected = True
         logger.info(
             "Connected to MCP server %s (%s): %d tools discovered",
@@ -138,7 +183,12 @@ class MCPServerConnection:
         }
         resp = await self._client.post(self._url, json=payload)
         resp.raise_for_status()
-        body = resp.json()
+        try:
+            body = resp.json()
+        except ValueError as exc:
+            raise RuntimeError(f"MCP RPC returned invalid JSON from {self._name}") from exc
+        if not isinstance(body, dict):
+            raise RuntimeError(f"MCP RPC returned non-object JSON from {self._name}")
 
         if "error" in body:
             error = body["error"]
@@ -234,6 +284,7 @@ class MCPBridge:
         Discovered tools are wrapped as :class:`MCPToolAdapter` instances
         and registered in the tool registry (if one is provided).
         """
+        self._adapters.clear()
         for name, conn in self._servers.items():
             try:
                 await conn.connect()

@@ -156,7 +156,11 @@ class MultiTurnEvaluator:
             turns=turns,
             tool_calls_made=all_tool_calls,
             tool_call_accuracy=check.accuracy,
-            success=check.accuracy == 1.0 and len(check.order_violations) == 0,
+            success=(
+                check.accuracy == 1.0
+                and len(check.order_violations) == 0
+                and len(check.unexpected) == 0
+            ),
             duration_ms=duration_ms,
         )
 

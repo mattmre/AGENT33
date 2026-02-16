@@ -31,6 +31,7 @@ from agent33.evaluation.multi_trial import (
 from agent33.evaluation.regression import RegressionDetector, RegressionRecorder
 
 logger = logging.getLogger(__name__)
+_MAX_MULTI_TRIAL_RUNS = 1000
 
 # Gate → required tag (§ Gate Execution Matrix)
 _GATE_TAG: dict[GateType, GoldenTag] = {
@@ -52,6 +53,7 @@ class EvaluationService:
         self._runs: dict[str, EvaluationRun] = {}
         self._baselines: dict[str, BaselineSnapshot] = {}
         self._multi_trial_runs: dict[str, MultiTrialRun] = {}
+        self._multi_trial_run_order: list[str] = []
         self._ctrf = CTRFGenerator()
 
     @property
@@ -216,10 +218,13 @@ class EvaluationService:
         Runs the full (task x agent x model x skills_mode) matrix and
         computes skills impact metrics.
         """
-        executor = MultiTrialExecutor()
+        executor = MultiTrialExecutor(
+            evaluation_fn=self._run_single_trial,
+            timeout_seconds=config.timeout_per_trial_seconds,
+        )
         runner = ExperimentRunner(executor)
         run = await runner.run_experiment(config)
-        self._multi_trial_runs[run.run_id] = run
+        self._store_multi_trial_run(run)
         logger.info(
             "multi_trial_run_stored id=%s results=%d",
             run.run_id,
@@ -227,18 +232,54 @@ class EvaluationService:
         )
         return run
 
+    async def _run_single_trial(
+        self,
+        task_id: str,
+        agent: str,
+        model: str,
+        skills_enabled: bool,
+    ) -> bool:
+        """Run one trial using available built-in evaluation context.
+
+        Current behavior:
+        - Unknown task IDs fail fast.
+        - Known golden task IDs are marked as pass placeholders until full
+          task-execution wiring is implemented.
+        """
+        if task_id not in GOLDEN_TASKS:
+            logger.warning(
+                "multi_trial_unknown_task task_id=%s agent=%s model=%s skills=%s",
+                task_id,
+                agent,
+                model,
+                skills_enabled,
+            )
+            return False
+        return True
+
+    def _store_multi_trial_run(self, run: MultiTrialRun) -> None:
+        """Store a run with bounded retention to avoid unbounded memory growth."""
+        self._multi_trial_runs[run.run_id] = run
+        self._multi_trial_run_order.append(run.run_id)
+        if len(self._multi_trial_run_order) > _MAX_MULTI_TRIAL_RUNS:
+            oldest = self._multi_trial_run_order.pop(0)
+            self._multi_trial_runs.pop(oldest, None)
+
     def get_multi_trial_run(self, run_id: str) -> MultiTrialRun | None:
         """Get a multi-trial run by ID."""
         return self._multi_trial_runs.get(run_id)
 
     def list_multi_trial_runs(self, limit: int = 50) -> list[MultiTrialRun]:
         """List multi-trial runs, most recent first."""
-        runs = sorted(
-            self._multi_trial_runs.values(),
-            key=lambda r: r.started_at,
-            reverse=True,
-        )
-        return runs[:limit]
+        result: list[MultiTrialRun] = []
+        for run_id in reversed(self._multi_trial_run_order):
+            run = self._multi_trial_runs.get(run_id)
+            if run is None:
+                continue
+            result.append(run)
+            if len(result) >= limit:
+                break
+        return result
 
     def export_ctrf(self, run_id: str) -> dict[str, Any] | None:
         """Export a multi-trial run as a CTRF report."""

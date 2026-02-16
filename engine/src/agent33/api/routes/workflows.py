@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any
 
 import structlog
@@ -23,7 +24,8 @@ router = APIRouter(prefix="/v1/workflows", tags=["workflows"])
 _registry: dict[str, WorkflowDefinition] = {}
 
 # In-memory execution history
-_execution_history: list[dict[str, Any]] = []
+_MAX_EXECUTION_HISTORY = 1000
+_execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 
 # Workflow scheduler instance
 _scheduler: WorkflowScheduler | None = None
@@ -69,7 +71,7 @@ class WorkflowScheduleRequest(BaseModel):
 
     cron_expr: str | None = None  # Cron expression (5-field format)
     interval_seconds: int | None = Field(default=None, ge=1, le=86_400)
-    inputs: dict[str, Any] = {}  # Optional workflow inputs
+    inputs: dict[str, Any] = Field(default_factory=dict)  # Optional workflow inputs
 
 
 class WorkflowScheduleResponse(BaseModel):
@@ -192,6 +194,13 @@ async def schedule_workflow(
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
 
+    scan = scan_inputs_recursive(request.inputs)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input rejected: {', '.join(scan.threats)}",
+        )
+
     # Validate that exactly one schedule type is provided
     if request.cron_expr and request.interval_seconds:
         raise HTTPException(
@@ -297,7 +306,8 @@ async def _execute_single(
         )
 
     executor = WorkflowExecutor(workflow)
-    start = time.time()
+    start_ts = time.time()
+    start_monotonic = time.monotonic()
 
     try:
         result: WorkflowResult = await executor.execute(request.inputs)
@@ -309,8 +319,8 @@ async def _execute_single(
             "workflow_name": name,
             "trigger_type": trigger_type,
             "status": "failed",
-            "duration_ms": (time.time() - start) * 1000,
-            "timestamp": start,
+            "duration_ms": (time.monotonic() - start_monotonic) * 1000,
+            "timestamp": start_ts,
             "error": str(exc),
             "job_id": job_id,
         })
@@ -322,7 +332,7 @@ async def _execute_single(
         "trigger_type": trigger_type,
         "status": result.status.value,
         "duration_ms": result.duration_ms,
-        "timestamp": start,
+        "timestamp": start_ts,
         "error": error,
         "job_id": job_id,
     })
@@ -390,12 +400,26 @@ def _get_scheduler() -> WorkflowScheduler:
     return _scheduler
 
 
-async def _scheduled_execution_callback(workflow_name: str, inputs: dict[str, Any]) -> None:
+async def _scheduled_execution_callback(
+    job_id: str,
+    workflow_name: str,
+    inputs: dict[str, Any],
+) -> None:
     """Callback invoked when a scheduled job triggers."""
-    logger.info("scheduled_workflow_triggered", workflow_name=workflow_name)
+    logger.info("scheduled_workflow_triggered", workflow_name=workflow_name, job_id=job_id)
     workflow = _registry.get(workflow_name)
     if workflow is None:
-        logger.error("scheduled_workflow_not_found", workflow_name=workflow_name)
+        logger.error("scheduled_workflow_not_found", workflow_name=workflow_name, job_id=job_id)
+        return
+
+    scan = scan_inputs_recursive(inputs)
+    if not scan.is_safe:
+        logger.warning(
+            "scheduled_workflow_input_rejected",
+            workflow_name=workflow_name,
+            job_id=job_id,
+            threats=scan.threats,
+        )
         return
 
     request = WorkflowExecuteRequest(inputs=inputs)
@@ -405,11 +429,12 @@ async def _scheduled_execution_callback(workflow_name: str, inputs: dict[str, An
             workflow_name,
             request,
             trigger_type="scheduled",
-            job_id=None,  # Job ID could be passed if needed
+            job_id=job_id,
         )
     except Exception as exc:
         logger.error(
             "scheduled_workflow_execution_failed",
             workflow_name=workflow_name,
+            job_id=job_id,
             error=str(exc),
         )

@@ -30,7 +30,7 @@ class WorkflowScheduler:
 
     Jobs are stored in-memory through APScheduler's default job store.
     A callback must be provided at construction time; it is invoked with
-    ``(workflow_name, inputs)`` whenever a job fires.
+    ``(job_id, workflow_name, inputs)`` whenever a job fires.
     """
 
     def __init__(
@@ -88,7 +88,7 @@ class WorkflowScheduler:
             self._execute,
             trigger=trigger,
             id=job_id,
-            args=[workflow_name, inputs],
+            args=[job_id, workflow_name, inputs],
         )
 
         self._jobs[job_id] = ScheduledJob(
@@ -120,7 +120,7 @@ class WorkflowScheduler:
             self._execute,
             trigger=trigger,
             id=job_id,
-            args=[workflow_name, inputs],
+            args=[job_id, workflow_name, inputs],
         )
 
         self._jobs[job_id] = ScheduledJob(
@@ -148,8 +148,8 @@ class WorkflowScheduler:
 
     # -- internal -------------------------------------------------------------
 
-    async def _execute(self, workflow_name: str, inputs: dict[str, Any]) -> None:
+    async def _execute(self, job_id: str, workflow_name: str, inputs: dict[str, Any]) -> None:
         """Fire the callback when a scheduled job triggers."""
-        logger.info("Triggering scheduled workflow %s", workflow_name)
+        logger.info("Triggering scheduled workflow %s (%s)", workflow_name, job_id)
         if self._on_trigger is not None:
-            await self._on_trigger(workflow_name, inputs)
+            await self._on_trigger(job_id, workflow_name, inputs)

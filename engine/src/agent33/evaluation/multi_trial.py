@@ -7,6 +7,7 @@ aggregated with binary reward (all-or-nothing) scoring.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -101,7 +102,7 @@ class ExperimentConfig(BaseModel):
     agents: list[str]
     models: list[str]
     trials_per_combination: int = Field(default=5, ge=1, le=100)
-    skills_modes: list[bool] = Field(default=[True, False])
+    skills_modes: list[bool] = Field(default_factory=lambda: [True, False])
     timeout_per_trial_seconds: int = Field(default=300, ge=1)
     parallel_trials: int = Field(default=1, ge=1)
 
@@ -148,15 +149,48 @@ class MultiTrialExecutor:
     ) -> TrialResult:
         """Execute a single trial and return the result."""
         start = time.monotonic()
+        if self._evaluation_fn is None:
+            duration = int((time.monotonic() - start) * 1000)
+            error_msg = "No evaluation function configured"
+            logger.warning(
+                "trial_failed task=%s agent=%s trial=%d error=%s",
+                task_id,
+                agent,
+                trial_number,
+                error_msg,
+            )
+            return TrialResult(
+                trial_number=trial_number,
+                score=0,
+                duration_ms=duration,
+                error_message=error_msg,
+            )
         try:
-            if self._evaluation_fn is None:
-                raise ValueError("No evaluation function configured")
-            success = await self._evaluation_fn(task_id, agent, model, skills_enabled)
+            success = await asyncio.wait_for(
+                self._evaluation_fn(task_id, agent, model, skills_enabled),
+                timeout=self._timeout,
+            )
             duration = int((time.monotonic() - start) * 1000)
             return TrialResult(
                 trial_number=trial_number,
                 score=1 if success else 0,
                 duration_ms=duration,
+            )
+        except TimeoutError:
+            duration = int((time.monotonic() - start) * 1000)
+            error_msg = f"Trial timed out after {self._timeout}s"
+            logger.warning(
+                "trial_failed task=%s agent=%s trial=%d error=%s",
+                task_id,
+                agent,
+                trial_number,
+                error_msg,
+            )
+            return TrialResult(
+                trial_number=trial_number,
+                score=0,
+                duration_ms=duration,
+                error_message=error_msg,
             )
         except Exception as exc:
             duration = int((time.monotonic() - start) * 1000)

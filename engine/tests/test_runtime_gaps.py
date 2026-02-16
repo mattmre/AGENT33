@@ -646,8 +646,8 @@ class TestDoubleConfirmationStructured:
         assert result.iterations >= 2
 
     @pytest.mark.asyncio
-    async def test_ambiguous_response_accepted(self) -> None:
-        """Ambiguous confirmation (no prefix) is accepted as completed."""
+    async def test_ambiguous_response_reprompts(self) -> None:
+        """Ambiguous confirmation should trigger another confirmation prompt."""
         first_resp = LLMResponse(
             content="Here is the result",
             model="test-model",
@@ -662,9 +662,16 @@ class TestDoubleConfirmationStructured:
             completion_tokens=20,
             # total_tokens is a computed property
         )
+        final_resp = LLMResponse(
+            content="COMPLETED: The answer is 42.",
+            model="test-model",
+            prompt_tokens=10,
+            completion_tokens=20,
+            # total_tokens is a computed property
+        )
 
         router = MagicMock()
-        router.complete = AsyncMock(side_effect=[first_resp, ambiguous_resp])
+        router.complete = AsyncMock(side_effect=[first_resp, ambiguous_resp, final_resp])
 
         registry = MagicMock()
         registry.list_all.return_value = []
@@ -680,3 +687,4 @@ class TestDoubleConfirmationStructured:
             model="test-model",
         )
         assert result.termination_reason == "completed"
+        assert result.raw_response.startswith("COMPLETED:")

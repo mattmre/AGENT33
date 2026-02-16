@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
@@ -259,7 +260,20 @@ class ToolLoop:
                     )
             else:
                 # --- Text-only response (no tool calls) -----------------------
-                if self._config.enable_double_confirmation and not state.confirmation_pending:
+                if not self._config.enable_double_confirmation:
+                    output = self._parse_output(response.content)
+                    return ToolLoopResult(
+                        output=output,
+                        raw_response=response.content,
+                        tokens_used=state.total_tokens,
+                        model=response.model,
+                        iterations=state.iteration,
+                        tool_calls_made=state.tool_calls_made,
+                        tools_used=list(state.tools_used),
+                        termination_reason="completed",
+                    )
+
+                if not state.confirmation_pending:
                     state.confirmation_pending = True
                     messages.append(ChatMessage(role="assistant", content=response.content))
                     messages.append(ChatMessage(role="user", content=CONFIRMATION_PROMPT))
@@ -276,10 +290,15 @@ class ToolLoop:
                         )
                         continue
 
-                    # confirmed is True or None (ambiguous -> accept)
-                    if confirmed is True:
-                        # Strip the COMPLETED: prefix for cleaner output
-                        final_text = _strip_completion_prefix(final_text)
+                    if confirmed is None:
+                        # Ambiguous response format; ask again for explicit confirmation.
+                        messages.append(ChatMessage(role="assistant", content=response.content))
+                        messages.append(ChatMessage(role="user", content=CONFIRMATION_PROMPT))
+                        state.confirmation_pending = True
+                        continue
+
+                    # confirmed is True
+                    final_text = _strip_completion_prefix(final_text)
 
                     output = self._parse_output(final_text)
                     return ToolLoopResult(
@@ -617,14 +636,14 @@ def _parse_confirmation(text: str) -> bool | None:
     -------
     True  — LLM confirmed completion ("COMPLETED: ...")
     False — LLM wants to continue ("CONTINUE: ...")
-    None  — Ambiguous (no structured prefix found, treat as completed)
+    None  — Ambiguous (no structured prefix found)
     """
     stripped = text.strip()
     upper = stripped.upper()
 
-    if upper.startswith("CONTINUE:") or upper.startswith("CONTINUE "):
+    if re.match(r"^CONTINUE(?:\b|[:\-\s])", upper):
         return False
-    if upper.startswith("COMPLETED:") or upper.startswith("COMPLETED "):
+    if re.match(r"^COMPLETED(?:\b|[:\-\s])", upper):
         return True
     return None
 
@@ -632,9 +651,4 @@ def _parse_confirmation(text: str) -> bool | None:
 def _strip_completion_prefix(text: str) -> str:
     """Remove the ``COMPLETED:`` prefix from a confirmation response."""
     stripped = text.strip()
-    upper = stripped.upper()
-    if upper.startswith("COMPLETED:"):
-        return stripped[len("COMPLETED:"):].strip()
-    if upper.startswith("COMPLETED "):
-        return stripped[len("COMPLETED "):].strip()
-    return stripped
+    return re.sub(r"^COMPLETED(?:[:\-\s]+)?", "", stripped, flags=re.IGNORECASE).strip()

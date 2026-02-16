@@ -579,7 +579,7 @@ class TestIterativeToolLoop:
                 self._tool_response([self._tool_call("echo", '{"message": "world"}')]),
                 self._text_response('{"response": "processed"}'),
                 # Double confirmation reply
-                self._text_response('{"response": "confirmed"}'),
+                self._text_response('COMPLETED: {"response": "confirmed"}'),
             ]
         )
 
@@ -1214,7 +1214,7 @@ class TestContextManagerInToolLoop:
                     completion_tokens=10,
                 ),
                 LLMResponse(
-                    content='{"response": "confirmed"}',
+                    content='COMPLETED: {"response": "confirmed"}',
                     model="test",
                     prompt_tokens=10,
                     completion_tokens=10,

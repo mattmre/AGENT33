@@ -324,7 +324,7 @@ class TestDoubleConfirmation:
         """First text-only response sends the confirmation prompt."""
         router = _make_router(
             _text_response("I think I'm done"),
-            _text_response("Yes, confirmed done"),
+            _text_response("COMPLETED: Yes, confirmed done"),
         )
         registry = _make_registry()
         config = ToolLoopConfig(enable_double_confirmation=True)
@@ -333,7 +333,7 @@ class TestDoubleConfirmation:
         result = await loop.run(_initial_messages(), model="m")
 
         assert result.termination_reason == "completed"
-        assert result.raw_response == "Yes, confirmed done"
+        assert result.raw_response == "COMPLETED: Yes, confirmed done"
         assert result.iterations == 2
 
         # Verify confirmation prompt was injected
@@ -345,7 +345,7 @@ class TestDoubleConfirmation:
         """After confirmation prompt, a second text response exits the loop."""
         router = _make_router(
             _text_response("answer is 42"),
-            _text_response('{"result": 42}'),
+            _text_response('COMPLETED: {"result": 42}'),
         )
         registry = _make_registry()
         config = ToolLoopConfig(enable_double_confirmation=True)
@@ -364,7 +364,7 @@ class TestDoubleConfirmation:
             _text_response("maybe done"),  # triggers confirmation_pending
             _tool_response([tc]),  # resets confirmation_pending
             _text_response("now really done"),  # triggers confirmation again
-            _text_response("confirmed"),  # final confirmation
+            _text_response("COMPLETED: confirmed"),  # final confirmation
         )
         registry = _make_registry(tool)
         config = ToolLoopConfig(enable_double_confirmation=True)
@@ -373,7 +373,7 @@ class TestDoubleConfirmation:
         result = await loop.run(_initial_messages(), model="m")
 
         assert result.termination_reason == "completed"
-        assert result.raw_response == "confirmed"
+        assert result.raw_response == "COMPLETED: confirmed"
         assert result.iterations == 4
 
     async def test_double_confirmation_disabled(self) -> None:

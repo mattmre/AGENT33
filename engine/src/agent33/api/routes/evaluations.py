@@ -310,11 +310,11 @@ async def resolve_regression(
 
 
 class StartExperimentRequest(BaseModel):
-    tasks: list[str]
-    agents: list[str]
-    models: list[str]
+    tasks: list[str] = Field(min_length=1, max_length=50)
+    agents: list[str] = Field(min_length=1, max_length=20)
+    models: list[str] = Field(min_length=1, max_length=20)
     trials_per_combination: int = Field(default=5, ge=1, le=100)
-    skills_modes: list[bool] = Field(default=[True, False])
+    skills_modes: list[bool] = Field(default_factory=lambda: [True, False])
     timeout_per_trial_seconds: int = Field(default=300, ge=1)
     parallel_trials: int = Field(default=1, ge=1)
 

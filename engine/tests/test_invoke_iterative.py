@@ -165,7 +165,7 @@ class TestInvokeIterativeRuntime:
             # First response: text only -> triggers double-confirmation
             _text_response('{"result": "answer"}'),
             # Second response: confirms -> exits
-            _text_response('{"result": "confirmed answer"}'),
+            _text_response('COMPLETED: {"result": "confirmed answer"}'),
         )
         runtime = AgentRuntime(
             definition=definition,
@@ -484,7 +484,7 @@ class TestInvokeIterativeRuntime:
         # are needed: first triggers confirmation, second confirms.
         router = _make_router(
             _text_response("initial"),
-            _text_response('{"result": "confirmed"}'),
+            _text_response('COMPLETED: {"result": "confirmed"}'),
         )
         runtime = AgentRuntime(
             definition=definition,

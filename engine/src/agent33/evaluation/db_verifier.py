@@ -202,7 +202,7 @@ class DatabaseVerifier:
                         if all(row.get(k) == v for k, v in exp_item.items()):
                             found = True
                             break
-                    elif exp_item in rows:
+                    elif exp_item in row.values():
                         found = True
                         break
                 if not found:
@@ -227,8 +227,8 @@ class DatabaseVerifier:
 
     @staticmethod
     def _compare_not_empty(
-        spec: VerificationSpec,
-        rows: list[dict[str, Any]],  # noqa: ARG004
+        _spec: VerificationSpec,
+        rows: list[dict[str, Any]],
     ) -> tuple[bool, Any, str | None]:
         """Check that the query returned at least one row."""
         count = len(rows)

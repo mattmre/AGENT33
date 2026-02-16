@@ -366,19 +366,23 @@ class TestMCPServerConnection:
     """Tests for MCP server connection management."""
 
     def test_initial_state(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         assert conn.name == "test"
-        assert conn.url == "http://localhost:8080"
+        assert conn.url == "https://mcp.example.com"
         assert not conn.connected
         assert conn.tools == []
 
     def test_url_trailing_slash_stripped(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080/")
-        assert conn.url == "http://localhost:8080"
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com/")
+        assert conn.url == "https://mcp.example.com"
+
+    def test_localhost_url_rejected(self) -> None:
+        with pytest.raises(ValueError, match="blocked by SSRF policy"):
+            MCPServerConnection(name="test", url="http://localhost:8080")
 
     @pytest.mark.asyncio
     async def test_connect_discovers_tools(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
@@ -412,7 +416,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_disconnect(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_client = AsyncMock()
         conn._client = mock_client
         conn._connected = True
@@ -425,7 +429,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_list_tools(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
@@ -447,7 +451,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_call_tool(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"result": {"content": [{"type": "text", "text": "42"}]}}
@@ -460,7 +464,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_health_check_success(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"result": {}}
@@ -472,7 +476,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_health_check_failure(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_client = AsyncMock()
         mock_client.post.side_effect = Exception("Connection refused")
         conn._client = mock_client
@@ -481,7 +485,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_rpc_error_response(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"error": {"code": -32600, "message": "Invalid request"}}
@@ -494,7 +498,7 @@ class TestMCPServerConnection:
 
     @pytest.mark.asyncio
     async def test_timeout_configuration(self) -> None:
-        conn = MCPServerConnection(name="test", url="http://localhost:8080", timeout=5.0)
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com", timeout=5.0)
         assert conn._timeout == 5.0
 
 
@@ -511,7 +515,7 @@ class TestMCPToolAdapter:
                 "required": ["query"],
             },
         )
-        conn = MCPServerConnection(name="test", url="http://localhost:8080")
+        conn = MCPServerConnection(name="test", url="https://mcp.example.com")
         return MCPToolAdapter(spec=spec, connection=conn)
 
     def test_name_property(self) -> None:
@@ -604,19 +608,19 @@ class TestMCPBridge:
 
     def test_add_server(self) -> None:
         bridge = MCPBridge()
-        bridge.add_server("local", "http://localhost:8080")
+        bridge.add_server("local", "https://mcp.example.com")
         assert "local" in bridge._servers
 
     def test_add_server_with_timeout(self) -> None:
         bridge = MCPBridge()
-        bridge.add_server("local", "http://localhost:8080", timeout=5.0)
+        bridge.add_server("local", "https://mcp.example.com", timeout=5.0)
         assert bridge._servers["local"]._timeout == 5.0
 
     @pytest.mark.asyncio
     async def test_initialize_registers_tools(self) -> None:
         mock_registry = MagicMock()
         bridge = MCPBridge(tool_registry=mock_registry)
-        bridge.add_server("test", "http://localhost:8080")
+        bridge.add_server("test", "https://mcp.example.com")
 
         # Patch the connection to return tools
         conn = bridge._servers["test"]
@@ -635,7 +639,7 @@ class TestMCPBridge:
     @pytest.mark.asyncio
     async def test_initialize_handles_connection_failure(self) -> None:
         bridge = MCPBridge()
-        bridge.add_server("bad", "http://localhost:9999")
+        bridge.add_server("bad", "https://bad.example.com")
         conn = bridge._servers["bad"]
         conn.connect = AsyncMock(side_effect=Exception("Connection refused"))
 
@@ -646,7 +650,7 @@ class TestMCPBridge:
     @pytest.mark.asyncio
     async def test_shutdown(self) -> None:
         bridge = MCPBridge()
-        bridge.add_server("test", "http://localhost:8080")
+        bridge.add_server("test", "https://mcp.example.com")
         conn = bridge._servers["test"]
         conn.disconnect = AsyncMock()
 
@@ -663,7 +667,7 @@ class TestMCPBridge:
     async def test_no_registry(self) -> None:
         """Bridge works without a tool registry (tools still discoverable)."""
         bridge = MCPBridge(tool_registry=None)
-        bridge.add_server("test", "http://localhost:8080")
+        bridge.add_server("test", "https://mcp.example.com")
         conn = bridge._servers["test"]
         conn.connect = AsyncMock()
         conn._tools = [MCPToolSpec(name="solo")]
@@ -1372,6 +1376,7 @@ class TestMultiTurnEvaluator:
         result = await evaluator.evaluate(scenario)
         # search matched, browser is unexpected but doesn't reduce accuracy
         assert result.tool_call_accuracy == 1.0
+        assert not result.success
 
     @pytest.mark.asyncio
     async def test_order_violation_detection(self) -> None:
@@ -1597,3 +1602,4 @@ class TestMultiTurnResult:
         assert result.turns == 3
         assert result.tool_call_accuracy == 0.75
         assert result.tokens_used == 500
+
