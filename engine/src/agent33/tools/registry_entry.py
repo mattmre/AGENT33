@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import enum
 from datetime import date  # noqa: TC003 – Pydantic needs runtime access
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-class ToolStatus(str, enum.Enum):
+class ToolStatus(StrEnum):
     """Lifecycle status of a registered tool."""
 
     ACTIVE = "active"
