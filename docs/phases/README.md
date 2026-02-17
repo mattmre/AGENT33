@@ -29,6 +29,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 22 | Unified UI Platform and Access Layer | Product/Runtime Access | `PHASE-22-UNIFIED-UI-PLATFORM-AND-ACCESS-LAYER.md` |
 | 25 | Visual Explainer Integration | Observability/Operator UX | `PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md` |
 | 26 | Visual Explainer Decision and Review Pages | Product/Explainability UX | `PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` |
+| 27 | Spacebot-Inspired Website Operations and Improvement Cycles | Product/Multi-User Agent UX | `PHASE-27-SPACEBOT-INSPIRED-WEBSITE-OPERATIONS-AND-IMPROVEMENT-CYCLES.md` |
 | 28 | PentAGI Component Security Testing Integration | Security/Product Safety | `PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md` |
 
 ## Workflow Plans

@@ -1,8 +1,8 @@
 # Phase 25: Visual Explainer Integration
 
-## Status: In Progress
+## Status: Stage 1 Complete (Merged)
 
-**Stage 1 (Workflow DAG MVP)**: Delivered on branch `phase25-workflow-graph-mvp`  
+**Stage 1 (Workflow DAG MVP)**: Merged to `main` via [#28](https://github.com/mattmre/AGENT33/pull/28) (`d39180c`)  
 **Remaining Stages**: Planned for future phases
 
 ## Overview
