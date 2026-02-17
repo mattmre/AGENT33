@@ -15,9 +15,22 @@ export interface ExplanationData {
   entity_type: string;
   entity_id: string;
   content: string;
+   mode?: "generic" | "diff_review" | "plan_review" | "project_recap";
   fact_check_status: "pending" | "verified" | "flagged" | "skipped";
   created_at: string;
   metadata?: Record<string, unknown>;
+  claims?: ExplanationClaimData[];
+}
+
+export interface ExplanationClaimData {
+  id: string;
+  claim_type: string;
+  target: string;
+  expected?: string;
+  actual?: string;
+  description?: string;
+  message?: string;
+  status: "pending" | "verified" | "flagged" | "skipped";
 }
 
 export interface ExplanationViewProps {
@@ -49,6 +62,21 @@ export const ExplanationView: React.FC<ExplanationViewProps> = ({
       <div className="explanation-content" data-testid="explanation-content">
         <p>{explanation.content}</p>
       </div>
+
+      {explanation.claims && explanation.claims.length > 0 && (
+        <div className="explanation-claims" data-testid="explanation-claims">
+          <h4>Fact-check claims</h4>
+          <ul>
+            {explanation.claims.map((claim) => (
+              <li key={claim.id}>
+                <strong>{claim.claim_type}</strong>: {claim.description || claim.target} (
+                {claim.status})
+                {claim.message ? <span> - {claim.message}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {explanation.metadata && Object.keys(explanation.metadata).length > 0 && (
         <div className="explanation-metadata">

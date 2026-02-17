@@ -10,11 +10,21 @@ describe("ExplanationView", () => {
     entity_type: "workflow",
     entity_id: "hello-flow",
     content: "This workflow processes greetings and generates responses.",
+    mode: "plan_review",
     fact_check_status: "verified",
     created_at: "2024-01-16T12:00:00Z",
     metadata: {
       model: "llama3.1"
-    }
+    },
+    claims: [
+      {
+        id: "claim-1",
+        claim_type: "metadata_equals",
+        target: "model",
+        status: "verified",
+        message: "Metadata value matches expected value"
+      }
+    ]
   };
 
   it("renders core explanation fields", () => {
@@ -33,6 +43,15 @@ describe("ExplanationView", () => {
     );
     expect(html).toContain("Metadata");
     expect(html).toContain("llama3.1");
+  });
+
+  it("renders fact-check claims when present", () => {
+    const html = renderToStaticMarkup(
+      createElement(ExplanationView, { explanation: mockExplanation })
+    );
+    expect(html).toContain("Fact-check claims");
+    expect(html).toContain("metadata_equals");
+    expect(html).toContain("Metadata value matches expected value");
   });
 
   it("hides metadata section when metadata is absent", () => {

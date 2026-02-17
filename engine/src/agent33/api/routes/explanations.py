@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, HTTPException
 
 from agent33.explanation.fact_check import run_fact_check_hooks
-from agent33.explanation.models import ExplanationMetadata, ExplanationRequest
+from agent33.explanation.models import ExplanationClaim, ExplanationMetadata, ExplanationRequest
 from agent33.security.permissions import require_scope
 
 logger = structlog.get_logger()
@@ -25,8 +25,18 @@ async def create_explanation(request: ExplanationRequest) -> ExplanationMetadata
         id=explanation_id,
         entity_type=request.entity_type,
         entity_id=request.entity_id,
-        content=f"Explanation for {request.entity_type} '{request.entity_id}'",
+        mode=request.mode,
+        content=_render_explanation_content(request),
         metadata=request.metadata,
+        claims=[
+            ExplanationClaim(
+                claim_type=claim.claim_type,
+                target=claim.target,
+                expected=claim.expected,
+                description=claim.description,
+            )
+            for claim in request.claims
+        ],
     )
 
     explanation.fact_check_status = await run_fact_check_hooks(explanation)
@@ -37,6 +47,8 @@ async def create_explanation(request: ExplanationRequest) -> ExplanationMetadata
         explanation_id=explanation_id,
         entity_type=request.entity_type,
         entity_id=request.entity_id,
+        mode=request.mode,
+        claims=len(explanation.claims),
         fact_check_status=explanation.fact_check_status,
     )
     return explanation
@@ -76,6 +88,37 @@ async def list_explanations(
     return results
 
 
+@router.post(
+    "/{explanation_id}/fact-check",
+    dependencies=[require_scope("workflows:write")],
+)
+async def rerun_fact_check(explanation_id: str) -> ExplanationMetadata:
+    """Re-run deterministic fact-check validation for an explanation."""
+    explanation = _explanations.get(explanation_id)
+    if explanation is None:
+        raise HTTPException(status_code=404, detail=f"Explanation '{explanation_id}' not found")
+
+    explanation.fact_check_status = await run_fact_check_hooks(explanation)
+    logger.info(
+        "explanation_fact_check_rerun",
+        explanation_id=explanation_id,
+        fact_check_status=explanation.fact_check_status,
+    )
+    return explanation
+
+
+@router.get(
+    "/{explanation_id}/claims",
+    dependencies=[require_scope("workflows:read")],
+)
+async def get_explanation_claims(explanation_id: str) -> list[ExplanationClaim]:
+    """Retrieve deterministic fact-check claims for an explanation."""
+    explanation = _explanations.get(explanation_id)
+    if explanation is None:
+        raise HTTPException(status_code=404, detail=f"Explanation '{explanation_id}' not found")
+    return explanation.claims
+
+
 @router.delete("/{explanation_id}", dependencies=[require_scope("workflows:write")])
 async def delete_explanation(explanation_id: str) -> dict[str, str]:
     """Delete an explanation."""
@@ -90,3 +133,16 @@ async def delete_explanation(explanation_id: str) -> dict[str, str]:
 def get_explanations_store() -> dict[str, ExplanationMetadata]:
     """Get in-memory explanation store for testing."""
     return _explanations
+
+
+def _render_explanation_content(request: ExplanationRequest) -> str:
+    title = f"{request.mode.value.replace('_', ' ').title()} explanation"
+    sections = [
+        title,
+        f"Entity: {request.entity_type} '{request.entity_id}'",
+    ]
+    highlights = request.metadata.get("highlights", [])
+    if isinstance(highlights, list) and highlights:
+        sections.append("Highlights:")
+        sections.extend(f"- {item}" for item in highlights if isinstance(item, str))
+    return "\n".join(sections)

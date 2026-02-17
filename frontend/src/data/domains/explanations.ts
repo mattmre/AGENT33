@@ -15,9 +15,19 @@ export const explanationsDomain: DomainConfig = {
         {
           entity_type: "workflow",
           entity_id: "hello-flow",
+          mode: "plan_review",
           metadata: {
-            model: "llama3.1"
-          }
+            model: "llama3.1",
+            highlights: ["Review generated plan and constraints"]
+          },
+          claims: [
+            {
+              claim_type: "metadata_equals",
+              target: "model",
+              expected: "llama3.1",
+              description: "Expected model metadata must be preserved"
+            }
+          ]
         },
         null,
         2
@@ -57,6 +67,26 @@ export const explanationsDomain: DomainConfig = {
       method: "DELETE",
       path: "/v1/explanations/{explanation_id}",
       description: "Delete an explanation.",
+      defaultPathParams: {
+        explanation_id: "expl-abc123"
+      }
+    },
+    {
+      id: "explanations-rerun-fact-check",
+      title: "Re-run Fact Check",
+      method: "POST",
+      path: "/v1/explanations/{explanation_id}/fact-check",
+      description: "Re-run deterministic fact-check validation.",
+      defaultPathParams: {
+        explanation_id: "expl-abc123"
+      }
+    },
+    {
+      id: "explanations-claims",
+      title: "Get Claims",
+      method: "GET",
+      path: "/v1/explanations/{explanation_id}/claims",
+      description: "Retrieve claim-level fact-check details.",
       defaultPathParams: {
         explanation_id: "expl-abc123"
       }
