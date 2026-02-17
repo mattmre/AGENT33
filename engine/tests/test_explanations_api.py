@@ -432,3 +432,203 @@ class TestFactCheckEndpoints:
         assert len(claims) == 1
         assert claims[0]["claim_type"] == "metadata_equals"
         assert claims[0]["status"] == "verified"
+
+
+# -- Phase 26 visual page generation tests ----------------------------------
+
+
+class TestDiffReviewEndpoint:
+    """Tests for diff review visual page generation."""
+
+    def test_create_diff_review_success(self, writer_client: TestClient) -> None:
+        """Should create diff review with visual HTML content."""
+        diff_text = """diff --git a/file.py b/file.py
+--- a/file.py
++++ b/file.py
+@@ -1,3 +1,4 @@
++import structlog
+ import sys
+-# old comment
++# new comment
+"""
+        resp = writer_client.post(
+            "/v1/explanations/diff-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "test-flow",
+                "diff_text": diff_text,
+                "metadata": {"branch": "feat/test"},
+            },
+        )
+        assert resp.status_code == 201
+
+        data = resp.json()
+        assert data["entity_type"] == "workflow"
+        assert data["entity_id"] == "test-flow"
+        assert data["mode"] == "diff_review"
+        assert "<!DOCTYPE html>" in data["content"]
+        assert "Diff Review" in data["content"]
+        assert data["fact_check_status"] == "skipped"
+        assert data["metadata"]["branch"] == "feat/test"
+
+    def test_diff_review_requires_write_scope(self, no_scope_client: TestClient) -> None:
+        """Should require workflows:write scope."""
+        resp = no_scope_client.post(
+            "/v1/explanations/diff-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "test-flow",
+                "diff_text": "diff --git a/f b/f",
+            },
+        )
+        assert resp.status_code == 403
+        assert "workflows:write" in resp.json()["detail"]
+
+    def test_diff_review_with_claims(self, writer_client: TestClient, tmp_path) -> None:
+        """Should validate claims during diff review creation."""
+        evidence = tmp_path / "evidence.txt"
+        evidence.write_text("proof")
+
+        resp = writer_client.post(
+            "/v1/explanations/diff-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "test-flow",
+                "diff_text": "diff --git a/f b/f\n+added line",
+                "claims": [
+                    {
+                        "claim_type": "file_exists",
+                        "target": str(evidence),
+                        "description": "Evidence file",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["fact_check_status"] == "verified"
+        assert len(data["claims"]) == 1
+        assert data["claims"][0]["status"] == "verified"
+
+
+class TestPlanReviewEndpoint:
+    """Tests for plan review visual page generation."""
+
+    def test_create_plan_review_success(self, writer_client: TestClient) -> None:
+        """Should create plan review with visual HTML content."""
+        plan_text = """# Project Plan
+
+## Phase 1: Setup
+Set up the environment.
+
+## Phase 2: Implementation
+Implement features.
+
+## Phase 3: Testing
+Test everything.
+"""
+        resp = writer_client.post(
+            "/v1/explanations/plan-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "project-plan",
+                "plan_text": plan_text,
+            },
+        )
+        assert resp.status_code == 201
+
+        data = resp.json()
+        assert data["entity_type"] == "workflow"
+        assert data["entity_id"] == "project-plan"
+        assert data["mode"] == "plan_review"
+        assert "<!DOCTYPE html>" in data["content"]
+        assert "Plan Review" in data["content"]
+        assert "3 sections identified" in data["content"]  # 3 h2 sections
+
+    def test_plan_review_requires_write_scope(self, no_scope_client: TestClient) -> None:
+        """Should require workflows:write scope."""
+        resp = no_scope_client.post(
+            "/v1/explanations/plan-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "test",
+                "plan_text": "## Section 1",
+            },
+        )
+        assert resp.status_code == 403
+
+
+class TestProjectRecapEndpoint:
+    """Tests for project recap visual page generation."""
+
+    def test_create_project_recap_success(self, writer_client: TestClient) -> None:
+        """Should create project recap with highlights."""
+        resp = writer_client.post(
+            "/v1/explanations/project-recap",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "q4-recap",
+                "recap_text": "Completed all Phase 26 objectives.",
+                "highlights": [
+                    "Added visual page generation",
+                    "Implemented diff stats computation",
+                    "Created template system",
+                ],
+            },
+        )
+        assert resp.status_code == 201
+
+        data = resp.json()
+        assert data["entity_type"] == "workflow"
+        assert data["entity_id"] == "q4-recap"
+        assert data["mode"] == "project_recap"
+        assert "<!DOCTYPE html>" in data["content"]
+        assert "Project Recap" in data["content"]
+        assert "Added visual page generation" in data["content"]
+
+    def test_project_recap_requires_write_scope(self, no_scope_client: TestClient) -> None:
+        """Should require workflows:write scope."""
+        resp = no_scope_client.post(
+            "/v1/explanations/project-recap",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "recap",
+                "recap_text": "Summary",
+            },
+        )
+        assert resp.status_code == 403
+
+
+class TestVisualPageSecurity:
+    """Security-focused tests for visual page rendering endpoints."""
+
+    def test_diff_review_escapes_html_content(self, writer_client: TestClient) -> None:
+        """Diff payload HTML should be escaped in rendered output."""
+        resp = writer_client.post(
+            "/v1/explanations/diff-review",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "xss-diff",
+                "diff_text": "<script>alert('xss')</script>\n+safe line",
+            },
+        )
+        assert resp.status_code == 201
+        content = resp.json()["content"]
+        assert "<script>alert('xss')</script>" not in content
+        assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in content
+
+    def test_project_recap_escapes_highlight_items(self, writer_client: TestClient) -> None:
+        """Highlight list entries should be escaped before HTML interpolation."""
+        resp = writer_client.post(
+            "/v1/explanations/project-recap",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "xss-recap",
+                "recap_text": "Recap content",
+                "highlights": ["</li><script>alert('x')</script><li>"],
+            },
+        )
+        assert resp.status_code == 201
+        content = resp.json()["content"]
+        assert "<script>alert('x')</script>" not in content
+        assert "&lt;/li&gt;&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;&lt;li&gt;" in content

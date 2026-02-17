@@ -8,7 +8,20 @@ import structlog
 from fastapi import APIRouter, HTTPException
 
 from agent33.explanation.fact_check import run_fact_check_hooks
-from agent33.explanation.models import ExplanationClaim, ExplanationMetadata, ExplanationRequest
+from agent33.explanation.models import (
+    DiffReviewRequest,
+    ExplanationClaim,
+    ExplanationMetadata,
+    ExplanationMode,
+    ExplanationRequest,
+    PlanReviewRequest,
+    ProjectRecapRequest,
+)
+from agent33.explanation.renderer import (
+    render_diff_review,
+    render_plan_review,
+    render_project_recap,
+)
 from agent33.security.permissions import require_scope
 
 logger = structlog.get_logger()
@@ -133,6 +146,151 @@ async def delete_explanation(explanation_id: str) -> dict[str, str]:
 def get_explanations_store() -> dict[str, ExplanationMetadata]:
     """Get in-memory explanation store for testing."""
     return _explanations
+
+
+@router.post(
+    "/diff-review",
+    dependencies=[require_scope("workflows:write")],
+    status_code=201,
+)
+async def create_diff_review(request: DiffReviewRequest) -> ExplanationMetadata:
+    """Generate a diff review visual page."""
+    explanation_id = f"expl-{uuid.uuid4().hex[:12]}"
+
+    # Render visual HTML content
+    html_content = render_diff_review(
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        diff_text=request.diff_text,
+    )
+
+    explanation = ExplanationMetadata(
+        id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        mode=ExplanationMode.DIFF_REVIEW,
+        content=html_content,
+        metadata=request.metadata,
+        claims=[
+            ExplanationClaim(
+                claim_type=claim.claim_type,
+                target=claim.target,
+                expected=claim.expected,
+                description=claim.description,
+            )
+            for claim in request.claims
+        ],
+    )
+
+    explanation.fact_check_status = await run_fact_check_hooks(explanation)
+    _explanations[explanation_id] = explanation
+
+    logger.info(
+        "diff_review_created",
+        explanation_id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        claims=len(explanation.claims),
+        fact_check_status=explanation.fact_check_status,
+    )
+    return explanation
+
+
+@router.post(
+    "/plan-review",
+    dependencies=[require_scope("workflows:write")],
+    status_code=201,
+)
+async def create_plan_review(request: PlanReviewRequest) -> ExplanationMetadata:
+    """Generate a plan review visual page."""
+    explanation_id = f"expl-{uuid.uuid4().hex[:12]}"
+
+    # Render visual HTML content
+    html_content = render_plan_review(
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        plan_text=request.plan_text,
+    )
+
+    explanation = ExplanationMetadata(
+        id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        mode=ExplanationMode.PLAN_REVIEW,
+        content=html_content,
+        metadata=request.metadata,
+        claims=[
+            ExplanationClaim(
+                claim_type=claim.claim_type,
+                target=claim.target,
+                expected=claim.expected,
+                description=claim.description,
+            )
+            for claim in request.claims
+        ],
+    )
+
+    explanation.fact_check_status = await run_fact_check_hooks(explanation)
+    _explanations[explanation_id] = explanation
+
+    logger.info(
+        "plan_review_created",
+        explanation_id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        claims=len(explanation.claims),
+        fact_check_status=explanation.fact_check_status,
+    )
+    return explanation
+
+
+@router.post(
+    "/project-recap",
+    dependencies=[require_scope("workflows:write")],
+    status_code=201,
+)
+async def create_project_recap(request: ProjectRecapRequest) -> ExplanationMetadata:
+    """Generate a project recap visual page."""
+    explanation_id = f"expl-{uuid.uuid4().hex[:12]}"
+
+    # Render visual HTML content
+    html_content = render_project_recap(
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        recap_text=request.recap_text,
+        highlights=request.highlights,
+    )
+
+    explanation = ExplanationMetadata(
+        id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        mode=ExplanationMode.PROJECT_RECAP,
+        content=html_content,
+        metadata=request.metadata,
+        claims=[
+            ExplanationClaim(
+                claim_type=claim.claim_type,
+                target=claim.target,
+                expected=claim.expected,
+                description=claim.description,
+            )
+            for claim in request.claims
+        ],
+    )
+
+    explanation.fact_check_status = await run_fact_check_hooks(explanation)
+    _explanations[explanation_id] = explanation
+
+    logger.info(
+        "project_recap_created",
+        explanation_id=explanation_id,
+        entity_type=request.entity_type,
+        entity_id=request.entity_id,
+        claims=len(explanation.claims),
+        fact_check_status=explanation.fact_check_status,
+    )
+    return explanation
 
 
 def _render_explanation_content(request: ExplanationRequest) -> str:
