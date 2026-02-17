@@ -1,6 +1,6 @@
 # Next Session Briefing
 
-Last updated: 2026-02-17T12:35Z
+Last updated: 2026-02-17T16:35Z
 
 ## Current State
 
@@ -50,6 +50,18 @@ Last updated: 2026-02-17T12:35Z
   - fact-check criteria hooks
 - Add targeted backend/frontend tests for the new Phase 26 surfaces.
 
+### Priority 4: Phase 28 Kickoff Planning and Research
+- Review Phase 28 planning artifacts:
+  - `docs/research/phase28-pentagi-integration-analysis.md` (integration architecture and contracts)
+  - `docs/progress/phase-28-pentagi-component-security-log.md` (progress tracking template)
+- Validate PentAGI availability and container execution model.
+- Begin Stage 1 MVP backend implementation:
+  - PentAGI adapter service (`engine/src/agent33/services/pentagi_integration.py`)
+  - Security run models (`engine/src/agent33/component_security/models.py`)
+  - Component security API routes (`engine/src/agent33/api/routes/component_security.py`)
+  - Quick profile implementation with bandit + gitleaks
+  - Backend unit tests (`engine/tests/test_component_security_api.py`)
+
 ## Startup Checklist (Next Session)
 
 ```bash
@@ -89,5 +101,8 @@ curl http://localhost:8000/v1/visualizations/workflows/hello-flow/graph \
 | Phase 25 spec | `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md` |
 | Phase 26 readiness research | `docs/research/phase26-visual-review-readiness-2026-02-17.md` |
 | Phase 26 spec | `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` |
+| Phase 28 spec | `docs/phases/PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md` |
+| Phase 28 integration analysis | `docs/research/phase28-pentagi-integration-analysis.md` |
+| Phase 28 progress log | `docs/progress/phase-28-pentagi-component-security-log.md` |
 | Operator walkthroughs | `docs/walkthroughs.md` |
 | Phase planning index | `docs/phase-planning.md` |

@@ -21,6 +21,8 @@ SCOPES: set[str] = {
     "workflows:write",
     "workflows:execute",
     "tools:execute",
+    "component-security:read",
+    "component-security:write",
 }
 
 
