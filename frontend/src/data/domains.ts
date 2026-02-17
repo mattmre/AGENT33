@@ -5,6 +5,7 @@ import { autonomyDomain } from "./domains/autonomy";
 import { chatDomain } from "./domains/chat";
 import { dashboardDomain } from "./domains/dashboard";
 import { evaluationsDomain } from "./domains/evaluations";
+import { explanationsDomain } from "./domains/explanations";
 import { healthDomain } from "./domains/health";
 import { improvementsDomain } from "./domains/improvements";
 import { memoryDomain } from "./domains/memory";
@@ -21,6 +22,7 @@ export const domains: DomainConfig[] = [
   chatDomain,
   agentsDomain,
   workflowsDomain,
+  explanationsDomain,
   memoryDomain,
   reviewsDomain,
   tracesDomain,
