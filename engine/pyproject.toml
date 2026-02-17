@@ -71,6 +71,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "integration: marks tests requiring running services",
+    "benchmark: marks benchmark and performance tests",
+    "smoke: marks fast smoke tests for CI",
 ]
 
 [tool.ruff]
