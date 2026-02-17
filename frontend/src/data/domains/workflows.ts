@@ -120,6 +120,17 @@ export const workflowsDomain: DomainConfig = {
       defaultPathParams: {
         name: "hello-flow"
       }
+    },
+    {
+      id: "workflows-graph",
+      title: "Workflow Graph",
+      method: "GET",
+      path: "/v1/visualizations/workflows/{workflow_id}/graph",
+      description: "Get workflow graph visualization data.",
+      defaultPathParams: {
+        workflow_id: "hello-flow"
+      },
+      uxHint: "workflow-graph"
     }
   ]
 };

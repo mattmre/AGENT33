@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import type { ApiResult, OperationConfig } from "../types";
+import { WorkflowGraph, WorkflowGraphData } from "./WorkflowGraph";
 
 interface OperationCardProps {
   operation: OperationConfig;
@@ -55,6 +56,7 @@ export function OperationCard({
   const isWorkflowExecute = operation.uxHint === "workflow-execute";
   const isWorkflowSchedule = operation.uxHint === "workflow-schedule";
   const isAgentIterative = operation.uxHint === "agent-iterative";
+  const isWorkflowGraph = operation.uxHint === "workflow-graph";
 
   const [pathParamsText, setPathParamsText] = useState(
     initialPathParamsText
@@ -92,8 +94,13 @@ export function OperationCard({
     if (isWorkflowSchedule && typeof payload.job_id === "string") {
       return `Schedule created: ${payload.job_id}`;
     }
+    if (isWorkflowGraph && typeof payload.workflow_id === "string") {
+      const nodeCount = Array.isArray(payload.nodes) ? payload.nodes.length : 0;
+      const edgeCount = Array.isArray(payload.edges) ? payload.edges.length : 0;
+      return `Graph loaded: ${nodeCount} nodes, ${edgeCount} edges`;
+    }
     return "";
-  }, [isAgentIterative, isWorkflowExecute, isWorkflowSchedule, result]);
+  }, [isAgentIterative, isWorkflowExecute, isWorkflowSchedule, isWorkflowGraph, result]);
 
   function formatObjectEditor(value: string, setter: (text: string) => void, label: string): void {
     try {
@@ -379,7 +386,12 @@ export function OperationCard({
       </div>
       {responseSummary ? <p className="operation-note">{responseSummary}</p> : null}
       {error ? <pre className="error-box">{error}</pre> : null}
-      {result ? <pre className="response-box">{JSON.stringify(result.data, null, 2)}</pre> : null}
+      {isWorkflowGraph && result && result.ok ? (
+        <WorkflowGraph data={result.data as WorkflowGraphData} />
+      ) : null}
+      {result && !isWorkflowGraph ? (
+        <pre className="response-box">{JSON.stringify(result.data, null, 2)}</pre>
+      ) : null}
     </article>
   );
 }
