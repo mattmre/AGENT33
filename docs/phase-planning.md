@@ -122,14 +122,20 @@ AGENT-33 is the master 'queen bee' repo that centralizes agentic workflows, orch
 - Implement server-side graph generation and client-side rendering for scalability.
 - Enable operators to debug workflows visually instead of manual trace correlation.
 - Close observability gap between text-based logs and intuitive graph representations.
-- Status: In Progress — Stage 1 (workflow DAG MVP) delivered on branch `phase25-workflow-graph-mvp` (see `docs/progress/phase-25-visual-explainer-log.md` and `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md`).
+- Status: Stage 1 MVP merged to `main` via [#28](https://github.com/mattmre/AGENT33/pull/28) (`d39180c`) (see `docs/progress/phase-25-visual-explainer-log.md` and `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md`).
 
 ## Phase 26: Visual Explainer Decision and Review Pages
 - Deliver visual diff-review, plan-review, project recap, and fact-check pages within AGENT-33 workflows.
 - Build backend explanation generation APIs and artifact metadata tracking for reusable review outputs.
 - Add frontend explanation workspace for operators to generate and browse visual review artifacts.
 - Reuse Phase 25 visualization primitives and Phase 16 trace data for explainability context.
-- Status: Planned (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` and `docs/research/phase26-visual-review-readiness-2026-02-17.md`).
+- Status: Stage 1 scaffold implemented in [#31](https://github.com/mattmre/AGENT33/pull/31), pending merge (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` and `docs/research/phase26-visual-review-readiness-2026-02-17.md`).
+
+## Phase 27: Spacebot-Inspired Website Operations and Improvement Cycles
+- Add Spacebot-inspired website functionality for concurrent operations and delegation visibility.
+- Preserve AGENT-33 core values by keeping research intake and improvement workflows as first-class flows.
+- Introduce guided human-style improvement-cycle workflows tied to existing orchestration and governance subsystems.
+- Status: Discovery complete, Stage 1 implementation planned (see `docs/phases/PHASE-27-SPACEBOT-INSPIRED-WEBSITE-OPERATIONS-AND-IMPROVEMENT-CYCLES.md` and `docs/research/phase27-spacebot-website-gap-analysis.md`).
 
 ## Phase 28: PentAGI Component Security Testing Integration
 - Integrate PentAGI component security testing flows into the AGENT-33 website for local and pre-production repository validation.
