@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class FailureCategory(str, Enum):
+class FailureCategory(StrEnum):
     """Top-level failure categories."""
 
     ENVIRONMENT = "F-ENV"
@@ -32,7 +32,7 @@ class FailureCategory(str, Enum):
     UNKNOWN = "F-UNK"
 
 
-class FailureSeverity(str, Enum):
+class FailureSeverity(StrEnum):
     """Severity levels for failures."""
 
     LOW = "low"

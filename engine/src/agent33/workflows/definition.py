@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class StepAction(str, Enum):
+class StepAction(StrEnum):
     """Available step actions."""
 
     INVOKE_AGENT = "invoke-agent"
@@ -26,7 +26,7 @@ class StepAction(str, Enum):
     ROUTE = "route"
 
 
-class ExecutionMode(str, Enum):
+class ExecutionMode(StrEnum):
     """Workflow execution modes."""
 
     SEQUENTIAL = "sequential"
@@ -34,7 +34,7 @@ class ExecutionMode(str, Enum):
     DEPENDENCY_AWARE = "dependency-aware"
 
 
-class TriggerEvent(str, Enum):
+class TriggerEvent(StrEnum):
     """System events that can trigger workflows."""
 
     SESSION_START = "session-start"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import structlog
@@ -35,7 +35,7 @@ from agent33.workflows.expressions import ExpressionEvaluator
 logger = structlog.get_logger()
 
 
-class WorkflowStatus(str, Enum):
+class WorkflowStatus(StrEnum):
     """Terminal status of a workflow execution."""
 
     SUCCESS = "success"

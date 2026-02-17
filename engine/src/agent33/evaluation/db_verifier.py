@@ -13,7 +13,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Coroutine
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -34,7 +34,7 @@ QueryExecutor = Callable[[str, float], Coroutine[Any, Any, list[dict[str, Any]]]
 # ---------------------------------------------------------------------------
 
 
-class ComparisonMode(str, Enum):
+class ComparisonMode(StrEnum):
     """How to compare actual query results against expected values."""
 
     EXACT = "exact"

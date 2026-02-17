@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     """Allowed agent roles."""
 
     ORCHESTRATOR = "orchestrator"
@@ -29,7 +29,7 @@ class AgentRole(str, Enum):
     VALIDATOR = "validator"
 
 
-class AgentCapability(str, Enum):
+class AgentCapability(StrEnum):
     """Capabilities an agent may declare."""
 
     FILE_READ = "file-read"
@@ -44,7 +44,7 @@ class AgentCapability(str, Enum):
     REFINEMENT = "refinement"
 
 
-class CapabilityCategory(str, Enum):
+class CapabilityCategory(StrEnum):
     """Top-level capability categories from the spec taxonomy."""
 
     PLANNING = "P"
@@ -54,7 +54,7 @@ class CapabilityCategory(str, Enum):
     RESEARCH = "X"
 
 
-class SpecCapability(str, Enum):
+class SpecCapability(StrEnum):
     """25-entry spec capability taxonomy (5 per category)."""
 
     # Planning
@@ -98,7 +98,7 @@ class SpecCapability(str, Enum):
         return CapabilityCategory(self.value[0])
 
 
-class AutonomyLevel(str, Enum):
+class AutonomyLevel(StrEnum):
     """Autonomy level controlling what an agent may do without approval.
 
     Modelled after ZeroClaw's security policy tiers.
@@ -109,7 +109,7 @@ class AutonomyLevel(str, Enum):
     FULL = "full"  # agent has full autonomy within its governance constraints
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     """Lifecycle status for an agent definition."""
 
     ACTIVE = "active"
