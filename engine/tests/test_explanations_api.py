@@ -59,6 +59,7 @@ class TestExplanationCreation:
             json={
                 "entity_type": "workflow",
                 "entity_id": "hello-flow",
+                "mode": "plan_review",
                 "metadata": {"model": "llama3.1"},
             },
         )
@@ -67,9 +68,11 @@ class TestExplanationCreation:
         data = resp.json()
         assert data["entity_type"] == "workflow"
         assert data["entity_id"] == "hello-flow"
-        assert data["content"]  # Has generated content
+        assert "Plan Review explanation" in data["content"]
         assert data["fact_check_status"] == "skipped"  # Hook returns SKIPPED
         assert "expl-" in data["id"]
+        assert data["mode"] == "plan_review"
+        assert data["claims"] == []
         assert data["metadata"]["model"] == "llama3.1"
 
     def test_create_multiple_explanations(self, writer_client: TestClient) -> None:
@@ -268,6 +271,30 @@ class TestExplanationAuthorization:
         resp = reader_client.delete(f"/v1/explanations/{explanation_id}")
         assert resp.status_code == 403
 
+    def test_rerun_fact_check_requires_write_scope(
+        self, writer_client: TestClient, reader_client: TestClient
+    ) -> None:
+        """Rerun endpoint should require workflows:write."""
+        create_resp = writer_client.post(
+            "/v1/explanations/",
+            json={"entity_type": "workflow", "entity_id": "test-flow"},
+        )
+        explanation_id = create_resp.json()["id"]
+        resp = reader_client.post(f"/v1/explanations/{explanation_id}/fact-check")
+        assert resp.status_code == 403
+
+    def test_get_claims_requires_read_scope(
+        self, writer_client: TestClient, no_scope_client: TestClient
+    ) -> None:
+        """Claims endpoint should require workflows:read."""
+        create_resp = writer_client.post(
+            "/v1/explanations/",
+            json={"entity_type": "workflow", "entity_id": "test-flow"},
+        )
+        explanation_id = create_resp.json()["id"]
+        resp = no_scope_client.get(f"/v1/explanations/{explanation_id}/claims")
+        assert resp.status_code == 403
+
 
 # -- Fact-check hook tests ---------------------------------------------------
 
@@ -302,3 +329,106 @@ class TestFactCheckHook:
         # Retrieve and verify status persisted
         get_resp = reader_client.get(f"/v1/explanations/{explanation_id}")
         assert get_resp.json()["fact_check_status"] == "skipped"
+
+    def test_fact_check_validates_file_exists_claim(
+        self, writer_client: TestClient, tmp_path
+    ) -> None:
+        """Fact-check should verify deterministic file existence claim."""
+        existing_file = tmp_path / "evidence.txt"
+        existing_file.write_text("evidence")
+
+        resp = writer_client.post(
+            "/v1/explanations/",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "file-check",
+                "claims": [
+                    {
+                        "claim_type": "file_exists",
+                        "target": str(existing_file),
+                        "description": "Evidence file should exist",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["fact_check_status"] == "verified"
+        assert len(data["claims"]) == 1
+        assert data["claims"][0]["status"] == "verified"
+        assert "File exists" in data["claims"][0]["message"]
+
+    def test_fact_check_flags_missing_file_claim(self, writer_client: TestClient) -> None:
+        """Fact-check should flag missing files."""
+        resp = writer_client.post(
+            "/v1/explanations/",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "missing-file",
+                "claims": [
+                    {
+                        "claim_type": "file_exists",
+                        "target": "D:/missing/file.txt",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["fact_check_status"] == "flagged"
+        assert data["claims"][0]["status"] == "flagged"
+
+
+class TestFactCheckEndpoints:
+    """Tests for dedicated Stage 2 fact-check endpoints."""
+
+    def test_rerun_fact_check_updates_status(self, writer_client: TestClient, tmp_path) -> None:
+        """Re-run endpoint should update claim status after external state changes."""
+        changing_file = tmp_path / "changing.txt"
+        explanation_resp = writer_client.post(
+            "/v1/explanations/",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "rerun-check",
+                "claims": [{"claim_type": "file_exists", "target": str(changing_file)}],
+            },
+        )
+        explanation_id = explanation_resp.json()["id"]
+        assert explanation_resp.json()["fact_check_status"] == "flagged"
+
+        changing_file.write_text("now present")
+
+        rerun_resp = writer_client.post(f"/v1/explanations/{explanation_id}/fact-check")
+        assert rerun_resp.status_code == 200
+        rerun_data = rerun_resp.json()
+        assert rerun_data["fact_check_status"] == "verified"
+        assert rerun_data["claims"][0]["status"] == "verified"
+
+    def test_get_claims_returns_claim_list(
+        self,
+        writer_client: TestClient,
+        reader_client: TestClient,
+    ) -> None:
+        """Claims endpoint should return stored claim details."""
+        create_resp = writer_client.post(
+            "/v1/explanations/",
+            json={
+                "entity_type": "workflow",
+                "entity_id": "claims-check",
+                "claims": [
+                    {
+                        "claim_type": "metadata_equals",
+                        "target": "model",
+                        "expected": "llama3.1",
+                    }
+                ],
+                "metadata": {"model": "llama3.1"},
+            },
+        )
+        explanation_id = create_resp.json()["id"]
+        claims_resp = reader_client.get(f"/v1/explanations/{explanation_id}/claims")
+        assert claims_resp.status_code == 200
+        claims = claims_resp.json()
+        assert len(claims) == 1
+        assert claims[0]["claim_type"] == "metadata_equals"
+        assert claims[0]["status"] == "verified"
