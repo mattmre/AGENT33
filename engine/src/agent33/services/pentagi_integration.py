@@ -126,33 +126,43 @@ class PentAGIService:
         return run
 
     def launch_scan(self, run_id: str, *, tenant_id: str | None = None) -> SecurityRun:
-        """Execute stage-1 quick profile scanners for the run."""
+        """Execute scanners for the requested profile and persist findings."""
         run = self.get_run(run_id, tenant_id=tenant_id)
         if run.status != RunStatus.PENDING:
             raise RunStateError(f"Run {run.id} cannot start from state {run.status.value}")
-        if run.profile != SecurityProfile.QUICK:
-            raise PentAGIServiceError(
-                f"Profile '{run.profile.value}' is not available in Stage 1; use 'quick'"
-            )
 
         run.status = RunStatus.RUNNING
         run.touch()
         run.started_at = run.updated_at
 
         try:
-            findings = self._execute_quick_profile(
-                run_id=run.id,
-                target_path=run.target.repository_path,
-                timeout_seconds=run.options.timeout_seconds,
-            )
+            if run.profile == SecurityProfile.QUICK:
+                findings, tools_executed, tool_warnings = self._execute_quick_profile(
+                    run_id=run.id,
+                    target_path=run.target.repository_path,
+                    timeout_seconds=run.options.timeout_seconds,
+                )
+            elif run.profile == SecurityProfile.STANDARD:
+                findings, tools_executed, tool_warnings = self._execute_standard_profile(
+                    run_id=run.id,
+                    target_path=run.target.repository_path,
+                    timeout_seconds=run.options.timeout_seconds,
+                )
+            else:
+                findings, tools_executed, tool_warnings = self._execute_deep_profile(
+                    run_id=run.id,
+                    target_path=run.target.repository_path,
+                    timeout_seconds=run.options.timeout_seconds,
+                )
             if run.status == RunStatus.CANCELLED:
-                # Preserve cancellation state if run was cancelled while scanners were executing.
-                run.metadata.tools_executed = ["bandit", "gitleaks"]
+                run.metadata.tools_executed = tools_executed
+                run.metadata.tool_warnings = tool_warnings
                 return run
             self._findings[run.id] = findings
             run.findings_count = len(findings)
             run.findings_summary = FindingsSummary.from_findings(findings)
-            run.metadata.tools_executed = ["bandit", "gitleaks"]
+            run.metadata.tools_executed = tools_executed
+            run.metadata.tool_warnings = tool_warnings
             run.status = RunStatus.COMPLETED
             run.touch()
             run.completed_at = run.updated_at
@@ -207,7 +217,7 @@ class PentAGIService:
         run_id: str,
         target_path: str,
         timeout_seconds: int,
-    ) -> list[SecurityFinding]:
+    ) -> tuple[list[SecurityFinding], list[str], list[str]]:
         target = self._validate_target_path(target_path)
 
         normalized_target = str(target)
@@ -219,7 +229,58 @@ class PentAGIService:
         )
         findings = self._parse_bandit_findings(run_id=run_id, raw_output=bandit_raw)
         findings.extend(self._parse_gitleaks_findings(run_id=run_id, raw_output=gitleaks_raw))
-        return findings
+        return findings, ["bandit", "gitleaks"], []
+
+    def _execute_standard_profile(
+        self,
+        *,
+        run_id: str,
+        target_path: str,
+        timeout_seconds: int,
+    ) -> tuple[list[SecurityFinding], list[str], list[str]]:
+        findings, tools_executed, tool_warnings = self._execute_quick_profile(
+            run_id=run_id,
+            target_path=target_path,
+            timeout_seconds=timeout_seconds,
+        )
+        pip_audit_raw = self._run_optional_command(
+            command=[sys.executable, "-m", "pip_audit", "-f", "json"],
+            timeout_seconds=timeout_seconds,
+            tool_name="pip-audit",
+            warnings=tool_warnings,
+        )
+        tools_executed.append("pip-audit")
+        if pip_audit_raw:
+            findings.extend(
+                self._parse_pip_audit_findings(
+                    run_id=run_id,
+                    raw_output=pip_audit_raw,
+                )
+            )
+        return findings, tools_executed, tool_warnings
+
+    def _execute_deep_profile(
+        self,
+        *,
+        run_id: str,
+        target_path: str,
+        timeout_seconds: int,
+    ) -> tuple[list[SecurityFinding], list[str], list[str]]:
+        findings, tools_executed, tool_warnings = self._execute_standard_profile(
+            run_id=run_id,
+            target_path=target_path,
+            timeout_seconds=timeout_seconds,
+        )
+        semgrep_raw = self._run_optional_command(
+            command=["semgrep", "--json", target_path],
+            timeout_seconds=timeout_seconds,
+            tool_name="semgrep",
+            warnings=tool_warnings,
+        )
+        tools_executed.append("semgrep")
+        if semgrep_raw:
+            findings.extend(self._parse_semgrep_findings(run_id=run_id, raw_output=semgrep_raw))
+        return findings, tools_executed, tool_warnings
 
     def _validate_target_path(self, target_path: str) -> Path:
         if "\x00" in target_path:
@@ -300,6 +361,36 @@ class PentAGIService:
             timeout=timeout_seconds,
         )
 
+    def _run_optional_command(
+        self,
+        *,
+        command: list[str],
+        timeout_seconds: int,
+        tool_name: str,
+        warnings: list[str],
+    ) -> str | None:
+        try:
+            result = self._command_runner(command, timeout_seconds)
+        except FileNotFoundError:
+            warning = f"{tool_name} is not installed; continuing without {tool_name} findings"
+            warnings.append(warning)
+            logger.warning("component_security_optional_tool_missing", tool=tool_name)
+            return None
+
+        if result.returncode != 0:
+            warning = (
+                f"{tool_name} execution returned non-zero exit code {result.returncode}; "
+                f"continuing without {tool_name} findings"
+            )
+            warnings.append(warning)
+            logger.warning(
+                "component_security_optional_tool_failed",
+                tool=tool_name,
+                return_code=result.returncode,
+            )
+            return None
+        return result.stdout
+
     def _parse_bandit_findings(self, *, run_id: str, raw_output: str) -> list[SecurityFinding]:
         if not raw_output.strip():
             return []
@@ -354,6 +445,68 @@ class PentAGIService:
             )
         return findings
 
+    def _parse_pip_audit_findings(self, *, run_id: str, raw_output: str) -> list[SecurityFinding]:
+        if not raw_output.strip():
+            return []
+        try:
+            payload = json.loads(raw_output)
+        except json.JSONDecodeError as exc:
+            raise ToolExecutionError("pip-audit output was not valid JSON") from exc
+
+        dependencies = payload.get("dependencies", [])
+        findings: list[SecurityFinding] = []
+        for dependency in dependencies:
+            for vulnerability in dependency.get("vulns", []):
+                vuln_id = vulnerability.get("id", "")
+                description = (
+                    vulnerability.get("description")
+                    or vuln_id
+                    or "Dependency vulnerability"
+                )
+                findings.append(
+                    SecurityFinding(
+                        run_id=run_id,
+                        severity=FindingSeverity.HIGH,
+                        category=FindingCategory.DEPENDENCY_VULNERABILITY,
+                        title=f"{dependency.get('name', 'dependency')} {vuln_id}".strip(),
+                        description=description,
+                        tool="pip-audit",
+                        remediation=", ".join(vulnerability.get("fix_versions", [])),
+                        cwe_id=vuln_id,
+                    )
+                )
+        return findings
+
+    def _parse_semgrep_findings(self, *, run_id: str, raw_output: str) -> list[SecurityFinding]:
+        if not raw_output.strip():
+            return []
+        try:
+            payload = json.loads(raw_output)
+        except json.JSONDecodeError as exc:
+            raise ToolExecutionError("semgrep output was not valid JSON") from exc
+
+        results = payload.get("results", [])
+        findings: list[SecurityFinding] = []
+        for result in results:
+            extra = result.get("extra", {})
+            check_id = result.get("check_id", "")
+            severity = self._map_semgrep_severity(str(extra.get("severity", "")))
+            message = str(extra.get("message") or check_id or "Semgrep finding")
+            findings.append(
+                SecurityFinding(
+                    run_id=run_id,
+                    severity=severity,
+                    category=self._map_semgrep_category(check_id),
+                    title=message,
+                    description=message,
+                    tool="semgrep",
+                    file_path=str(result.get("path", "")),
+                    line_number=result.get("start", {}).get("line"),
+                    remediation="Review and remediate rule violation in source code",
+                )
+            )
+        return findings
+
     @staticmethod
     def _map_bandit_severity(raw_severity: str) -> FindingSeverity:
         normalized = raw_severity.lower()
@@ -369,5 +522,33 @@ class PentAGIService:
     def _map_bandit_category(issue_text: str) -> FindingCategory:
         lowered = issue_text.lower()
         if "inject" in lowered or "exec" in lowered or "subprocess" in lowered:
+            return FindingCategory.INJECTION_RISK
+        if "auth" in lowered:
+            return FindingCategory.AUTHENTICATION_WEAKNESS
+        return FindingCategory.CODE_QUALITY
+
+    @staticmethod
+    def _map_semgrep_severity(raw_severity: str) -> FindingSeverity:
+        normalized = raw_severity.lower()
+        if normalized in {"error", "high"}:
+            return FindingSeverity.HIGH
+        if normalized in {"warning", "medium"}:
+            return FindingSeverity.MEDIUM
+        if normalized in {"info", "low"}:
+            return FindingSeverity.LOW
+        return FindingSeverity.INFO
+
+    @staticmethod
+    def _map_semgrep_category(check_id: str) -> FindingCategory:
+        lowered = check_id.lower()
+        if "authz" in lowered or "authorization" in lowered:
+            return FindingCategory.AUTHORIZATION_BYPASS
+        if "auth" in lowered:
+            return FindingCategory.AUTHENTICATION_WEAKNESS
+        if "crypto" in lowered:
+            return FindingCategory.CRYPTOGRAPHY_WEAKNESS
+        if "config" in lowered:
+            return FindingCategory.CONFIGURATION_ISSUE
+        if "inject" in lowered:
             return FindingCategory.INJECTION_RISK
         return FindingCategory.CODE_QUALITY

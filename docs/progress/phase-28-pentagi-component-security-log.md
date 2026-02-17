@@ -209,3 +209,23 @@ python -m pytest tests -q
 ### Next Steps
 - [ ] Resolve remaining PR discussion thread metadata and merge order with Phase 26/30 dependencies.
 - [ ] Begin Stage 2 profile expansion (`standard`, `deep`) after Stage 1 PR merge.
+
+---
+
+## 2026-02-17: Stage 2 Profiles + Release Gate Wiring
+
+### Work Completed
+- [x] Expanded runtime profile support for `standard` and `deep`.
+- [x] Added optional-tool execution warnings and metadata capture for missing scanners.
+- [x] Added `SecurityGatePolicy` / gate decision models for release integration.
+- [x] Added release gate evaluator and release-service RL-06 wiring.
+- [x] Added `/v1/releases/{release_id}/security-gate` endpoint for deterministic gate application.
+- [x] Extended component-security and release test suites for Stage 2 behavior.
+
+### Validation Evidence
+```bash
+cd engine
+python -m ruff check src tests
+python -m pytest tests/test_component_security_api.py -q
+python -m pytest tests/test_phase19_release.py -q
+```

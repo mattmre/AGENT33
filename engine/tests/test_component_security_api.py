@@ -39,6 +39,10 @@ def _default_command_runner(
         return _fake_completed('{"results": []}')
     if command and command[0] == "gitleaks":
         return _fake_completed("[]")
+    if "pip_audit" in " ".join(command):
+        return _fake_completed('{"dependencies": []}')
+    if command and command[0] == "semgrep":
+        return _fake_completed('{"results": []}')
     return _fake_completed("")
 
 
@@ -213,14 +217,54 @@ class TestPentAGIService:
         assert cancelled.status == RunStatus.CANCELLED
         assert cancelled.completed_at is not None
 
-    def test_non_quick_profile_rejected(self, tmp_path: Path) -> None:
+    def test_standard_profile_executes_additional_scanners(self, tmp_path: Path) -> None:
         service = PentAGIService(command_runner=_default_command_runner)
         run = service.create_run(
             target=ScanTarget(repository_path=str(tmp_path)),
             profile=SecurityProfile.STANDARD,
         )
-        with pytest.raises(Exception, match="not available in Stage 1"):
-            service.launch_scan(run.id)
+        completed = service.launch_scan(run.id)
+        assert completed.status == RunStatus.COMPLETED
+        assert completed.metadata.tools_executed == ["bandit", "gitleaks", "pip-audit"]
+
+    def test_deep_profile_executes_semgrep(self, tmp_path: Path) -> None:
+        service = PentAGIService(command_runner=_default_command_runner)
+        run = service.create_run(
+            target=ScanTarget(repository_path=str(tmp_path)),
+            profile=SecurityProfile.DEEP,
+        )
+        completed = service.launch_scan(run.id)
+        assert completed.status == RunStatus.COMPLETED
+        assert completed.metadata.tools_executed == [
+            "bandit",
+            "gitleaks",
+            "pip-audit",
+            "semgrep",
+        ]
+
+    def test_optional_tool_missing_adds_warning(self, tmp_path: Path) -> None:
+        def missing_semgrep_runner(
+            command: list[str], _timeout_seconds: int
+        ) -> subprocess.CompletedProcess[str]:
+            if "bandit" in " ".join(command):
+                return _fake_completed('{"results": []}')
+            if command and command[0] == "gitleaks":
+                return _fake_completed("[]")
+            if "pip_audit" in " ".join(command):
+                return _fake_completed('{"dependencies": []}')
+            if command and command[0] == "semgrep":
+                raise FileNotFoundError
+            return _fake_completed("")
+
+        service = PentAGIService(command_runner=missing_semgrep_runner)
+        run = service.create_run(
+            target=ScanTarget(repository_path=str(tmp_path)),
+            profile=SecurityProfile.DEEP,
+        )
+        completed = service.launch_scan(run.id)
+        assert completed.status == RunStatus.COMPLETED
+        assert completed.metadata.tools_executed[-1] == "semgrep"
+        assert completed.metadata.tool_warnings
 
 
 class TestComponentSecurityApi:
@@ -251,6 +295,18 @@ class TestComponentSecurityApi:
         payload = response.json()
         assert payload["status"] == "completed"
         assert payload["metadata"]["tools_executed"] == ["bandit", "gitleaks"]
+
+    def test_create_run_executes_standard_profile(
+        self, writer_client: TestClient, tmp_path: Path
+    ) -> None:
+        response = writer_client.post(
+            "/v1/component-security/runs",
+            json={"target": {"repository_path": str(tmp_path)}, "profile": "standard"},
+        )
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert payload["metadata"]["tools_executed"] == ["bandit", "gitleaks", "pip-audit"]
 
     def test_list_get_and_status_endpoints(
         self, writer_client: TestClient, reader_client: TestClient, tmp_path: Path
