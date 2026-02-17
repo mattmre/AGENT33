@@ -131,6 +131,12 @@ AGENT-33 is the master 'queen bee' repo that centralizes agentic workflows, orch
 - Reuse Phase 25 visualization primitives and Phase 16 trace data for explainability context.
 - Status: Planned (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` and `docs/research/phase26-visual-review-readiness-2026-02-17.md`).
 
+## Phase 28: PentAGI Component Security Testing Integration
+- Integrate PentAGI component security testing flows into the AGENT-33 website for local and pre-production repository validation.
+- Add backend run orchestration and normalized findings APIs for component security tests.
+- Capture run evidence and connect results to release readiness gates before production deployment.
+- Status: Planned (see `docs/phases/PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md`).
+
 ## Phase Template Guidance (Generic)
 Use the generic phase templates in `core/phases/` for structure, and the AGENT-33 phase plans in `docs/phases/` for sequencing:
 - Start with `docs/phases/README.md` to select the next phase.
