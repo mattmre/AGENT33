@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
-class ReleaseType(str, Enum):
+class ReleaseType(StrEnum):
     """Release cadence type."""
 
     PATCH = "patch"
@@ -25,7 +25,7 @@ class ReleaseType(str, Enum):
     MAJOR = "major"
 
 
-class ReleaseStatus(str, Enum):
+class ReleaseStatus(StrEnum):
     """Release lifecycle status."""
 
     PLANNED = "planned"
@@ -37,7 +37,7 @@ class ReleaseStatus(str, Enum):
     ROLLED_BACK = "rolled_back"
 
 
-class CheckStatus(str, Enum):
+class CheckStatus(StrEnum):
     """Status of a release checklist item."""
 
     PENDING = "pending"
@@ -47,7 +47,7 @@ class CheckStatus(str, Enum):
     NA = "na"
 
 
-class SyncStrategy(str, Enum):
+class SyncStrategy(StrEnum):
     """How files are synced to downstream repos."""
 
     COPY = "copy"
@@ -55,7 +55,7 @@ class SyncStrategy(str, Enum):
     REFERENCE = "reference"
 
 
-class SyncFrequency(str, Enum):
+class SyncFrequency(StrEnum):
     """When sync runs."""
 
     ON_RELEASE = "on_release"
@@ -63,7 +63,7 @@ class SyncFrequency(str, Enum):
     MANUAL = "manual"
 
 
-class SyncStatus(str, Enum):
+class SyncStatus(StrEnum):
     """Status of a sync execution."""
 
     PENDING = "pending"
@@ -73,7 +73,7 @@ class SyncStatus(str, Enum):
     FAILED = "failed"
 
 
-class RollbackType(str, Enum):
+class RollbackType(StrEnum):
     """Type of rollback."""
 
     IMMEDIATE = "immediate"
@@ -82,7 +82,7 @@ class RollbackType(str, Enum):
     CONFIG = "config"
 
 
-class RollbackStatus(str, Enum):
+class RollbackStatus(StrEnum):
     """Status of a rollback."""
 
     PENDING = "pending"

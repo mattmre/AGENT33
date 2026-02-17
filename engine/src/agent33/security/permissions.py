@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
@@ -24,7 +24,7 @@ SCOPES: set[str] = {
 }
 
 
-class PermissionDecision(str, Enum):
+class PermissionDecision(StrEnum):
     """Decision result for permission evaluation."""
 
     ALLOW = "allow"

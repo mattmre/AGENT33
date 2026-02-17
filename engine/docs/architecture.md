@@ -275,7 +275,7 @@ The `NATSMessageBus` uses the `nats-py` async client. Subscriptions register asy
 
 | Table / Concept | Purpose |
 |---|---|
-| **workflow_checkpoints** | Persisted workflow state for resumption after failures. Managed by `workflows/checkpoint.py` and `langgraph-checkpoint-postgres`. |
+| **workflow_checkpoints** | Persisted workflow state for resumption after failures. Managed by custom checkpoint manager in `workflows/checkpoint.py`. |
 | **embeddings** (pgvector) | Vector embeddings for long-term memory and RAG. Uses the `pgvector` extension with `vector` column type for cosine similarity search. |
 | **sessions** | Session metadata and state for multi-turn conversations. |
 | **data_lineage** | Tracks the provenance of data through workflow steps (`observability/lineage.py`). |

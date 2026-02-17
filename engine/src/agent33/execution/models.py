@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -103,7 +103,7 @@ class ExecutionResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class AdapterType(str, Enum):
+class AdapterType(StrEnum):
     """Supported adapter transport types."""
 
     CLI = "cli"
@@ -112,7 +112,7 @@ class AdapterType(str, Enum):
     MCP = "mcp"
 
 
-class AdapterStatus(str, Enum):
+class AdapterStatus(StrEnum):
     """Lifecycle status of an adapter definition."""
 
     ACTIVE = "active"

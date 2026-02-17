@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,7 @@ def _trace_id(prefix: str = "TRC") -> str:
 # ---------------------------------------------------------------------------
 
 
-class TraceStatus(str, Enum):
+class TraceStatus(StrEnum):
     """Outcome status for a trace record."""
 
     COMPLETED = "completed"
@@ -39,7 +39,7 @@ class TraceStatus(str, Enum):
     RUNNING = "running"
 
 
-class ActionStatus(str, Enum):
+class ActionStatus(StrEnum):
     """Status of a single action within a step."""
 
     SUCCESS = "success"
@@ -48,7 +48,7 @@ class ActionStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class ArtifactType(str, Enum):
+class ArtifactType(StrEnum):
     """Types of artifacts produced during execution."""
 
     LOG = "LOG"

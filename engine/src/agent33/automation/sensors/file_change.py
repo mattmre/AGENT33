@@ -8,7 +8,7 @@ import fnmatch
 import logging
 import os
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ChangeType(str, Enum):
+class ChangeType(StrEnum):
     """Type of file system change detected."""
 
     CREATED = "created"
