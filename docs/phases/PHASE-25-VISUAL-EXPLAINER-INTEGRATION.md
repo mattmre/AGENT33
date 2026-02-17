@@ -1,6 +1,9 @@
 # Phase 25: Visual Explainer Integration
 
-## Status: Planned
+## Status: In Progress
+
+**Stage 1 (Workflow DAG MVP)**: Delivered on branch `phase25-workflow-graph-mvp`  
+**Remaining Stages**: Planned for future phases
 
 ## Overview
 - **Phase**: 25 of 25+
@@ -45,19 +48,19 @@
 | 5 | API domain integration | `frontend/src/data/domains/workflows.ts` | Add graph view operation to workflows domain |
 | 6 | Container dependency update | `engine/Dockerfile`, `engine/pyproject.toml` | Add graphviz or igraph for server-side layout |
 | 7 | Unit tests | `engine/tests/test_visualizations_api.py` | Test graph generation for various workflow structures |
-| 8 | Frontend tests | `frontend/src/components/WorkflowGraph.test.tsx` | Snapshot tests and interaction validation |
+| 8 | Frontend tests | `frontend/src/components/WorkflowGraph.test.ts` | Mapper and graph data transformation validation |
 | 9 | Performance validation | `docs/progress/phase-25-visual-explainer-log.md` | Load times, render performance, real-time update latency |
 | 10 | Operator documentation | `docs/walkthroughs.md` update | How to use workflow graph view for debugging |
 
 ## Acceptance Criteria
-- [ ] Backend `/v1/visualizations/workflows/{workflow_id}/graph` route returns valid node/edge JSON
+- [x] Backend `/v1/visualizations/workflows/{workflow_id}/graph` route returns valid node/edge JSON
 - [ ] Graph generation handles workflows with 10-100 steps without timeout (<1s response)
-- [ ] Frontend renders workflow graphs with zoom, pan, and node-click interactions
-- [ ] Clicking a node displays step details (inputs, outputs, logs, status) in sidebar
-- [ ] Real-time status updates reflect workflow state changes within 2s latency
-- [ ] Graph layout is readable for typical workflows without manual repositioning
-- [ ] Auth middleware enforces same permissions as `/v1/workflows/` routes
-- [ ] Unit tests pass for graph generation logic and frontend component
+- [x] Frontend renders workflow graphs with zoom, pan, and node-click interactions
+- [x] Clicking a node displays step details (inputs, outputs, logs, status) in sidebar
+- [ ] Real-time status updates reflect workflow state changes within 2s latency (deferred to Stage 2)
+- [x] Graph layout is readable for typical workflows without manual repositioning
+- [x] Auth middleware enforces same permissions as `/v1/workflows/` routes
+- [x] Unit tests pass for graph generation logic and frontend component
 - [ ] Performance validation confirms <1s load and <500ms render for 100-node graphs
 - [ ] Documentation includes workflow graph usage examples with screenshots
 
@@ -163,6 +166,7 @@
 
 ## References
 - Research analysis: `docs/research/visual-explainer-integration-analysis-2026-02-17.md`
+- Progress log: `docs/progress/phase-25-visual-explainer-log.md`
 - Phase 16 (Observability): `docs/phases/PHASE-16-OBSERVABILITY-AND-TRACE-PIPELINE.md`
 - Phase 22 (UI Platform): `docs/phases/PHASE-22-UNIFIED-UI-PLATFORM-AND-ACCESS-LAYER.md`
 - React Flow docs: https://reactflow.dev/

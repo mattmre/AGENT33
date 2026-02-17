@@ -122,14 +122,14 @@ AGENT-33 is the master 'queen bee' repo that centralizes agentic workflows, orch
 - Implement server-side graph generation and client-side rendering for scalability.
 - Enable operators to debug workflows visually instead of manual trace correlation.
 - Close observability gap between text-based logs and intuitive graph representations.
-- Status: Planned (see `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md` and `docs/research/visual-explainer-integration-analysis-2026-02-17.md`).
+- Status: In Progress — Stage 1 (workflow DAG MVP) delivered on branch `phase25-workflow-graph-mvp` (see `docs/progress/phase-25-visual-explainer-log.md` and `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md`).
 
 ## Phase 26: Visual Explainer Decision and Review Pages
 - Deliver visual diff-review, plan-review, project recap, and fact-check pages within AGENT-33 workflows.
 - Build backend explanation generation APIs and artifact metadata tracking for reusable review outputs.
 - Add frontend explanation workspace for operators to generate and browse visual review artifacts.
 - Reuse Phase 25 visualization primitives and Phase 16 trace data for explainability context.
-- Status: Planned (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md`).
+- Status: Planned (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` and `docs/research/phase26-visual-review-readiness-2026-02-17.md`).
 
 ## Phase Template Guidance (Generic)
 Use the generic phase templates in `core/phases/` for structure, and the AGENT-33 phase plans in `docs/phases/` for sequencing:

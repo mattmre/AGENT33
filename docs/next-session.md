@@ -1,82 +1,62 @@
 # Next Session Briefing
 
-Last updated: 2026-02-17T03:25
+Last updated: 2026-02-17T23:20
 
 ## Current State
 
-- **Active branch**: `phase25-visual-explainer-integration`
+- **Active branch**: `phase25-workflow-graph-mvp`
 - **Open PRs**:
-  - [#26](https://github.com/mattmre/AGENT33/pull/26) — Phase 22 closure refresh + archive handoff
-  - [#27](https://github.com/mattmre/AGENT33/pull/27) — Phase 25 visual-explainer integration planning
-- **Latest session log**: `docs/sessions/session-24-2026-02-17.md`
-- **Main status**: `main` is synced with `origin/main` at `9ac2786`
-- **Phase 22 status**: Merged and closed
-- **Phase 25 status**: Planned (research/spec complete; implementation not started)
-- **Phase 26 status**: Planned (follow-on visual review pages scope added)
+  - [#28](https://github.com/mattmre/AGENT33/pull/28) — Phase 25 workflow graph MVP implementation + readiness docs
+- **Latest session log**: `docs/sessions/session-25-2026-02-17.md`
+- **Main status**: `main` synced with `origin/main` at `9344262`
+- **Phase 22 status**: merged and closed
+- **Phase 25 status**: in progress (Stage 1 MVP implemented on branch)
+- **Phase 26 status**: planned (readiness analysis updated)
 
 ## What Was Completed
 
-### Session 20 (Phase 22 Closure Docs)
-1. Refreshed stale handoff docs to current merged-main state.
-2. Added transition plan + executive summary artifacts.
-3. Added Phase 22 archive index and preserved orchestration state snapshot.
-4. Opened PR #26.
-
-### Session 21 (Phase 25 Planning)
-1. Added research analysis for visual-explainer integration:
-   - `docs/research/visual-explainer-integration-analysis-2026-02-17.md`
-2. Added new phase spec:
-   - `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md`
-3. Updated planning indexes:
-   - `docs/phases/README.md`
-   - `docs/phase-planning.md`
-4. Added session log:
-   - `docs/sessions/session-21-2026-02-17.md`
-5. Opened PR #27.
-
-### Session 22 (PR Audit + Next-Session Prep)
-1. Verified no local work exists outside open PR branches.
-2. Confirmed there is no additional uncommitted/untracked implementation requiring a new PR.
-3. Updated handoff docs for clean continuation.
-
-### Session 23 (Phase 26 Planning Extension)
-1. Added a new follow-on phase spec for visual decision/review pages:
-   - `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md`
-2. Updated planning indexes:
-   - `docs/phases/README.md`
-   - `docs/phase-planning.md`
-
-### Session 24 (PR Coverage Recheck + Handoff Refresh)
-1. Re-audited git and PR state and confirmed no additional local work exists outside open PR branches.
-2. Updated session and handoff docs for next-session continuity.
-3. Pushed latest handoff updates to existing PR #27 (no extra PR required).
+### Session 25 (Phase 25 Stage 1 Execution)
+1. Merged prerequisite docs PRs:
+   - PR #26 (Phase 22 closure refresh)
+   - PR #27 (Phase 25/26 planning docs)
+2. Created fresh implementation branch from latest `main`.
+3. Implemented backend workflow graph endpoint + graph service + tests:
+   - `engine/src/agent33/api/routes/visualizations.py`
+   - `engine/src/agent33/services/graph_generator.py`
+   - `engine/tests/test_visualizations_api.py`
+4. Implemented frontend workflow graph component + wiring + tests:
+   - `frontend/src/components/WorkflowGraph.tsx`
+   - `frontend/src/components/WorkflowGraph.test.ts`
+   - workflows domain + operation card integration
+5. Added Phase 25 progress evidence and Phase 26 readiness docs:
+   - `docs/progress/phase-25-visual-explainer-log.md`
+   - `docs/research/phase26-visual-review-readiness-2026-02-17.md`
+6. Updated walkthrough and planning docs for continuity.
 
 ## Immediate Next Tasks
 
-### Priority 1: Review + Merge Open Docs PRs
-- Review and merge PR #26 first (Phase 22 closure/handoff correctness).
-- Review and merge PR #27 second (Phase 25 planning artifacts).
-- Resolve any doc conflicts if both touch handoff docs.
+### Priority 1: Review and Merge Phase 25 Implementation PR
+- Review PR #28 and resolve any feedback.
+- Merge PR #28 to `main` once approved.
+- Focus review on:
+  - graph API contract (`/v1/visualizations/workflows/{workflow_id}/graph`)
+  - frontend WorkflowGraph UX behavior
+  - test coverage and known limitations
 
-### Priority 2: Phase 25 Implementation Kickoff (Stage 1 MVP)
-- Create implementation branch from latest `main` after PR #27 merge.
-- Implement workflow DAG visualization path:
-  - backend graph route/service
-  - frontend graph component
-  - domain wiring + tests
-- Track progress in a new phase-25 progress log.
-
-### Priority 3: Validation Baseline Before Implementation
-- Re-run baseline checks before Phase 25 coding:
-  - `python -m ruff check src tests`
+### Priority 2: Complete Full Backend Baseline Verification
+- Re-run full backend suite when runtime window allows:
   - `python -m pytest tests/ -q`
-  - `npm run lint && npm run test -- --run && npm run build`
-- Capture evidence in upcoming phase-25 progress docs.
+- Keep targeted evidence from Session 25 as baseline:
+  - visualization API tests pass
+  - workflow scheduling regression tests pass
+  - `ruff` checks pass
 
-### Priority 4: Phase 26 Design Readiness
-- Align Phase 26 API contract design with Phase 25 outputs.
-- Decide artifact metadata model and storage lifecycle for review pages.
-- Define fact-check criteria and confidence annotations before implementation.
+### Priority 3: Prepare Phase 26 Implementation Branch
+- Start from latest `main` after Phase 25 merge.
+- Use readiness doc to define first implementation slice:
+  - artifact metadata model
+  - explanation API contract stubs
+  - fact-check criteria scaffolding
 
 ## Startup Checklist (Next Session)
 
@@ -101,7 +81,7 @@ curl -X POST http://localhost:8000/v1/auth/token \
   -d '{"username":"admin","password":"admin"}'
 
 # example protected call (replace token)
-curl http://localhost:8000/v1/agents/ \
+curl http://localhost:8000/v1/visualizations/workflows/hello-flow/graph \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
@@ -109,12 +89,10 @@ curl http://localhost:8000/v1/agents/ \
 
 | Purpose | Path |
 |---|---|
-| Session handoff (latest) | `docs/sessions/session-24-2026-02-17.md` |
-| Phase 25 session log | `docs/sessions/session-21-2026-02-17.md` |
-| Phase 25 research | `docs/research/visual-explainer-integration-analysis-2026-02-17.md` |
+| Session handoff (latest) | `docs/sessions/session-25-2026-02-17.md` |
+| Phase 25 progress log | `docs/progress/phase-25-visual-explainer-log.md` |
 | Phase 25 spec | `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md` |
+| Phase 26 readiness research | `docs/research/phase26-visual-review-readiness-2026-02-17.md` |
 | Phase 26 spec | `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` |
+| Operator walkthroughs | `docs/walkthroughs.md` |
 | Phase planning index | `docs/phase-planning.md` |
-| Phase catalog | `docs/phases/README.md` |
-| Phase 22 archive index | `docs/sessions/archive/phase-22/README.md` |
-| Transition plan | `docs/implementation-plan-phase22-23-transition.md` |

@@ -373,3 +373,68 @@ curl -X POST http://localhost:8000/v1/traces/<trace_id>/complete \
   -H "Content-Type: application/json" \
   -d '{"status":"completed"}'
 ```
+
+## 10. Workflow Graph Visualization (Phase 25)
+
+Get visual graph representation of a workflow:
+
+```bash
+curl http://localhost:8000/v1/visualizations/workflows/hello-flow/graph \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response includes nodes, edges, layout coordinates, and execution status overlay:
+
+```json
+{
+  "workflow_id": "hello-flow",
+  "workflow_version": "1.0.0",
+  "nodes": [
+    {
+      "id": "build-message",
+      "name": "build-message",
+      "action": "transform",
+      "x": 80,
+      "y": 80,
+      "position": {"x": 80, "y": 80},
+      "metadata": {
+        "inputs": {...},
+        "outputs": {...}
+      },
+      "status": "success"
+    }
+  ],
+  "edges": [],
+  "layout": {
+    "type": "layered",
+    "width": 280,
+    "height": 280,
+    "layer_spacing": 200,
+    "node_spacing": 150
+  },
+  "metadata": {
+    "generated_at": "2026-02-17T...",
+    "step_count": 1,
+    "execution_mode": "sequential"
+  }
+}
+```
+
+### Using the Frontend Workflow Graph View
+
+1. Navigate to `http://localhost:3000` and login with bootstrap credentials
+2. Select the **Workflows** domain from the sidebar
+3. Choose **Workflow Graph** operation
+4. Enter the workflow ID (e.g., `hello-flow`) in the path parameter field
+5. Click **Run** to fetch and render the graph
+6. Use the interactive controls:
+   - **Zoom**: Mouse wheel or zoom controls
+   - **Pan**: Click and drag on the canvas
+   - **Node details**: Click any node to view inputs, outputs, status, and metadata
+   - **Deselect**: Click on empty canvas to hide detail sidebar
+
+The graph view is useful for:
+- Debugging workflow execution paths and dependencies
+- Identifying failed steps visually with status indicators
+- Understanding complex workflow structures without manual trace correlation
+- Sharing workflow architecture diagrams with non-technical stakeholders

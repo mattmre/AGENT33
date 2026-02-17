@@ -31,6 +31,16 @@ _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 _scheduler: WorkflowScheduler | None = None
 
 
+def get_workflow_registry() -> dict[str, WorkflowDefinition]:
+    """Expose the workflow registry for internal route composition."""
+    return _registry
+
+
+def get_execution_history() -> deque[dict[str, Any]]:
+    """Expose workflow execution history for internal route composition."""
+    return _execution_history
+
+
 class WorkflowCreateRequest(BaseModel):
     """Request body for creating a workflow."""
 
@@ -94,6 +104,7 @@ class WorkflowHistoryEntry(BaseModel):
     timestamp: float
     error: str | None = None
     job_id: str | None = None  # Present for scheduled executions
+    step_statuses: dict[str, str] | None = None  # Optional step-level status map
 
 
 @router.get("/", dependencies=[require_scope("workflows:read")])
@@ -323,8 +334,12 @@ async def _execute_single(
             "timestamp": start_ts,
             "error": str(exc),
             "job_id": job_id,
+            "step_statuses": None,
         })
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Extract step statuses from result
+    step_statuses = {sr.step_id: sr.status for sr in result.step_results}
 
     # Record success in history
     _execution_history.append({
@@ -335,6 +350,7 @@ async def _execute_single(
         "timestamp": start_ts,
         "error": error,
         "job_id": job_id,
+        "step_statuses": step_statuses,
     })
 
     logger.info(

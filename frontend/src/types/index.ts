@@ -1,5 +1,5 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type OperationUxHint = "workflow-execute" | "workflow-schedule" | "agent-iterative";
+export type OperationUxHint = "workflow-execute" | "workflow-schedule" | "agent-iterative" | "workflow-graph";
 
 export interface OperationConfig {
   id: string;
