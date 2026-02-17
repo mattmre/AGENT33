@@ -3,6 +3,7 @@ FROM python:3.11-slim AS builder
 WORKDIR /build
 COPY pyproject.toml .
 RUN pip install --no-cache-dir hatchling && \
+    pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
     pip install --no-cache-dir .
 
 FROM python:3.11-slim
@@ -16,7 +17,8 @@ COPY src/ src/
 COPY templates/ templates/
 COPY pyproject.toml .
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
+    pip install --no-cache-dir -e .
 
 USER agent33
 EXPOSE 8000

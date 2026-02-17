@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path  # noqa: TC003 — Pydantic needs Path at runtime for base_path field
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SkillStatus(str, Enum):
+class SkillStatus(StrEnum):
     """Lifecycle status for a skill definition."""
 
     ACTIVE = "active"
@@ -17,7 +17,7 @@ class SkillStatus(str, Enum):
     EXPERIMENTAL = "experimental"
 
 
-class SkillInvocationMode(str, Enum):
+class SkillInvocationMode(StrEnum):
     """Who can trigger the skill."""
 
     USER_ONLY = "user-only"
@@ -25,7 +25,7 @@ class SkillInvocationMode(str, Enum):
     BOTH = "both"
 
 
-class SkillExecutionContext(str, Enum):
+class SkillExecutionContext(StrEnum):
     """Where the skill runs."""
 
     INLINE = "inline"  # runs in agent's context

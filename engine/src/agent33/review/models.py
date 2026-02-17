@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     """Risk level for a change set."""
 
     NONE = "none"
@@ -26,7 +26,7 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class RiskTrigger(str, Enum):
+class RiskTrigger(StrEnum):
     """Categories of risk triggers from RISK_TRIGGERS.md."""
 
     DOCUMENTATION = "documentation"
@@ -45,7 +45,7 @@ class RiskTrigger(str, Enum):
     SUPPLY_CHAIN = "supply-chain"
 
 
-class SignoffState(str, Enum):
+class SignoffState(StrEnum):
     """Lifecycle states for a review record."""
 
     DRAFT = "draft"
@@ -60,7 +60,7 @@ class SignoffState(str, Enum):
     MERGED = "merged"
 
 
-class ReviewDecision(str, Enum):
+class ReviewDecision(StrEnum):
     """Decision a reviewer can make."""
 
     APPROVED = "approved"
@@ -68,7 +68,7 @@ class ReviewDecision(str, Enum):
     ESCALATED = "escalated"
 
 
-class ChecklistVerdict(str, Enum):
+class ChecklistVerdict(StrEnum):
     """Verdict for a single checklist category."""
 
     PASS = "pass"
