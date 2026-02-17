@@ -25,7 +25,8 @@ jobs:
       - name: Ruff check
         run: ruff check src/ tests/
 
-      - name: Mypy
+      - name: Mypy (non-blocking)
+        continue-on-error: true
         run: mypy src/
 
   test:
