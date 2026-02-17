@@ -53,6 +53,10 @@ class FindingCategory(StrEnum):
     SECRETS_EXPOSURE = "secrets-exposure"
     INJECTION_RISK = "injection-risk"
     CODE_QUALITY = "code-quality"
+    AUTHENTICATION_WEAKNESS = "authentication-weakness"
+    AUTHORIZATION_BYPASS = "authorization-bypass"
+    CRYPTOGRAPHY_WEAKNESS = "cryptography-weakness"
+    CONFIGURATION_ISSUE = "configuration-issue"
 
 
 class ScanTarget(BaseModel):
@@ -79,6 +83,7 @@ class RunMetadata(BaseModel):
     session_id: str = ""
     release_candidate_id: str = ""
     tools_executed: list[str] = Field(default_factory=list)
+    tool_warnings: list[str] = Field(default_factory=list)
 
 
 class SecurityFinding(BaseModel):
@@ -160,3 +165,28 @@ class SecurityRun(BaseModel):
     def touch(self) -> None:
         """Refresh last-updated timestamp."""
         self.updated_at = datetime.now(UTC)
+
+
+class SecurityGatePolicy(BaseModel):
+    """Configurable policy for release gate decisions."""
+
+    block_on_critical: bool = True
+    block_on_high: bool = True
+    max_high: int = 0
+    max_medium: int = 10
+
+
+class SecurityGateDecision(StrEnum):
+    """Outcome of evaluating a run against gate policy."""
+
+    PASS = "pass"
+    FAIL = "fail"
+
+
+class SecurityGateResult(BaseModel):
+    """Result of release security gate policy evaluation."""
+
+    decision: SecurityGateDecision
+    message: str
+    run_id: str
+    summary: FindingsSummary

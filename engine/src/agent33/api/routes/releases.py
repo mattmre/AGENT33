@@ -9,6 +9,7 @@ import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from agent33.component_security.models import FindingsSummary, SecurityGatePolicy
 from agent33.release.models import (
     CheckStatus,
     ReleaseStatus,
@@ -65,6 +66,12 @@ class UpdateCheckRequest(BaseModel):
     check_id: str
     status: CheckStatus
     message: str = ""
+
+
+class SecurityGateEvaluationRequest(BaseModel):
+    run_id: str
+    summary: FindingsSummary
+    policy: SecurityGatePolicy | None = None
 
 
 class CreateSyncRuleRequest(BaseModel):
@@ -285,6 +292,35 @@ async def update_check(
             status_code=404, detail=f"Release not found: {release_id}"
         ) from None
     return {"release_id": release_id, "check_id": body.check_id, "status": body.status.value}
+
+
+@router.post(
+    "/{release_id}/security-gate",
+    dependencies=[require_scope("tools:execute")],
+)
+async def apply_security_gate(
+    release_id: str,
+    body: SecurityGateEvaluationRequest,
+) -> dict[str, Any]:
+    """Apply RL-06 gate status from component security summary."""
+    try:
+        result = _service.apply_component_security_gate(
+            release_id,
+            run_id=body.run_id,
+            summary=body.summary,
+            policy=body.policy,
+        )
+    except ReleaseNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Release not found: {release_id}"
+        ) from None
+    return {
+        "release_id": release_id,
+        "run_id": result.run_id,
+        "decision": result.decision.value,
+        "message": result.message,
+        "summary": result.summary.model_dump(),
+    }
 
 
 # ---------------------------------------------------------------------------

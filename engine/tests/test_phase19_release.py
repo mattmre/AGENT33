@@ -18,6 +18,7 @@ import pytest
 if TYPE_CHECKING:
     from starlette.testclient import TestClient
 
+from agent33.component_security.models import FindingsSummary, SecurityGatePolicy
 from agent33.release.checklist import ChecklistEvaluator, build_checklist
 from agent33.release.models import (
     CheckStatus,
@@ -460,6 +461,34 @@ class TestReleaseService:
         assert passed is False
         assert len(failures) >= 7
 
+    def test_apply_component_security_gate_pass(self):
+        svc = ReleaseService()
+        release = svc.create_release(version="1.0.0")
+        result = svc.apply_component_security_gate(
+            release.release_id,
+            run_id="secrun-pass",
+            summary=FindingsSummary(critical=0, high=0, medium=1, low=1, info=0),
+            policy=SecurityGatePolicy(max_medium=5),
+        )
+        assert result.decision.value == "pass"
+        rl06 = next(c for c in release.evidence.checklist if c.check_id == "RL-06")
+        assert rl06.status == CheckStatus.PASS
+        assert release.evidence.gate_passed is True
+
+    def test_apply_component_security_gate_fail(self):
+        svc = ReleaseService()
+        release = svc.create_release(version="1.0.0")
+        result = svc.apply_component_security_gate(
+            release.release_id,
+            run_id="secrun-fail",
+            summary=FindingsSummary(critical=0, high=2, medium=0, low=0, info=0),
+            policy=SecurityGatePolicy(max_high=0),
+        )
+        assert result.decision.value == "fail"
+        rl06 = next(c for c in release.evidence.checklist if c.check_id == "RL-06")
+        assert rl06.status == CheckStatus.FAIL
+        assert release.evidence.gate_passed is False
+
     def test_add_sync_rule(self):
         svc = ReleaseService()
         rule = SyncRule(target_repo="org/repo")
@@ -639,6 +668,30 @@ class TestReleaseAPI:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "pass"
+
+    def test_apply_security_gate_endpoint(self, client: TestClient):
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
+        rid = create_resp.json()["release_id"]
+        resp = client.post(
+            f"/v1/releases/{rid}/security-gate",
+            json={
+                "run_id": "secrun-123",
+                "summary": {
+                    "critical": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 1,
+                    "info": 0,
+                },
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["decision"] == "pass"
+
+        checklist_resp = client.get(f"/v1/releases/{rid}/checklist")
+        checks = checklist_resp.json()["checks"]
+        rl06 = next(check for check in checks if check["check_id"] == "RL-06")
+        assert rl06["status"] == "pass"
 
     def test_sync_rule_crud(self, client: TestClient):
         resp = client.post(

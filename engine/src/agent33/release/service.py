@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from agent33.component_security.models import (
+    FindingsSummary,
+    SecurityGatePolicy,
+    SecurityGateResult,
+)
 from agent33.release.checklist import ChecklistEvaluator, build_checklist
 from agent33.release.models import (
     CheckStatus,
@@ -14,6 +19,7 @@ from agent33.release.models import (
     SyncRule,
 )
 from agent33.release.rollback import RollbackManager
+from agent33.release.security_gate import evaluate_security_gate
 from agent33.release.sync import SyncEngine
 
 logger = logging.getLogger(__name__)
@@ -185,6 +191,28 @@ class ReleaseService:
         """Evaluate the release checklist. Returns (passed, failures)."""
         release = self.get_release(release_id)
         return self._evaluator.evaluate(release.evidence.checklist)
+
+    def apply_component_security_gate(
+        self,
+        release_id: str,
+        *,
+        run_id: str,
+        summary: FindingsSummary,
+        policy: SecurityGatePolicy | None = None,
+    ) -> SecurityGateResult:
+        """Evaluate and apply RL-06 status from component security findings."""
+        release = self.get_release(release_id)
+        gate_policy = policy or SecurityGatePolicy()
+        result = evaluate_security_gate(run_id=run_id, summary=summary, policy=gate_policy)
+        release.evidence.gate_passed = result.decision.value == "pass"
+        check_status = CheckStatus.PASS if release.evidence.gate_passed else CheckStatus.FAIL
+        self._evaluator.update_check(
+            release.evidence.checklist,
+            "RL-06",
+            check_status,
+            result.message,
+        )
+        return result
 
     # ------------------------------------------------------------------
     # Sync (delegated to SyncEngine)
