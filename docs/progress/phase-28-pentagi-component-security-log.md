@@ -169,3 +169,43 @@ python -m pytest tests -q
 - [ ] Add Stage 2 profiles (`standard`, `deep`) and broaden tool matrix.
 - [ ] Add release gate policy model/wiring in Phase 19 release workflows.
 - [ ] Add frontend component-security workspace and UI tests.
+
+---
+
+## 2026-02-17: Stage 1 Review Hardening and Baseline Re-sync
+
+### Work Completed
+- [x] Merged baseline remediation branch updates into `phase28/pentagi-component-security-phase`.
+- [x] Added API-level target path allowlist enforcement in `PentAGIService` wiring to reduce arbitrary path scan risk.
+- [x] Added cancellation race hardening to preserve `CANCELLED` status when cancellation happens during scanner execution.
+- [x] Added targeted backend tests for path-allowlist rejection and cancel-state preservation.
+- [x] Added Stage 1 implementation note in integration analysis documenting subprocess-based quick profile behavior.
+
+### Validation Evidence
+```bash
+cd engine
+python -m ruff check src/agent33/services/pentagi_integration.py src/agent33/api/routes/component_security.py tests/test_component_security_api.py
+python -m pytest tests/test_component_security_api.py -q
+python -m ruff check src tests
+python -m pytest tests -q
+```
+
+**Results**:
+- Targeted lint/tests: pass (`14 passed`)
+- Full engine lint: pass
+- Full engine tests: pass (`1571 passed, 1 warning`)
+
+### Issues Encountered
+| Issue | Impact | Resolution |
+|-------|--------|------------|
+| Baseline PR feedback identified scan target path trust gap | Potential arbitrary filesystem scan scope | Added allowlist-based path validation in API service wiring and adapter validation method |
+| Cancellation endpoint could race with completion status update | State inconsistency risk (`CANCELLED` overwritten by `COMPLETED`) | Added launch-time cancellation guard and regression test |
+
+### Decisions Made
+- **Decision**: Enforce path allowlist in API singleton service instance rather than globally in all service instances.
+  - **Rationale**: Preserves API safety boundary while keeping tests and non-API service construction flexible.
+  - **Alternatives considered**: Global default path restriction in service constructor (rejected due test friction and reduced composability).
+
+### Next Steps
+- [ ] Resolve remaining PR discussion thread metadata and merge order with Phase 26/30 dependencies.
+- [ ] Begin Stage 2 profile expansion (`standard`, `deep`) after Stage 1 PR merge.
