@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class BudgetState(str, Enum):
+class BudgetState(StrEnum):
     """Lifecycle states for an autonomy budget."""
 
     DRAFT = "draft"
@@ -28,7 +28,7 @@ class BudgetState(str, Enum):
     REJECTED = "rejected"
 
 
-class StopAction(str, Enum):
+class StopAction(StrEnum):
     """Action to take when a stop condition triggers."""
 
     STOP = "stop"
@@ -36,7 +36,7 @@ class StopAction(str, Enum):
     WARN = "warn"
 
 
-class EscalationUrgency(str, Enum):
+class EscalationUrgency(StrEnum):
     """Urgency level for escalation triggers."""
 
     IMMEDIATE = "immediate"
@@ -44,7 +44,7 @@ class EscalationUrgency(str, Enum):
     LOW = "low"
 
 
-class PolicyAction(str, Enum):
+class PolicyAction(StrEnum):
     """Action a policy rule can take."""
 
     ALLOW = "allow"
@@ -54,7 +54,7 @@ class PolicyAction(str, Enum):
     STOP = "stop"
 
 
-class EnforcementResult(str, Enum):
+class EnforcementResult(StrEnum):
     """Result of an enforcement check."""
 
     ALLOWED = "allowed"
@@ -63,7 +63,7 @@ class EnforcementResult(str, Enum):
     ESCALATED = "escalated"
 
 
-class PreflightStatus(str, Enum):
+class PreflightStatus(StrEnum):
     """Status of a preflight check."""
 
     PASS = "pass"

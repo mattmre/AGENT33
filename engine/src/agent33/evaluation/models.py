@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class GateType(str, Enum):
+class GateType(StrEnum):
     """Regression gate types (§ Gate Types)."""
 
     G_PR = "G-PR"
@@ -26,7 +26,7 @@ class GateType(str, Enum):
     G_MON = "G-MON"
 
 
-class GateAction(str, Enum):
+class GateAction(StrEnum):
     """Action taken when a threshold is breached."""
 
     BLOCK = "block"
@@ -34,7 +34,7 @@ class GateAction(str, Enum):
     ALERT = "alert"
 
 
-class GateResult(str, Enum):
+class GateResult(StrEnum):
     """Outcome of a gate check."""
 
     PASS = "pass"
@@ -42,7 +42,7 @@ class GateResult(str, Enum):
     WARN = "warn"
 
 
-class MetricId(str, Enum):
+class MetricId(StrEnum):
     """Evaluation metrics (§ Metrics Definitions)."""
 
     M_01 = "M-01"  # Success Rate
@@ -52,7 +52,7 @@ class MetricId(str, Enum):
     M_05 = "M-05"  # Scope Adherence
 
 
-class GoldenTag(str, Enum):
+class GoldenTag(StrEnum):
     """Golden task gating tags (§ Golden Task Gating Tags)."""
 
     GT_CRITICAL = "GT-CRITICAL"
@@ -62,7 +62,7 @@ class GoldenTag(str, Enum):
     GT_OPTIONAL = "GT-OPTIONAL"
 
 
-class TaskResult(str, Enum):
+class TaskResult(StrEnum):
     """Result of a single golden task / case execution."""
 
     PASS = "pass"
@@ -71,7 +71,7 @@ class TaskResult(str, Enum):
     ERROR = "error"
 
 
-class RegressionIndicator(str, Enum):
+class RegressionIndicator(StrEnum):
     """Regression indicators (§ Regression Detection)."""
 
     RI_01 = "RI-01"  # Previously passing task now fails
@@ -81,7 +81,7 @@ class RegressionIndicator(str, Enum):
     RI_05 = "RI-05"  # Flaky test becomes consistent failure
 
 
-class RegressionSeverity(str, Enum):
+class RegressionSeverity(StrEnum):
     """Severity levels for regressions."""
 
     LOW = "low"
@@ -90,7 +90,7 @@ class RegressionSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class TriageStatus(str, Enum):
+class TriageStatus(StrEnum):
     """Triage status for regression records."""
 
     NEW = "new"
@@ -101,7 +101,7 @@ class TriageStatus(str, Enum):
     WONTFIX = "wontfix"
 
 
-class ThresholdOperator(str, Enum):
+class ThresholdOperator(StrEnum):
     """Comparison operators for thresholds."""
 
     GTE = "gte"

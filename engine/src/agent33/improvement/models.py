@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ def _new_id(prefix: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-class ResearchType(str, Enum):
+class ResearchType(StrEnum):
     """Research intake classification type."""
 
     EXTERNAL = "external"
@@ -32,7 +32,7 @@ class ResearchType(str, Enum):
     TECHNICAL = "technical"
 
 
-class ResearchUrgency(str, Enum):
+class ResearchUrgency(StrEnum):
     """Urgency level for research intake."""
 
     HIGH = "high"
@@ -40,7 +40,7 @@ class ResearchUrgency(str, Enum):
     LOW = "low"
 
 
-class IntakeStatus(str, Enum):
+class IntakeStatus(StrEnum):
     """Research intake lifecycle status."""
 
     SUBMITTED = "submitted"
@@ -52,7 +52,7 @@ class IntakeStatus(str, Enum):
     TRACKED = "tracked"
 
 
-class LessonEventType(str, Enum):
+class LessonEventType(StrEnum):
     """What kind of event triggered the lesson."""
 
     SUCCESS = "success"
@@ -60,7 +60,7 @@ class LessonEventType(str, Enum):
     OBSERVATION = "observation"
 
 
-class LessonActionStatus(str, Enum):
+class LessonActionStatus(StrEnum):
     """Status of a lesson-learned action item."""
 
     PENDING = "pending"
@@ -69,7 +69,7 @@ class LessonActionStatus(str, Enum):
     WONT_FIX = "wont_fix"
 
 
-class MetricTrend(str, Enum):
+class MetricTrend(StrEnum):
     """Direction of a metric over time."""
 
     IMPROVING = "improving"
@@ -77,7 +77,7 @@ class MetricTrend(str, Enum):
     DECLINING = "declining"
 
 
-class ChecklistPeriod(str, Enum):
+class ChecklistPeriod(StrEnum):
     """Which periodic checklist this belongs to."""
 
     PER_RELEASE = "per_release"
@@ -85,7 +85,7 @@ class ChecklistPeriod(str, Enum):
     QUARTERLY = "quarterly"
 
 
-class RefreshScope(str, Enum):
+class RefreshScope(StrEnum):
     """Roadmap refresh scope."""
 
     MICRO = "micro"
