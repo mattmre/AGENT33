@@ -77,6 +77,58 @@ class ExplanationRequest(BaseModel):
     )
 
 
+class DiffReviewRequest(BaseModel):
+    """Request to generate a diff review explanation."""
+
+    entity_type: str = Field(..., min_length=1, description="Type of entity")
+    entity_id: str = Field(..., min_length=1, description="ID of the entity")
+    diff_text: str = Field(..., min_length=1, description="Diff content to review")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata",
+    )
+    claims: list[ExplanationClaimRequest] = Field(
+        default_factory=list,
+        description="Optional deterministic claims for fact-check validation",
+    )
+
+
+class PlanReviewRequest(BaseModel):
+    """Request to generate a plan review explanation."""
+
+    entity_type: str = Field(..., min_length=1, description="Type of entity")
+    entity_id: str = Field(..., min_length=1, description="ID of the entity")
+    plan_text: str = Field(..., min_length=1, description="Plan content (markdown format)")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata",
+    )
+    claims: list[ExplanationClaimRequest] = Field(
+        default_factory=list,
+        description="Optional deterministic claims for fact-check validation",
+    )
+
+
+class ProjectRecapRequest(BaseModel):
+    """Request to generate a project recap explanation."""
+
+    entity_type: str = Field(..., min_length=1, description="Type of entity")
+    entity_id: str = Field(..., min_length=1, description="ID of the entity")
+    recap_text: str = Field(..., min_length=1, description="Recap content")
+    highlights: list[str] = Field(
+        default_factory=list,
+        description="Optional list of highlight items",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata",
+    )
+    claims: list[ExplanationClaimRequest] = Field(
+        default_factory=list,
+        description="Optional deterministic claims for fact-check validation",
+    )
+
+
 class ExplanationMetadata(BaseModel):
     """Metadata for a generated explanation artifact."""
 
