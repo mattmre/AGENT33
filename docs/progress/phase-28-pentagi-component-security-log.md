@@ -127,27 +127,45 @@ Documentation consistency check:
 
 ---
 
-## Upcoming Session Placeholders
-
-(Add entries below as implementation progresses)
-
-## YYYY-MM-DD: Stage 1 Backend Implementation
+## 2026-02-17: Stage 1 Backend Implementation
 
 ### Work Completed
-- [ ] Adapter service implementation
-- [ ] Model definitions
-- [ ] API routes
+- [x] Implemented `engine/src/agent33/component_security/models.py` with run/finding domain models and severity/profile/status enums.
+- [x] Implemented `engine/src/agent33/services/pentagi_integration.py` with quick-profile scanner integration (bandit + gitleaks), lifecycle state handling, findings parsing, and explicit error states.
+- [x] Added `engine/src/agent33/api/routes/component_security.py` with authenticated run lifecycle + findings endpoints.
+- [x] Wired new router into `engine/src/agent33/main.py`.
+- [x] Added `component-security:read` and `component-security:write` scopes in `engine/src/agent33/security/permissions.py`.
+- [x] Added targeted backend tests in `engine/tests/test_component_security_api.py`.
 
 ### Validation Evidence
 ```bash
-# Example validation commands
 cd engine
-python -m ruff check src/agent33/services/pentagi_integration.py
-python -m pytest tests/test_component_security_api.py -v
+python -m ruff check src/agent33/component_security src/agent33/services/pentagi_integration.py src/agent33/api/routes/component_security.py tests/test_component_security_api.py
+python -m pytest tests/test_component_security_api.py -q
+python -m ruff check src tests
+python -m pytest tests -q
 ```
 
+**Results**:
+- Targeted lint/tests: pass (`12 passed`)
+- Full engine lint: pass
+- Full engine tests: pass (`1569 passed, 1 warning`)
+
 ### Issues Encountered
-(Document issues here)
+| Issue | Impact | Resolution |
+|-------|--------|------------|
+| Initial delegated implementation generated out-of-scope setup/docs files in repo root | Noise and review risk | Removed unintended files and reworked implementation with focused code-only changes |
+| New modules initially failed Ruff line-length/type-only import checks | Validation blocked | Refactored long lines and moved type-only imports under `TYPE_CHECKING` |
+
+### Decisions Made
+- **Decision**: Stage 1 execution supports only `quick` profile at runtime while keeping full `SecurityProfile` enum.
+  - **Rationale**: Matches Phase 28 Stage 1 scope while preserving API/model forward compatibility for Stage 2.
+  - **Alternatives considered**: Simulate `standard`/`deep` using quick toolset (rejected as misleading behavior).
+- **Decision**: `create run` endpoint supports `execute_now` toggle.
+  - **Rationale**: Enables deterministic API tests and operator control between queued/manual execution and immediate execution.
+  - **Alternatives considered**: Always-run on create (rejected because it tightly couples submission and execution).
 
 ### Next Steps
-(Next tasks)
+- [ ] Add Stage 2 profiles (`standard`, `deep`) and broaden tool matrix.
+- [ ] Add release gate policy model/wiring in Phase 19 release workflows.
+- [ ] Add frontend component-security workspace and UI tests.
