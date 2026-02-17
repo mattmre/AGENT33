@@ -3,6 +3,7 @@ import { agentsDomain } from "./domains/agents";
 import { authDomain } from "./domains/auth";
 import { autonomyDomain } from "./domains/autonomy";
 import { chatDomain } from "./domains/chat";
+import { componentSecurityDomain } from "./domains/componentSecurity";
 import { dashboardDomain } from "./domains/dashboard";
 import { evaluationsDomain } from "./domains/evaluations";
 import { explanationsDomain } from "./domains/explanations";
@@ -32,5 +33,6 @@ export const domains: DomainConfig[] = [
   improvementsDomain,
   dashboardDomain,
   trainingDomain,
-  webhooksDomain
+  webhooksDomain,
+  componentSecurityDomain
 ];
