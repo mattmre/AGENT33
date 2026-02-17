@@ -28,6 +28,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 21 | Extensibility Patterns Integration | Research/Core | `PHASE-21-EXTENSIBILITY-PATTERNS-INTEGRATION.md` |
 | 22 | Unified UI Platform and Access Layer | Product/Runtime Access | `PHASE-22-UNIFIED-UI-PLATFORM-AND-ACCESS-LAYER.md` |
 | 25 | Visual Explainer Integration | Observability/Operator UX | `PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md` |
+| 26 | Visual Explainer Decision and Review Pages | Product/Explainability UX | `PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` |
 
 ## Workflow Plans
 - `PHASE-03-08-WORKFLOW-PLAN.md` (phase sequencing, task mapping, review gates)
