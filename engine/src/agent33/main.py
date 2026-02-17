@@ -22,6 +22,7 @@ from agent33.api.routes import (
     chat,
     dashboard,
     evaluations,
+    explanations,
     health,
     improvements,
     memory_search,
@@ -457,6 +458,7 @@ app.include_router(chat.router)
 app.include_router(agents.router)
 app.include_router(workflows.router)
 app.include_router(visualizations.router)
+app.include_router(explanations.router)
 app.include_router(auth.router)
 app.include_router(webhooks.router)
 app.include_router(dashboard.router)
