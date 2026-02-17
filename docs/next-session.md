@@ -5,7 +5,8 @@ Last updated: 2026-02-17T12:35Z
 ## Current State
 
 - **Active branch**: `docs/session-26-handoff` (docs-only handoff refresh branch)
-- **Open PRs**: none at snapshot (open PR from this branch next)
+- **Open PRs**:
+  - [#29](https://github.com/mattmre/AGENT33/pull/29) — Session 26 handoff docs refresh
 - **Latest session log**: `docs/sessions/session-26-2026-02-17.md`
 - **Main status**: `main` synced with `origin/main` at `d39180c` (PR #28 merged)
 - **Phase 22 status**: merged and closed
@@ -29,11 +30,11 @@ Last updated: 2026-02-17T12:35Z
 
 ## Immediate Next Tasks
 
-### Priority 1: Open and Merge This Handoff Docs PR
-- Open PR from `docs/session-26-handoff` containing:
+### Priority 1: Merge Handoff Docs PR #29
+- Review and merge [#29](https://github.com/mattmre/AGENT33/pull/29).
+- Scope is docs-only:
   - `docs/sessions/session-26-2026-02-17.md`
   - `docs/next-session.md`
-- Keep scope docs-only for fast review/merge.
 
 ### Priority 2: Stabilize Baseline CI + Security
 - Create dedicated remediation branch from latest `main`.
