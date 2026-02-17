@@ -1,63 +1,60 @@
 # Next Session Briefing
 
-Last updated: 2026-02-17T19:43Z
+Last updated: 2026-02-17T21:40Z
 
 ## Current State
 
-- **Active branch**: `phase28/pentagi-component-security-phase`
+- **Active branch**: `docs/session-31-orchestration-handoff`
 - **Open PRs**:
-  - [#30](https://github.com/mattmre/AGENT33/pull/30) — baseline CI/security remediation (**checks: green**)
-  - [#31](https://github.com/mattmre/AGENT33/pull/31) — Phase 26 Stage 1 explanation scaffolding (**checks: green**)
-  - [#32](https://github.com/mattmre/AGENT33/pull/32) — Phase 27 discovery mapping (**checks: failing lint + container scan**)
-  - [#33](https://github.com/mattmre/AGENT33/pull/33) — Phase 28 Stage 1 backend (**checks: green**)
+  - [#37](https://github.com/mattmre/AGENT33/pull/37) — docs: refresh next-session after orchestration run
+  - [#38](https://github.com/mattmre/AGENT33/pull/38) — Phase 26 visual diff/plan/recap endpoints + template pack (**checks: green**)
+  - [#39](https://github.com/mattmre/AGENT33/pull/39) — Phase 28 frontend component-security workspace (**checks: green**)
+  - [#40](https://github.com/mattmre/AGENT33/pull/40) — SkillsBench smoke benchmark + CTRF CI artifact (**checks: benchmark-smoke green; some checks still running**)
 - **Latest session logs**:
-  - `docs/sessions/session-28-2026-02-17.md`
   - `docs/sessions/session-29-2026-02-17.md`
-- **Main status**: `main` at `5ec72f3` (last merged PR still [#29](https://github.com/mattmre/AGENT33/pull/29))
-- **Local branch hygiene**: stale branches audited and cleaned; only active branches retained locally.
+  - `docs/sessions/session-31-2026-02-17.md`
+- **Main status**: `main` at `a2adc43` (latest merged PRs include [#34](https://github.com/mattmre/AGENT33/pull/34), [#35](https://github.com/mattmre/AGENT33/pull/35), [#36](https://github.com/mattmre/AGENT33/pull/36))
 
 ## What Was Completed
 
-### Session 28 (Multi-PR Orchestration)
-1. Updated PR #30 baseline remediation and pushed `c385067`.
-2. Merged baseline branch into PR #31 (`2b17bea`) and revalidated backend/frontend.
-3. Merged baseline branch into PR #33, fixed review comments, and pushed:
-   - `7f350f3` (path allowlist + cancellation hardening + tests)
-   - `1ea0b09` (session/progress documentation updates)
+### Priority PR Closure
+1. Merged priority queue PRs using admin merge:
+   - [#34](https://github.com/mattmre/AGENT33/pull/34) (Phase 26 Stage 2)
+   - [#35](https://github.com/mattmre/AGENT33/pull/35) (Phase 28 Stage 2)
+   - [#36](https://github.com/mattmre/AGENT33/pull/36) (SkillsBench regression guards)
 
-### Session 29 (Stale Branch Safety Audit + Cleanup)
-1. Completed full local-branch accounting audit (22 branches) against GitHub refs and PR head SHAs.
-2. Archived protected branch before cleanup:
-   - `origin/archive/phase25-visual-explainer-integration-20260217`
-   - tag `archive-phase25-visual-explainer-integration-20260217`
-3. Deleted 17 stale local branches after safety checks; retained only:
-   - `main`
-   - `baseline/ci-security-remediation`
-   - `phase26/stage1-explanation-scaffold`
-   - `phase27/discovery-spacebot-mapping`
-   - `phase28/pentagi-component-security-phase`
+### New Implementation Slices (Fresh-Agent Orchestrated)
+2. Opened [#38](https://github.com/mattmre/AGENT33/pull/38):
+   - visual explanation page rendering module
+   - new diff-review / plan-review / project-recap endpoints
+   - template pack under `engine/templates/explanations/`
+   - backend tests covering scope enforcement and HTML escaping
+3. Opened [#39](https://github.com/mattmre/AGENT33/pull/39):
+   - new frontend `componentSecurityDomain`
+   - domain registration in control-plane domain list
+   - domain config tests for operation coverage and payload shape
+4. Opened [#40](https://github.com/mattmre/AGENT33/pull/40):
+   - smoke benchmark test module under `engine/tests/benchmarks/`
+   - CTRF smoke report writer helper
+   - non-blocking `benchmark-smoke` CI job + artifact upload
 
 ## Immediate Next Tasks
 
-### Priority 1: Merge PR #30 (Baseline Remediation)
-- Merge [#30](https://github.com/mattmre/AGENT33/pull/30) to restore baseline confidence on `main`.
-- Reconfirm required checks on merge commit.
+### Priority 1: Review and merge PR #38
+- Validate visual endpoint behavior and template rendering output.
+- Confirm no regressions beyond `tests/test_explanations_api.py`.
 
-### Priority 2: Merge PR #31 (Phase 26 Stage 1)
-- Merge [#31](https://github.com/mattmre/AGENT33/pull/31) after #30 lands.
-- Confirm explanation API scaffolding behavior on updated mainline.
+### Priority 2: Review and merge PR #39
+- Validate frontend component-security workflow in control-plane UI.
+- Confirm operations map correctly to backend component-security routes.
 
-### Priority 3: Merge PR #33 (Phase 28 Stage 1 Backend)
-- Merge [#33](https://github.com/mattmre/AGENT33/pull/33) after #30 lands.
-- Preserve Stage 1 scope note (subprocess quick profile + path allowlist).
+### Priority 3: Finish checks and merge PR #40
+- Wait for remaining checks to complete on [#40](https://github.com/mattmre/AGENT33/pull/40).
+- Confirm benchmark artifact upload and non-blocking semantics.
 
-### Priority 4: Triage/Fix PR #32 Failing Checks
-- Investigate [#32](https://github.com/mattmre/AGENT33/pull/32) CI lint and security container-scan failures.
-- Rebase #32 on latest `main` after #30 merge; rerun checks.
-
-### Priority 5: Start Phase 26/28 Stage 2 Work
-- Phase 26: move from scaffolding to richer decision/review/fact-check behavior.
-- Phase 28: implement `standard`/`deep` profiles and release-gate wiring.
+### Priority 4: Resolve docs PR overlap (#37 vs this branch)
+- Merge whichever docs PR best reflects final orchestration state.
+- Close/supersede stale docs PR if needed to keep handoff clean.
 
 ## Startup Checklist (Next Session)
 
@@ -65,10 +62,9 @@ Last updated: 2026-02-17T19:43Z
 git checkout main
 git pull --ff-only
 gh pr list --state open
-gh pr checks 30
-gh pr checks 31
-gh pr checks 32
-gh pr checks 33
+gh pr checks 38
+gh pr checks 39
+gh pr checks 40
 cd engine
 docker compose -f docker-compose.yml -f docker-compose.shared-ollama.yml up -d
 docker compose ps
@@ -77,21 +73,22 @@ curl -I http://localhost:3000
 ```
 
 Expected:
-- PR #30/#31/#33 checks remain green
-- PR #32 has explicit remediation plan or green rerun
-- API health is `healthy` and frontend is reachable
+- PR #38 and #39 remain green and merge-ready
+- PR #40 checks complete with no blocking failures
+- API health is `healthy` and frontend remains reachable
 
 ## Key Paths
 
 | Purpose | Path |
 |---|---|
-| Latest orchestration log | `docs/sessions/session-28-2026-02-17.md` |
-| Latest cleanup/handoff log | `docs/sessions/session-29-2026-02-17.md` |
-| Baseline remediation PR | `https://github.com/mattmre/AGENT33/pull/30` |
-| Phase 26 Stage 1 PR | `https://github.com/mattmre/AGENT33/pull/31` |
-| Phase 27 discovery PR | `https://github.com/mattmre/AGENT33/pull/32` |
-| Phase 28 Stage 1 PR | `https://github.com/mattmre/AGENT33/pull/33` |
-| Phase 26 spec | `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` |
-| Phase 28 spec | `docs/phases/PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md` |
-| Phase 28 integration analysis | `docs/research/phase28-pentagi-integration-analysis.md` |
-| Phase 28 progress log | `docs/progress/phase-28-pentagi-component-security-log.md` |
+| Latest orchestration session log | `docs/sessions/session-31-2026-02-17.md` |
+| Previous handoff log | `docs/sessions/session-29-2026-02-17.md` |
+| Phase 26 Stage 3 research | `docs/research/phase26-stage3-visual-pages-research-2026-02-17.md` |
+| Phase 26 Stage 3 architecture | `docs/phases/phase26-stage3-visual-pages-architecture-2026-02-17.md` |
+| Phase 28 workspace research | `docs/research/phase28-frontend-workspace-research-2026-02-17.md` |
+| Phase 28 workspace architecture | `docs/phases/phase28-frontend-workspace-architecture-2026-02-17.md` |
+| SkillsBench smoke research | `docs/research/skillsbench-smoke-harness-research-2026-02-17.md` |
+| SkillsBench smoke architecture | `docs/phases/skillsbench-smoke-harness-architecture-2026-02-17.md` |
+| Phase 26 implementation PR | `https://github.com/mattmre/AGENT33/pull/38` |
+| Phase 28 implementation PR | `https://github.com/mattmre/AGENT33/pull/39` |
+| SkillsBench implementation PR | `https://github.com/mattmre/AGENT33/pull/40` |
