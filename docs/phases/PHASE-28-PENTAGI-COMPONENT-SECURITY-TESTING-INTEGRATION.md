@@ -38,11 +38,13 @@
 | 1 | PentAGI integration spec | `docs/research/phase28-pentagi-integration-analysis.md` | Adapter contract, profiles, execution model, and risk controls |
 | 2 | PentAGI integration service | `engine/src/agent33/services/pentagi_integration.py` | Launch, monitor, and normalize PentAGI security test runs |
 | 3 | Component security API routes | `engine/src/agent33/api/routes/component_security.py` | Authenticated endpoints for run lifecycle + findings |
-| 4 | Website component security workspace | `frontend/src/features/component-security/` | UI for running scans and viewing results |
+| 4 | Website component security workspace | `frontend/src/components/component-security/` | UI for running scans and viewing results |
 | 5 | Release gate wiring | `engine/src/agent33/release/` | Optional/required pre-release check against latest component security run |
 | 6 | Backend tests | `engine/tests/test_component_security_api.py` | Route and service behavior coverage |
-| 7 | Frontend tests | `frontend/src/features/component-security/*.test.tsx` | UX and data flow validation |
+| 7 | Frontend tests | `frontend/src/components/component-security/*.test.tsx` | UX and data flow validation |
 | 8 | Progress/evidence log | `docs/progress/phase-28-pentagi-component-security-log.md` | Validation commands, outputs, issues, and fixes |
+
+Note: target paths above are planned implementation locations to be created during Phase 28 delivery.
 
 ## Acceptance Criteria
 - [ ] Operators can create a component security test run from the AGENT-33 website.
@@ -57,7 +59,6 @@
 - Phase 14 (security hardening and policy model)
 - Phase 19 (release gate and rollback automation)
 - Phase 22 (website platform and authenticated frontend flows)
-- Phase 27 (operations surfaces for cross-system status visibility), if merged
 
 ## Blocks
 - PentAGI availability and stable interface for local orchestration.
