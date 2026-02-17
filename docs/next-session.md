@@ -5,7 +5,8 @@ Last updated: 2026-02-17T23:20
 ## Current State
 
 - **Active branch**: `phase25-workflow-graph-mvp`
-- **Open PRs**: none (Phase 25 implementation PR pending creation)
+- **Open PRs**:
+  - [#28](https://github.com/mattmre/AGENT33/pull/28) — Phase 25 workflow graph MVP implementation + readiness docs
 - **Latest session log**: `docs/sessions/session-25-2026-02-17.md`
 - **Main status**: `main` synced with `origin/main` at `9344262`
 - **Phase 22 status**: merged and closed
@@ -34,9 +35,10 @@ Last updated: 2026-02-17T23:20
 
 ## Immediate Next Tasks
 
-### Priority 1: Open and Review Phase 25 Implementation PR
-- Push `phase25-workflow-graph-mvp` and open PR to `main`.
-- Request review for:
+### Priority 1: Review and Merge Phase 25 Implementation PR
+- Review PR #28 and resolve any feedback.
+- Merge PR #28 to `main` once approved.
+- Focus review on:
   - graph API contract (`/v1/visualizations/workflows/{workflow_id}/graph`)
   - frontend WorkflowGraph UX behavior
   - test coverage and known limitations
