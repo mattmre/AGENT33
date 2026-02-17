@@ -47,10 +47,12 @@ def reset_component_security_service() -> None:
     _service._runs.clear()
     _service._findings.clear()
     _service._command_runner = _default_command_runner
+    _service._allowed_roots = []
     yield
     _service._runs.clear()
     _service._findings.clear()
     _service._command_runner = _default_command_runner
+    _service._allowed_roots = []
 
 
 @pytest.fixture
@@ -168,6 +170,48 @@ class TestPentAGIService:
         failed = service.launch_scan(run.id)
         assert failed.status == RunStatus.FAILED
         assert "does not exist" in failed.error_message
+
+    def test_launch_scan_rejects_target_outside_allowed_roots(self, tmp_path: Path) -> None:
+        allowed_root = tmp_path / "allowed"
+        outside_root = tmp_path / "outside"
+        allowed_root.mkdir()
+        outside_root.mkdir()
+        service = PentAGIService(
+            command_runner=_default_command_runner,
+            allowed_roots=[str(allowed_root)],
+        )
+        run = service.create_run(
+            target=ScanTarget(repository_path=str(outside_root)),
+            profile=SecurityProfile.QUICK,
+        )
+
+        failed = service.launch_scan(run.id)
+        assert failed.status == RunStatus.FAILED
+        assert "outside allowed directories" in failed.error_message
+
+    def test_cancelled_run_not_overwritten_by_completed_state(self, tmp_path: Path) -> None:
+        run_id = ""
+
+        def command_runner(
+            command: list[str], _timeout_seconds: int
+        ) -> subprocess.CompletedProcess[str]:
+            if "bandit" in " ".join(command):
+                service.cancel_run(run_id)
+                return _fake_completed('{"results": []}')
+            return _fake_completed("[]")
+
+        service = PentAGIService(command_runner=command_runner)
+        target = tmp_path / "repo"
+        target.mkdir()
+        run = service.create_run(
+            target=ScanTarget(repository_path=str(target)),
+            profile=SecurityProfile.QUICK,
+        )
+        run_id = run.id
+
+        cancelled = service.launch_scan(run.id)
+        assert cancelled.status == RunStatus.CANCELLED
+        assert cancelled.completed_at is not None
 
     def test_non_quick_profile_rejected(self, tmp_path: Path) -> None:
         service = PentAGIService(command_runner=_default_command_runner)

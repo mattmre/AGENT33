@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -23,7 +24,8 @@ from agent33.services.pentagi_integration import (
 )
 
 router = APIRouter(prefix="/v1/component-security", tags=["component-security"])
-_service = PentAGIService()
+_WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+_service = PentAGIService(allowed_roots=[str(_WORKSPACE_ROOT)])
 
 
 def get_component_security_service() -> PentAGIService:

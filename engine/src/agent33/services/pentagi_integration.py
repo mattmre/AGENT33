@@ -64,10 +64,12 @@ class PentAGIService:
     def __init__(
         self,
         command_runner: Callable[[list[str], int], subprocess.CompletedProcess[str]] | None = None,
+        allowed_roots: list[str] | None = None,
     ) -> None:
         self._runs: dict[str, SecurityRun] = {}
         self._findings: dict[str, list[SecurityFinding]] = {}
         self._command_runner = command_runner or self._run_command
+        self._allowed_roots = [Path(root).resolve() for root in (allowed_roots or [])]
 
     def create_run(
         self,
@@ -143,6 +145,10 @@ class PentAGIService:
                 target_path=run.target.repository_path,
                 timeout_seconds=run.options.timeout_seconds,
             )
+            if run.status == RunStatus.CANCELLED:
+                # Preserve cancellation state if run was cancelled while scanners were executing.
+                run.metadata.tools_executed = ["bandit", "gitleaks"]
+                return run
             self._findings[run.id] = findings
             run.findings_count = len(findings)
             run.findings_summary = FindingsSummary.from_findings(findings)
@@ -202,15 +208,40 @@ class PentAGIService:
         target_path: str,
         timeout_seconds: int,
     ) -> list[SecurityFinding]:
-        target = Path(target_path)
-        if not target.exists():
-            raise ToolExecutionError(f"Scan target does not exist: {target_path}")
+        target = self._validate_target_path(target_path)
 
-        bandit_raw = self._run_bandit(target_path=target_path, timeout_seconds=timeout_seconds)
-        gitleaks_raw = self._run_gitleaks(target_path=target_path, timeout_seconds=timeout_seconds)
+        normalized_target = str(target)
+        bandit_raw = self._run_bandit(
+            target_path=normalized_target, timeout_seconds=timeout_seconds
+        )
+        gitleaks_raw = self._run_gitleaks(
+            target_path=normalized_target, timeout_seconds=timeout_seconds
+        )
         findings = self._parse_bandit_findings(run_id=run_id, raw_output=bandit_raw)
         findings.extend(self._parse_gitleaks_findings(run_id=run_id, raw_output=gitleaks_raw))
         return findings
+
+    def _validate_target_path(self, target_path: str) -> Path:
+        if "\x00" in target_path:
+            raise ToolExecutionError("Scan target path cannot contain null bytes")
+        target = Path(target_path)
+        if not target.exists():
+            raise ToolExecutionError(f"Scan target does not exist: {target_path}")
+        resolved = target.resolve()
+        if not self._allowed_roots:
+            return resolved
+
+        for allowed_root in self._allowed_roots:
+            try:
+                resolved.relative_to(allowed_root)
+                return resolved
+            except ValueError:
+                continue
+
+        allowed = ", ".join(str(root) for root in self._allowed_roots)
+        raise ToolExecutionError(
+            f"Scan target '{resolved}' is outside allowed directories: {allowed}"
+        )
 
     def _run_bandit(self, *, target_path: str, timeout_seconds: int) -> str:
         command = [sys.executable, "-m", "bandit", "-r", target_path, "-f", "json", "-q"]

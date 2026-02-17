@@ -103,6 +103,11 @@ class PentAGIAdapter:
 - Findings written to shared volume, parsed by adapter on completion
 - Container cleanup triggered after findings retrieval or timeout
 
+_Stage 1 implementation note_: The current Phase 28 Stage 1 backend uses direct subprocess
+invocations of `bandit` and `gitleaks` for the quick profile, with target-path allowlist
+validation enforced by the API service. Full Docker-orchestrated PentAGI container execution
+remains the target architecture for later stages.
+
 ### API Route Structure
 
 ```
