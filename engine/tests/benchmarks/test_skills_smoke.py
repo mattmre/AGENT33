@@ -252,12 +252,60 @@ class TestSkillsBenchSmoke:
         elapsed = time.perf_counter() - start
         assert elapsed < 0.1, f"Gate enumeration took {elapsed:.3f}s, expected <100ms"
 
+    @pytest.mark.asyncio
+    async def test_multi_trial_executes_three_golden_tasks(self) -> None:
+        """Run a minimal 3-task multi-trial smoke experiment."""
+        service = EvaluationService()
+        config = ExperimentConfig(
+            tasks=["GT-01", "GT-04", "GT-06"],
+            agents=["smoke-agent"],
+            models=["smoke-model"],
+            trials_per_combination=1,
+            skills_modes=[True, False],
+            timeout_per_trial_seconds=15,
+            parallel_trials=1,
+        )
+        run = await service.start_multi_trial_run(config)
 
-def test_write_ctrf_helper() -> None:
+        assert run.status == "completed"
+        assert len(run.results) == 6  # 3 tasks x 1 agent x 1 model x 2 skills modes
+        assert len(run.skills_impacts) == 3
+        assert all(result.pass_rate == 1.0 for result in run.results)
+
+    @pytest.mark.asyncio
+    async def test_multi_trial_ctrf_export_contains_expected_counts(self) -> None:
+        """Ensure CTRF export reflects smoke multi-trial execution."""
+        service = EvaluationService()
+        run = await service.start_multi_trial_run(
+            ExperimentConfig(
+                tasks=["GT-01", "GT-02", "GT-03"],
+                agents=["smoke-agent"],
+                models=["smoke-model"],
+                trials_per_combination=1,
+                skills_modes=[True],
+                timeout_per_trial_seconds=15,
+                parallel_trials=1,
+            )
+        )
+
+        report = service.export_ctrf(run.run_id)
+        assert report is not None
+        assert report["results"]["summary"]["tests"] == 3
+        assert report["results"]["summary"]["failed"] == 0
+
+        # Write to CI artifact path if env var is set
+        ctrf_path = os.environ.get("AGENT33_SMOKE_CTRF_PATH")
+        if ctrf_path:
+            output_path = Path(ctrf_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(report, indent=2))
+
+
+def test_write_ctrf_helper(tmp_path: Path) -> None:
     """Test that CTRF helper writes valid reports.
 
-    This test validates the write_benchmark_ctrf helper function and
-    generates a sample CTRF report for CI artifact upload.
+    This test validates the write_benchmark_ctrf helper function
+    using a temporary directory to avoid overwriting CI artifacts.
     """
     # Sample test results
     test_results = [
@@ -277,9 +325,8 @@ def test_write_ctrf_helper() -> None:
         },
     ]
 
-    # Get output path from environment or use default
-    env_path = os.environ.get("AGENT33_SMOKE_CTRF_PATH")
-    output_path = Path(env_path) if env_path else Path("test-results/ctrf-smoke-report.json")
+    # Write to temporary path instead of CI artifact path
+    output_path = tmp_path / "ctrf-helper-test.json"
 
     # Write the report
     write_benchmark_ctrf(test_results, output_path)
