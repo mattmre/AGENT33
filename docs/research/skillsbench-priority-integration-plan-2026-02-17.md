@@ -32,3 +32,43 @@ cd engine
 python -m ruff check src tests
 python -m pytest tests/test_skillsbench_priority_surfaces.py -q
 ```
+
+---
+
+## Post-Stage1 Follow-Up (2026-02-18)
+
+### Benchmark Smoke Monitoring
+With Phase 27/29/30 Stage 1 backend slices complete, the next SkillsBench integration phase focuses on:
+
+1. **Expand benchmark coverage from smoke to selected golden tasks**
+   - Leverage existing `test_skillsbench_priority_surfaces.py` regression checks
+   - Add `engine/tests/benchmarks/test_skills_smoke.py` with 3-5 simple task executions
+   - Target runtime: <5 seconds total
+
+2. **CI integration for artifact visibility**
+   - Add non-blocking `benchmark-smoke` job to `.github/workflows/ci.yml`
+   - Use `continue-on-error: true` to prevent PR disruption
+   - Upload CTRF artifacts for historical tracking
+
+3. **Expand to broader task scenarios post-Stage1**
+   - After operations hub (Phase 27 Stage 2) provides monitoring UI
+   - After multimodal adapters (Phase 29 Stage 2) integrate real providers
+   - After outcome metrics (Phase 30 Stage 2) enable trend-driven improvement cycles
+
+### Validation Evidence Commands
+```bash
+# Verify existing SkillsBench surfaces remain present
+cd engine
+python -m pytest tests/test_skillsbench_priority_surfaces.py -v
+
+# Future: Run expanded benchmark smoke tests
+python -m pytest tests/benchmarks/test_skills_smoke.py -v
+
+# Future: Check CTRF artifact generation
+ls benchmark-results/*.json
+```
+
+### Timeline
+- **Current**: Regression checks validate core surfaces remain accessible
+- **Next sprint**: Add smoke benchmark harness with CI artifact upload
+- **Post-Stage2**: Expand to broader SkillsBench golden task coverage
