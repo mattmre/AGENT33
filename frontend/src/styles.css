@@ -126,6 +126,7 @@ button:disabled {
 
 .auth-panel,
 .health-panel,
+.main-nav,
 .domain-nav,
 .domain-panel,
 .activity-panel {
@@ -138,6 +139,7 @@ button:disabled {
 
 .auth-panel h2,
 .health-panel h2,
+.main-nav h2,
 .domain-nav h2,
 .domain-panel h2,
 .activity-panel h2 {
@@ -550,4 +552,349 @@ button:disabled {
 .react-flow__controls-button:hover {
   background: #2a4f5e;
 }
+
+/* Operations Hub Styles */
+.operations-hub-panel {
+  background: linear-gradient(170deg, rgba(22, 45, 58, 0.9), rgba(10, 27, 36, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.95rem;
+  box-shadow: 0 18px 34px rgba(5, 13, 17, 0.45);
+}
+
+.main-nav {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.main-nav button {
+  width: 100%;
+  text-align: left;
+  border-color: #2c5261;
+  background: #102734;
+  color: #d2e8ef;
+}
+
+.main-nav button.active {
+  background: linear-gradient(100deg, #205368, #2f7f75);
+  border-color: #60b2a8;
+  color: #f7fff6;
+}
+
+.ops-hub-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ops-hub-head h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.ops-hub-head p {
+  margin: 0.3rem 0 0.7rem;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.ops-hub-filters {
+  display: flex;
+  gap: 0.7rem;
+  align-items: end;
+}
+
+.ops-hub-filters label {
+  min-width: 140px;
+}
+
+.ops-hub-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.ops-hub-list {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  max-height: 650px;
+  overflow-y: auto;
+}
+
+.ops-hub-detail {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: rgba(8, 24, 32, 0.6);
+  max-height: 650px;
+  overflow-y: auto;
+}
+
+.ops-hub-process-item {
+  border: 1px solid #315365;
+  background: rgba(8, 24, 32, 0.74);
+  border-radius: 10px;
+  padding: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ops-hub-process-item:hover {
+  border-color: #4a7a8f;
+  background: rgba(12, 32, 42, 0.85);
+}
+
+.ops-hub-process-item.selected {
+  border-color: var(--accent);
+  background: rgba(20, 50, 60, 0.9);
+  box-shadow: 0 0 8px rgba(48, 213, 200, 0.3);
+}
+
+.process-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.process-item-header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text-main);
+}
+
+.process-status {
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-pending {
+  background: #3a3a2e;
+  color: #d9d9a0;
+}
+
+.status-running {
+  background: #2e3a4a;
+  color: #a0c9d9;
+}
+
+.status-paused {
+  background: #4a3a2e;
+  color: #d9c9a0;
+}
+
+.status-cancelled {
+  background: #3a2e2e;
+  color: #d9a0a0;
+}
+
+.process-item-id {
+  margin: 0.2rem 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
+
+.process-item-time {
+  margin: 0.2rem 0;
+  font-size: 0.72rem;
+  color: #7db6ca;
+}
+
+.process-progress {
+  position: relative;
+  height: 18px;
+  background: #0b1e27;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.process-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #2f7f75, #30d5c8);
+  transition: width 0.3s ease;
+}
+
+.process-progress-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-main);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.ops-hub-loading,
+.ops-hub-error,
+.ops-hub-empty,
+.ops-hub-placeholder {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-soft);
+}
+
+.ops-hub-error {
+  color: var(--danger);
+}
+
+.process-detail h3 {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+  color: var(--text-main);
+}
+
+.detail-field {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.85rem;
+}
+
+.detail-field .detail-label {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.detail-field.error-field {
+  color: var(--danger);
+}
+
+.detail-section {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.detail-section h4 {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.detail-metadata {
+  margin: 0;
+  padding: 0.6rem;
+  background: #0b1e27;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  max-height: 200px;
+  overflow: auto;
+  color: #9dc3cf;
+}
+
+.detail-log {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  padding: 0.5rem;
+  background: #0b1e27;
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.log-entry.log-error {
+  border-left-color: var(--danger);
+  background: #1a1214;
+}
+
+.log-entry.log-warning {
+  border-left-color: var(--accent-warm);
+  background: #1a1814;
+}
+
+.log-entry.log-info {
+  border-left-color: var(--accent);
+}
+
+.log-time {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: #7db6ca;
+  margin-bottom: 0.2rem;
+}
+
+.log-message {
+  color: var(--text-main);
+}
+
+.process-controls {
+  margin-top: 1.2rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.process-controls h4 {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.control-buttons {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.control-buttons button {
+  flex: 1;
+}
+
+.control-danger {
+  background: linear-gradient(120deg, #5a2828, #742a2a);
+  border-color: #944b4b;
+}
+
+.control-danger:hover:not(:disabled) {
+  background: linear-gradient(120deg, #6a3030, #8a3535);
+}
+
+@media (max-width: 1100px) {
+  .ops-hub-content {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-hub-list {
+    max-height: 400px;
+  }
+
+  .ops-hub-detail {
+    max-height: 500px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-hub-head {
+    flex-direction: column;
+  }
+
+  .ops-hub-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ops-hub-filters label {
+    width: 100%;
+  }
+}
+
 
