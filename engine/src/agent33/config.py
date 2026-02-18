@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
 
+    # Multimodal provider integration (Phase 29 Stage 2)
+    multimodal_stt_provider: str = "mock"  # "mock" | "openai_whisper"
+    multimodal_tts_provider: str = "mock"  # "mock" | "openai_tts"
+    multimodal_vision_provider: str = "mock"  # "mock" | "openai_vision"
+    multimodal_openai_base_url: str = "https://api.openai.com/v1"
+    multimodal_retry_attempts: int = 3
+    multimodal_retry_base_delay_ms: int = 200
+
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
     airllm_model_path: str = ""

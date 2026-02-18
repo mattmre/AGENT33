@@ -28,6 +28,12 @@ class CreateRequestBody(BaseModel):
     execute_now: bool = True
 
 
+class ProviderConfigBody(BaseModel):
+    stt_provider: str | None = None
+    tts_provider: str | None = None
+    vision_provider: str | None = None
+
+
 def get_multimodal_service() -> MultimodalService:
     """Return singleton multimodal service."""
     return _service
@@ -130,6 +136,31 @@ async def cancel_request(request_id: str, request: Request) -> dict[str, Any]:
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return record.model_dump(mode="json")
+
+
+@router.get("/providers/health", dependencies=[require_scope("multimodal:read")])
+async def provider_health() -> dict[str, Any]:
+    """Return provider/key validation health."""
+    return _service.provider_health()
+
+
+@router.get("/providers/metrics", dependencies=[require_scope("multimodal:read")])
+async def provider_metrics() -> dict[str, Any]:
+    """Return aggregated multimodal provider execution metrics."""
+    return _service.provider_metrics()
+
+
+@router.post("/providers/config", dependencies=[require_scope("multimodal:write")])
+async def configure_providers(body: ProviderConfigBody) -> dict[str, Any]:
+    """Update runtime multimodal provider configuration."""
+    try:
+        return _service.configure_providers(
+            stt_provider=body.stt_provider,
+            tts_provider=body.tts_provider,
+            vision_provider=body.vision_provider,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

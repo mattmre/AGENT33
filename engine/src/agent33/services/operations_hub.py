@@ -7,15 +7,17 @@ from typing import Any
 
 from agent33.api.routes.autonomy import get_autonomy_service
 from agent33.api.routes.improvements import get_improvement_service
+from agent33.api.routes.multimodal import get_multimodal_service
 from agent33.api.routes.traces import get_trace_collector
 from agent33.api.routes.workflows import get_execution_history
 from agent33.autonomy.models import BudgetState
 from agent33.autonomy.service import BudgetNotFoundError
 from agent33.improvement.models import IntakeStatus
+from agent33.multimodal.service import RequestNotFoundError
 from agent33.observability.trace_collector import TraceNotFoundError
 from agent33.observability.trace_models import TraceStatus
 
-_DEFAULT_INCLUDE = frozenset({"traces", "budgets", "improvements", "workflows"})
+_DEFAULT_INCLUDE = frozenset({"traces", "budgets", "improvements", "workflows", "multimodal"})
 _MAX_LIMIT = 100
 
 
@@ -75,6 +77,15 @@ class OperationsHubService:
                     limit=capped_limit,
                 )
             )
+        if "multimodal" in include_set:
+            processes.extend(
+                self._multimodal_processes(
+                    tenant_id=tenant_id,
+                    since=since_dt,
+                    status=status,
+                    limit=capped_limit,
+                )
+            )
 
         if status is not None:
             processes = [item for item in processes if item["status"] == status]
@@ -118,6 +129,13 @@ class OperationsHubService:
             if improvement is not None:
                 return self._improvement_detail(improvement)
 
+        multimodal_service = get_multimodal_service()
+        try:
+            mm_request = multimodal_service.get_request(process_id, tenant_id=tenant_id or None)
+            return self._multimodal_detail(mm_request)
+        except RequestNotFoundError:
+            pass
+
         raise ProcessNotFoundError(process_id)
 
     def control_process(
@@ -150,6 +168,17 @@ class OperationsHubService:
         try:
             _budget = autonomy_service.get_budget(process_id)
         except BudgetNotFoundError as exc:
+            multimodal_service = get_multimodal_service()
+            try:
+                _request = multimodal_service.get_request(process_id, tenant_id=tenant_id or None)
+                if action != "cancel":
+                    raise UnsupportedControlError(
+                        f"Action '{action}' is unsupported for multimodal request process"
+                    ) from exc
+                multimodal_service.cancel_request(process_id, tenant_id=tenant_id or None)
+                return self.get_process(process_id, tenant_id=tenant_id)
+            except RequestNotFoundError:
+                pass
             if process_id.startswith("workflow:"):
                 raise UnsupportedControlError(
                     "Lifecycle control is not supported for workflow history records"
@@ -292,6 +321,43 @@ class OperationsHubService:
                 break
         return processes
 
+    def _multimodal_processes(
+        self,
+        *,
+        tenant_id: str,
+        since: datetime,
+        status: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        multimodal_service = get_multimodal_service()
+        requests = multimodal_service.list_requests(
+            tenant_id=tenant_id or None,
+            state=None,
+            limit=limit,
+        )
+
+        processes: list[dict[str, Any]] = []
+        for request in requests:
+            if request.created_at < since:
+                continue
+            processes.append(
+                {
+                    "id": request.id,
+                    "type": "multimodal_request",
+                    "status": request.state.value,
+                    "started_at": request.created_at.isoformat(),
+                    "name": request.modality.value,
+                    "metadata": {
+                        "tenant_id": request.tenant_id,
+                        "modality": request.modality.value,
+                        "requested_by": request.requested_by,
+                        "result_id": request.result_id,
+                    },
+                    "_started_at": request.created_at,
+                }
+            )
+        return processes
+
     def _trace_detail(self, trace: Any) -> dict[str, Any]:
         return {
             "id": trace.trace_id,
@@ -339,6 +405,26 @@ class OperationsHubService:
                 "research_type": intake.classification.research_type.value,
                 "urgency": intake.classification.urgency.value,
             },
+        }
+
+    def _multimodal_detail(self, request: Any) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "tenant_id": request.tenant_id,
+            "modality": request.modality.value,
+            "requested_by": request.requested_by,
+            "requested_timeout_seconds": request.requested_timeout_seconds,
+        }
+        if request.result_id:
+            metadata["result_id"] = request.result_id
+        if request.error_message:
+            metadata["error_message"] = request.error_message
+        return {
+            "id": request.id,
+            "type": "multimodal_request",
+            "status": request.state.value,
+            "started_at": request.created_at.isoformat(),
+            "name": request.modality.value,
+            "metadata": metadata,
         }
 
     def _workflow_detail(self, process_id: str) -> dict[str, Any]:
