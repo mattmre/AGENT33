@@ -293,12 +293,19 @@ class TestSkillsBenchSmoke:
         assert report["results"]["summary"]["tests"] == 3
         assert report["results"]["summary"]["failed"] == 0
 
+        # Write to CI artifact path if env var is set
+        ctrf_path = os.environ.get("AGENT33_SMOKE_CTRF_PATH")
+        if ctrf_path:
+            output_path = Path(ctrf_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(report, indent=2))
 
-def test_write_ctrf_helper() -> None:
+
+def test_write_ctrf_helper(tmp_path: Path) -> None:
     """Test that CTRF helper writes valid reports.
 
-    This test validates the write_benchmark_ctrf helper function and
-    generates a sample CTRF report for CI artifact upload.
+    This test validates the write_benchmark_ctrf helper function
+    using a temporary directory to avoid overwriting CI artifacts.
     """
     # Sample test results
     test_results = [
@@ -318,9 +325,8 @@ def test_write_ctrf_helper() -> None:
         },
     ]
 
-    # Get output path from environment or use default
-    env_path = os.environ.get("AGENT33_SMOKE_CTRF_PATH")
-    output_path = Path(env_path) if env_path else Path("test-results/ctrf-smoke-report.json")
+    # Write to temporary path instead of CI artifact path
+    output_path = tmp_path / "ctrf-helper-test.json"
 
     # Write the report
     write_benchmark_ctrf(test_results, output_path)
