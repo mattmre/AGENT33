@@ -1,79 +1,77 @@
 # Next Session Briefing
 
-Last updated: 2026-02-18T15:35Z
+Last updated: 2026-02-18T23:30Z
 
 ## Current State
 
 - **Active branch**: `main`
-- **Open PRs**: none created yet for Phase 27/29/30 Stage 1 slices
-- **Main status**: Phase 27/29/30 Stage 1 backend is implemented and validated; worktree includes local changes pending PR split
+- **Open PRs**:
+  - [#46](https://github.com/mattmre/AGENT33/pull/46) — Phase 27 Stage 2 Operations Hub frontend
+  - [#47](https://github.com/mattmre/AGENT33/pull/47) — Phase 29 Stage 2 multimodal provider integration
+  - [#48](https://github.com/mattmre/AGENT33/pull/48) — Phase 30 Stage 2 outcomes dashboard UI
+  - [#49](https://github.com/mattmre/AGENT33/pull/49) — SkillsBench smoke expansion + CTRF visibility
+- **Main status**: Stage 1 PRs are merged (#42/#43/#44/#45); Stage 2 is split into reviewable PRs.
 - **Latest session logs**:
-  - `docs/sessions/session-32-2026-02-17.md`
-  - `docs/sessions/session-33-2026-02-18.md`
+  - `docs/sessions/session-34-2026-02-18.md`
+  - `docs/sessions/session-35-2026-02-18.md`
 
 ## What Was Completed
 
-1. **Phase 27 Stage 1: Operations Hub Backend**
-   - Implemented `operations_hub` service with aggregation and lifecycle controls
-   - Added `/v1/operations/hub` and process control API routes
-   - 16 backend tests covering auth, aggregation, tenant filtering, control actions
+1. **Stage 1 merge + baseline validation**
+   - Merged PRs #42, #43, #44, #45 into `main`.
+   - Validated baseline on clean worktree:
+     - Backend: `python -m ruff check src tests` + `python -m pytest tests -q` (`1655 passed, 1 warning`)
+     - Frontend: `npm run lint && npm run test -- --run && npm run build` (green, 25 tests)
 
-2. **Phase 29 Stage 1: Multimodal Backend Contracts**
-   - Implemented multimodal models (STT, TTS, vision)
-   - Added adapter interfaces with mock implementations
-   - Added 7 API routes with policy validation and tenant isolation
-   - 16 backend tests covering lifecycle, policy enforcement, state transitions
+2. **Phase 27 Stage 2 implementation (PR #46)**
+   - Added `frontend/src/features/operations-hub/` with polling list/detail/control flow.
+   - Integrated app navigation mode and activity callback logging.
+   - Frontend lint/test/build passed.
 
-3. **Phase 30 Stage 1: Outcomes Backend**
-   - Implemented outcome event recording and trend computation
-   - Added dashboard aggregation with trend direction detection
-   - 4 API routes for events, trends, and dashboard views
-   - 6 backend tests covering trend logic, tenant filtering, and dashboard contract
+3. **Phase 29 Stage 2 implementation (PR #47)**
+   - Added configurable provider-backed multimodal adapters with retry/timeout handling.
+   - Added provider health/metrics/config endpoints.
+   - Extended operations hub include/control to support multimodal requests.
+   - Targeted backend validation passed (`test_multimodal_api.py`, `test_operations_hub_api.py` + ruff).
 
-4. **Documentation Updates**
-   - Updated phase progress logs (27, 29, 30)
-   - Updated SkillsBench integration plan with post-Stage1 follow-up
-   - Created session 33 log with validation evidence
+4. **Phase 30 Stage 2 implementation (PR #48)**
+   - Added `frontend/src/features/outcomes-dashboard/` with trends, filtering, decline detection, and intake wiring.
+   - Integrated app navigation mode for outcomes dashboard.
+   - Frontend lint/test/build passed.
 
-5. **Full Validation**
-   - Backend: `1655 passed, 1 warning` (full `engine` test suite)
-   - Linting: Clean output across all modules
-   - Frontend: lint/test/build all green (`25 passed` tests)
+5. **SkillsBench expansion (PR #49)**
+   - Expanded smoke benchmark to run three golden tasks in multi-trial mode.
+   - Added CTRF export count verification in smoke tests.
+   - Updated CI benchmark artifact naming/path for clearer visibility.
+   - Targeted benchmark validation passed.
 
 ## Immediate Next Tasks
 
-### Priority 1: Phase 27 Stage 2 - Operations Hub Frontend
-- Create `frontend/src/features/operations-hub/` component structure
-- Implement process list with polling updates (<2s refresh)
-- Add control panel for lifecycle actions (pause/resume/cancel)
-- Integrate with existing layout and navigation
+### Priority 0: Review and merge open Stage 2 PRs
+1. Merge [#46](https://github.com/mattmre/AGENT33/pull/46)
+2. Merge [#47](https://github.com/mattmre/AGENT33/pull/47)
+3. Merge [#48](https://github.com/mattmre/AGENT33/pull/48)
+4. Merge [#49](https://github.com/mattmre/AGENT33/pull/49)
 
-### Priority 2: Phase 29 Stage 2 - Real Provider Integration
-- Replace mock adapters with OpenAI Whisper (STT), ElevenLabs/OpenAI (TTS), GPT-4 Vision
-- Add provider API key management and validation
-- Implement retry logic and timeout handling
-- Add multimodal monitoring to operations hub
+### Priority 1: Post-merge full validation on main
+- `cd engine && python -m ruff check src tests && python -m pytest tests -q`
+- `cd frontend && npm run lint && npm run test -- --run && npm run build`
 
-### Priority 3: Phase 30 Stage 2 - Outcome Dashboard UI
-- Create trend visualization components (line charts, direction indicators)
-- Implement dashboard layout with multi-metric views
-- Add filtering controls (domain, time window, metric type)
-- Integrate decline-triggered improvement intake flows
-
-### Priority 4: SkillsBench Expansion
-- Add `engine/tests/benchmarks/test_skills_smoke.py` with 3-5 golden task executions
-- Update `.github/workflows/ci.yml` with non-blocking benchmark job
-- Configure CTRF artifact upload for CI visibility
+### Priority 2: Provider credential hardening follow-up
+- Verify production provider credentials are set via environment.
+- Validate `/v1/multimodal/providers/health` under real credentials.
 
 ## Startup Checklist (Next Session)
 
 ```bash
 git checkout main
 git pull --ff-only
-gh pr list --state open
+gh pr list --state open --limit 20
+
 cd engine
 python -m ruff check src tests
 python -m pytest tests -q
+
 cd ..\frontend
 npm run lint
 npm run test -- --run
@@ -81,20 +79,18 @@ npm run build
 ```
 
 Expected:
-- No open PRs
-- Backend: 1655 tests passing
-- Frontend: lint/test/build green
-- Ready for Stage 2 implementation
+- Open PR list shows only active review items
+- Backend checks green
+- Frontend checks green
 
 ## Key Paths
 
 | Purpose | Path |
 |---|---|
-| Session 33 log | `docs/sessions/session-33-2026-02-18.md` |
-| Phase 27 progress | `docs/progress/phase-27-spacebot-inspired-website-log.md` |
-| Phase 29 progress | `docs/progress/phase-29-multimodal-log.md` |
-| Phase 30 progress | `docs/progress/phase-30-strategic-loops-log.md` |
-| SkillsBench follow-up | `docs/research/skillsbench-priority-integration-plan-2026-02-17.md` |
-| Operations hub service | `engine/src/agent33/services/operations_hub.py` |
-| Multimodal models | `engine/src/agent33/multimodal/models.py` |
-| Outcomes service | `engine/src/agent33/outcomes/service.py` |
+| Session 34 log | `docs/sessions/session-34-2026-02-18.md` |
+| Session 35 log | `docs/sessions/session-35-2026-02-18.md` |
+| Stage 2 architecture notes | `docs/research/phase27-30-stage2-delivery-architecture-2026-02-18.md` |
+| Operations hub Stage 2 PR | `frontend/src/features/operations-hub/` |
+| Multimodal Stage 2 PR | `engine/src/agent33/multimodal/` |
+| Outcomes dashboard Stage 2 PR | `frontend/src/features/outcomes-dashboard/` |
+| SkillsBench smoke tests | `engine/tests/benchmarks/test_skills_smoke.py` |
