@@ -27,6 +27,7 @@ from agent33.api.routes import (
     health,
     improvements,
     memory_search,
+    multimodal,
     releases,
     reviews,
     traces,
@@ -472,3 +473,4 @@ app.include_router(releases.router)
 app.include_router(improvements.router)
 app.include_router(training.router)
 app.include_router(component_security.router)
+app.include_router(multimodal.router)
