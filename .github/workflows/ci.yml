@@ -86,6 +86,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-smoke-results
-          path: engine/test-results/
+          name: skillsbench-smoke-report
+          path: |
+            engine/test-results/ctrf-smoke-report.json
+            engine/test-results/
           retention-days: 30

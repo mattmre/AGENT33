@@ -252,6 +252,47 @@ class TestSkillsBenchSmoke:
         elapsed = time.perf_counter() - start
         assert elapsed < 0.1, f"Gate enumeration took {elapsed:.3f}s, expected <100ms"
 
+    @pytest.mark.asyncio
+    async def test_multi_trial_executes_three_golden_tasks(self) -> None:
+        """Run a minimal 3-task multi-trial smoke experiment."""
+        service = EvaluationService()
+        config = ExperimentConfig(
+            tasks=["GT-01", "GT-04", "GT-06"],
+            agents=["smoke-agent"],
+            models=["smoke-model"],
+            trials_per_combination=1,
+            skills_modes=[True, False],
+            timeout_per_trial_seconds=15,
+            parallel_trials=1,
+        )
+        run = await service.start_multi_trial_run(config)
+
+        assert run.status == "completed"
+        assert len(run.results) == 6  # 3 tasks x 1 agent x 1 model x 2 skills modes
+        assert len(run.skills_impacts) == 3
+        assert all(result.pass_rate == 1.0 for result in run.results)
+
+    @pytest.mark.asyncio
+    async def test_multi_trial_ctrf_export_contains_expected_counts(self) -> None:
+        """Ensure CTRF export reflects smoke multi-trial execution."""
+        service = EvaluationService()
+        run = await service.start_multi_trial_run(
+            ExperimentConfig(
+                tasks=["GT-01", "GT-02", "GT-03"],
+                agents=["smoke-agent"],
+                models=["smoke-model"],
+                trials_per_combination=1,
+                skills_modes=[True],
+                timeout_per_trial_seconds=15,
+                parallel_trials=1,
+            )
+        )
+
+        report = service.export_ctrf(run.run_id)
+        assert report is not None
+        assert report["results"]["summary"]["tests"] == 3
+        assert report["results"]["summary"]["failed"] == 0
+
 
 def test_write_ctrf_helper() -> None:
     """Test that CTRF helper writes valid reports.
