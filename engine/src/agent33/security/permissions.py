@@ -23,6 +23,8 @@ SCOPES: set[str] = {
     "tools:execute",
     "component-security:read",
     "component-security:write",
+    "outcomes:read",
+    "outcomes:write",
 }
 
 
