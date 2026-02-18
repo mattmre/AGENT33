@@ -4,6 +4,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { DomainPanel } from "./components/DomainPanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { domains } from "./data/domains";
+import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDashboardPanel";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
@@ -18,6 +19,7 @@ interface ActivityItem {
 }
 
 export default function App(): JSX.Element {
+  const [selectedView, setSelectedView] = useState<"domains" | "outcomes-dashboard">("domains");
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
@@ -73,22 +75,43 @@ export default function App(): JSX.Element {
             onApiKeyChange={setApiKey}
           />
           <HealthPanel />
-          <nav className="domain-nav">
-            <h2>Domains</h2>
-            {domains.map((domain) => (
-              <button
-                key={domain.id}
-                className={domain.id === selectedDomainId ? "active" : ""}
-                onClick={() => setSelectedDomainId(domain.id)}
-              >
-                {domain.title}
-              </button>
-            ))}
+          <nav className="main-nav">
+            <h2>Navigation</h2>
+            <button
+              className={selectedView === "domains" ? "active" : ""}
+              onClick={() => setSelectedView("domains")}
+            >
+              API Domains
+            </button>
+            <button
+              className={selectedView === "outcomes-dashboard" ? "active" : ""}
+              onClick={() => setSelectedView("outcomes-dashboard")}
+            >
+              Outcomes Dashboard
+            </button>
           </nav>
+          {selectedView === "domains" ? (
+            <nav className="domain-nav">
+              <h2>Domains</h2>
+              {domains.map((domain) => (
+                <button
+                  key={domain.id}
+                  className={domain.id === selectedDomainId ? "active" : ""}
+                  onClick={() => setSelectedDomainId(domain.id)}
+                >
+                  {domain.title}
+                </button>
+              ))}
+            </nav>
+          ) : null}
         </aside>
 
         <main className="workspace">
-          <DomainPanel domain={selectedDomain} token={token} apiKey={apiKey} onResult={onResult} />
+          {selectedView === "domains" ? (
+            <DomainPanel domain={selectedDomain} token={token} apiKey={apiKey} onResult={onResult} />
+          ) : (
+            <OutcomesDashboardPanel token={token} apiKey={apiKey} onResult={onResult} />
+          )}
         </main>
 
         <aside className="activity-panel">
