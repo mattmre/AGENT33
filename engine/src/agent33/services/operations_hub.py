@@ -11,7 +11,7 @@ from agent33.api.routes.multimodal import get_multimodal_service
 from agent33.api.routes.traces import get_trace_collector
 from agent33.api.routes.workflows import get_execution_history
 from agent33.autonomy.models import BudgetState
-from agent33.autonomy.service import BudgetNotFoundError
+from agent33.autonomy.service import BudgetNotFoundError, InvalidStateTransitionError
 from agent33.improvement.models import IntakeStatus
 from agent33.multimodal.service import RequestNotFoundError
 from agent33.observability.trace_collector import TraceNotFoundError
@@ -197,11 +197,11 @@ class OperationsHubService:
             # Prefer EXPIRED for cancellation semantics, fall back to COMPLETED if needed.
             try:
                 autonomy_service.transition(process_id, BudgetState.EXPIRED)
-            except Exception:
+            except InvalidStateTransitionError:
                 autonomy_service.complete(process_id)
         else:
             raise UnsupportedControlError(f"Action '{action}' is unsupported for budget process")
-        return self.get_process(process_id)
+        return self.get_process(process_id, tenant_id=tenant_id)
 
     def _trace_processes(
         self, *, tenant_id: str, since: datetime, status: str | None, limit: int
