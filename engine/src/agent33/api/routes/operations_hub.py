@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/v1/operations", tags=["operations"])
 _service = OperationsHubService()
-_ALLOWED_INCLUDE = {"traces", "budgets", "improvements", "workflows"}
+_ALLOWED_INCLUDE = {"traces", "budgets", "improvements", "workflows", "multimodal"}
 
 
 class ProcessControlRequest(BaseModel):

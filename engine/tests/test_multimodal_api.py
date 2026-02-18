@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent33.api.routes.multimodal import _service
+from agent33.config import settings
 from agent33.main import app
 from agent33.multimodal.models import ModalityType, MultimodalPolicy, RequestState
 from agent33.security.auth import create_access_token
@@ -15,10 +16,28 @@ from agent33.security.auth import create_access_token
 
 @pytest.fixture(autouse=True)
 def reset_multimodal_service() -> None:
+    _service._openai_api_key = settings.openai_api_key.get_secret_value()
+    _service._openai_base_url = settings.multimodal_openai_base_url
+    _service._retry_attempts = max(1, settings.multimodal_retry_attempts)
+    _service._retry_base_delay_ms = max(0, settings.multimodal_retry_base_delay_ms)
+    _service.configure_providers(
+        stt_provider=settings.multimodal_stt_provider,
+        tts_provider=settings.multimodal_tts_provider,
+        vision_provider=settings.multimodal_vision_provider,
+    )
     _service._requests.clear()
     _service._results.clear()
     _service._policies.clear()
     yield
+    _service._openai_api_key = settings.openai_api_key.get_secret_value()
+    _service._openai_base_url = settings.multimodal_openai_base_url
+    _service._retry_attempts = max(1, settings.multimodal_retry_attempts)
+    _service._retry_base_delay_ms = max(0, settings.multimodal_retry_base_delay_ms)
+    _service.configure_providers(
+        stt_provider=settings.multimodal_stt_provider,
+        tts_provider=settings.multimodal_tts_provider,
+        vision_provider=settings.multimodal_vision_provider,
+    )
     _service._requests.clear()
     _service._results.clear()
     _service._policies.clear()
@@ -252,6 +271,88 @@ def test_cancel_completed_request_returns_409(writer_client: TestClient) -> None
     request_id = create_response.json()["id"]
     cancel_response = writer_client.post(f"/v1/multimodal/requests/{request_id}/cancel")
     assert cancel_response.status_code == 409
+
+
+def test_provider_health_endpoint(reader_client: TestClient) -> None:
+    response = reader_client.get("/v1/multimodal/providers/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["providers"]["stt"] == settings.multimodal_stt_provider
+    assert payload["providers"]["tts"] == settings.multimodal_tts_provider
+    assert payload["providers"]["vision"] == settings.multimodal_vision_provider
+
+
+def test_provider_config_requires_write_scope(reader_client: TestClient) -> None:
+    response = reader_client.post(
+        "/v1/multimodal/providers/config",
+        json={"stt_provider": "mock"},
+    )
+    assert response.status_code == 403
+    assert "multimodal:write" in response.json()["detail"]
+
+
+def test_provider_config_rejects_openai_without_key(writer_client: TestClient) -> None:
+    if settings.openai_api_key.get_secret_value():
+        pytest.skip(
+            "OpenAI API key configured in environment; missing-key validation not applicable"
+        )
+    response = writer_client.post(
+        "/v1/multimodal/providers/config",
+        json={"stt_provider": "openai_whisper"},
+    )
+    assert response.status_code == 400
+    assert "OpenAI adapter requires a non-empty API key" in response.json()["detail"]
+
+
+def test_execute_request_retries_transient_failures() -> None:
+    class FlakyAdapter:
+        provider_name = "flaky"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def run(self, request: object, *, timeout_seconds: int) -> dict[str, object]:
+            del request, timeout_seconds
+            self.calls += 1
+            if self.calls < 3:
+                raise RuntimeError("transient")
+            return {
+                "output_text": "",
+                "output_artifact_id": "artifact",
+                "output_data": {"provider": "flaky"},
+            }
+
+    adapter = FlakyAdapter()
+    _service._adapters[ModalityType.TEXT_TO_SPEECH] = adapter
+    _service._retry_attempts = 3
+    _service._retry_base_delay_ms = 0
+
+    request = _service.create_request(
+        tenant_id="tenant-a",
+        modality=ModalityType.TEXT_TO_SPEECH,
+        input_text="retry test",
+        requested_timeout_seconds=5,
+    )
+    executed = _service.execute_request(request.id, tenant_id="tenant-a")
+    assert executed.state == RequestState.COMPLETED
+    assert adapter.calls == 3
+
+    result = _service.get_result(request.id, tenant_id="tenant-a")
+    assert result.metadata["attempts"] == 3
+    assert result.metadata["provider"] == "flaky"
+
+
+def test_provider_metrics_endpoint(writer_client: TestClient) -> None:
+    writer_client.post(
+        "/v1/multimodal/requests",
+        json={"modality": "text_to_speech", "input_text": "metrics"},
+    )
+    response = writer_client.get("/v1/multimodal/providers/metrics")
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    assert providers
+    assert "mock" in providers
+    assert providers["mock"]["count"] >= 1
 
 
 def test_service_policy_and_lifecycle_contracts() -> None:

@@ -9,11 +9,13 @@ from fastapi.testclient import TestClient
 
 from agent33.api.routes.autonomy import get_autonomy_service
 from agent33.api.routes.improvements import get_improvement_service
+from agent33.api.routes.multimodal import get_multimodal_service
 from agent33.api.routes.traces import get_trace_collector
 from agent33.api.routes.workflows import get_execution_history
 from agent33.autonomy.models import BudgetState
 from agent33.improvement.models import IntakeContent, IntakeStatus, ResearchIntake
 from agent33.main import app
+from agent33.multimodal.models import ModalityType
 from agent33.observability.trace_models import TraceStatus
 from agent33.security.auth import create_access_token
 
@@ -37,6 +39,11 @@ def reset_operations_sources() -> None:
     improvement_service = get_improvement_service()
     improvement_service._intakes.clear()
 
+    multimodal_service = get_multimodal_service()
+    multimodal_service._requests.clear()
+    multimodal_service._results.clear()
+    multimodal_service._policies.clear()
+
     get_execution_history().clear()
     yield
 
@@ -46,6 +53,9 @@ def reset_operations_sources() -> None:
     autonomy_service._enforcers.clear()
     autonomy_service._escalations.clear()
     improvement_service._intakes.clear()
+    multimodal_service._requests.clear()
+    multimodal_service._results.clear()
+    multimodal_service._policies.clear()
     get_execution_history().clear()
 
 
@@ -126,12 +136,21 @@ def seeded_state() -> dict[str, str]:
         }
     )
 
+    multimodal_service = get_multimodal_service()
+    multimodal_request = multimodal_service.create_request(
+        tenant_id="tenant-alpha",
+        modality=ModalityType.TEXT_TO_SPEECH,
+        input_text="hello",
+        requested_by="ops-user",
+    )
+
     return {
         "trace_alpha_id": trace_alpha.trace_id,
         "trace_beta_id": trace_beta.trace_id,
         "active_budget_id": active_budget.budget_id,
         "draft_budget_id": draft_budget.budget_id,
         "intake_id": intake.intake_id,
+        "multimodal_request_id": multimodal_request.id,
     }
 
 
@@ -176,6 +195,16 @@ def test_hub_include_filter_limits_sources(
     assert process_types <= {"trace", "autonomy_budget"}
 
 
+def test_hub_include_filter_multimodal(
+    read_client: TestClient, seeded_state: dict[str, str]
+) -> None:
+    response = read_client.get("/v1/operations/hub?include=multimodal")
+    assert response.status_code == 200
+    process_types = {item["type"] for item in response.json()["processes"]}
+    assert process_types <= {"multimodal_request"}
+    assert "multimodal_request" in process_types
+
+
 def test_hub_invalid_include_returns_400(read_client: TestClient) -> None:
     response = read_client.get("/v1/operations/hub?include=traces,invalid")
     assert response.status_code == 400
@@ -213,7 +242,7 @@ def test_hub_tenant_filter_excludes_non_tenant_sources(
     assert response.status_code == 200
     processes = response.json()["processes"]
     assert processes
-    assert all(item["type"] == "trace" for item in processes)
+    assert all(item["type"] in {"trace", "multimodal_request"} for item in processes)
     assert all(item["metadata"]["tenant_id"] == "tenant-alpha" for item in processes)
 
 
@@ -284,6 +313,18 @@ def test_control_improvement_returns_409(
         json={"action": "cancel"},
     )
     assert response.status_code == 409
+
+
+def test_control_multimodal_cancel(
+    execute_client: TestClient, seeded_state: dict[str, str]
+) -> None:
+    request_id = seeded_state["multimodal_request_id"]
+    response = execute_client.post(
+        f"/v1/operations/processes/{request_id}/control",
+        json={"action": "cancel"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
 
 
 def test_control_workflow_returns_409(
