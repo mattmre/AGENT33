@@ -26,6 +26,8 @@ SCOPES: set[str] = {
     "multimodal:read",
     "multimodal:write",
     "multimodal:execute",
+    "outcomes:read",
+    "outcomes:write",
 }
 
 
