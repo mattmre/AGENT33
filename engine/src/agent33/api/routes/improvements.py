@@ -27,6 +27,11 @@ router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 _service = ImprovementService()
 
 
+def get_improvement_service() -> ImprovementService:
+    """Return the improvement service singleton (for route composition/testing)."""
+    return _service
+
+
 def _reset_service() -> None:
     """Reset singleton for testing."""
     global _service  # noqa: PLW0603

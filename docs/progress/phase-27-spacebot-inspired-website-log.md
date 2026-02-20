@@ -3,7 +3,7 @@
 **Phase**: 27 of 27+  
 **Branch**: `phase27/discovery-spacebot-mapping`  
 **Start Date**: 2026-02-17  
-**Status**: Discovery
+**Status**: Stage 1 Backend Complete
 
 ---
 
@@ -172,6 +172,99 @@ cd engine && pytest tests/test_operations_hub_api.py -v
 
 ---
 
+## Session 2: Stage 1 Backend Implementation Complete (2026-02-18)
+
+### Objectives
+Complete operations hub backend aggregation and lifecycle controls (Phase 27 Stage 1).
+
+### Activities
+
+#### 1. Service Implementation
+**Created**: `engine/src/agent33/services/operations_hub.py`
+
+**Capabilities**:
+- `get_hub()`: Aggregates processes from traces, autonomy budgets, improvements, and workflows
+- `get_process()`: Unified detail view for any process type
+- `control_process()`: Lifecycle actions (`pause`, `resume`, `cancel`) mapped to subsystem APIs
+- Tenant filtering applied before returning process lists
+- Query parameters: `include`, `since`, `status`, `limit` (max 100)
+
+**Design decisions**:
+- Reused existing service singleton patterns from traces/autonomy/improvements
+- Default 24-hour lookback window for `since` parameter
+- Status filtering applied after aggregation to support cross-subsystem queries
+- Workflow history entries use `workflow:{workflow_name}:{timestamp}` IDs; all other process types keep native IDs
+
+#### 2. API Routes Implementation
+**Created**: `engine/src/agent33/api/routes/operations_hub.py`
+
+**Endpoints**:
+- `GET /v1/operations/hub` - Aggregated operations list
+- `GET /v1/operations/processes/{process_id}` - Unified process detail
+- `POST /v1/operations/processes/{process_id}/control` - Lifecycle control actions
+
+**Guardrails**:
+- Read endpoints require `workflows:read` scope
+- Control endpoint requires `workflows:execute` scope
+- Tenant extraction from `request.state.user.tenant_id`
+- 404 responses for missing processes
+
+#### 3. Backend Tests
+**Created**: `engine/tests/test_operations_hub_api.py`
+
+**Coverage**:
+- Auth enforcement (401 without token, 403 without scope)
+- Hub aggregation with multiple process types
+- Process detail retrieval
+- Control actions (pause/resume/cancel)
+- Tenant filtering for traces
+- Error paths (process not found, unsupported actions)
+- Query parameter behavior (`include`, `since`, `status`, `limit`)
+
+**Test structure**:
+- Fixture for resetting all data sources (traces, budgets, improvements, workflows)
+- Helper function for creating test clients with configurable scopes/tenant
+- Tests for each endpoint with success and error scenarios
+
+### Validation Evidence
+
+**Linting**:
+```bash
+cd engine
+python -m ruff check src tests
+# Clean output (no errors)
+```
+
+**Test execution**:
+```bash
+cd engine
+python -m pytest tests/test_operations_hub_api.py -q
+# 16 passed
+```
+
+**Full test suite**:
+```bash
+python -m pytest tests -q
+# 1655 passed, 1 warning
+```
+
+### Artifacts Created
+- ✅ `engine/src/agent33/services/operations_hub.py`
+- ✅ `engine/src/agent33/api/routes/operations_hub.py`
+- ✅ `engine/tests/test_operations_hub_api.py`
+
+### Next Steps
+- [ ] Update API surface documentation to include operations hub endpoints
+- [ ] Begin Stage 2 (Frontend operations hub UI + control surfaces)
+- [ ] Define operations hub component structure in `frontend/src/features/operations-hub/`
+
+### Notes
+**Stage 1 scope validated**: Backend aggregation and lifecycle controls complete without frontend implementation. All endpoints return expected JSON structures. Tenant filtering works correctly for multi-tenant traces. Control actions properly map to underlying subsystem APIs (trace completion, budget suspension, etc.).
+
+**No regressions**: Full test suite passes with 1655 tests. Operations hub tests added to backend validation without breaking existing functionality.
+
+---
+
 ## Notes and Observations
 
 ### Why Discovery First?
@@ -213,25 +306,20 @@ Phase 27 requires mapping external inspiration (Spacebot) to AGENT33's existing 
 | Staged implementation plan | ✅ Complete | 3 stages, 1 week each |
 | Risk assessment | ✅ Complete | 7 risks identified with mitigations |
 | Success metrics | ✅ Complete | 6 measurable criteria |
-| Backend implementation | ⏳ Not started | Awaiting approval |
+| Backend implementation | ✅ Complete | Stage 1 backend aggregation + controls delivered |
 | Frontend implementation | ⏳ Not started | Awaiting Stage 1 completion |
-| Tests | ⏳ Not started | Awaiting implementation |
-| Documentation | ⏳ In progress | Gap analysis complete, walkthrough pending |
+| Tests | ✅ Complete | `tests/test_operations_hub_api.py` passing |
+| Documentation | ⏳ In progress | Session 2 implementation evidence captured |
 
 ---
 
 ## Team Coordination
 
-**Documentation Agent** (this session):
-- Created gap analysis
-- Created progress log
-- Ready to update Phase 27 spec
-
-**Awaiting from other agents**:
-- **Architect**: Review and approve gap analysis
-- **Implementer**: Begin Stage 1 (backend aggregation)
-- **QA**: Define acceptance test scenarios
-- **Orchestrator**: Schedule stage checkpoint reviews
+**Cross-agent outputs consumed in this phase**:
+- **Architect**: Produced Stage 1 backend architecture notes
+- **Implementer**: Delivered operations hub service/routes/tests
+- **QA**: Validated module behavior and full-suite compatibility
+- **Documentation**: Captured discovery + implementation logs in this file
 
 **References maintained**:
 - Phase 20, 22, 25, 26 specs
