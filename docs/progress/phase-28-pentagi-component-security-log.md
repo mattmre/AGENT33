@@ -229,3 +229,63 @@ python -m ruff check src tests
 python -m pytest tests/test_component_security_api.py -q
 python -m pytest tests/test_phase19_release.py -q
 ```
+
+---
+
+## 2026-02-21: Phase 28 Revised — Enterprise Security Scanning Integration (PR #52)
+
+### Work Completed
+- [x] **Stage 1**: Renamed PentAGI → SecurityScan (zero functional changes, zero remaining references)
+- [x] **Stage 2**: SARIF 2.1.0 bidirectional converter + Claude Code Security adapter + SARIF export endpoint + CI jobs
+- [x] **Stage 3**: MCP security server integration (Semgrep/Trivy pre-registered, CRUD endpoints)
+- [x] **Stage 4**: AI/LLM security layer (prompt injection, OWASP MCP Top 10, tool poisoning/shadowing, LLMGuard/Garak stubs)
+- [x] **Stage 5**: Frontend security dashboard (SecurityDashboard, ScanRunCard, FindingsTable, severity filtering, SARIF download)
+
+### Validation Evidence
+```bash
+cd engine
+python -m pytest tests/test_component_security_api.py tests/test_sarif_converter.py tests/test_mcp_scanner.py tests/test_llm_security.py -q
+# 80 passed in 0.44s
+
+python -m ruff check src/agent33/component_security/ src/agent33/services/security_scan.py
+# All checks passed!
+
+python -m pytest tests/ --ignore=tests/benchmarks -q --tb=no
+# 1706 passed, 3 failed (pre-existing infra)
+
+grep -r "PentAGI\|pentagi" src/ tests/
+# zero hits
+
+cd ../frontend
+npx vitest run    # 33 passed
+npm run build     # clean (386 KB)
+```
+
+### Decisions Made
+- **Decision**: Replace PentAGI entirely with enterprise-grade tooling rather than wrapping it
+  - **Rationale**: PentAGI is offensive pentesting tool (misaligned), existing code never used it, better alternatives exist (Claude Code Security, MCP servers, OWASP frameworks)
+  - **Trust hierarchy**: Anthropic first-party > Enterprise-backed > Established OSS > Community > Unknown
+- **Decision**: Use adapter stubs for LLMGuard and Garak rather than full integration
+  - **Rationale**: Stage 4 establishes interface contracts; real integration deferred to when CI pipeline is configured
+- **Decision**: Frontend tests use module-level export checks instead of render tests
+  - **Rationale**: `@testing-library/react` not installed in project; avoided adding new dependencies
+
+### New Files (10)
+| File | Purpose |
+|------|---------|
+| `engine/src/agent33/component_security/sarif.py` | SARIF 2.1.0 bidirectional converter |
+| `engine/src/agent33/component_security/claude_security.py` | Claude Code Security adapter |
+| `engine/src/agent33/component_security/mcp_scanner.py` | MCP security server integration |
+| `engine/src/agent33/component_security/llm_security.py` | AI/LLM security scanning |
+| `engine/tests/test_sarif_converter.py` | 19 tests |
+| `engine/tests/test_mcp_scanner.py` | 22 tests |
+| `engine/tests/test_llm_security.py` | 22 tests |
+| `frontend/src/features/security-dashboard/SecurityDashboard.tsx` | Dashboard component |
+| `frontend/src/features/security-dashboard/ScanRunCard.tsx` | Scan run card component |
+| `frontend/src/features/security-dashboard/FindingsTable.tsx` | Findings table component |
+
+### Next Steps
+- [ ] Merge PR #52
+- [ ] Phase 27 Stage 2: Operations Hub Frontend
+- [ ] Phase 29 Stage 2: Real Provider Integration
+- [ ] Phase 30 Stage 2: Outcome Dashboard UI
