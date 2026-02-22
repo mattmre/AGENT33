@@ -100,3 +100,61 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: "1"
           format: table
+
+  trivy-sarif:
+    name: Trivy SARIF Upload
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Trivy DB cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      - name: Run Trivy scan (SARIF output)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ./engine
+          scanners: vuln,secret
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: "0"
+          format: sarif
+          output: results/trivy-results.sarif
+
+      - name: Upload Trivy SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results/trivy-results.sarif
+          category: trivy
+
+  claude-code-security:
+    name: Claude Code Security Review
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Claude Code Security Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-20250514
+          direct_prompt: |
+            Review this PR for security vulnerabilities. Focus on:
+            - Prompt injection risks in LLM-facing code
+            - OWASP Top 10 vulnerabilities
+            - Secrets exposure
+            - Dependency vulnerabilities
+            - Authentication/authorization bypasses
+            Output findings in SARIF 2.1.0 format.
+          timeout_minutes: 10

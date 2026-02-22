@@ -22,7 +22,7 @@ from agent33.component_security.models import (
 )
 from agent33.main import app
 from agent33.security.auth import create_access_token
-from agent33.services.pentagi_integration import PentAGIService
+from agent33.services.security_scan import SecurityScanService
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -116,7 +116,7 @@ class TestComponentSecurityModels:
         assert summary.total == 2
 
 
-class TestPentAGIService:
+class TestSecurityScanService:
     def test_launch_quick_scan_collects_findings(self, tmp_path: Path) -> None:
         def command_runner(
             command: list[str], _timeout_seconds: int
@@ -151,7 +151,7 @@ class TestPentAGIService:
                 )
             )
 
-        service = PentAGIService(command_runner=command_runner)
+        service = SecurityScanService(command_runner=command_runner)
         run = service.create_run(
             target=ScanTarget(repository_path=str(tmp_path)),
             profile=SecurityProfile.QUICK,
@@ -166,7 +166,7 @@ class TestPentAGIService:
         assert {finding.tool for finding in findings} == {"bandit", "gitleaks"}
 
     def test_launch_scan_fails_for_missing_target(self) -> None:
-        service = PentAGIService(command_runner=_default_command_runner)
+        service = SecurityScanService(command_runner=_default_command_runner)
         run = service.create_run(
             target=ScanTarget(repository_path="D:\\missing-target"),
             profile=SecurityProfile.QUICK,
@@ -180,7 +180,7 @@ class TestPentAGIService:
         outside_root = tmp_path / "outside"
         allowed_root.mkdir()
         outside_root.mkdir()
-        service = PentAGIService(
+        service = SecurityScanService(
             command_runner=_default_command_runner,
             allowed_roots=[str(allowed_root)],
         )
@@ -204,7 +204,7 @@ class TestPentAGIService:
                 return _fake_completed('{"results": []}')
             return _fake_completed("[]")
 
-        service = PentAGIService(command_runner=command_runner)
+        service = SecurityScanService(command_runner=command_runner)
         target = tmp_path / "repo"
         target.mkdir()
         run = service.create_run(
@@ -218,7 +218,7 @@ class TestPentAGIService:
         assert cancelled.completed_at is not None
 
     def test_standard_profile_executes_additional_scanners(self, tmp_path: Path) -> None:
-        service = PentAGIService(command_runner=_default_command_runner)
+        service = SecurityScanService(command_runner=_default_command_runner)
         run = service.create_run(
             target=ScanTarget(repository_path=str(tmp_path)),
             profile=SecurityProfile.STANDARD,
@@ -228,7 +228,7 @@ class TestPentAGIService:
         assert completed.metadata.tools_executed == ["bandit", "gitleaks", "pip-audit"]
 
     def test_deep_profile_executes_semgrep(self, tmp_path: Path) -> None:
-        service = PentAGIService(command_runner=_default_command_runner)
+        service = SecurityScanService(command_runner=_default_command_runner)
         run = service.create_run(
             target=ScanTarget(repository_path=str(tmp_path)),
             profile=SecurityProfile.DEEP,
@@ -256,7 +256,7 @@ class TestPentAGIService:
                 raise FileNotFoundError
             return _fake_completed("")
 
-        service = PentAGIService(command_runner=missing_semgrep_runner)
+        service = SecurityScanService(command_runner=missing_semgrep_runner)
         run = service.create_run(
             target=ScanTarget(repository_path=str(tmp_path)),
             profile=SecurityProfile.DEEP,
