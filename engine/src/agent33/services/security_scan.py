@@ -1,4 +1,4 @@
-"""Stage 1 PentAGI integration service (quick profile)."""
+"""Security scan service for component security operations."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -42,23 +42,23 @@ _SEVERITY_ORDER = {
 }
 
 
-class PentAGIServiceError(Exception):
+class SecurityScanError(Exception):
     """Base service error for component security operations."""
 
 
-class RunNotFoundError(PentAGIServiceError):
+class RunNotFoundError(SecurityScanError):
     """Raised when the requested run does not exist."""
 
 
-class RunStateError(PentAGIServiceError):
+class RunStateError(SecurityScanError):
     """Raised for invalid state transitions."""
 
 
-class ToolExecutionError(PentAGIServiceError):
+class ToolExecutionError(SecurityScanError):
     """Raised when scanner command execution fails."""
 
 
-class PentAGIService:
+class SecurityScanService:
     """In-memory service for component security run lifecycle and quick profile scans."""
 
     def __init__(
@@ -210,6 +210,22 @@ class PentAGIService:
         run = self.get_run(run_id, tenant_id=tenant_id)
         del self._runs[run.id]
         self._findings.pop(run.id, None)
+
+    def sarif_export(
+        self,
+        run_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Export findings for a completed run as SARIF 2.1.0 JSON."""
+        from agent33.component_security.sarif import SARIFConverter
+
+        findings = self.fetch_findings(run_id, tenant_id=tenant_id)
+        run = self.get_run(run_id, tenant_id=tenant_id)
+        return SARIFConverter.findings_to_sarif(
+            findings,
+            tool_name=f"agent33-{run.profile.value}-scan",
+        )
 
     def _execute_quick_profile(
         self,

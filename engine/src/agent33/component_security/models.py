@@ -57,6 +57,10 @@ class FindingCategory(StrEnum):
     AUTHORIZATION_BYPASS = "authorization-bypass"
     CRYPTOGRAPHY_WEAKNESS = "cryptography-weakness"
     CONFIGURATION_ISSUE = "configuration-issue"
+    PROMPT_INJECTION = "prompt-injection"
+    TOOL_POISONING = "tool-poisoning"
+    SUPPLY_CHAIN = "supply-chain"
+    MODEL_SECURITY = "model-security"
 
 
 class ScanTarget(BaseModel):
