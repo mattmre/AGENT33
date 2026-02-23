@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import type { ApiResult, DomainConfig } from "../types";
 import { OperationCard } from "./OperationCard";
 import { SecurityDashboard } from "../features/security-dashboard/SecurityDashboard";
+import { OperationsHub } from "../features/operations-hub/OperationsHub";
 
 interface DomainPanelProps {
   domain: DomainConfig;
@@ -48,6 +49,12 @@ export function DomainPanel({
           />
         </label>
       </header>
+
+      {domain.id === "operations" && (
+        <div className="custom-feature-panel">
+          <OperationsHub token={token} />
+        </div>
+      )}
 
       {domain.id === "component-security" && (
         <div className="custom-feature-panel">

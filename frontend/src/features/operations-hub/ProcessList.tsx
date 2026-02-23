@@ -8,7 +8,7 @@ interface ProcessInfo {
     created_at: string;
 }
 
-export function ProcessList({ token }: { token: string | null }) {
+export function ProcessList({ token, onSelectProcess, selectedProcessId }: { token: string | null; onSelectProcess: (id: string) => void; selectedProcessId?: string }) {
     const [processes, setProcesses] = useState<ProcessInfo[]>([]);
     const { API_BASE_URL } = getRuntimeConfig();
 
@@ -39,7 +39,12 @@ export function ProcessList({ token }: { token: string | null }) {
             {processes.length === 0 && <p>No active processes.</p>}
             <ul>
                 {processes.map((p) => (
-                    <li key={p.id}>
+                    <li 
+                      key={p.id} 
+                      onClick={() => onSelectProcess(p.id)}
+                      className={p.id === selectedProcessId ? 'selected-process' : ''}
+                      style={{ cursor: 'pointer', padding: '0.5rem', border: p.id === selectedProcessId ? '1px solid #30d5c8' : '1px solid transparent' }}
+                    >
                         <strong>{p.id}</strong> - {p.state} ({new Date(p.created_at).toLocaleString()})
                     </li>
                 ))}
