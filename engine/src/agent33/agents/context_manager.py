@@ -439,9 +439,29 @@ MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "mistral": 32_768,
     "mixtral": 32_768,
     "gemma2": 8_192,
-    "qwen2.5": 32_768,
     "deepseek-v2": 128_000,
+    "qwen3-coder:32b": 32_768,
+    "qwen3-coder:30b": 32_768,
+    "qwen3-coder:14b": 32_768,
 }
+
+def truncate_tool_output(output: str, max_chars: int = 15000) -> str:
+    """Safely truncate massive tool outputs (like `cat file.txt` or `curl`) before they hit the LLM.
+    
+    If the string length exceeds max_chars, it will be sliced and appended with a 
+    truncation warning so the model knows there's more data it didn't see.
+    """
+    if not isinstance(output, str):
+        output = str(output)
+    if len(output) <= max_chars:
+        return output
+
+    half = max_chars // 2
+    return (
+        output[:half]
+        + f"\n\n... [TRUNCATED: {len(output) - max_chars} characters omitted due to Context Limits] ...\n\n"
+        + output[-half:]
+    )
 
 
 def budget_for_model(model: str, reserved_for_completion: int = 4_096) -> ContextBudget:

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import sys
 
-
 POPULAR_MODELS = {
     "llama3-70b": "meta-llama/Meta-Llama-3-70B-Instruct",
     "qwen72b": "Qwen/Qwen2-72B-Instruct",

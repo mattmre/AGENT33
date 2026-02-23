@@ -26,6 +26,7 @@ from agent33.api.routes import (
     explanations,
     health,
     improvements,
+    mcp,
     memory_search,
     multimodal,
     operations_hub,
@@ -293,7 +294,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from agent33.memory.observation import ObservationCapture
         from agent33.memory.summarizer import SessionSummarizer
 
-        capture = ObservationCapture()
+        capture = ObservationCapture(nats_bus=nats_bus)
         app.state.observation_capture = capture
         logger.info("observation_capture_initialized")
 
@@ -443,6 +444,9 @@ app = FastAPI(
 
 # -- Middleware (order matters: last added = first executed) --------------------
 
+app.add_middleware(RequestSizeLimitMiddleware)
+app.add_middleware(AuthMiddleware)
+
 _cors_origins = settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else []
 app.add_middleware(
     CORSMiddleware,
@@ -452,8 +456,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
-app.add_middleware(RequestSizeLimitMiddleware)
-app.add_middleware(AuthMiddleware)
+
 
 # -- Routers -------------------------------------------------------------------
 
@@ -478,3 +481,4 @@ app.include_router(component_security.router)
 app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
+app.include_router(mcp.router)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -27,56 +25,50 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
+from fastapi import Request, Response
+
+
 @router.post("/chat/completions")
-async def chat_completions(request: ChatRequest) -> dict[str, Any]:
-    """Proxy chat completions to Ollama."""
-    model = request.model or settings.ollama_default_model
-    payload = {
-        "model": model,
-        "messages": [m.model_dump() for m in request.messages],
-        "stream": False,
-        "options": {"temperature": request.temperature},
-    }
-    if request.max_tokens:
-        payload["options"]["num_predict"] = request.max_tokens  # type: ignore[index]
+async def chat_completions(request: Request) -> Response:
+    """Proxy chat completions to the locally configured orchestration engine."""
+    payload = await request.json()
+    model = payload.get("model") or settings.local_orchestration_model
+    payload["model"] = model
 
     # Scan for prompt injection
-    for msg in request.messages:
-        scan = scan_input(msg.content)
-        if not scan.is_safe:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Input rejected: {', '.join(scan.threats)}",
-            )
+    for msg in payload.get("messages", []):
+        content = msg.get("content", "")
+        if content:
+            scan = scan_input(content)
+            if not scan.is_safe:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Input rejected: {', '.join(scan.threats)}",
+                )
+
+    engine = settings.local_orchestration_engine.lower()
+    if engine in ("llama.cpp", "llamacpp"):
+        base_url = "http://host.docker.internal:8033/v1"
+    else:
+        # Ollama's OpenAI compatibility layer
+        base_url = f"{settings.ollama_base_url}/v1"
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{settings.ollama_base_url}/api/chat", json=payload
-            )
-            r.raise_for_status()
-            data = r.json()
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
-    except httpx.ConnectError as e:
-        raise HTTPException(status_code=503, detail="Ollama unavailable") from e
+            # We explicitly pass the headers and yield the raw response so that streaming (SSE)
+            # and exact OpenAI chunk formats are perfectly preserved back to the frontend.
+            req = client.build_request("POST", f"{base_url}/chat/completions", json=payload)
+            r = await client.send(req, stream=True)
 
-    # Return OpenAI-compatible format
-    return {
-        "id": f"chatcmpl-{id(data)}",
-        "object": "chat.completion",
-        "model": model,
-        "choices": [
-            {
-                "index": 0,
-                "message": data.get("message", {}),
-                "finish_reason": "stop",
-            }
-        ],
-        "usage": {
-            "prompt_tokens": data.get("prompt_eval_count", 0),
-            "completion_tokens": data.get("eval_count", 0),
-            "total_tokens": data.get("prompt_eval_count", 0)
-            + data.get("eval_count", 0),
-        },
-    }
+            # Read the response and return it exactly as the provider formatted it
+            await r.aread()
+            return Response(
+                content=r.content,
+                status_code=r.status_code,
+                media_type=r.headers.get("content-type", "application/json")
+            )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=503, detail=f"{engine} unavailable: {type(e).__name__} - {e}") from e

@@ -57,6 +57,8 @@ export function OperationCard({
   const isWorkflowSchedule = operation.uxHint === "workflow-schedule";
   const isAgentIterative = operation.uxHint === "agent-iterative";
   const isWorkflowGraph = operation.uxHint === "workflow-graph";
+  const isHealth = operation.uxHint === "health";
+  const isHealthChannels = operation.uxHint === "health-channels";
 
   const [pathParamsText, setPathParamsText] = useState(
     initialPathParamsText
@@ -73,6 +75,9 @@ export function OperationCard({
   const [scheduleIntervalSeconds, setScheduleIntervalSeconds] = useState(900);
   const [scheduleCronExpr, setScheduleCronExpr] = useState("0 */6 * * *");
   const [iterativePreset, setIterativePreset] = useState<"quick" | "balanced" | "deep">("balanced");
+
+  // UX Overhaul: Hide raw technical inputs by default if this operation has friendly text.
+  const [showAdvanced, setShowAdvanced] = useState(!operation.instructionalText);
 
   const hasBody = useMemo(
     () => operation.method !== "GET" && operation.method !== "DELETE",
@@ -281,6 +286,47 @@ export function OperationCard({
     return null;
   }
 
+  function renderHealthResults(): JSX.Element | null {
+    if (!result || !result.ok || !result.data) return null;
+
+    if (isHealth) {
+      const payload = result.data as Record<string, unknown>;
+      if (!payload.services) return null;
+      return (
+        <ul className="health-checklist">
+          {Object.entries(payload.services as Record<string, string>).map(([service, status]) => (
+            <li key={service} className={`health-item status-${String(status).toLowerCase()}`}>
+              <span className="health-indicator">
+                {status === "ok" || status === "configured" ? "🟢" : status === "degraded" ? "🟡" : "🔴"}
+              </span>
+              <span className="health-name">{service}</span>
+              <span className="health-state">{String(status).toUpperCase()}</span>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (isHealthChannels) {
+      const payload = result.data as Record<string, unknown>;
+      if (!payload.channels) return null;
+      return (
+        <ul className="health-checklist">
+          {Object.entries(payload.channels as Record<string, Record<string, string>>).map(([platform, data]) => (
+            <li key={platform} className={`health-item status-${data.status?.toLowerCase()}`}>
+              <span className="health-indicator">
+                {data.status === "ok" ? "🟢" : "🔴"}
+              </span>
+              <span className="health-name">{platform}</span>
+              <span className="health-state">{data.status?.toUpperCase() || "UNKNOWN"}</span>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return null;
+  }
+
   async function runOperation(): Promise<void> {
     setError("");
     setIsRunning(true);
@@ -323,44 +369,105 @@ export function OperationCard({
         <span className={`method-badge method-${operation.method.toLowerCase()}`}>
           {operation.method}
         </span>
-        <div>
+        <div style={{ flex: 1 }}>
           <h3>{operation.title}</h3>
           <p>{operation.description}</p>
         </div>
+        {operation.instructionalText && (
+          <button
+            className={`advanced-toggle-btn ${showAdvanced ? "active" : ""}`}
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            title="Toggle Raw JSON Editor"
+          >
+            {showAdvanced ? "Hide Advanced" : "Advanced"}
+          </button>
+        )}
       </header>
-      <p className="operation-path">{operation.path}</p>
-      <div className="operation-grid">
-        <label>
-          Path Params (JSON)
-          <textarea
-            value={pathParamsText}
-            onChange={(e) => setPathParamsText(e.target.value)}
-            rows={4}
-          />
-          <div className="json-tools">
-            <button type="button" onClick={() => formatObjectEditor(pathParamsText, setPathParamsText, "Path Params")}>
-              Format
-            </button>
-            <button type="button" onClick={() => setPathParamsText(initialPathParamsText)}>
-              Reset
-            </button>
-          </div>
-        </label>
-        <label>
-          Query Params (JSON)
-          <textarea value={queryText} onChange={(e) => setQueryText(e.target.value)} rows={4} />
-          <div className="json-tools">
-            <button type="button" onClick={() => formatObjectEditor(queryText, setQueryText, "Query Params")}>
-              Format
-            </button>
-            <button type="button" onClick={() => setQueryText(initialQueryText)}>
-              Reset
-            </button>
-          </div>
-        </label>
-      </div>
+
+      {operation.instructionalText && (
+        <div className="instructional-text">
+          <p>{operation.instructionalText}</p>
+        </div>
+      )}
+
+      {showAdvanced && operation.schemaInfo && (
+        <section className="schema-info-panel">
+          <h4>Operation Schema</h4>
+          {operation.schemaInfo.parameters && (
+            <div className="schema-table-container">
+              <table className="schema-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {operation.schemaInfo.parameters.map((p) => (
+                    <tr key={p.name}>
+                      <td><code>{p.name}</code></td>
+                      <td><span className="schema-type">{p.type}</span></td>
+                      <td>{p.required ? <span className="req-badge req-true">Yes</span> : <span className="req-badge req-false">No</span>}</td>
+                      <td>{p.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {operation.schemaInfo.body && (
+            <div className="schema-body-info">
+              <h5>Body Payload</h5>
+              <p>{operation.schemaInfo.body.description}</p>
+              <h6>Expected Format:</h6>
+              <pre><code>{operation.schemaInfo.body.example}</code></pre>
+            </div>
+          )}
+        </section>
+      )}
+
+      {showAdvanced && (
+        <p className="operation-path">{operation.path}</p>
+      )}
+
+      {showAdvanced && (
+        <div className="operation-grid">
+          <label>
+            Path Params (JSON)
+            <textarea
+              value={pathParamsText}
+              onChange={(e) => setPathParamsText(e.target.value)}
+              rows={4}
+            />
+            <div className="json-tools">
+              <button type="button" onClick={() => formatObjectEditor(pathParamsText, setPathParamsText, "Path Params")}>
+                Format
+              </button>
+              <button type="button" onClick={() => setPathParamsText(initialPathParamsText)}>
+                Reset
+              </button>
+            </div>
+          </label>
+          <label>
+            Query Params (JSON)
+            <textarea value={queryText} onChange={(e) => setQueryText(e.target.value)} rows={4} />
+            <div className="json-tools">
+              <button type="button" onClick={() => formatObjectEditor(queryText, setQueryText, "Query Params")}>
+                Format
+              </button>
+              <button type="button" onClick={() => setQueryText(initialQueryText)}>
+                Reset
+              </button>
+            </div>
+          </label>
+        </div>
+      )}
+
       {renderGuidedControls()}
-      {hasBody ? (
+
+      {hasBody && showAdvanced ? (
         <label>
           Request Body (JSON)
           <textarea value={bodyText} onChange={(e) => setBodyText(e.target.value)} rows={8} />
@@ -389,7 +496,10 @@ export function OperationCard({
       {isWorkflowGraph && result && result.ok ? (
         <WorkflowGraph data={result.data as WorkflowGraphData} />
       ) : null}
-      {result && !isWorkflowGraph ? (
+      {(isHealth || isHealthChannels) && result ? (
+        renderHealthResults()
+      ) : null}
+      {result && !isWorkflowGraph && !isHealth && !isHealthChannels ? (
         <pre className="response-box">{JSON.stringify(result.data, null, 2)}</pre>
       ) : null}
     </article>

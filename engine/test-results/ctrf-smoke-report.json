@@ -1,0 +1,30 @@
+{
+  "results": {
+    "tool": {
+      "name": "agent33-benchmark-smoke",
+      "version": "1.0.0"
+    },
+    "summary": {
+      "tests": 2,
+      "passed": 1,
+      "failed": 1,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1700000000000,
+      "stop": 1700000000115
+    },
+    "tests": [
+      {
+        "name": "test_example_pass",
+        "status": "passed",
+        "duration": 42
+      },
+      {
+        "name": "test_example_fail",
+        "status": "failed",
+        "duration": 15
+      }
+    ]
+  }
+}

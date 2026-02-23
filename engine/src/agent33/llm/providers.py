@@ -179,7 +179,7 @@ PROVIDER_CATALOG: dict[str, ProviderInfo] = {
     "llamacpp": ProviderInfo(
         name="llamacpp",
         display_name="llama.cpp Server",
-        base_url="http://localhost:8080/v1",
+        base_url="http://host.docker.internal:8033/v1",
         auth_type="none",
         model_prefixes=["llamacpp/"],
         notes="llama.cpp HTTP server with OpenAI-compatible endpoint",

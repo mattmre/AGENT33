@@ -1,1 +1,1 @@
-"""Continuous improvement, research intake, and lessons learned (Phase 20)."""
+"""__init__.py for improvement module."""

@@ -4,9 +4,15 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Virtual environments
 .env
-.venv/
+.venv
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
 *.egg
+
+# Local LLM Models and Binaries
+models/
+bin/

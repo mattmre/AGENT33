@@ -29,6 +29,7 @@ dependencies = [
     "jsonschema>=4.23,<5",
     "langchain-core>=0.3,<1",
     "python-multipart>=0.0.18",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +63,11 @@ dev = [
 
 [project.scripts]
 agent33 = "agent33.cli.main:app"
+
+[project.entry-points."agent33.tools"]
+tldr_read = "agent33.tools.tldr_enforcer:TLDRReadEnforcerTool"
+a2a_subordinate = "agent33.workflows.actions.a2a_subordinate:DeployA2ASubordinateTool"
+computer_use = "agent33.tools.computer_use:ComputerUseTool"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent33"]
