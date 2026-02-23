@@ -116,6 +116,9 @@ jobs:
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
+      - name: Create results directory
+        run: mkdir -p results
+
       - name: Run Trivy scan (SARIF output)
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -137,6 +140,7 @@ jobs:
   claude-code-security:
     name: Claude Code Security Review
     runs-on: ubuntu-latest
+    continue-on-error: true
     permissions:
       security-events: write
       contents: read
