@@ -219,6 +219,7 @@ class AgentRuntime:
         tool_context: ToolContext | None = None,
         runtime_enforcer: RuntimeEnforcer | None = None,
         context_manager: ContextManager | None = None,
+        reasoning_protocol: Any | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -235,6 +236,7 @@ class AgentRuntime:
         self._tool_context = tool_context
         self._runtime_enforcer = runtime_enforcer
         self._context_manager = context_manager
+        self._reasoning_protocol = reasoning_protocol
 
     @property
     def definition(self) -> AgentDefinition:
@@ -384,6 +386,81 @@ class AgentRuntime:
 
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
+
+        # --- Reasoning protocol path (Phase 29.1) ---
+        if self._reasoning_protocol is not None:
+            # Inject skill context
+            if self._skill_injector is not None:
+                if self._definition.skills:
+                    system_prompt += (
+                        "\n\n"
+                        + self._skill_injector.build_skill_metadata_block(
+                            self._definition.skills
+                        )
+                    )
+                for skill_name in self._active_skills:
+                    system_prompt += (
+                        "\n\n"
+                        + self._skill_injector.build_skill_instructions_block(skill_name)
+                    )
+
+            # Inject memory context
+            if self._progressive_recall is not None:
+                try:
+                    user_query = json.dumps(inputs) if inputs else ""
+                    recall_results = await self._progressive_recall.search(
+                        user_query, level="index", top_k=5
+                    )
+                    if recall_results:
+                        memory_lines = ["\n# Prior Context (from memory)"]
+                        for rr in recall_results:
+                            memory_lines.append(f"- {rr.content}")
+                        system_prompt += "\n" + "\n".join(memory_lines)
+                except Exception:
+                    logger.debug("failed to retrieve memory context", exc_info=True)
+
+            # Validate required inputs
+            for name, param in self._definition.inputs.items():
+                if param.required and name not in inputs:
+                    raise ValueError(f"Missing required input: {name}")
+
+            loop_config = config or ToolLoopConfig()
+            tool_loop = ToolLoop(
+                router=self._router,
+                tool_registry=self._tool_registry,
+                tool_governance=self._tool_governance,
+                tool_context=self._tool_context,
+                observation_capture=self._observation_capture,
+                runtime_enforcer=self._runtime_enforcer,
+                config=loop_config,
+                agent_name=self._definition.name,
+                session_id=self._session_id,
+                context_manager=self._context_manager,
+            )
+
+            task_input = json.dumps(inputs, indent=2)
+            reasoning_result = await self._reasoning_protocol.run(
+                task_input=task_input,
+                tool_loop=tool_loop,
+                model=self._model,
+                router=self._router,
+                temperature=self._temperature,
+                max_tokens=self._definition.constraints.max_tokens,
+                system_prompt=system_prompt,
+            )
+
+            return IterativeAgentResult(
+                output={"response": reasoning_result.final_output}
+                if isinstance(reasoning_result.final_output, str)
+                else reasoning_result.final_output,
+                raw_response=reasoning_result.final_output,
+                tokens_used=0,
+                model=self._model,
+                iterations=reasoning_result.total_steps,
+                tool_calls_made=0,
+                tools_used=[],
+                termination_reason=reasoning_result.termination_reason,
+            )
 
         # Inject skill context if injector is available
         if self._skill_injector is not None:

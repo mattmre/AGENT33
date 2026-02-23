@@ -31,6 +31,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    reasoning,
     releases,
     reviews,
     traces,
@@ -482,3 +483,4 @@ app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
+app.include_router(reasoning.router)
