@@ -140,6 +140,7 @@ jobs:
     permissions:
       security-events: write
       contents: read
+      id-token: write
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4

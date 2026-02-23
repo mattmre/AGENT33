@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { SecurityDashboard } from "../SecurityDashboard";
-import { ScanRunCard } from "../ScanRunCard";
-import { FindingsTable } from "../FindingsTable";
+import { SecurityDashboard } from "./SecurityDashboard";
+import { ScanRunCard } from "./ScanRunCard";
+import { FindingsTable } from "./FindingsTable";
 
 describe("SecurityDashboard module", () => {
   it("exports SecurityDashboard as a function component", () => {

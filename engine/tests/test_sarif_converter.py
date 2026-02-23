@@ -297,15 +297,14 @@ class TestSarifRouteIntegration:
             app, headers={"Authorization": f"Bearer {token}"}
         )
 
-        # Create a completed run
-        create_resp = client.post(
-            "/v1/component-security/runs",
-            json={
-                "target": {"repository_path": "."},
-                "profile": "quick",
-                "execute_now": False,
-            },
-        )
+                    # Create a completed run
+                    create_resp = client.post(
+                        "/v1/component-security/runs",
+                        json={
+                            "target": {"repository_path": "."},
+                            "profile": "quick",
+                            "execute_now": True,
+                        },        )
         run_id = create_resp.json()["id"]
 
         # SARIF export (empty findings for pending run)
