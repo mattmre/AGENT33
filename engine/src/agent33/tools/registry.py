@@ -58,6 +58,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
         self._entries: dict[str, ToolRegistryEntry] = {}
+        self._mcp_manager: Any = None
 
     # ------------------------------------------------------------------
     # Existing API (unchanged)
@@ -97,6 +98,54 @@ class ToolRegistry:
             except Exception:
                 logger.exception("Failed to load tool entry point: %s", ep.name)
         return count
+
+    async def discover_mcp_stdio_server(self, command: str, args: list[str], env: dict[str, str] | None = None) -> int:
+        """Connect to an MCP STDIO server and register its tools dynamically."""
+        try:
+            from agent33.tools.mcp_client import MCPClientManager
+        except ImportError:
+            logger.warning("MCP client not available (mcp package missing)")
+            return 0
+
+        if self._mcp_manager is None:
+            self._mcp_manager = MCPClientManager()
+
+        try:
+            session = await self._mcp_manager.connect_stdio(command, args, env)
+            tools = await self._mcp_manager.load_tools_from_session(session)
+            count = 0
+            for tool in tools:
+                self.register(tool)
+                count += 1
+            logger.info("Discovered %d tools from MCP STDIO server: %s", count, command)
+            return count
+        except Exception:
+            logger.error("Failed to discover tools from MCP STDIO server: %s", command, exc_info=True)
+            return 0
+
+    async def discover_mcp_sse_server(self, url: str) -> int:
+        """Connect to an MCP SSE server and register its tools dynamically."""
+        try:
+            from agent33.tools.mcp_client import MCPClientManager
+        except ImportError:
+            logger.warning("MCP client not available (mcp package missing)")
+            return 0
+
+        if self._mcp_manager is None:
+            self._mcp_manager = MCPClientManager()
+
+        try:
+            session = await self._mcp_manager.connect_sse(url)
+            tools = await self._mcp_manager.load_tools_from_session(session)
+            count = 0
+            for tool in tools:
+                self.register(tool)
+                count += 1
+            logger.info("Discovered %d tools from MCP SSE server: %s", count, url)
+            return count
+        except Exception:
+            logger.error("Failed to discover tools from MCP SSE server: %s", url, exc_info=True)
+            return 0
 
     # ------------------------------------------------------------------
     # Phase 12 – metadata & change-control API

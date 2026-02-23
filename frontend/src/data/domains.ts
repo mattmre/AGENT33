@@ -16,6 +16,14 @@ import { tracesDomain } from "./domains/traces";
 import { trainingDomain } from "./domains/training";
 import { webhooksDomain } from "./domains/webhooks";
 import { workflowsDomain } from "./domains/workflows";
+import { operationsHubDomain } from "./domains/operationsHub";
+import { outcomesDomain } from "./domains/outcomes";
+import { multimodalDomain } from "./domains/multimodal";
+import { selfEvolutionDomain } from "./domains/selfEvolution";
+import { sessionsDomain } from "./domains/sessions";
+import { researchDomain } from "./domains/research";
+import { modulesDomain } from "./domains/modules";
+import { tasksDomain } from "./domains/tasks";
 
 export const domains: DomainConfig[] = [
   healthDomain,
@@ -34,5 +42,13 @@ export const domains: DomainConfig[] = [
   dashboardDomain,
   trainingDomain,
   webhooksDomain,
-  componentSecurityDomain
+  componentSecurityDomain,
+  operationsHubDomain,
+  outcomesDomain,
+  multimodalDomain,
+  selfEvolutionDomain,
+  sessionsDomain,
+  researchDomain,
+  modulesDomain,
+  tasksDomain
 ];

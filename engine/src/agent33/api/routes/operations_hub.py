@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agent33.autonomy.service import InvalidStateTransitionError
@@ -88,6 +89,38 @@ async def get_hub(
         active_count=hub["active_count"],
     )
     return hub
+
+
+@router.get("/stream", dependencies=[require_scope("workflows:read")])
+async def stream_operations(request: Request) -> StreamingResponse:
+    """Stream operations events to the UI via SSE."""
+    import asyncio
+    import json
+    nats_bus = getattr(request.app.state, "nats_bus", None)
+    if not nats_bus:
+        raise HTTPException(status_code=503, detail="NATS not available")
+
+    async def event_generator():
+        queue = asyncio.Queue()
+
+        async def handler(data: dict):
+            await queue.put(data)
+
+        await nats_bus.subscribe("agent.observation", handler)
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
 
 @router.get("/processes/{process_id}", dependencies=[require_scope("workflows:read")])

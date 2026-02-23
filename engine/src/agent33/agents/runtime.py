@@ -144,6 +144,12 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
         parts.append(f"- Timeout: {definition.constraints.timeout_seconds}s")
         parts.append(f"- Max retries: {definition.constraints.max_retries}")
 
+    # --- Agentic Memory Instructions ---
+    parts.append("\n# Persistent Memory & Knowledge Retrieval")
+    parts.append("- You have access to a persistent PGVector semantic memory database.")
+    parts.append("- Actively utilize your prior context to store conclusions and retrieve context before acting.")
+    parts.append("- Rely on retrieved RAG memories instead of blindly re-analyzing or re-asking the user for the same information.")
+
     # --- Safety Guardrails ---
     parts.append("\n# Safety Rules")
     parts.append("- Never expose secrets, API keys, or credentials in output")

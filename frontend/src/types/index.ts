@@ -1,5 +1,20 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type OperationUxHint = "workflow-execute" | "workflow-schedule" | "agent-iterative" | "workflow-graph";
+export type OperationUxHint = "workflow-execute" | "workflow-schedule" | "agent-iterative" | "workflow-graph" | "health" | "health-channels";
+
+export interface SchemaParameter {
+  name: string;
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface SchemaInfo {
+  parameters?: SchemaParameter[];
+  body?: {
+    description: string;
+    example: string;
+  };
+}
 
 export interface OperationConfig {
   id: string;
@@ -7,6 +22,8 @@ export interface OperationConfig {
   method: HttpMethod;
   path: string;
   description: string;
+  instructionalText?: string;
+  schemaInfo?: SchemaInfo;
   defaultPathParams?: Record<string, string>;
   defaultQuery?: Record<string, string>;
   defaultBody?: string;

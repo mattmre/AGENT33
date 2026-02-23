@@ -11,6 +11,13 @@ export const chatDomain: DomainConfig = {
       method: "POST",
       path: "/v1/chat/completions",
       description: "OpenAI-compatible chat completion.",
+      instructionalText: "Submit a direct prompt to the large language model exactly as you would through the main chat interface. Useful for testing raw response speed and model capabilities.",
+      schemaInfo: {
+        body: {
+          description: "An array of conversation messages identical to the standard OpenAI API format requesting a model response.",
+          example: '{\n  "model": "qwen3-coder:30b",\n  "messages": [\n    { "role": "system", "content": "You are a helpful assistant." },\n    { "role": "user", "content": "Hello, how are you?" }\n  ],\n  "temperature": 0.2\n}'
+        }
+      },
       defaultBody: JSON.stringify(
         {
           model: "qwen3-coder:30b",

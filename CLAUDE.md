@@ -86,6 +86,7 @@ PostgreSQL → Redis → NATS → AgentRegistry → CodeExecutor → ModelRouter
 - **mypy**: strict mode, pydantic plugin
 - **pytest**: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
 - **DB migrations**: Alembic in `engine/alembic/versions/`
+- **EVOKORE-MCP**: The system utilizes the local EVOKORE-MCP server (at `D:\GITHUB\EVOKORE-MCP\src\index.ts`) for dynamic agent skills, proxy routing, and HITL security. For UI hooks in the CLI, use the `gemini-evokore`, `claude-evokore`, or `copilot-evokore` PowerShell aliases.
 
 ## Benchmarking (SkillsBench)
 

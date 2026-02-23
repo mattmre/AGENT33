@@ -41,22 +41,44 @@ export function HealthPanel(): JSX.Element {
     };
   }, []);
 
+  function getStatusIcon(status: string): JSX.Element {
+    const s = status.toLowerCase();
+    switch (s) {
+      case "ok":
+      case "healthy":
+        return <span className="rh-icon connected" title="Connected and Working">🟢</span>;
+      case "degraded":
+      case "unavailable":
+      case "error":
+        return <span className="rh-icon error" title="Not working">🔴</span>;
+      case "configured":
+        return <span className="rh-icon pending" title="Setup and not connected">🟡</span>;
+      case "unconfigured":
+      default:
+        return <span className="rh-icon inactive" title="Not setup">⚪</span>;
+    }
+  }
+
   return (
     <section className="health-panel">
       <h2>Runtime Health</h2>
       {error ? <pre className="error-box">{error}</pre> : null}
       {health ? (
-        <div className="health-grid">
-          <div className="health-item">
-            <h3>Overall</h3>
-            <p className={health.status === "healthy" ? "status-ok" : "status-error"}>
-              {health.status}
-            </p>
+        <div className="runtime-health-grid">
+          <div className="runtime-health-card">
+            <h3>OVERALL</h3>
+            <div className="rh-state">
+              {getStatusIcon(health.status)}
+              <span className={`rh-text ${health.status.toLowerCase()}`}>{health.status}</span>
+            </div>
           </div>
           {Object.entries(health.services ?? {}).map(([name, status]) => (
-            <div className="health-item" key={name}>
-              <h3>{name}</h3>
-              <p className={status === "ok" ? "status-ok" : "status-error"}>{status}</p>
+            <div className="runtime-health-card" key={name}>
+              <h3>{name.toUpperCase()}</h3>
+              <div className="rh-state">
+                {getStatusIcon(status)}
+                <span className={`rh-text ${status.toLowerCase()}`}>{status}</span>
+              </div>
             </div>
           ))}
         </div>

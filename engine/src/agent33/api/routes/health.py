@@ -59,6 +59,39 @@ async def health() -> dict[str, Any]:
         checks["postgres"] = "ok"
     except Exception:
         checks["postgres"] = "unavailable"
+        
+    # External Integrations
+    if settings.openai_api_key.get_secret_value():
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"}
+                )
+                checks["openai"] = "ok" if r.status_code == 200 else "degraded"
+        except Exception:
+            checks["openai"] = "unavailable"
+    else:
+        checks["openai"] = "unconfigured"
+
+    if settings.elevenlabs_api_key.get_secret_value():
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.get(
+                    "https://api.elevenlabs.io/v1/models",
+                    headers={"xi-api-key": settings.elevenlabs_api_key.get_secret_value()}
+                )
+                checks["elevenlabs"] = "ok" if r.status_code == 200 else "degraded"
+        except Exception:
+            checks["elevenlabs"] = "unavailable"
+    else:
+        checks["elevenlabs"] = "unconfigured"
+
+    if settings.jina_api_key.get_secret_value():
+        # Jina reader uses a simple ping since /models isn't universally standard
+         checks["jina"] = "configured"
+    else:
+        checks["jina"] = "unconfigured"
 
     # NATS
     try:

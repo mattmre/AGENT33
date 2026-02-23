@@ -245,10 +245,12 @@ class ToolLoop:
                     tc = processed_tool_calls[i] if i < len(processed_tool_calls) else None
                     tc_id = tc.id if tc else ""
                     tc_name = tc.function.name if tc else ""
+                    # Truncate raw tool output before adding to LLM context
+                    from agent33.agents.context_manager import truncate_tool_output
                     content = (
-                        tool_result.output
+                        truncate_tool_output(tool_result.output)
                         if tool_result.success
-                        else f"Error: {tool_result.error}"
+                        else f"Error: {truncate_tool_output(tool_result.error)}"
                     )
                     messages.append(
                         ChatMessage(
@@ -258,6 +260,29 @@ class ToolLoop:
                             name=tc_name,
                         )
                     )
+
+                # --- PHASE 34: Segmented Context Wipe (Handoff Interceptor) ---
+                for tc, result in zip(processed_tool_calls, tool_results):
+                    if tc.function.name == "handoff" and result.success:
+                        logger.info("PHASE 34: Intercepting Handoff -> Triggering Context Wipe.")
+                        from agent33.workflows.actions.handoff import StateLedger, execute_handoff
+                        try:
+                            # Re-parse args, the registry already validated them
+                            parsed_args = json.loads(tc.function.arguments)
+                            ledger = StateLedger(**parsed_args.get("ledger_data", {}))
+                            # Wipe and reset the entire conversation array
+                            messages.clear()
+                            wiped_messages = execute_handoff(ledger, [ChatMessage(role="system", content=messages[0].content if messages else "")])
+                            messages.extend(wiped_messages)
+
+                            # Log to ui/observation for user visibility
+                            await self._record_observation(
+                                event_type="handoff_context_wipe",
+                                content=f"Agent memory wiped. Continuing with fresh context window + Target Objective: {ledger.objective}",
+                                metadata={"source": ledger.source_agent, "target": ledger.target_agent}
+                            )
+                        except Exception as e:
+                            logger.error(f"Handoff wipe failed unexpectedly: {e}")
             else:
                 # --- Text-only response (no tool calls) -----------------------
                 if not self._config.enable_double_confirmation:

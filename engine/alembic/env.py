@@ -7,8 +7,8 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import MetaData, Column, Text, DateTime, pool
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, DateTime, MetaData, Text, pool
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func

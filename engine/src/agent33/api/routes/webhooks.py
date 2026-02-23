@@ -139,3 +139,38 @@ async def whatsapp_webhook(
     payload = await request.json()
     adapter.enqueue_webhook_payload(payload)
     return {"status": "ok"}
+
+
+# -----------------------------------------------------------------------
+# Signal (via signal-cli-rest-api)
+# -----------------------------------------------------------------------
+
+
+@router.post("/signal")
+async def signal_webhook(request: Request) -> dict[str, str]:
+    """Receive Signal messages via REST API bridge."""
+    adapter = _adapters.get("signal")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="Signal adapter not configured")
+
+    payload = await request.json()
+    adapter.enqueue_message(payload)
+    return {"status": "ok"}
+
+
+# -----------------------------------------------------------------------
+# iMessage (via Mac bridge / Webhooks)
+# -----------------------------------------------------------------------
+
+
+@router.post("/imessage")
+async def imessage_webhook(request: Request) -> dict[str, str]:
+    """Receive incoming Apple iMessages via bridge."""
+    adapter = _adapters.get("imessage")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="iMessage adapter not configured")
+
+    payload = await request.json()
+    adapter.enqueue_message(payload)
+    return {"status": "ok"}
+

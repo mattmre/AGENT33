@@ -252,6 +252,53 @@ class TestSkillsBenchSmoke:
         elapsed = time.perf_counter() - start
         assert elapsed < 0.1, f"Gate enumeration took {elapsed:.3f}s, expected <100ms"
 
+    def test_golden_task_executions(self) -> None:
+        """Simulate execution of 3-5 golden tasks for SkillsBench integration.
+        
+        Tests:
+        - Ability to slice and execute the first 3 golden tasks.
+        - Proper accumulation of MultiTrialResult.
+        - CTRF report generation for multiple tasks.
+        """
+        start = time.perf_counter()
+        service = EvaluationService()
+        tasks = service.list_golden_tasks()[:3]
+        assert len(tasks) == 3, "Expected at least 3 golden tasks to be defined"
+
+        results = []
+        for i, task in enumerate(tasks):
+            # Simulate a multi-trial result for each task
+            trial = TrialResult(trial_number=1, score=1, duration_ms=40 + i)
+            result = MultiTrialResult(
+                task_id=task.get("task_id", f"task-{i}"),
+                agent="agent33-coder",
+                model="qwen3-coder:30b",
+                skills_enabled=True,
+                trials=[trial],
+                total_tokens=150,
+                total_duration_ms=40 + i,
+            )
+            results.append(result)
+
+        run = MultiTrialRun(
+            run_id="golden-execution-run",
+            config=ExperimentConfig(
+                tasks=[t.get("task_id", "") for t in tasks],
+                agents=["agent33-coder"],
+                models=["qwen3-coder:30b"],
+            ),
+            results=results,
+            started_at=datetime.now(UTC),
+        )
+
+        generator = CTRFGenerator()
+        report = generator.generate_report(run)
+        assert report["results"]["summary"]["tests"] == 3
+
+        elapsed = time.perf_counter() - start
+        assert elapsed < 0.2, f"Golden task simulation took {elapsed:.3f}s, expected <200ms"
+
+
 
 def test_write_ctrf_helper() -> None:
     """Test that CTRF helper writes valid reports.

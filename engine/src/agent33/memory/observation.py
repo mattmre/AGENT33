@@ -37,9 +37,11 @@ class ObservationCapture:
         self,
         long_term_memory: Any | None = None,
         embedding_provider: Any | None = None,
+        nats_bus: Any | None = None,
     ) -> None:
         self._memory = long_term_memory
         self._embeddings = embedding_provider
+        self._nats_bus = nats_bus
         self._buffer: list[Observation] = []
 
     async def record(self, obs: Observation) -> str:
@@ -73,6 +75,25 @@ class ObservationCapture:
                 logging.getLogger(__name__).warning(
                     "failed to store observation %s", obs.id, exc_info=True
                 )
+
+        if self._nats_bus is not None:
+            try:
+                await self._nats_bus.publish(
+                    "agent.observation",
+                    {
+                        "id": obs.id,
+                        "session_id": obs.session_id,
+                        "agent_name": obs.agent_name,
+                        "event_type": obs.event_type,
+                        "content": obs.content,
+                        "metadata": obs.metadata,
+                        "tags": obs.tags,
+                        "timestamp": obs.timestamp.isoformat()
+                    }
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning("failed to publish observation to NATS", exc_info=True)
 
         return obs.id
 

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_default_model: str = "llama3.2"
 
+    # Local "Heretic" & Ultra-Sparse Orchestration (optimized for single RTX 3090 - 24GB VRAM)
+    # Top targets: Qwen3-Coder-Next (via llama.cpp tensor offloading), Qwen2.5-Coder-32B-Instruct-abliterated, Lexi-3.0
+    local_orchestration_model: str = "qwen3-coder-next"
+    local_orchestration_format: str = "gguf_q4_k_m"
+    local_orchestration_engine: str = "llama.cpp"
+
     # PostgreSQL
     database_url: str = "postgresql+asyncpg://agent33:agent33@postgres:5432/agent33"
 
@@ -54,6 +60,7 @@ class Settings(BaseSettings):
     # Optional cloud LLM
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
+    elevenlabs_api_key: SecretStr = SecretStr("")
 
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
@@ -128,6 +135,8 @@ class Settings(BaseSettings):
     self_improve_enabled: bool = True
     self_improve_scope: str = "prompts,workflows,templates"
     self_improve_require_approval: bool = True
+    autonomy_max_stretch_hours: int = 24
+    autonomy_allow_security_recon: bool = True
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
