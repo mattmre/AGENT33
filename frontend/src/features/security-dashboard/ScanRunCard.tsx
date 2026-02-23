@@ -54,7 +54,12 @@ export function ScanRunCard({
       onClick={onSelect}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onSelect()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
     >
       <div className="scan-run-header">
         <span className={`status-indicator ${statusClass(run.status)}`}>

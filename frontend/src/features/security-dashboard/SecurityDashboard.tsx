@@ -130,7 +130,9 @@ export function SecurityDashboard({ token }: { token: string | null }) {
         const a = document.createElement("a");
         a.href = url;
         a.download = `security-scan-${runId}.sarif.json`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
     } catch (e) {
