@@ -93,6 +93,63 @@ export const componentSecurityDomain: DomainConfig = {
       defaultPathParams: {
         run_id: "replace-with-run-id"
       }
+    },
+    {
+      id: "sec-get-sarif",
+      title: "Export SARIF",
+      method: "GET",
+      path: "/v1/component-security/runs/{run_id}/sarif",
+      description: "Export findings as SARIF 2.1.0 JSON.",
+      defaultPathParams: {
+        run_id: "replace-with-run-id"
+      }
+    },
+    {
+      id: "sec-llm-scan",
+      title: "LLM Security Scan",
+      method: "POST",
+      path: "/v1/component-security/runs/{run_id}/llm-scan",
+      description: "Run AI-specific security scan.",
+      defaultPathParams: {
+        run_id: "replace-with-run-id"
+      }
+    },
+    {
+      id: "sec-list-mcp-servers",
+      title: "List MCP Servers",
+      method: "GET",
+      path: "/v1/component-security/mcp-servers",
+      description: "List registered MCP security servers."
+    },
+    {
+      id: "sec-register-mcp-server",
+      title: "Register MCP Server",
+      method: "POST",
+      path: "/v1/component-security/mcp-servers",
+      description: "Register an MCP security server.",
+      defaultBody: JSON.stringify(
+        {
+          name: "semgrep",
+          transport: "stdio",
+          config: {
+            command: "npx",
+            args: ["-y", "@semgrep/mcp"],
+            scan_tool_name: "scan"
+          }
+        },
+        null,
+        2
+      )
+    },
+    {
+      id: "sec-delete-mcp-server",
+      title: "Remove MCP Server",
+      method: "DELETE",
+      path: "/v1/component-security/mcp-servers/{name}",
+      description: "Remove a registered MCP security server.",
+      defaultPathParams: {
+        name: "replace-with-server-name"
+      }
     }
   ]
 };

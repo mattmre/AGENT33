@@ -1,5 +1,13 @@
 # Phase 28 Integration Analysis: PentAGI Component Security Testing (2026-02-17)
 
+> **ARCHIVED (2026-02-21)**: This analysis was written when Phase 28 targeted PentAGI integration.
+> Research revealed PentAGI is an offensive pentesting tool misaligned with AGENT-33's defensive
+> security needs. Phase 28 has been revised to use enterprise-grade tooling: Claude Code Security
+> (Anthropic first-party), Semgrep/Trivy MCP servers, and AI/LLM security frameworks (LLM Guard,
+> Garak). The existing subprocess-based scanner code (bandit, gitleaks, semgrep, pip-audit) has been
+> preserved and renamed from `pentagi_integration.py` to `security_scan.py`. See the updated phase
+> spec at `docs/phases/PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md`.
+
 ## Executive Summary
 
 This document defines the technical integration architecture and operational patterns for embedding PentAGI component security testing capabilities into AGENT-33 workflows. Phase 28 delivers a first-class security validation surface that operators can use to run pre-deployment security scans against local repository targets, review normalized findings, and enforce release gate policies based on security run outcomes.

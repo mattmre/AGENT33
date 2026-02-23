@@ -12,8 +12,8 @@ describe("componentSecurityDomain", () => {
     expect(componentSecurityDomain.description).toBeDefined();
   });
 
-  it("should have exactly 7 operations", () => {
-    expect(componentSecurityDomain.operations.length).toBe(7);
+  it("should have exactly 12 operations", () => {
+    expect(componentSecurityDomain.operations.length).toBe(12);
   });
 
   it("should have all required operation fields", () => {
@@ -69,6 +69,31 @@ describe("componentSecurityDomain", () => {
     const getStatus = operations.find((op) => op.id === "sec-run-status");
     expect(getStatus?.method).toBe("GET");
     expect(getStatus?.path).toBe("/v1/component-security/runs/{run_id}/status");
+
+    // Export SARIF
+    const getSarif = operations.find((op) => op.id === "sec-get-sarif");
+    expect(getSarif?.method).toBe("GET");
+    expect(getSarif?.path).toBe("/v1/component-security/runs/{run_id}/sarif");
+
+    // LLM Security Scan
+    const llmScan = operations.find((op) => op.id === "sec-llm-scan");
+    expect(llmScan?.method).toBe("POST");
+    expect(llmScan?.path).toBe("/v1/component-security/runs/{run_id}/llm-scan");
+
+    // List MCP Servers
+    const listMcp = operations.find((op) => op.id === "sec-list-mcp-servers");
+    expect(listMcp?.method).toBe("GET");
+    expect(listMcp?.path).toBe("/v1/component-security/mcp-servers");
+
+    // Register MCP Server
+    const registerMcp = operations.find((op) => op.id === "sec-register-mcp-server");
+    expect(registerMcp?.method).toBe("POST");
+    expect(registerMcp?.path).toBe("/v1/component-security/mcp-servers");
+
+    // Delete MCP Server
+    const deleteMcp = operations.find((op) => op.id === "sec-delete-mcp-server");
+    expect(deleteMcp?.method).toBe("DELETE");
+    expect(deleteMcp?.path).toBe("/v1/component-security/mcp-servers/{name}");
   });
 
   it("should have valid default values for create run", () => {
@@ -85,12 +110,42 @@ describe("componentSecurityDomain", () => {
   });
 
   it("should have path params for operations requiring run_id", () => {
-    const opsWithRunId = ["sec-get-run", "sec-get-findings", "sec-cancel-run", "sec-delete-run", "sec-run-status"];
+    const opsWithRunId = [
+      "sec-get-run",
+      "sec-get-findings",
+      "sec-cancel-run",
+      "sec-delete-run",
+      "sec-run-status",
+      "sec-get-sarif",
+      "sec-llm-scan"
+    ];
 
     opsWithRunId.forEach((opId) => {
       const op = componentSecurityDomain.operations.find((o) => o.id === opId);
       expect(op?.defaultPathParams).toBeDefined();
       expect(op?.defaultPathParams?.run_id).toBe("replace-with-run-id");
     });
+  });
+
+  it("should have path params for operations requiring name", () => {
+    const deleteMcp = componentSecurityDomain.operations.find(
+      (o) => o.id === "sec-delete-mcp-server"
+    );
+    expect(deleteMcp?.defaultPathParams).toBeDefined();
+    expect(deleteMcp?.defaultPathParams?.name).toBe("replace-with-server-name");
+  });
+
+  it("should have valid default body for MCP server registration", () => {
+    const registerMcp = componentSecurityDomain.operations.find(
+      (op) => op.id === "sec-register-mcp-server"
+    );
+    expect(registerMcp?.defaultBody).toBeDefined();
+
+    if (registerMcp?.defaultBody) {
+      const body = JSON.parse(registerMcp.defaultBody);
+      expect(body.name).toBeDefined();
+      expect(body.transport).toBeDefined();
+      expect(body.config).toBeDefined();
+    }
   });
 });
