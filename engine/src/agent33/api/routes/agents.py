@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,10 +23,12 @@ from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
+from agent33.observability.metrics import MetricsCollector
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import _get_token_payload, require_scope
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
+logger = logging.getLogger(__name__)
 
 # -- singletons ----------------------------------------------------------
 
@@ -69,6 +72,55 @@ def _resolve_domain_context(request: Request, body_domain: str | None) -> str:
     host = request.headers.get("host", "")
     return host.split(":", 1)[0].strip().lower() if host else ""
 
+
+def _build_skill_match_query(definition: AgentDefinition, inputs: dict[str, Any]) -> str:
+    """Build a compact query for skill matching from agent + request context."""
+    user_payload = json.dumps(inputs, ensure_ascii=False)
+    return f"{definition.description}\n\nUser request:\n{user_payload}"
+
+
+async def _resolve_active_skills(
+    *,
+    request: Request,
+    definition: AgentDefinition,
+    model_router: ModelRouter,
+    inputs: dict[str, Any],
+) -> list[str]:
+    """Resolve active skills for an invocation with feature-flagged matching."""
+    configured_skills = list(definition.skills)
+    if not configured_skills:
+        return []
+    if not settings.skillsbench_skill_matcher_enabled:
+        return configured_skills
+
+    skill_matcher = getattr(request.app.state, "skill_matcher", None)
+    if skill_matcher is None:
+        skill_registry = getattr(request.app.state, "skill_registry", None)
+        if skill_registry is None:
+            return configured_skills
+        from agent33.skills.matching import SkillMatcher
+
+        skill_matcher = SkillMatcher(
+            registry=skill_registry,
+            router=model_router,
+            model=settings.skillsbench_skill_matcher_model or settings.ollama_default_model,
+            top_k=settings.skillsbench_skill_matcher_top_k,
+            skip_llm_below=settings.skillsbench_skill_matcher_skip_llm_below,
+        )
+        request.app.state.skill_matcher = skill_matcher
+
+    allowed = set(configured_skills)
+    try:
+        match_result = await skill_matcher.match(
+            _build_skill_match_query(definition, inputs),
+        )
+    except Exception:
+        logger.warning("skill_match_failed agent=%s", definition.name, exc_info=True)
+        return configured_skills
+
+    matched = [skill.name for skill in match_result.skills if skill.name in allowed]
+    return matched or configured_skills
+
 _effort_router = AgentEffortRouter(
     enabled=settings.agent_effort_routing_enabled,
     default_effort=settings.agent_effort_default,
@@ -84,6 +136,49 @@ _effort_router = AgentEffortRouter(
     tenant_domain_policies=_parse_effort_policy(settings.agent_effort_policy_tenant_domain),
     cost_per_1k_tokens=settings.agent_effort_cost_per_1k_tokens,
 )
+_metrics = MetricsCollector()
+
+
+def set_metrics(collector: MetricsCollector) -> None:
+    """Swap the global metrics collector (called during app init)."""
+    global _metrics
+    _metrics = collector
+
+
+def _record_effort_routing_metrics(routing: dict[str, Any] | None) -> None:
+    if not routing:
+        return
+    effort = str(routing.get("effort") or "unknown")
+    source = str(routing.get("source") or routing.get("effort_source") or "unknown")
+    labels = {"effort": effort, "source": source}
+    _metrics.increment("effort_routing_decisions_total", labels=labels)
+
+    if effort == AgentEffort.HIGH.value:
+        _metrics.increment("effort_routing_high_effort_total")
+
+    estimated_token_budget = routing.get("estimated_token_budget")
+    if isinstance(estimated_token_budget, int | float):
+        _metrics.observe(
+            "effort_routing_estimated_token_budget",
+            float(estimated_token_budget),
+            labels=labels,
+        )
+        _metrics.observe(
+            "effort_routing_estimated_token_budget",
+            float(estimated_token_budget),
+        )
+
+    estimated_cost = routing.get("estimated_cost")
+    if isinstance(estimated_cost, int | float):
+        _metrics.observe(
+            "effort_routing_estimated_cost_usd",
+            float(estimated_cost),
+            labels=labels,
+        )
+        _metrics.observe(
+            "effort_routing_estimated_cost_usd",
+            float(estimated_cost),
+        )
 
 
 # -- dependency injection -------------------------------------------------
@@ -263,6 +358,12 @@ async def invoke_agent(
     token_payload = _get_token_payload(request)
     tenant_id = token_payload.tenant_id or ""
     domain = _resolve_domain_context(request, body.domain)
+    active_skills = await _resolve_active_skills(
+        request=request,
+        definition=definition,
+        model_router=model_router,
+        inputs=body.inputs,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -272,6 +373,7 @@ async def invoke_agent(
         effort=body.effort,
         effort_router=effort_router,
         skill_injector=skill_injector,
+        active_skills=active_skills,
         progressive_recall=progressive_recall,
         tenant_id=tenant_id,
         domain=domain,
@@ -283,6 +385,8 @@ async def invoke_agent(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    _record_effort_routing_metrics(result.routing_decision)
 
     return InvokeResponse(
         agent=name,
@@ -344,6 +448,12 @@ async def invoke_agent_iterative(
     token_payload = _get_token_payload(request)
     user_scopes = token_payload.scopes
     domain = _resolve_domain_context(request, body.domain)
+    active_skills = await _resolve_active_skills(
+        request=request,
+        definition=definition,
+        model_router=model_router,
+        inputs=body.inputs,
+    )
 
     # Extract tool_policies from definition governance
     tool_policies = definition.governance.tool_policies if definition.governance else {}
@@ -361,6 +471,16 @@ async def invoke_agent_iterative(
         enable_double_confirmation=body.enable_double_confirmation,
         loop_detection_threshold=body.loop_detection_threshold,
     )
+    context_manager = getattr(request.app.state, "context_manager", None)
+    if context_manager is None and settings.skillsbench_context_manager_enabled:
+        from agent33.agents.context_manager import ContextManager, budget_for_model
+
+        selected_model = body.model or settings.ollama_default_model
+        context_manager = ContextManager(
+            budget=budget_for_model(selected_model),
+            router=model_router,
+            summarize_model=selected_model,
+        )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -370,10 +490,12 @@ async def invoke_agent_iterative(
         effort=body.effort,
         effort_router=effort_router,
         skill_injector=skill_injector,
+        active_skills=active_skills,
         progressive_recall=progressive_recall,
         tool_registry=tool_registry,
         tool_governance=tool_governance,
         tool_context=tool_context,
+        context_manager=context_manager,
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
     )
@@ -384,6 +506,8 @@ async def invoke_agent_iterative(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    _record_effort_routing_metrics(result.routing_decision)
 
     return InvokeIterativeResponse(
         agent=name,
