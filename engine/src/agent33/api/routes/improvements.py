@@ -28,6 +28,8 @@ from agent33.improvement.models import (
 from agent33.improvement.persistence import (
     FileLearningSignalStore,
     InMemoryLearningSignalStore,
+    SQLiteLearningSignalStore,
+    migrate_file_learning_state_to_db,
 )
 from agent33.improvement.service import ImprovementService
 
@@ -38,7 +40,20 @@ def _build_improvement_service() -> ImprovementService:
     backend = settings.improvement_learning_persistence_backend.strip().lower()
     if backend == "file":
         store = FileLearningSignalStore(
-            path=str(Path(settings.improvement_learning_persistence_path))
+            path=str(Path(settings.improvement_learning_persistence_path)),
+            on_corruption=settings.improvement_learning_file_corruption_behavior,
+        )
+    elif backend in {"db", "sqlite"}:
+        if settings.improvement_learning_persistence_migrate_on_start:
+            migrate_file_learning_state_to_db(
+                file_path=str(Path(settings.improvement_learning_persistence_path)),
+                db_path=str(Path(settings.improvement_learning_persistence_db_path)),
+                on_file_corruption=(
+                    settings.improvement_learning_file_corruption_behavior
+                ),
+            )
+        store = SQLiteLearningSignalStore(
+            path=str(Path(settings.improvement_learning_persistence_db_path))
         )
     else:
         store = InMemoryLearningSignalStore()
