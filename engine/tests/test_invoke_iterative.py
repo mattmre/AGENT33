@@ -8,6 +8,7 @@ Covers:
   prompt injection rejection)
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -544,6 +545,64 @@ class TestInvokeIterativeRuntime:
         call_kwargs = router.complete.call_args[1]
         assert call_kwargs["model"] == "gpt-4o"
         assert call_kwargs["temperature"] == 0.3
+
+    async def test_reasoning_completed_returns_reasoning_output_path(self) -> None:
+        """Reasoning completion should return reasoning output directly."""
+        definition = _make_definition()
+        registry = _make_registry()
+        router = _make_router()
+        reasoning_protocol = MagicMock()
+        reasoning_protocol.run = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output="reasoned answer",
+                total_steps=4,
+                termination_reason="completed",
+            )
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=router,
+            tool_registry=registry,
+            reasoning_protocol=reasoning_protocol,
+        )
+
+        result = await runtime.invoke_iterative({"task": "reason this"})
+
+        assert result.output == {"response": "reasoned answer"}
+        assert result.raw_response == "reasoned answer"
+        assert result.termination_reason == "completed"
+        assert result.iterations == 4
+        assert router.complete.await_count == 0
+
+    async def test_reasoning_degraded_dispatch_failure_falls_back_to_tool_loop(self) -> None:
+        """Degraded dispatch failure in reasoning should fall back to tool loop."""
+        definition = _make_definition()
+        registry = _make_registry()
+        router = _make_router(_text_response('{"result": "tool loop completion"}'))
+        reasoning_protocol = MagicMock()
+        reasoning_protocol.run = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output="degraded output",
+                total_steps=1,
+                termination_reason="degraded_phase_dispatch_failure",
+            )
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=router,
+            tool_registry=registry,
+            reasoning_protocol=reasoning_protocol,
+        )
+
+        result = await runtime.invoke_iterative(
+            {"task": "recover from degraded reasoning"},
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        assert result.output == {"result": "tool loop completion"}
+        assert result.termination_reason == "completed"
+        assert result.iterations == 1
+        reasoning_protocol.run.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

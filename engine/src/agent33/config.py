@@ -111,6 +111,14 @@ class Settings(BaseSettings):
 
     # Agent definitions
     agent_definitions_dir: str = "agent-definitions"
+    agent_effort_routing_enabled: bool = False
+    agent_effort_default: str = "medium"
+    agent_effort_low_model: str = ""
+    agent_effort_medium_model: str = ""
+    agent_effort_high_model: str = ""
+    agent_effort_low_token_multiplier: float = 1.0
+    agent_effort_medium_token_multiplier: float = 1.0
+    agent_effort_high_token_multiplier: float = 1.0
 
     # Skills
     skill_definitions_dir: str = "skills"
@@ -140,6 +148,13 @@ class Settings(BaseSettings):
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
+
+    # Continuous improvement learning signals (Phase 31)
+    improvement_learning_enabled: bool = False
+    improvement_learning_summary_default_limit: int = 50
+    improvement_learning_auto_intake_enabled: bool = False
+    improvement_learning_auto_intake_min_severity: str = "high"
+    improvement_learning_auto_intake_max_items: int = 3
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
