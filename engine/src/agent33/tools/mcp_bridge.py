@@ -15,6 +15,15 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, Field
 
+from agent33.config import settings
+from agent33.connectors.circuit_breaker import CircuitBreaker
+from agent33.connectors.executor import ConnectorExecutor
+from agent33.connectors.governance import BlocklistConnectorPolicy
+from agent33.connectors.middleware import (
+    CircuitBreakerMiddleware,
+    GovernanceMiddleware,
+)
+from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.schema import validate_params
 
@@ -30,6 +39,10 @@ _BLOCKED_NETWORKS = (
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
 )
+
+
+def _parse_csv(value: str) -> frozenset[str]:
+    return frozenset(item.strip() for item in value.split(",") if item.strip())
 
 
 def _validate_mcp_url(url: str) -> str:
@@ -82,6 +95,7 @@ class MCPServerConnection:
         name: str,
         url: str,
         timeout: float = 30.0,
+        boundary_executor: ConnectorExecutor | None = None,
     ) -> None:
         self._name = name
         self._url = _validate_mcp_url(url)
@@ -89,6 +103,10 @@ class MCPServerConnection:
         self._tools: list[MCPToolSpec] = []
         self._connected = False
         self._client: httpx.AsyncClient | None = None
+        if boundary_executor is not None:
+            self._boundary_executor = boundary_executor
+        else:
+            self._boundary_executor = self._build_boundary_executor()
 
     @property
     def name(self) -> str:
@@ -172,6 +190,29 @@ class MCPServerConnection:
 
     async def _rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         """Send a JSON-RPC-style POST to the MCP server."""
+        if self._boundary_executor is None:
+            return await self._perform_rpc(method=method, params=params)
+        request = ConnectorRequest(
+            connector=f"mcp:{self._name}",
+            operation=method,
+            payload={"params": params},
+            metadata={"url": self._url},
+        )
+        result = await self._boundary_executor.execute(
+            request,
+            self._execute_boundary_rpc,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError(f"MCP RPC returned non-object JSON from {self._name}")
+        return result
+
+    async def _execute_boundary_rpc(self, request: ConnectorRequest) -> dict[str, Any]:
+        params = request.payload.get("params")
+        if not isinstance(params, dict):
+            raise RuntimeError("Connector request payload missing 'params' object")
+        return await self._perform_rpc(method=request.operation, params=params)
+
+    async def _perform_rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self._timeout)
 
@@ -192,10 +233,43 @@ class MCPServerConnection:
 
         if "error" in body:
             error = body["error"]
-            msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+            msg = (
+                error.get("message", str(error))
+                if isinstance(error, dict)
+                else str(error)
+            )
             raise RuntimeError(f"MCP RPC error from {self._name}: {msg}")
 
         return body.get("result", body)
+
+    def _build_boundary_executor(self) -> ConnectorExecutor | None:
+        if not settings.connector_boundary_enabled:
+            return None
+        middlewares = []
+        policy = BlocklistConnectorPolicy(
+            blocked_connectors=_parse_csv(
+                settings.connector_governance_blocked_connectors
+            ),
+            blocked_operations=_parse_csv(
+                settings.connector_governance_blocked_operations
+            ),
+        )
+        middlewares.append(GovernanceMiddleware(policy))
+        if settings.connector_circuit_breaker_enabled:
+            middlewares.append(
+                CircuitBreakerMiddleware(
+                    CircuitBreaker(
+                        failure_threshold=settings.connector_circuit_failure_threshold,
+                        recovery_timeout_seconds=(
+                            settings.connector_circuit_recovery_seconds
+                        ),
+                        half_open_success_threshold=(
+                            settings.connector_circuit_half_open_successes
+                        ),
+                    )
+                )
+            )
+        return ConnectorExecutor(middlewares=middlewares)
 
 
 # ---------------------------------------------------------------------------
