@@ -1,12 +1,12 @@
 # Next Session Briefing
 
-Last updated: 2026-02-24T22:30Z
+Last updated: 2026-02-24T23:59Z
 
 ## Current State
 
 - **Branch status**: Priority rollout completed across PR-1/PR-2/PR-3 slices (Phase 32 adoption, persistence hardening, observability integration) with green targeted regression gates.
-- **Latest session**: Session 40 (`docs/sessions/session-40-2026-02-24.md`)
-- **Prior milestone context**: Session 39 (`docs/sessions/session-39-2026-02-24.md`)
+- **Latest session**: Session 41 (`docs/sessions/session-41-2026-02-24.md`)
+- **Prior milestone context**: Session 40 (`docs/sessions/session-40-2026-02-24.md`)
 
 ## What Was Completed (Session 40)
 
@@ -44,8 +44,14 @@ Last updated: 2026-02-24T22:30Z
 - PR-3 smoke: observability set (`test_phase30_effort_routing + test_integration_wiring`) + phase30 routing suite + baseline targeted set.
 
 ### Priority 3: Operational Follow-Through
-- Decide whether effort telemetry needs a durable exporter beyond in-memory dashboard metrics.
-- Continue connector inventory for any remaining non-boundary outbound network surfaces.
+- PR-4 telemetry exporter implementation is now available for review on branch `feat/phase33-effort-telemetry-exporter` (PR #70).
+- Connector inventory continuation for remaining non-boundary outbound surfaces is now documented in this PR:
+  - `docs/research/connector-inventory-non-boundary.md`
+  - `docs/research/effort-telemetry-exporter-decision.md`
+
+### Priority 4: Post-Review Execution (PR-4)
+- Review PR #70 and validate merge readiness for telemetry exporter follow-through.
+- Re-run telemetry slice validation (`test_effort_telemetry_exporter`, `test_phase30_effort_routing`) as part of merge gate confirmation.
 
 ## Validation Snapshot (Session 40)
 
@@ -79,5 +85,7 @@ python -m pytest tests/test_phase30_effort_routing.py tests/test_phase31_learnin
 | Workflow bridge observability wiring | `engine/src/agent33/main.py` |
 | Learning persistence hardening | `engine/src/agent33/improvement/persistence.py` |
 | Learning signal API wiring | `engine/src/agent33/api/routes/improvements.py` |
+| Telemetry exporter decision record | `docs/research/effort-telemetry-exporter-decision.md` |
+| Connector inventory continuation record | `docs/research/connector-inventory-non-boundary.md` |
 | Core priority regression suites | `engine/tests/{test_phase30_effort_routing.py,test_phase31_learning_signals.py,test_phase32_connector_boundary.py}` |
-| Session 40 log | `docs/sessions/session-40-2026-02-24.md` |
+| Session 41 log | `docs/sessions/session-41-2026-02-24.md` |
