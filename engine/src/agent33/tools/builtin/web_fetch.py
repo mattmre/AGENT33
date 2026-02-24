@@ -7,6 +7,11 @@ from urllib.parse import urlparse
 
 import httpx
 
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext, ToolResult
 
 _DEFAULT_TIMEOUT = 30
@@ -63,14 +68,32 @@ class WebFetchTool:
         headers: dict[str, str] = params.get("headers", {})
         body: str | None = params.get("body")
         timeout: int = params.get("timeout", _DEFAULT_TIMEOUT)
+        policy_pack: str | None = params.get("policy_pack")
 
-        try:
+        async def _perform_fetch(_request: ConnectorRequest) -> httpx.Response:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 if method == "GET":
-                    resp = await client.get(url, headers=headers)
-                else:
-                    resp = await client.post(url, headers=headers, content=body)
+                    return await client.get(url, headers=headers)
+                return await client.post(url, headers=headers, content=body)
 
+        boundary_executor = build_connector_boundary_executor(
+            default_timeout_seconds=float(timeout),
+            retry_attempts=1,
+            policy_pack=policy_pack,
+        )
+        try:
+            if boundary_executor is None:
+                resp = await _perform_fetch(
+                    ConnectorRequest(connector="tool:web_fetch", operation=method)
+                )
+            else:
+                req = ConnectorRequest(
+                    connector="tool:web_fetch",
+                    operation=method,
+                    payload={"url": url, "headers": headers, "body": body},
+                    metadata={"timeout_seconds": float(timeout)},
+                )
+                resp = await boundary_executor.execute(req, _perform_fetch)
             resp.raise_for_status()
 
             content_length = len(resp.content)
@@ -82,11 +105,16 @@ class WebFetchTool:
 
             return ToolResult.ok(resp.text)
 
-        except httpx.TimeoutException:
-            return ToolResult.fail(f"Request timed out after {timeout}s")
-        except httpx.HTTPStatusError as exc:
-            return ToolResult.fail(
-                f"HTTP {exc.response.status_code}: {exc.response.text[:500]}"
-            )
-        except httpx.RequestError as exc:
+        except Exception as exc:
+            if boundary_executor is not None:
+                mapped = map_connector_exception(exc, "tool:web_fetch", method)
+                return ToolResult.fail(str(mapped))
+            if isinstance(exc, httpx.TimeoutException):
+                return ToolResult.fail(f"Request timed out after {timeout}s")
+            if isinstance(exc, httpx.HTTPStatusError):
+                return ToolResult.fail(
+                    f"HTTP {exc.response.status_code}: {exc.response.text[:500]}"
+                )
+            if isinstance(exc, httpx.RequestError):
+                return ToolResult.fail(f"Request error: {exc}")
             return ToolResult.fail(f"Request error: {exc}")
