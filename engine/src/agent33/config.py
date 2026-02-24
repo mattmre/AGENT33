@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -189,7 +189,23 @@ class Settings(BaseSettings):
         "var/improvement_learning_signals.sqlite3"
     )
     improvement_learning_persistence_migrate_on_start: bool = False
+    improvement_learning_persistence_migration_backup_on_start: bool = False
+    improvement_learning_persistence_migration_backup_path: str = (
+        "var/improvement_learning_signals.backup.json"
+    )
     improvement_learning_file_corruption_behavior: str = "reset"  # reset | raise
+    improvement_learning_db_corruption_behavior: str = "reset"  # reset | raise
+
+    @field_validator(
+        "improvement_learning_file_corruption_behavior",
+        "improvement_learning_db_corruption_behavior",
+    )
+    @classmethod
+    def _validate_learning_corruption_behavior(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"reset", "raise"}:
+            raise ValueError("corruption behavior must be one of: reset, raise")
+        return normalized
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
