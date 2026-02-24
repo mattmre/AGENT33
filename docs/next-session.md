@@ -40,8 +40,16 @@ Last updated: 2026-02-24T23:00Z
 - Add alerting thresholds for high-cost/high-effort routing patterns.
 
 ### Priority 4: PR Review and Merge Flow
-- Split and finalize PR review packets for PR-1/PR-2/PR-3 with validation snapshots.
-- Complete merge sequencing and post-merge regression smoke checks.
+- Use finalized review packets:
+  - `docs/review-packets/pr-1-phase32-adoption.md`
+  - `docs/review-packets/pr-2-persistence-hardening.md`
+  - `docs/review-packets/pr-3-observability-integration.md`
+  - `docs/review-packets/validation-snapshots.md`
+  - `docs/review-packets/merge-sequencing.md`
+- Execute post-merge smoke plan after each merge step:
+  - PR-1 merge smoke: connector tests (**11**) + connector regression group (**92**) + baseline targeted (**187**).
+  - PR-2 merge smoke: persistence tests (**14**) + baseline targeted (**187**).
+  - PR-3 merge smoke: observability set (**38**) + phase30 suite (**15**) + baseline targeted (**187**).
 
 ## Startup Checklist (Next Session)
 
