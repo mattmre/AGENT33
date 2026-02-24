@@ -114,12 +114,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Observability metrics + alerts -------------------------------------
     from agent33.observability.alerts import AlertManager
+    from agent33.observability.effort_telemetry import (
+        FileEffortTelemetryExporter,
+        NoopEffortTelemetryExporter,
+    )
     from agent33.observability.metrics import MetricsCollector
 
     metrics_collector = MetricsCollector()
     app.state.metrics_collector = metrics_collector
     agents.set_metrics(metrics_collector)
     dashboard.set_metrics(metrics_collector)
+
+    effort_telemetry_exporter = (
+        FileEffortTelemetryExporter(settings.observability_effort_export_path)
+        if settings.observability_effort_export_enabled
+        else NoopEffortTelemetryExporter()
+    )
+    app.state.effort_telemetry_exporter = effort_telemetry_exporter
+    agents.set_effort_telemetry_exporter(effort_telemetry_exporter)
 
     alert_manager = AlertManager(metrics_collector)
     if settings.observability_effort_alerts_enabled:
