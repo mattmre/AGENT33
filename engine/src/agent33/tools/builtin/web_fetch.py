@@ -68,10 +68,8 @@ class WebFetchTool:
         headers: dict[str, str] = params.get("headers", {})
         body: str | None = params.get("body")
         timeout: int = params.get("timeout", _DEFAULT_TIMEOUT)
-        policy_pack: str | None = params.get("policy_pack")
-
         async def _perform_fetch(_request: ConnectorRequest) -> httpx.Response:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 if method == "GET":
                     return await client.get(url, headers=headers)
                 return await client.post(url, headers=headers, content=body)
@@ -79,7 +77,6 @@ class WebFetchTool:
         boundary_executor = build_connector_boundary_executor(
             default_timeout_seconds=float(timeout),
             retry_attempts=1,
-            policy_pack=policy_pack,
         )
         try:
             if boundary_executor is None:
@@ -95,6 +92,8 @@ class WebFetchTool:
                 )
                 resp = await boundary_executor.execute(req, _perform_fetch)
             resp.raise_for_status()
+            if 300 <= resp.status_code < 400:
+                return ToolResult.fail("Redirect responses are blocked by policy")
 
             content_length = len(resp.content)
             if content_length > _MAX_RESPONSE_BYTES:

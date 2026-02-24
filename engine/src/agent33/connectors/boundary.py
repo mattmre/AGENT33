@@ -25,7 +25,14 @@ def _parse_csv(value: str) -> frozenset[str]:
 _POLICY_PACKS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "default": (frozenset(), frozenset()),
     "strict-web": (
-        frozenset({"tool:web_fetch", "workflow:http_request"}),
+        frozenset(
+            {
+                "tool:web_fetch",
+                "workflow:http_request",
+                "search:searxng",
+                "tool:reader",
+            }
+        ),
         frozenset(),
     ),
     "mcp-readonly": (

@@ -6,8 +6,8 @@ AGENT-33 connector boundaries now support policy-pack presets via `CONNECTOR_POL
 
 - `default` (default): no connector/operation blocks. Behavior matches legacy defaults.
 - `strict-web`: blocks outbound web connector surfaces:
-  - connectors: `tool:web_fetch`, `workflow:http_request`
-- `mcp-readonly`: prevents MCP mutation calls:
+  - connectors: `tool:web_fetch`, `workflow:http_request`, `search:searxng`, `tool:reader`
+- `mcp-readonly`: blocks MCP tool invocation calls (all `tools/call` operations, including read-only and mutation tools):
   - operations: `tools/call`
 
 ## How packs combine with explicit blocklists

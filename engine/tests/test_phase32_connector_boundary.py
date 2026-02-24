@@ -25,6 +25,8 @@ from agent33.connectors.middleware import (
 )
 from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext
+from agent33.tools.builtin.reader import ReaderTool
+from agent33.tools.builtin.search import SearchTool
 from agent33.tools.builtin.web_fetch import WebFetchTool
 from agent33.tools.mcp_bridge import MCPServerConnection
 from agent33.workflows.actions import http_request
@@ -59,6 +61,11 @@ class _FailingClient:
 
     async def aclose(self) -> None:
         return None
+
+
+class _NeverCalledMCPSession:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:  # noqa: ARG002
+        raise AssertionError("MCP session should not be called when governance denies")
 
 
 def test_policy_pack_resolution_defaults_for_unknown() -> None:
@@ -264,5 +271,59 @@ async def test_web_fetch_boundary_policy_pack_blocks_connector(
     context = ToolContext(domain_allowlist=["example.com"])
 
     result = await tool.execute({"url": "https://example.com", "method": "GET"}, context)
+    assert result.success is False
+    assert "Connector governance blocked" in result.error
+
+
+@pytest.mark.asyncio
+async def test_search_boundary_policy_pack_blocks_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "strict-web")
+
+    tool = SearchTool()
+    result = await tool.execute({"query": "agent33"}, ToolContext())
+    assert result.success is False
+    assert "Connector governance blocked" in result.error
+
+
+@pytest.mark.asyncio
+async def test_reader_boundary_policy_pack_blocks_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "strict-web")
+
+    tool = ReaderTool()
+    context = ToolContext(domain_allowlist=["example.com"])
+    result = await tool.execute({"url": "https://example.com/page"}, context)
+    assert result.success is False
+    assert "Connector governance blocked" in result.error
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_manager_policy_pack_readonly_blocks_tools_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("mcp")
+    from agent33.tools.mcp_client import MCPClientManager, MCPToolAdapter
+
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "mcp-readonly")
+
+    manager = MCPClientManager()
+    session = _NeverCalledMCPSession()
+    with pytest.raises(RuntimeError, match="Connector governance blocked"):
+        await manager.call_tool(session, "scan", {"target": "."})
+
+    adapter = MCPToolAdapter(
+        session=session,  # type: ignore[arg-type]
+        name="scan",
+        description="scan tool",
+        input_schema={},
+        manager=manager,
+    )
+    result = await adapter.execute({"target": "."}, ToolContext())
     assert result.success is False
     assert "Connector governance blocked" in result.error

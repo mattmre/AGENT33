@@ -44,8 +44,6 @@ class SearchTool:
 
         num_results: int = params.get("num_results", 10)
         categories: str = params.get("categories", "general")
-        policy_pack: str | None = params.get("policy_pack")
-
         url = f"{settings.searxng_url}/search"
         request_params = {
             "q": query,
@@ -61,7 +59,6 @@ class SearchTool:
         boundary_executor = build_connector_boundary_executor(
             default_timeout_seconds=float(_DEFAULT_TIMEOUT),
             retry_attempts=1,
-            policy_pack=policy_pack,
         )
         try:
             if boundary_executor is None:
