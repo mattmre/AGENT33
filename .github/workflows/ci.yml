@@ -7,6 +7,69 @@ on:
     branches: [main]
 
 jobs:
+  merge-sequencing-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Enforce sequence label ordering
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = (context.payload.pull_request.labels || []).map((label) => label.name);
+            const sequenceLabels = labels.filter((name) => /^sequence:[1-3]$/.test(name));
+
+            if (sequenceLabels.length === 0) {
+              core.notice("No sequence label found on PR. Skipping merge sequencing guard.");
+              return;
+            }
+
+            if (sequenceLabels.length > 1) {
+              core.setFailed(`Expected a single sequence label, found: ${sequenceLabels.join(", ")}`);
+              return;
+            }
+
+            const currentLabel = sequenceLabels[0];
+            const currentSequence = Number(currentLabel.split(":")[1]);
+
+            if (currentSequence === 1) {
+              core.info("PR is sequence:1. No predecessor required.");
+              return;
+            }
+
+            const predecessorLabel = `sequence:${currentSequence - 1}`;
+            const baseBranch = context.payload.pull_request.base.ref;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const closedPulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "closed",
+              base: baseBranch,
+              per_page: 100,
+            });
+
+            const predecessor = closedPulls.find((pr) => {
+              const prLabels = (pr.labels || []).map((label) => label.name);
+              return pr.merged_at && prLabels.includes(predecessorLabel);
+            });
+
+            if (!predecessor) {
+              core.setFailed(
+                `Missing merged predecessor on base branch '${baseBranch}'. ` +
+                `PRs labeled '${currentLabel}' require a merged '${predecessorLabel}'.`
+              );
+              return;
+            }
+
+            core.info(
+              `Merge sequencing check passed. Found predecessor #${predecessor.number} ` +
+              `(${predecessorLabel}) merged into '${baseBranch}'.`
+            );
+
   lint:
     runs-on: ubuntu-latest
     defaults:
