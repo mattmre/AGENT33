@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
@@ -225,6 +226,7 @@ class AgentRuntime:
         reasoning_protocol: Any | None = None,
         effort: AgentEffort | str | None = None,
         effort_router: AgentEffortRouter | None = None,
+        routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
         tenant_id: str = "",
         domain: str = "",
     ) -> None:
@@ -235,6 +237,7 @@ class AgentRuntime:
         self._temperature = temperature
         self._effort = effort
         self._effort_router = effort_router
+        self._routing_metrics_emitter = routing_metrics_emitter
         self._tenant_id = tenant_id
         self._domain = domain
         self._routing_decision_metadata: dict[str, Any] | None = None
@@ -299,6 +302,14 @@ class AgentRuntime:
             decision.max_tokens,
         )
         return decision.model, decision.max_tokens
+
+    def _emit_routing_metrics(self) -> None:
+        if self._routing_metrics_emitter is None:
+            return
+        try:
+            self._routing_metrics_emitter(self._routing_decision_metadata)
+        except Exception:
+            logger.debug("failed to emit routing metrics", exc_info=True)
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -383,6 +394,7 @@ class AgentRuntime:
             model=response.model,
             routing_decision=self._routing_decision_metadata,
         )
+        self._emit_routing_metrics()
 
         # Record observation if capture is available
         if self._observation_capture is not None:
@@ -517,6 +529,7 @@ class AgentRuntime:
             )
 
             if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
+                self._emit_routing_metrics()
                 return IterativeAgentResult(
                     output={"response": reasoning_result.final_output}
                     if isinstance(reasoning_result.final_output, str)
@@ -607,6 +620,7 @@ class AgentRuntime:
             termination_reason=loop_result.termination_reason,
             routing_decision=self._routing_decision_metadata,
         )
+        self._emit_routing_metrics()
 
         # Record observation for completed iterative invocation
         if self._observation_capture is not None:

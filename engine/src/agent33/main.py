@@ -308,6 +308,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry=agent_registry,
         skill_injector=skill_injector,
         progressive_recall=progressive_recall,
+        effort_router=getattr(agents, "_effort_router", None),
+        routing_metrics_emitter=getattr(agents, "_record_effort_routing_metrics", None),
     )
     logger.info("agent_workflow_bridge_registered")
 
@@ -400,6 +402,8 @@ def _register_agent_runtime_bridge(
     registry: Any = None,
     skill_injector: Any = None,
     progressive_recall: Any = None,
+    effort_router: Any = None,
+    routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
@@ -418,7 +422,7 @@ def _register_agent_runtime_bridge(
 
     async def _bridge(inputs: dict) -> dict:
         agent_name = inputs.pop("agent_name", "workflow-agent")
-        model = inputs.pop("model", settings.ollama_default_model)
+        model = inputs.pop("model", None)
 
         # Try to look up actual registered definition first
         definition = None
@@ -448,6 +452,8 @@ def _register_agent_runtime_bridge(
             model=model,
             skill_injector=skill_injector,
             progressive_recall=progressive_recall,
+            effort_router=effort_router,
+            routing_metrics_emitter=routing_metrics_emitter,
         )
         result = await runtime.invoke(inputs)
         return result.output
