@@ -1,5 +1,6 @@
 """REST endpoints for continuous improvement, research intake, and lessons learned."""
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -24,11 +25,27 @@ from agent33.improvement.models import (
     ResearchIntake,
     RoadmapRefresh,
 )
+from agent33.improvement.persistence import (
+    FileLearningSignalStore,
+    InMemoryLearningSignalStore,
+)
 from agent33.improvement.service import ImprovementService
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 
-_service = ImprovementService()
+
+def _build_improvement_service() -> ImprovementService:
+    backend = settings.improvement_learning_persistence_backend.strip().lower()
+    if backend == "file":
+        store = FileLearningSignalStore(
+            path=str(Path(settings.improvement_learning_persistence_path))
+        )
+    else:
+        store = InMemoryLearningSignalStore()
+    return ImprovementService(learning_store=store)
+
+
+_service = _build_improvement_service()
 
 
 def get_improvement_service() -> ImprovementService:
@@ -39,7 +56,7 @@ def get_improvement_service() -> ImprovementService:
 def _reset_service() -> None:
     """Reset singleton for testing."""
     global _service  # noqa: PLW0603
-    _service = ImprovementService()
+    _service = _build_improvement_service()
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +69,7 @@ class SubmitIntakeRequest(BaseModel):
     summary: str = ""
     source: str = ""
     submitted_by: str = ""
+    tenant_id: str = "default"
     research_type: str = "external"
     category: str = ""
     urgency: str = "medium"
@@ -122,6 +140,7 @@ class RecordLearningSignalRequest(BaseModel):
     summary: str
     details: str = ""
     source: str = ""
+    tenant_id: str = "default"
     context: dict[str, str] = Field(default_factory=dict)
 
 
@@ -141,6 +160,7 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
     try:
         intake = ResearchIntake(
             submitted_by=req.submitted_by,
+            tenant_id=req.tenant_id,
             classification=IntakeClassification(
                 research_type=req.research_type,
                 category=req.category,
@@ -167,6 +187,7 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
 def list_intakes(
     status: str | None = None,
     research_type: str | None = None,
+    tenant_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """List research intakes with optional filters."""
     intake_status = None
@@ -177,7 +198,9 @@ def list_intakes(
             raise HTTPException(
                 status_code=400, detail=f"Invalid status: {status}"
             ) from None
-    intakes = _service.list_intakes(status=intake_status, research_type=research_type)
+    intakes = _service.list_intakes(
+        status=intake_status, research_type=research_type, tenant_id=tenant_id
+    )
     return [i.model_dump(mode="json") for i in intakes]
 
 
@@ -479,6 +502,7 @@ def record_learning_signal(req: RecordLearningSignalRequest) -> dict[str, Any]:
         signal = LearningSignal(
             signal_type=LearningSignalType(signal_type),
             severity=LearningSignalSeverity(req.severity),
+            tenant_id=req.tenant_id,
             summary=req.summary,
             details=req.details,
             source=req.source,
@@ -494,6 +518,7 @@ def list_learning_signals(
     signal_type: str | None = None,
     signal_type_alias: str | None = Query(default=None, alias="type"),
     severity: str | None = None,
+    tenant_id: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """List learning signals with optional filters."""
@@ -519,14 +544,20 @@ def list_learning_signals(
     return [
         signal.model_dump(mode="json")
         for signal in _service.list_learning_signals(
-            signal_type=parsed_type, severity=parsed_severity, limit=limit
+            signal_type=parsed_type,
+            severity=parsed_severity,
+            tenant_id=tenant_id,
+            limit=limit,
         )
     ]
 
 
 @router.get("/learning/summary")
 def get_learning_summary(
-    limit: int | None = None, generate_intakes: bool = False
+    limit: int | None = None,
+    generate_intakes: bool = False,
+    tenant_id: str | None = None,
+    window_days: int | None = None,
 ) -> dict[str, Any]:
     """Get learning summary and optionally generate intake records."""
     _ensure_learning_enabled()
@@ -535,7 +566,9 @@ def get_learning_summary(
         if limit is None
         else limit
     )
-    summary = _service.summarize_learning_signals(limit=effective_limit)
+    summary = _service.summarize_learning_signals(
+        limit=effective_limit, tenant_id=tenant_id, window_days=window_days
+    )
 
     generated_intakes = []
     if generate_intakes and settings.improvement_learning_auto_intake_enabled:
@@ -545,6 +578,7 @@ def get_learning_summary(
         generated_intakes = _service.generate_intakes_from_learning_signals(
             min_severity=min_severity,
             max_items=settings.improvement_learning_auto_intake_max_items,
+            tenant_id=tenant_id,
         )
 
     return {

@@ -126,10 +126,15 @@ class LearningSignal(BaseModel):
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     signal_type: LearningSignalType = LearningSignalType.FEEDBACK
     severity: LearningSignalSeverity = LearningSignalSeverity.MEDIUM
+    tenant_id: str = "default"
     summary: str
     details: str = ""
     source: str = ""
     context: dict[str, str] = Field(default_factory=dict)
+    quality_score: float = 0.0
+    quality_label: str = "low"
+    quality_reasons: list[str] = Field(default_factory=list)
+    enrichment: dict[str, str] = Field(default_factory=dict)
     intake_generated: bool = False
     related_intake_id: str | None = None
 
@@ -140,7 +145,16 @@ class LearningSummary(BaseModel):
     total_signals: int = 0
     counts_by_type: dict[str, int] = Field(default_factory=dict)
     counts_by_severity: dict[str, int] = Field(default_factory=dict)
+    counts_by_tenant: dict[str, int] = Field(default_factory=dict)
     latest_recorded_at: datetime | None = None
+    average_quality_score: float = 0.0
+    high_quality_signals: int = 0
+    tenant_id: str | None = None
+    window_days: int | None = None
+    window_start_at: datetime | None = None
+    previous_window_total: int | None = None
+    trend_delta: int | None = None
+    trend_direction: str = "stable"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -208,6 +222,10 @@ class ResearchIntake(BaseModel):
     intake_id: str = Field(default_factory=lambda: _new_id("RI"))
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     submitted_by: str = ""
+    tenant_id: str = "default"
+    generated_from_signal_id: str | None = None
+    automated_quality_score: float | None = None
+    automated_quality_label: str | None = None
 
     classification: IntakeClassification = Field(
         default_factory=IntakeClassification,
