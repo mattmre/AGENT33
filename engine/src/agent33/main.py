@@ -112,6 +112,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("agent_definitions_dir_not_found", path=str(defs_dir))
     app.state.agent_registry = agent_registry
 
+    # -- Observability metrics + alerts -------------------------------------
+    from agent33.observability.alerts import AlertManager
+    from agent33.observability.metrics import MetricsCollector
+
+    metrics_collector = MetricsCollector()
+    app.state.metrics_collector = metrics_collector
+    agents.set_metrics(metrics_collector)
+    dashboard.set_metrics(metrics_collector)
+
+    alert_manager = AlertManager(metrics_collector)
+    if settings.observability_effort_alerts_enabled:
+        alert_manager.add_rule(
+            name="high_effort_routing_volume",
+            metric="effort_routing_high_effort_total",
+            threshold=float(
+                settings.observability_effort_alert_high_effort_count_threshold
+            ),
+            comparator="gt",
+        )
+        alert_manager.add_rule(
+            name="high_effort_cost_spike",
+            metric="effort_routing_estimated_cost_usd",
+            threshold=settings.observability_effort_alert_high_cost_usd_threshold,
+            comparator="gt",
+            statistic="max",
+        )
+        alert_manager.add_rule(
+            name="high_effort_token_budget_spike",
+            metric="effort_routing_estimated_token_budget",
+            threshold=float(
+                settings.observability_effort_alert_high_token_budget_threshold
+            ),
+            comparator="gt",
+            statistic="max",
+        )
+    app.state.alert_manager = alert_manager
+    dashboard.set_alert_manager(alert_manager)
+
     # -- Agent runtime / workflow integration ------------------------------
     from agent33.llm.router import ModelRouter
     from agent33.workflows.actions.invoke_agent import (

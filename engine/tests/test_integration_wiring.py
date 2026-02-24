@@ -149,6 +149,14 @@ class TestLifespanState:
         app, _, _ = patched_app
         assert hasattr(app.state, "redis")
 
+    def test_state_has_metrics_collector(self, patched_app):
+        app, _, _ = patched_app
+        assert hasattr(app.state, "metrics_collector")
+
+    def test_state_has_alert_manager(self, patched_app):
+        app, _, _ = patched_app
+        assert hasattr(app.state, "alert_manager")
+
 
 class TestEmbeddingSubsystem:
     """Verify embedding provider, cache, and RAG wiring."""
@@ -288,8 +296,72 @@ class TestAgentInvokeSubsystemPassthrough:
             call_kwargs = mock_runtime_cls.call_args.kwargs
             assert "skill_injector" in call_kwargs
             assert "progressive_recall" in call_kwargs
+            assert "active_skills" in call_kwargs
             assert call_kwargs["skill_injector"] is app.state.skill_injector
             assert call_kwargs["progressive_recall"] is app.state.progressive_recall
+            assert call_kwargs["active_skills"] == []
+
+    def test_invoke_route_uses_skill_matcher_when_feature_flag_enabled(self, patched_app):
+        """When enabled, skill matcher output should drive runtime active_skills."""
+        from unittest.mock import patch as mock_patch
+
+        from agent33.agents.definition import (
+            AgentConstraints,
+            AgentDefinition,
+            AgentParameter,
+            AgentRole,
+        )
+        from agent33.agents.runtime import AgentResult
+        from agent33.config import settings
+
+        app, client, _ = patched_app
+        dummy_def = AgentDefinition(
+            name="skill-agent",
+            version="1.0.0",
+            role=AgentRole.WORKER,
+            description="test matcher",
+            skills=["skill-a", "skill-b"],
+            inputs={"prompt": AgentParameter(type="string", description="input")},
+            outputs={"result": AgentParameter(type="string", description="output")},
+            constraints=AgentConstraints(),
+        )
+        app.state.agent_registry.register(dummy_def)
+
+        mock_result = AgentResult(
+            output={"result": "ok"},
+            raw_response='{"result":"ok"}',
+            tokens_used=10,
+            model="test",
+        )
+        skill_ok = type("MatchedSkill", (), {"name": "skill-b"})()
+        skill_other = type("MatchedSkill", (), {"name": "not-allowed"})()
+        mock_matcher = MagicMock()
+        mock_matcher.match = AsyncMock(return_value=MagicMock(
+            skills=[skill_ok, skill_other]
+        ))
+        app.state.skill_matcher = mock_matcher
+
+        original = settings.skillsbench_skill_matcher_enabled
+        settings.skillsbench_skill_matcher_enabled = True
+        try:
+            with mock_patch(
+                "agent33.api.routes.agents.AgentRuntime", autospec=True,
+            ) as mock_runtime_cls:
+                mock_instance = MagicMock()
+                mock_instance.invoke = AsyncMock(return_value=mock_result)
+                mock_runtime_cls.return_value = mock_instance
+
+                resp = client.post(
+                    "/v1/agents/skill-agent/invoke",
+                    json={"inputs": {"prompt": "hello"}},
+                    headers={"Authorization": "Bearer " + _make_test_token()},
+                )
+                assert resp.status_code == 200
+                call_kwargs = mock_runtime_cls.call_args.kwargs
+                assert call_kwargs["active_skills"] == ["skill-b"]
+                mock_matcher.match.assert_awaited_once()
+        finally:
+            settings.skillsbench_skill_matcher_enabled = original
 
 
 def _make_test_token() -> str:
