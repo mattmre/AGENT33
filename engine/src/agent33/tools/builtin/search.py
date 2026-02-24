@@ -7,6 +7,11 @@ from typing import Any
 import httpx
 
 from agent33.config import settings
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext, ToolResult
 
 _DEFAULT_TIMEOUT = 15
@@ -39,6 +44,7 @@ class SearchTool:
 
         num_results: int = params.get("num_results", 10)
         categories: str = params.get("categories", "general")
+        policy_pack: str | None = params.get("policy_pack")
 
         url = f"{settings.searxng_url}/search"
         request_params = {
@@ -48,22 +54,46 @@ class SearchTool:
             "categories": categories,
         }
 
-        try:
+        async def _perform_search(_request: ConnectorRequest) -> httpx.Response:
             async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-                resp = await client.get(url, params=request_params)
+                return await client.get(url, params=request_params)
+
+        boundary_executor = build_connector_boundary_executor(
+            default_timeout_seconds=float(_DEFAULT_TIMEOUT),
+            retry_attempts=1,
+            policy_pack=policy_pack,
+        )
+        try:
+            if boundary_executor is None:
+                resp = await _perform_search(
+                    ConnectorRequest(connector="search:searxng", operation="GET")
+                )
+            else:
+                req = ConnectorRequest(
+                    connector="search:searxng",
+                    operation="GET",
+                    payload={"url": url, "params": request_params},
+                    metadata={"timeout_seconds": float(_DEFAULT_TIMEOUT)},
+                )
+                resp = await boundary_executor.execute(req, _perform_search)
             resp.raise_for_status()
-        except httpx.ConnectError:
-            return ToolResult.fail(
-                f"Could not connect to SearXNG at {settings.searxng_url}."
-            )
-        except httpx.TimeoutException:
-            return ToolResult.fail("SearXNG request timed out.")
-        except httpx.HTTPStatusError as exc:
-            return ToolResult.fail(
-                f"SearXNG returned HTTP {exc.response.status_code}: "
-                f"{exc.response.text[:500]}"
-            )
-        except httpx.RequestError as exc:
+        except Exception as exc:
+            if boundary_executor is not None:
+                mapped = map_connector_exception(exc, "search:searxng", "GET")
+                return ToolResult.fail(str(mapped))
+            if isinstance(exc, httpx.ConnectError):
+                return ToolResult.fail(
+                    f"Could not connect to SearXNG at {settings.searxng_url}."
+                )
+            if isinstance(exc, httpx.TimeoutException):
+                return ToolResult.fail("SearXNG request timed out.")
+            if isinstance(exc, httpx.HTTPStatusError):
+                return ToolResult.fail(
+                    f"SearXNG returned HTTP {exc.response.status_code}: "
+                    f"{exc.response.text[:500]}"
+                )
+            if isinstance(exc, httpx.RequestError):
+                return ToolResult.fail(f"SearXNG request error: {exc}")
             return ToolResult.fail(f"SearXNG request error: {exc}")
 
         data = resp.json()

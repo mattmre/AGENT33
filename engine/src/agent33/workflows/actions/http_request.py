@@ -9,6 +9,12 @@ from urllib.parse import urlparse
 import httpx
 import structlog
 
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
+
 logger = structlog.get_logger()
 
 # Private/reserved IP ranges that should be blocked to prevent SSRF.
@@ -48,6 +54,7 @@ async def execute(
     timeout_seconds: int = 30,
     inputs: dict[str, Any] | None = None,
     dry_run: bool = False,
+    policy_pack: str | None = None,
 ) -> dict[str, Any]:
     """Make an HTTP request and return the response.
 
@@ -86,6 +93,52 @@ async def execute(
     if dry_run:
         return {"dry_run": True, "url": url, "method": method}
 
+    connector = "workflow:http_request"
+    operation = method.upper()
+
+    async def _do_request(_request: ConnectorRequest) -> dict[str, Any]:
+        return await _perform_request(
+            method=method,
+            url=url,
+            headers=headers,
+            body=body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    boundary_executor = build_connector_boundary_executor(
+        default_timeout_seconds=float(timeout_seconds),
+        retry_attempts=1,
+        policy_pack=policy_pack,
+    )
+    if boundary_executor is not None:
+        request = ConnectorRequest(
+            connector=connector,
+            operation=operation,
+            payload={"url": url, "headers": headers or {}, "body": body},
+            metadata={"timeout_seconds": float(timeout_seconds)},
+        )
+        try:
+            return await boundary_executor.execute(request, _do_request)
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
+
+    return await _perform_request(
+        method=method,
+        url=url,
+        headers=headers,
+        body=body,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+async def _perform_request(
+    *,
+    method: str,
+    url: str,
+    headers: dict[str, str] | None,
+    body: Any | None,
+    timeout_seconds: int,
+) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(
             timeout=timeout_seconds,
