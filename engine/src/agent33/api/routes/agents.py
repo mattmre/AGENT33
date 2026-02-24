@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,7 +23,7 @@ from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
 from agent33.security.injection import scan_inputs_recursive
-from agent33.security.permissions import require_scope
+from agent33.security.permissions import _get_token_payload, require_scope
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -42,6 +43,32 @@ if settings.openai_api_key.get_secret_value():
         _openai_kwargs["base_url"] = settings.openai_base_url
     _model_router.register("openai", OpenAIProvider(**_openai_kwargs))
 
+
+def _parse_effort_policy(raw: str) -> dict[str, str]:
+    if not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Effort policy config must be valid JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Effort policy config must be a JSON object")
+    parsed: dict[str, str] = {}
+    for key, value in data.items():
+        if isinstance(key, str) and isinstance(value, str):
+            parsed[key] = value
+    return parsed
+
+
+def _resolve_domain_context(request: Request, body_domain: str | None) -> str:
+    if body_domain and body_domain.strip():
+        return body_domain.strip().lower()
+    header_domain = request.headers.get("x-agent-domain", "")
+    if header_domain.strip():
+        return header_domain.strip().lower()
+    host = request.headers.get("host", "")
+    return host.split(":", 1)[0].strip().lower() if host else ""
+
 _effort_router = AgentEffortRouter(
     enabled=settings.agent_effort_routing_enabled,
     default_effort=settings.agent_effort_default,
@@ -51,6 +78,11 @@ _effort_router = AgentEffortRouter(
     low_token_multiplier=settings.agent_effort_low_token_multiplier,
     medium_token_multiplier=settings.agent_effort_medium_token_multiplier,
     high_token_multiplier=settings.agent_effort_high_token_multiplier,
+    heuristic_enabled=settings.agent_effort_heuristic_enabled,
+    tenant_policies=_parse_effort_policy(settings.agent_effort_policy_tenant),
+    domain_policies=_parse_effort_policy(settings.agent_effort_policy_domain),
+    tenant_domain_policies=_parse_effort_policy(settings.agent_effort_policy_tenant_domain),
+    cost_per_1k_tokens=settings.agent_effort_cost_per_1k_tokens,
 )
 
 
@@ -75,6 +107,7 @@ class InvokeRequest(BaseModel):
     model: str | None = None
     temperature: float = 0.7
     effort: AgentEffort | None = None
+    domain: str | None = None
 
 
 class InvokeResponse(BaseModel):
@@ -84,6 +117,7 @@ class InvokeResponse(BaseModel):
     output: dict[str, Any]
     tokens_used: int
     model: str
+    routing: dict[str, Any] | None = None
 
 
 class InvokeIterativeRequest(BaseModel):
@@ -93,6 +127,7 @@ class InvokeIterativeRequest(BaseModel):
     model: str | None = None
     temperature: float = 0.7
     effort: AgentEffort | None = None
+    domain: str | None = None
     max_iterations: int = 20
     max_tool_calls_per_iteration: int = 5
     enable_double_confirmation: bool = True
@@ -110,6 +145,7 @@ class InvokeIterativeResponse(BaseModel):
     tool_calls_made: int
     tools_used: list[str]
     termination_reason: str
+    routing: dict[str, Any] | None = None
 
 
 # -- routes ---------------------------------------------------------------
@@ -224,6 +260,9 @@ async def invoke_agent(
     effort_router = getattr(request.app.state, "effort_router", _effort_router)
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
+    token_payload = _get_token_payload(request)
+    tenant_id = token_payload.tenant_id or ""
+    domain = _resolve_domain_context(request, body.domain)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -234,6 +273,8 @@ async def invoke_agent(
         effort_router=effort_router,
         skill_injector=skill_injector,
         progressive_recall=progressive_recall,
+        tenant_id=tenant_id,
+        domain=domain,
     )
 
     try:
@@ -248,6 +289,7 @@ async def invoke_agent(
         output=result.output,
         tokens_used=result.tokens_used,
         model=result.model,
+        routing=result.routing_decision,
     )
 
 
@@ -297,11 +339,11 @@ async def invoke_agent_iterative(
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
     # Build ToolContext from authenticated user and definition governance
-    from agent33.security.permissions import _get_token_payload
     from agent33.tools.base import ToolContext
 
     token_payload = _get_token_payload(request)
     user_scopes = token_payload.scopes
+    domain = _resolve_domain_context(request, body.domain)
 
     # Extract tool_policies from definition governance
     tool_policies = definition.governance.tool_policies if definition.governance else {}
@@ -332,6 +374,8 @@ async def invoke_agent_iterative(
         tool_registry=tool_registry,
         tool_governance=tool_governance,
         tool_context=tool_context,
+        tenant_id=token_payload.tenant_id or "",
+        domain=domain,
     )
 
     try:
@@ -350,6 +394,7 @@ async def invoke_agent_iterative(
         tool_calls_made=result.tool_calls_made,
         tools_used=result.tools_used,
         termination_reason=result.termination_reason,
+        routing=result.routing_decision,
     )
 
 

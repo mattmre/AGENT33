@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     agent_effort_low_token_multiplier: float = 1.0
     agent_effort_medium_token_multiplier: float = 1.0
     agent_effort_high_token_multiplier: float = 1.0
+    agent_effort_heuristic_enabled: bool = True
+    agent_effort_policy_tenant: str = ""  # JSON object: {"tenant-id": "low|medium|high"}
+    agent_effort_policy_domain: str = ""  # JSON object: {"domain": "low|medium|high"}
+    agent_effort_policy_tenant_domain: str = (
+        ""  # JSON object: {"tenant-id|domain": "low|medium|high"}
+    )
+    agent_effort_cost_per_1k_tokens: float = 0.0
 
     # Skills
     skill_definitions_dir: str = "skills"
@@ -128,6 +135,13 @@ class Settings(BaseSettings):
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
     mcp_auto_discover: bool = True
+    connector_boundary_enabled: bool = False
+    connector_governance_blocked_connectors: str = ""  # comma-separated
+    connector_governance_blocked_operations: str = ""  # comma-separated
+    connector_circuit_breaker_enabled: bool = False
+    connector_circuit_failure_threshold: int = 3
+    connector_circuit_recovery_seconds: float = 30.0
+    connector_circuit_half_open_successes: int = 1
 
     # Environment
     environment: str = "development"
@@ -155,6 +169,10 @@ class Settings(BaseSettings):
     improvement_learning_auto_intake_enabled: bool = False
     improvement_learning_auto_intake_min_severity: str = "high"
     improvement_learning_auto_intake_max_items: int = 3
+    improvement_learning_persistence_backend: str = "memory"  # memory | file
+    improvement_learning_persistence_path: str = (
+        "var/improvement_learning_signals.json"
+    )
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""

@@ -31,6 +31,7 @@ class AgentResult:
     raw_response: str
     tokens_used: int
     model: str
+    routing_decision: dict[str, Any] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ class IterativeAgentResult:
     tool_calls_made: int
     tools_used: list[str]
     termination_reason: str
+    routing_decision: dict[str, Any] | None = None
 
 
 def _build_system_prompt(definition: AgentDefinition) -> str:
@@ -223,6 +225,8 @@ class AgentRuntime:
         reasoning_protocol: Any | None = None,
         effort: AgentEffort | str | None = None,
         effort_router: AgentEffortRouter | None = None,
+        tenant_id: str = "",
+        domain: str = "",
     ) -> None:
         self._definition = definition
         self._router = router
@@ -231,6 +235,9 @@ class AgentRuntime:
         self._temperature = temperature
         self._effort = effort
         self._effort_router = effort_router
+        self._tenant_id = tenant_id
+        self._domain = domain
+        self._routing_decision_metadata: dict[str, Any] | None = None
         self._observation_capture = observation_capture
         self._trace_emitter = trace_emitter
         self._session_id = session_id
@@ -248,15 +255,48 @@ class AgentRuntime:
     def definition(self) -> AgentDefinition:
         return self._definition
 
-    def _resolve_execution_parameters(self) -> tuple[str, int]:
+    def _resolve_execution_parameters(
+        self,
+        *,
+        inputs: dict[str, Any] | None = None,
+        iterative: bool = False,
+        max_iterations: int | None = None,
+    ) -> tuple[str, int]:
         max_tokens = self._definition.constraints.max_tokens
         if self._effort_router is None:
+            self._routing_decision_metadata = None
             return self._model, max_tokens
         decision = self._effort_router.resolve(
             requested_model=self._requested_model,
             default_model=self._model,
             max_tokens=max_tokens,
             effort=self._effort,
+            tenant_id=self._tenant_id,
+            domain=self._domain,
+            inputs=inputs,
+            iterative=iterative,
+            max_iterations=max_iterations,
+        )
+        self._routing_decision_metadata = {
+            "effort": decision.effort.value,
+            "effort_source": decision.effort_source.value,
+            "token_multiplier": decision.token_multiplier,
+            "estimated_token_budget": decision.estimated_token_budget,
+            "estimated_cost": decision.estimated_cost,
+            "tenant_id": decision.tenant_id,
+            "domain": decision.domain,
+            "policy_key": decision.policy_key,
+            "heuristic_confidence": decision.heuristic_confidence,
+            "heuristic_reasons": list(decision.heuristic_reasons),
+            "selected_model": decision.model,
+            "routed_max_tokens": decision.max_tokens,
+        }
+        logger.info(
+            "effort routing decision: effort=%s source=%s model=%s max_tokens=%d",
+            decision.effort.value,
+            decision.effort_source.value,
+            decision.model,
+            decision.max_tokens,
         )
         return decision.model, decision.max_tokens
 
@@ -304,7 +344,7 @@ class AgentRuntime:
             ChatMessage(role="user", content=user_content),
         ]
 
-        routed_model, max_tokens = self._resolve_execution_parameters()
+        routed_model, max_tokens = self._resolve_execution_parameters(inputs=inputs)
         max_retries = self._definition.constraints.max_retries
 
         last_exc: Exception | None = None
@@ -341,6 +381,7 @@ class AgentRuntime:
             raw_response=response.content,
             tokens_used=response.total_tokens,
             model=response.model,
+            routing_decision=self._routing_decision_metadata,
         )
 
         # Record observation if capture is available
@@ -356,6 +397,8 @@ class AgentRuntime:
                     metadata={"model": response.model, "tokens": response.total_tokens},
                     tags=[],
                 )
+                if self._routing_decision_metadata is not None:
+                    obs.metadata["routing"] = self._routing_decision_metadata
                 await self._observation_capture.record(obs)
             except Exception:
                 logger.debug("failed to record observation", exc_info=True)
@@ -402,7 +445,11 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
-        routed_model, routed_max_tokens = self._resolve_execution_parameters()
+        routed_model, routed_max_tokens = self._resolve_execution_parameters(
+            inputs=inputs,
+            iterative=True,
+            max_iterations=(config.max_iterations if config is not None else None),
+        )
 
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
@@ -481,6 +528,7 @@ class AgentRuntime:
                     tool_calls_made=0,
                     tools_used=[],
                     termination_reason=reasoning_result.termination_reason,
+                    routing_decision=self._routing_decision_metadata,
                 )
 
             logger.warning(
@@ -557,6 +605,7 @@ class AgentRuntime:
             tool_calls_made=loop_result.tool_calls_made,
             tools_used=loop_result.tools_used,
             termination_reason=loop_result.termination_reason,
+            routing_decision=self._routing_decision_metadata,
         )
 
         # Record observation for completed iterative invocation
@@ -578,6 +627,8 @@ class AgentRuntime:
                     },
                     tags=[],
                 )
+                if self._routing_decision_metadata is not None:
+                    obs.metadata["routing"] = self._routing_decision_metadata
                 await self._observation_capture.record(obs)
             except Exception:
                 logger.debug("failed to record observation", exc_info=True)
