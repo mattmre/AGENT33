@@ -3,22 +3,42 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from agent33.improvement.checklists import ChecklistEvaluator, build_checklist
 from agent33.improvement.metrics import MetricsTracker, default_metrics
 from agent33.improvement.models import (
     ChecklistPeriod,
     ImprovementChecklist,
+    IntakeClassification,
+    IntakeContent,
+    IntakeRelevance,
     IntakeStatus,
+    LearningSignal,
+    LearningSignalSeverity,
+    LearningSignalType,
+    LearningSummary,
     LessonActionStatus,
     LessonLearned,
     MetricsSnapshot,
     ResearchIntake,
     RoadmapRefresh,
 )
+from agent33.improvement.persistence import (
+    InMemoryLearningSignalStore,
+    LearningPersistenceState,
+    LearningSignalStore,
+)
+from agent33.improvement.quality import enrich_learning_signal
 
 logger = logging.getLogger(__name__)
+
+_SEVERITY_RANK: dict[LearningSignalSeverity, int] = {
+    LearningSignalSeverity.LOW: 1,
+    LearningSignalSeverity.MEDIUM: 2,
+    LearningSignalSeverity.HIGH: 3,
+    LearningSignalSeverity.CRITICAL: 4,
+}
 
 
 # Valid intake status transitions
@@ -40,11 +60,15 @@ _INTAKE_TRANSITIONS: dict[IntakeStatus, set[IntakeStatus]] = {
 class ImprovementService:
     """In-memory service for continuous improvement operations."""
 
-    def __init__(self) -> None:
+    def __init__(self, learning_store: LearningSignalStore | None = None) -> None:
         self._intakes: dict[str, ResearchIntake] = {}
         self._lessons: dict[str, LessonLearned] = {}
         self._checklists: dict[str, ImprovementChecklist] = {}
         self._refreshes: dict[str, RoadmapRefresh] = {}
+        self._learning_signals: dict[str, LearningSignal] = {}
+        self._learning_signal_intake_map: dict[str, str] = {}
+        self._learning_store = learning_store or InMemoryLearningSignalStore()
+        self._load_learning_state()
         self._metrics_tracker = MetricsTracker()
         self._checklist_evaluator = ChecklistEvaluator()
 
@@ -54,6 +78,8 @@ class ImprovementService:
         """Submit a new research intake."""
         intake.disposition.status = IntakeStatus.SUBMITTED
         self._intakes[intake.intake_id] = intake
+        if intake.generated_from_signal_id is not None:
+            self._persist_learning_state()
         logger.info("intake_submitted", intake_id=intake.intake_id)
         return intake
 
@@ -64,6 +90,7 @@ class ImprovementService:
         self,
         status: IntakeStatus | None = None,
         research_type: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[ResearchIntake]:
         result = list(self._intakes.values())
         if status is not None:
@@ -76,6 +103,8 @@ class ImprovementService:
                 for i in result
                 if i.classification.research_type.value == research_type
             ]
+        if tenant_id is not None:
+            result = [i for i in result if i.tenant_id == tenant_id]
         return result
 
     def transition_intake(
@@ -119,6 +148,8 @@ class ImprovementService:
             from_status=current.value,
             to_status=new_status.value,
         )
+        if intake.generated_from_signal_id is not None:
+            self._persist_learning_state()
         return intake
 
     # ----- Lessons Learned -------------------------------------------------
@@ -297,3 +328,220 @@ class ImprovementService:
         if changes:
             refresh.changes_made = changes
         return refresh
+
+    # ----- Learning Signals -------------------------------------------------
+
+    def record_learning_signal(self, signal: LearningSignal) -> LearningSignal:
+        """Record a learning signal."""
+        enrich_learning_signal(signal)
+        self._learning_signals[signal.signal_id] = signal
+        self._persist_learning_state()
+        logger.info(
+            "learning_signal_recorded",
+            signal_id=signal.signal_id,
+            signal_type=signal.signal_type.value,
+            severity=signal.severity.value,
+        )
+        return signal
+
+    def list_learning_signals(
+        self,
+        signal_type: LearningSignalType | None = None,
+        severity: LearningSignalSeverity | None = None,
+        limit: int | None = 50,
+        tenant_id: str | None = None,
+    ) -> list[LearningSignal]:
+        """List learning signals with optional filters."""
+        result = list(self._learning_signals.values())
+        if signal_type is not None:
+            result = [s for s in result if s.signal_type == signal_type]
+        if severity is not None:
+            result = [s for s in result if s.severity == severity]
+        if tenant_id is not None:
+            result = [s for s in result if s.tenant_id == tenant_id]
+        result.sort(key=lambda s: s.recorded_at, reverse=True)
+        if limit is None:
+            return result
+        return result[: max(0, limit)]
+
+    def summarize_learning_signals(
+        self,
+        limit: int = 50,
+        *,
+        tenant_id: str | None = None,
+        window_days: int | None = None,
+    ) -> LearningSummary:
+        """Summarize recent learning signals."""
+        now = datetime.now(UTC)
+        all_scoped = self.list_learning_signals(limit=None, tenant_id=tenant_id)
+        summary_signals = all_scoped
+        previous_window_total: int | None = None
+        trend_delta: int | None = None
+        trend_direction = "stable"
+        window_start_at: datetime | None = None
+
+        if window_days is not None and window_days > 0:
+            window_start_at = now - timedelta(days=window_days)
+            previous_window_start = window_start_at - timedelta(days=window_days)
+            summary_signals = [
+                signal
+                for signal in all_scoped
+                if signal.recorded_at >= window_start_at
+            ]
+            previous_window_total = len(
+                [
+                    signal
+                    for signal in all_scoped
+                    if previous_window_start <= signal.recorded_at < window_start_at
+                ]
+            )
+            trend_delta = len(summary_signals) - previous_window_total
+            if trend_delta > 0:
+                trend_direction = "up"
+            elif trend_delta < 0:
+                trend_direction = "down"
+
+        signals = summary_signals[: max(0, limit)]
+        counts_by_type: dict[str, int] = {}
+        counts_by_severity: dict[str, int] = {}
+        counts_by_tenant: dict[str, int] = {}
+        latest_recorded_at = signals[0].recorded_at if signals else None
+
+        quality_total = 0.0
+        high_quality_signals = 0
+        for signal in signals:
+            stype = signal.signal_type.value
+            ssev = signal.severity.value
+            counts_by_type[stype] = counts_by_type.get(stype, 0) + 1
+            counts_by_severity[ssev] = counts_by_severity.get(ssev, 0) + 1
+            counts_by_tenant[signal.tenant_id] = (
+                counts_by_tenant.get(signal.tenant_id, 0) + 1
+            )
+            quality_total += signal.quality_score
+            if signal.quality_label == "high":
+                high_quality_signals += 1
+
+        return LearningSummary(
+            total_signals=len(signals),
+            counts_by_type=counts_by_type,
+            counts_by_severity=counts_by_severity,
+            counts_by_tenant=counts_by_tenant,
+            latest_recorded_at=latest_recorded_at,
+            average_quality_score=(
+                round(quality_total / len(signals), 3) if signals else 0.0
+            ),
+            high_quality_signals=high_quality_signals,
+            tenant_id=tenant_id,
+            window_days=window_days,
+            window_start_at=window_start_at,
+            previous_window_total=previous_window_total,
+            trend_delta=trend_delta,
+            trend_direction=trend_direction,
+        )
+
+    def generate_intakes_from_learning_signals(
+        self,
+        *,
+        min_severity: LearningSignalSeverity = LearningSignalSeverity.HIGH,
+        max_items: int = 3,
+        tenant_id: str | None = None,
+    ) -> list[ResearchIntake]:
+        """Generate research intakes from qualifying signals.
+
+        Uses an internal idempotency map so each signal produces at most one intake.
+        """
+        if max_items <= 0:
+            return []
+
+        created: list[ResearchIntake] = []
+        candidates = self.list_learning_signals(limit=None, tenant_id=tenant_id)
+        candidates.sort(
+            key=lambda signal: (
+                _SEVERITY_RANK[signal.severity],
+                signal.quality_score,
+                signal.recorded_at,
+            ),
+            reverse=True,
+        )
+        for signal in candidates:
+            if _SEVERITY_RANK[signal.severity] < _SEVERITY_RANK[min_severity]:
+                continue
+            if signal.signal_id in self._learning_signal_intake_map:
+                continue
+
+            urgency = (
+                "high"
+                if signal.severity
+                in {LearningSignalSeverity.HIGH, LearningSignalSeverity.CRITICAL}
+                else "medium"
+            )
+            priority_score = {
+                LearningSignalSeverity.LOW: 3,
+                LearningSignalSeverity.MEDIUM: 5,
+                LearningSignalSeverity.HIGH: 8,
+                LearningSignalSeverity.CRITICAL: 10,
+            }[signal.severity]
+            priority_score = min(
+                10,
+                max(1, priority_score + round(signal.quality_score * 2)),
+            )
+
+            intake = self.submit_intake(
+                ResearchIntake(
+                    submitted_by="learning-service",
+                    tenant_id=signal.tenant_id,
+                    generated_from_signal_id=signal.signal_id,
+                    automated_quality_score=signal.quality_score,
+                    automated_quality_label=signal.quality_label,
+                    classification=IntakeClassification(
+                        research_type="internal",
+                        category=f"learning:{signal.signal_type.value}",
+                        urgency=urgency,
+                    ),
+                    content=IntakeContent(
+                        title=f"Learning signal: {signal.summary}",
+                        summary=signal.details or signal.summary,
+                        source=signal.source,
+                    ),
+                    relevance=IntakeRelevance(
+                        priority_score=priority_score,
+                        impact_areas=[f"quality:{signal.quality_label}"],
+                    ),
+                )
+            )
+            self._learning_signal_intake_map[signal.signal_id] = intake.intake_id
+            signal.related_intake_id = intake.intake_id
+            signal.intake_generated = True
+            created.append(intake)
+            if len(created) >= max_items:
+                break
+        if created:
+            self._persist_learning_state()
+        return created
+
+    def _load_learning_state(self) -> None:
+        state = self._learning_store.load()
+        self._learning_signals = {
+            signal.signal_id: signal for signal in state.signals
+        }
+        self._learning_signal_intake_map = dict(state.signal_intake_map)
+        for intake in state.generated_intakes:
+            self._intakes[intake.intake_id] = intake
+
+    def _persist_learning_state(self) -> None:
+        generated_intakes = [
+            intake
+            for intake in self._intakes.values()
+            if intake.generated_from_signal_id is not None
+        ]
+        signals = sorted(
+            self._learning_signals.values(), key=lambda signal: signal.signal_id
+        )
+        generated_intakes.sort(key=lambda intake: intake.intake_id)
+        self._learning_store.save(
+            LearningPersistenceState(
+                signals=signals,
+                generated_intakes=generated_intakes,
+                signal_intake_map=dict(self._learning_signal_intake_map),
+            )
+        )

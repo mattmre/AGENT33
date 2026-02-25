@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
 
+from agent33.connectors.boundary import build_connector_boundary_executor
+from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.schema import validate_params
+
+if TYPE_CHECKING:
+    from agent33.connectors.executor import ConnectorExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +87,20 @@ class MCPServerConnection:
         name: str,
         url: str,
         timeout: float = 30.0,
+        boundary_executor: ConnectorExecutor | None = None,
+        policy_pack: str | None = None,
     ) -> None:
         self._name = name
         self._url = _validate_mcp_url(url)
         self._timeout = timeout
+        self._policy_pack = policy_pack
         self._tools: list[MCPToolSpec] = []
         self._connected = False
         self._client: httpx.AsyncClient | None = None
+        if boundary_executor is not None:
+            self._boundary_executor = boundary_executor
+        else:
+            self._boundary_executor = self._build_boundary_executor()
 
     @property
     def name(self) -> str:
@@ -172,6 +184,29 @@ class MCPServerConnection:
 
     async def _rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         """Send a JSON-RPC-style POST to the MCP server."""
+        if self._boundary_executor is None:
+            return await self._perform_rpc(method=method, params=params)
+        request = ConnectorRequest(
+            connector=f"mcp:{self._name}",
+            operation=method,
+            payload={"params": params},
+            metadata={"url": self._url},
+        )
+        result = await self._boundary_executor.execute(
+            request,
+            self._execute_boundary_rpc,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError(f"MCP RPC returned non-object JSON from {self._name}")
+        return result
+
+    async def _execute_boundary_rpc(self, request: ConnectorRequest) -> dict[str, Any]:
+        params = request.payload.get("params")
+        if not isinstance(params, dict):
+            raise RuntimeError("Connector request payload missing 'params' object")
+        return await self._perform_rpc(method=request.operation, params=params)
+
+    async def _perform_rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self._timeout)
 
@@ -192,10 +227,21 @@ class MCPServerConnection:
 
         if "error" in body:
             error = body["error"]
-            msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+            msg = (
+                error.get("message", str(error))
+                if isinstance(error, dict)
+                else str(error)
+            )
             raise RuntimeError(f"MCP RPC error from {self._name}: {msg}")
 
         return body.get("result", body)
+
+    def _build_boundary_executor(self) -> ConnectorExecutor | None:
+        return build_connector_boundary_executor(
+            default_timeout_seconds=self._timeout,
+            retry_attempts=1,
+            policy_pack=self._policy_pack,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +319,20 @@ class MCPBridge:
         self._servers: dict[str, MCPServerConnection] = {}
         self._adapters: list[MCPToolAdapter] = []
 
-    def add_server(self, name: str, url: str, timeout: float = 30.0) -> None:
+    def add_server(
+        self,
+        name: str,
+        url: str,
+        timeout: float = 30.0,
+        policy_pack: str | None = None,
+    ) -> None:
         """Register an MCP server to connect to during initialization."""
-        self._servers[name] = MCPServerConnection(name=name, url=url, timeout=timeout)
+        self._servers[name] = MCPServerConnection(
+            name=name,
+            url=url,
+            timeout=timeout,
+            policy_pack=policy_pack,
+        )
         logger.info("MCP server queued: %s (%s)", name, url)
 
     async def initialize(self) -> None:

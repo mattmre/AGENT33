@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
@@ -12,6 +13,7 @@ from agent33.llm.base import ChatMessage, LLMResponse
 if TYPE_CHECKING:
     from agent33.agents.context_manager import ContextManager
     from agent33.agents.definition import AgentDefinition
+    from agent33.agents.effort import AgentEffort, AgentEffortRouter
     from agent33.agents.tool_loop import ToolLoopConfig
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
@@ -30,6 +32,7 @@ class AgentResult:
     raw_response: str
     tokens_used: int
     model: str
+    routing_decision: dict[str, Any] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -44,6 +47,7 @@ class IterativeAgentResult:
     tool_calls_made: int
     tools_used: list[str]
     termination_reason: str
+    routing_decision: dict[str, Any] | None = None
 
 
 def _build_system_prompt(definition: AgentDefinition) -> str:
@@ -219,11 +223,24 @@ class AgentRuntime:
         tool_context: ToolContext | None = None,
         runtime_enforcer: RuntimeEnforcer | None = None,
         context_manager: ContextManager | None = None,
+        reasoning_protocol: Any | None = None,
+        effort: AgentEffort | str | None = None,
+        effort_router: AgentEffortRouter | None = None,
+        routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
+        tenant_id: str = "",
+        domain: str = "",
     ) -> None:
         self._definition = definition
         self._router = router
+        self._requested_model = model
         self._model = model or "llama3.2"
         self._temperature = temperature
+        self._effort = effort
+        self._effort_router = effort_router
+        self._routing_metrics_emitter = routing_metrics_emitter
+        self._tenant_id = tenant_id
+        self._domain = domain
+        self._routing_decision_metadata: dict[str, Any] | None = None
         self._observation_capture = observation_capture
         self._trace_emitter = trace_emitter
         self._session_id = session_id
@@ -235,10 +252,64 @@ class AgentRuntime:
         self._tool_context = tool_context
         self._runtime_enforcer = runtime_enforcer
         self._context_manager = context_manager
+        self._reasoning_protocol = reasoning_protocol
 
     @property
     def definition(self) -> AgentDefinition:
         return self._definition
+
+    def _resolve_execution_parameters(
+        self,
+        *,
+        inputs: dict[str, Any] | None = None,
+        iterative: bool = False,
+        max_iterations: int | None = None,
+    ) -> tuple[str, int]:
+        max_tokens = self._definition.constraints.max_tokens
+        if self._effort_router is None:
+            self._routing_decision_metadata = None
+            return self._model, max_tokens
+        decision = self._effort_router.resolve(
+            requested_model=self._requested_model,
+            default_model=self._model,
+            max_tokens=max_tokens,
+            effort=self._effort,
+            tenant_id=self._tenant_id,
+            domain=self._domain,
+            inputs=inputs,
+            iterative=iterative,
+            max_iterations=max_iterations,
+        )
+        self._routing_decision_metadata = {
+            "effort": decision.effort.value,
+            "effort_source": decision.effort_source.value,
+            "token_multiplier": decision.token_multiplier,
+            "estimated_token_budget": decision.estimated_token_budget,
+            "estimated_cost": decision.estimated_cost,
+            "tenant_id": decision.tenant_id,
+            "domain": decision.domain,
+            "policy_key": decision.policy_key,
+            "heuristic_confidence": decision.heuristic_confidence,
+            "heuristic_reasons": list(decision.heuristic_reasons),
+            "selected_model": decision.model,
+            "routed_max_tokens": decision.max_tokens,
+        }
+        logger.info(
+            "effort routing decision: effort=%s source=%s model=%s max_tokens=%d",
+            decision.effort.value,
+            decision.effort_source.value,
+            decision.model,
+            decision.max_tokens,
+        )
+        return decision.model, decision.max_tokens
+
+    def _emit_routing_metrics(self) -> None:
+        if self._routing_metrics_emitter is None:
+            return
+        try:
+            self._routing_metrics_emitter(self._routing_decision_metadata)
+        except Exception:
+            logger.debug("failed to emit routing metrics", exc_info=True)
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -284,7 +355,7 @@ class AgentRuntime:
             ChatMessage(role="user", content=user_content),
         ]
 
-        max_tokens = self._definition.constraints.max_tokens
+        routed_model, max_tokens = self._resolve_execution_parameters(inputs=inputs)
         max_retries = self._definition.constraints.max_retries
 
         last_exc: Exception | None = None
@@ -294,7 +365,7 @@ class AgentRuntime:
             try:
                 response = await self._router.complete(
                     messages,
-                    model=self._model,
+                    model=routed_model,
                     temperature=self._temperature,
                     max_tokens=max_tokens,
                 )
@@ -321,7 +392,9 @@ class AgentRuntime:
             raw_response=response.content,
             tokens_used=response.total_tokens,
             model=response.model,
+            routing_decision=self._routing_decision_metadata,
         )
+        self._emit_routing_metrics()
 
         # Record observation if capture is available
         if self._observation_capture is not None:
@@ -336,6 +409,8 @@ class AgentRuntime:
                     metadata={"model": response.model, "tokens": response.total_tokens},
                     tags=[],
                 )
+                if self._routing_decision_metadata is not None:
+                    obs.metadata["routing"] = self._routing_decision_metadata
                 await self._observation_capture.record(obs)
             except Exception:
                 logger.debug("failed to record observation", exc_info=True)
@@ -382,8 +457,98 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
+        routed_model, routed_max_tokens = self._resolve_execution_parameters(
+            inputs=inputs,
+            iterative=True,
+            max_iterations=(config.max_iterations if config is not None else None),
+        )
+
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
+
+        # --- Reasoning protocol path (Phase 29.1) ---
+        if self._reasoning_protocol is not None:
+            # Inject skill context
+            if self._skill_injector is not None:
+                if self._definition.skills:
+                    system_prompt += (
+                        "\n\n"
+                        + self._skill_injector.build_skill_metadata_block(
+                            self._definition.skills
+                        )
+                    )
+                for skill_name in self._active_skills:
+                    system_prompt += (
+                        "\n\n"
+                        + self._skill_injector.build_skill_instructions_block(skill_name)
+                    )
+
+            # Inject memory context
+            if self._progressive_recall is not None:
+                try:
+                    user_query = json.dumps(inputs) if inputs else ""
+                    recall_results = await self._progressive_recall.search(
+                        user_query, level="index", top_k=5
+                    )
+                    if recall_results:
+                        memory_lines = ["\n# Prior Context (from memory)"]
+                        for rr in recall_results:
+                            memory_lines.append(f"- {rr.content}")
+                        system_prompt += "\n" + "\n".join(memory_lines)
+                except Exception:
+                    logger.debug("failed to retrieve memory context", exc_info=True)
+
+            # Validate required inputs
+            for name, param in self._definition.inputs.items():
+                if param.required and name not in inputs:
+                    raise ValueError(f"Missing required input: {name}")
+
+            loop_config = config or ToolLoopConfig()
+            tool_loop = ToolLoop(
+                router=self._router,
+                tool_registry=self._tool_registry,
+                tool_governance=self._tool_governance,
+                tool_context=self._tool_context,
+                observation_capture=self._observation_capture,
+                runtime_enforcer=self._runtime_enforcer,
+                config=loop_config,
+                agent_name=self._definition.name,
+                session_id=self._session_id,
+                context_manager=self._context_manager,
+            )
+
+            task_input = json.dumps(inputs, indent=2)
+            reasoning_result = await self._reasoning_protocol.run(
+                task_input=task_input,
+                tool_loop=tool_loop,
+                model=routed_model,
+                router=self._router,
+                temperature=self._temperature,
+                max_tokens=routed_max_tokens,
+                system_prompt=system_prompt,
+            )
+
+            if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
+                self._emit_routing_metrics()
+                return IterativeAgentResult(
+                    output={"response": reasoning_result.final_output}
+                    if isinstance(reasoning_result.final_output, str)
+                    else reasoning_result.final_output,
+                    raw_response=reasoning_result.final_output,
+                    tokens_used=0,
+                    model=routed_model,
+                    iterations=reasoning_result.total_steps,
+                    tool_calls_made=0,
+                    tools_used=[],
+                    termination_reason=reasoning_result.termination_reason,
+                    routing_decision=self._routing_decision_metadata,
+                )
+
+            logger.warning(
+                "Reasoning protocol degraded with phase dispatch failure for agent %s; "
+                "falling back to standard iterative tool loop",
+                self._definition.name,
+            )
 
         # Inject skill context if injector is available
         if self._skill_injector is not None:
@@ -437,12 +602,11 @@ class AgentRuntime:
             context_manager=self._context_manager,
         )
 
-        max_tokens = self._definition.constraints.max_tokens
         loop_result = await loop.run(
             messages=messages,
-            model=self._model,
+            model=routed_model,
             temperature=self._temperature,
-            max_tokens=max_tokens,
+            max_tokens=routed_max_tokens,
         )
 
         result = IterativeAgentResult(
@@ -454,7 +618,9 @@ class AgentRuntime:
             tool_calls_made=loop_result.tool_calls_made,
             tools_used=loop_result.tools_used,
             termination_reason=loop_result.termination_reason,
+            routing_decision=self._routing_decision_metadata,
         )
+        self._emit_routing_metrics()
 
         # Record observation for completed iterative invocation
         if self._observation_capture is not None:
@@ -475,6 +641,8 @@ class AgentRuntime:
                     },
                     tags=[],
                 )
+                if self._routing_decision_metadata is not None:
+                    obs.metadata["routing"] = self._routing_decision_metadata
                 await self._observation_capture.record(obs)
             except Exception:
                 logger.debug("failed to record observation", exc_info=True)

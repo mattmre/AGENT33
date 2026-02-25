@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_default_model: str = "llama3.2"
 
-    # Local "Heretic" & Ultra-Sparse Orchestration (optimized for single RTX 3090 - 24GB VRAM)
-    # Top targets: Qwen3-Coder-Next (via llama.cpp tensor offloading), Qwen2.5-Coder-32B-Instruct-abliterated, Lexi-3.0
+    # Local "Heretic" & Ultra-Sparse Orchestration
+    # (optimized for single RTX 3090 - 24GB VRAM).
+    # Top targets: Qwen3-Coder-Next (via llama.cpp tensor offloading),
+    # Qwen2.5-Coder-32B-Instruct-abliterated, Lexi-3.0.
     local_orchestration_model: str = "qwen3-coder-next"
     local_orchestration_format: str = "gguf_q4_k_m"
     local_orchestration_engine: str = "llama.cpp"
@@ -111,15 +113,50 @@ class Settings(BaseSettings):
 
     # Agent definitions
     agent_definitions_dir: str = "agent-definitions"
+    agent_effort_routing_enabled: bool = False
+    agent_effort_default: str = "medium"
+    agent_effort_low_model: str = ""
+    agent_effort_medium_model: str = ""
+    agent_effort_high_model: str = ""
+    agent_effort_low_token_multiplier: float = 1.0
+    agent_effort_medium_token_multiplier: float = 1.0
+    agent_effort_high_token_multiplier: float = 1.0
+    agent_effort_heuristic_enabled: bool = True
+    agent_effort_policy_tenant: str = ""  # JSON object: {"tenant-id": "low|medium|high"}
+    agent_effort_policy_domain: str = ""  # JSON object: {"domain": "low|medium|high"}
+    agent_effort_policy_tenant_domain: str = (
+        ""  # JSON object: {"tenant-id|domain": "low|medium|high"}
+    )
+    agent_effort_cost_per_1k_tokens: float = 0.0
+    observability_effort_alerts_enabled: bool = True
+    observability_effort_alert_high_effort_count_threshold: int = 25
+    observability_effort_alert_high_cost_usd_threshold: float = 5.0
+    observability_effort_alert_high_token_budget_threshold: int = 8000
+    observability_effort_export_enabled: bool = False
+    observability_effort_export_path: str = "var/effort_routing_events.jsonl"
+    observability_effort_export_fail_closed: bool = False
 
     # Skills
     skill_definitions_dir: str = "skills"
     skill_max_instructions_chars: int = 16000
+    skillsbench_skill_matcher_enabled: bool = False
+    skillsbench_skill_matcher_model: str = "llama3.2"
+    skillsbench_skill_matcher_top_k: int = 20
+    skillsbench_skill_matcher_skip_llm_below: int = 3
+    skillsbench_context_manager_enabled: bool = True
 
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
     mcp_auto_discover: bool = True
+    connector_boundary_enabled: bool = False
+    connector_policy_pack: str = "default"
+    connector_governance_blocked_connectors: str = ""  # comma-separated
+    connector_governance_blocked_operations: str = ""  # comma-separated
+    connector_circuit_breaker_enabled: bool = False
+    connector_circuit_failure_threshold: int = 3
+    connector_circuit_recovery_seconds: float = 30.0
+    connector_circuit_half_open_successes: int = 1
 
     # Environment
     environment: str = "development"
@@ -140,6 +177,38 @@ class Settings(BaseSettings):
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
+
+    # Continuous improvement learning signals (Phase 31)
+    improvement_learning_enabled: bool = False
+    improvement_learning_summary_default_limit: int = 50
+    improvement_learning_auto_intake_enabled: bool = False
+    improvement_learning_auto_intake_min_severity: str = "high"
+    improvement_learning_auto_intake_max_items: int = 3
+    improvement_learning_persistence_backend: str = "memory"  # memory | file | db
+    improvement_learning_persistence_path: str = (
+        "var/improvement_learning_signals.json"
+    )
+    improvement_learning_persistence_db_path: str = (
+        "var/improvement_learning_signals.sqlite3"
+    )
+    improvement_learning_persistence_migrate_on_start: bool = False
+    improvement_learning_persistence_migration_backup_on_start: bool = False
+    improvement_learning_persistence_migration_backup_path: str = (
+        "var/improvement_learning_signals.backup.json"
+    )
+    improvement_learning_file_corruption_behavior: str = "reset"  # reset | raise
+    improvement_learning_db_corruption_behavior: str = "reset"  # reset | raise
+
+    @field_validator(
+        "improvement_learning_file_corruption_behavior",
+        "improvement_learning_db_corruption_behavior",
+    )
+    @classmethod
+    def _validate_learning_corruption_behavior(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"reset", "raise"}:
+            raise ValueError("corruption behavior must be one of: reset, raise")
+        return normalized
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""

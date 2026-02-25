@@ -1,10 +1,12 @@
 """REST endpoints for continuous improvement, research intake, and lessons learned."""
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from agent33.config import settings
 from agent33.improvement.models import (
     ChecklistPeriod,
     ImprovementMetric,
@@ -12,6 +14,9 @@ from agent33.improvement.models import (
     IntakeContent,
     IntakeRelevance,
     IntakeStatus,
+    LearningSignal,
+    LearningSignalSeverity,
+    LearningSignalType,
     LessonAction,
     LessonEventType,
     LessonLearned,
@@ -20,11 +25,66 @@ from agent33.improvement.models import (
     ResearchIntake,
     RoadmapRefresh,
 )
+from agent33.improvement.persistence import (
+    FileLearningSignalStore,
+    InMemoryLearningSignalStore,
+    SQLiteLearningSignalStore,
+    migrate_file_learning_state_to_db,
+    should_migrate_file_learning_state_to_db,
+)
 from agent33.improvement.service import ImprovementService
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 
-_service = ImprovementService()
+
+def _build_improvement_service() -> ImprovementService:
+    backend = settings.improvement_learning_persistence_backend.strip().lower()
+    if backend == "file":
+        store = FileLearningSignalStore(
+            path=str(Path(settings.improvement_learning_persistence_path)),
+            on_corruption=settings.improvement_learning_file_corruption_behavior,
+        )
+    elif backend in {"db", "sqlite"}:
+        if settings.improvement_learning_persistence_migrate_on_start:
+            file_path = str(Path(settings.improvement_learning_persistence_path))
+            db_path = str(Path(settings.improvement_learning_persistence_db_path))
+            if should_migrate_file_learning_state_to_db(
+                file_path=file_path,
+                db_path=db_path,
+                on_file_corruption=settings.improvement_learning_file_corruption_behavior,
+                on_db_corruption=settings.improvement_learning_db_corruption_behavior,
+            ):
+                migrate_file_learning_state_to_db(
+                    file_path=file_path,
+                    db_path=db_path,
+                    on_file_corruption=(
+                        settings.improvement_learning_file_corruption_behavior
+                    ),
+                    backup_path=(
+                        str(
+                            Path(
+                                settings.improvement_learning_persistence_migration_backup_path
+                            )
+                        )
+                        if settings.improvement_learning_persistence_migration_backup_on_start
+                        else None
+                    ),
+                )
+        store = SQLiteLearningSignalStore(
+            path=str(Path(settings.improvement_learning_persistence_db_path)),
+            on_corruption=settings.improvement_learning_db_corruption_behavior,
+        )
+    elif backend == "memory":
+        store = InMemoryLearningSignalStore()
+    else:
+        raise ValueError(
+            "Unsupported improvement learning persistence backend: "
+            f"{settings.improvement_learning_persistence_backend}"
+        )
+    return ImprovementService(learning_store=store)
+
+
+_service = _build_improvement_service()
 
 
 def get_improvement_service() -> ImprovementService:
@@ -35,7 +95,7 @@ def get_improvement_service() -> ImprovementService:
 def _reset_service() -> None:
     """Reset singleton for testing."""
     global _service  # noqa: PLW0603
-    _service = ImprovementService()
+    _service = _build_improvement_service()
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +108,7 @@ class SubmitIntakeRequest(BaseModel):
     summary: str = ""
     source: str = ""
     submitted_by: str = ""
+    tenant_id: str = "default"
     research_type: str = "external"
     category: str = ""
     urgency: str = "medium"
@@ -111,6 +172,22 @@ class CompleteRefreshRequest(BaseModel):
     changes: list[str] = Field(default_factory=list)
 
 
+class RecordLearningSignalRequest(BaseModel):
+    signal_type: str | None = None
+    type: str | None = None
+    severity: str
+    summary: str
+    details: str = ""
+    source: str = ""
+    tenant_id: str = "default"
+    context: dict[str, str] = Field(default_factory=dict)
+
+
+def _ensure_learning_enabled() -> None:
+    if not settings.improvement_learning_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 # ---------------------------------------------------------------------------
 # Research Intake endpoints
 # ---------------------------------------------------------------------------
@@ -122,6 +199,7 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
     try:
         intake = ResearchIntake(
             submitted_by=req.submitted_by,
+            tenant_id=req.tenant_id,
             classification=IntakeClassification(
                 research_type=req.research_type,
                 category=req.category,
@@ -148,6 +226,7 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
 def list_intakes(
     status: str | None = None,
     research_type: str | None = None,
+    tenant_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """List research intakes with optional filters."""
     intake_status = None
@@ -158,7 +237,9 @@ def list_intakes(
             raise HTTPException(
                 status_code=400, detail=f"Invalid status: {status}"
             ) from None
-    intakes = _service.list_intakes(status=intake_status, research_type=research_type)
+    intakes = _service.list_intakes(
+        status=intake_status, research_type=research_type, tenant_id=tenant_id
+    )
     return [i.model_dump(mode="json") for i in intakes]
 
 
@@ -442,3 +523,104 @@ def complete_refresh(
         return result.model_dump(mode="json")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+# ---------------------------------------------------------------------------
+# Learning Signal endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/learning/signals")
+def record_learning_signal(req: RecordLearningSignalRequest) -> dict[str, Any]:
+    """Record a continuous-learning signal."""
+    _ensure_learning_enabled()
+    try:
+        signal_type = req.signal_type or req.type
+        if signal_type is None:
+            raise ValueError("signal_type is required")
+        signal = LearningSignal(
+            signal_type=LearningSignalType(signal_type),
+            severity=LearningSignalSeverity(req.severity),
+            tenant_id=req.tenant_id,
+            summary=req.summary,
+            details=req.details,
+            source=req.source,
+            context=req.context,
+        )
+        return _service.record_learning_signal(signal).model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.get("/learning/signals")
+def list_learning_signals(
+    signal_type: str | None = None,
+    signal_type_alias: str | None = Query(default=None, alias="type"),
+    severity: str | None = None,
+    tenant_id: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """List learning signals with optional filters."""
+    _ensure_learning_enabled()
+    parsed_type = None
+    raw_type = signal_type or signal_type_alias
+    if raw_type is not None:
+        try:
+            parsed_type = LearningSignalType(raw_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid signal_type: {raw_type}"
+            ) from None
+    parsed_severity = None
+    if severity is not None:
+        try:
+            parsed_severity = LearningSignalSeverity(severity)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid severity: {severity}"
+            ) from None
+
+    return [
+        signal.model_dump(mode="json")
+        for signal in _service.list_learning_signals(
+            signal_type=parsed_type,
+            severity=parsed_severity,
+            tenant_id=tenant_id,
+            limit=limit,
+        )
+    ]
+
+
+@router.get("/learning/summary")
+def get_learning_summary(
+    limit: int | None = None,
+    generate_intakes: bool = False,
+    tenant_id: str | None = None,
+    window_days: int | None = None,
+) -> dict[str, Any]:
+    """Get learning summary and optionally generate intake records."""
+    _ensure_learning_enabled()
+    effective_limit = (
+        settings.improvement_learning_summary_default_limit
+        if limit is None
+        else limit
+    )
+    summary = _service.summarize_learning_signals(
+        limit=effective_limit, tenant_id=tenant_id, window_days=window_days
+    )
+
+    generated_intakes = []
+    if generate_intakes and settings.improvement_learning_auto_intake_enabled:
+        min_severity = LearningSignalSeverity(
+            settings.improvement_learning_auto_intake_min_severity
+        )
+        generated_intakes = _service.generate_intakes_from_learning_signals(
+            min_severity=min_severity,
+            max_items=settings.improvement_learning_auto_intake_max_items,
+            tenant_id=tenant_id,
+        )
+
+    return {
+        "summary": summary.model_dump(mode="json"),
+        "generated_intakes": [i.model_dump(mode="json") for i in generated_intakes],
+    }

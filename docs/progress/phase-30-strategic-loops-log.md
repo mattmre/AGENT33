@@ -150,6 +150,9 @@ python -m pytest tests -q
 
 ## Change Log
 
+- **2026-02-24**: Phase 30 hardening completion milestone
+  - Completed hardening track for effort routing with classifier precedence, tenant/domain policy resolution, and cost-aware routing telemetry.
+  - Linked Phase 30 progress log to the Phase 31 persistence/quality and Phase 32 connector-boundary kickoff session handoff.
 - **2026-02-18**: Stage 1 backend complete
   - Models, service, routes, tests implemented
   - Trend computation with direction detection

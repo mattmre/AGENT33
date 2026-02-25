@@ -31,6 +31,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    reasoning,
     releases,
     reviews,
     traces,
@@ -110,6 +111,56 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.warning("agent_definitions_dir_not_found", path=str(defs_dir))
     app.state.agent_registry = agent_registry
+
+    # -- Observability metrics + alerts -------------------------------------
+    from agent33.observability.alerts import AlertManager
+    from agent33.observability.effort_telemetry import (
+        FileEffortTelemetryExporter,
+        NoopEffortTelemetryExporter,
+    )
+    from agent33.observability.metrics import MetricsCollector
+
+    metrics_collector = MetricsCollector()
+    app.state.metrics_collector = metrics_collector
+    agents.set_metrics(metrics_collector)
+    dashboard.set_metrics(metrics_collector)
+
+    effort_telemetry_exporter = (
+        FileEffortTelemetryExporter(settings.observability_effort_export_path)
+        if settings.observability_effort_export_enabled
+        else NoopEffortTelemetryExporter()
+    )
+    app.state.effort_telemetry_exporter = effort_telemetry_exporter
+    agents.set_effort_telemetry_exporter(effort_telemetry_exporter)
+
+    alert_manager = AlertManager(metrics_collector)
+    if settings.observability_effort_alerts_enabled:
+        alert_manager.add_rule(
+            name="high_effort_routing_volume",
+            metric="effort_routing_high_effort_total",
+            threshold=float(
+                settings.observability_effort_alert_high_effort_count_threshold
+            ),
+            comparator="gt",
+        )
+        alert_manager.add_rule(
+            name="high_effort_cost_spike",
+            metric="effort_routing_estimated_cost_usd",
+            threshold=settings.observability_effort_alert_high_cost_usd_threshold,
+            comparator="gt",
+            statistic="max",
+        )
+        alert_manager.add_rule(
+            name="high_effort_token_budget_spike",
+            metric="effort_routing_estimated_token_budget",
+            threshold=float(
+                settings.observability_effort_alert_high_token_budget_threshold
+            ),
+            comparator="gt",
+            statistic="max",
+        )
+    app.state.alert_manager = alert_manager
+    dashboard.set_alert_manager(alert_manager)
 
     # -- Agent runtime / workflow integration ------------------------------
     from agent33.llm.router import ModelRouter
@@ -269,6 +320,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry=agent_registry,
         skill_injector=skill_injector,
         progressive_recall=progressive_recall,
+        effort_router=getattr(agents, "_effort_router", None),
+        routing_metrics_emitter=getattr(agents, "_record_effort_routing_metrics", None),
     )
     logger.info("agent_workflow_bridge_registered")
 
@@ -361,6 +414,8 @@ def _register_agent_runtime_bridge(
     registry: Any = None,
     skill_injector: Any = None,
     progressive_recall: Any = None,
+    effort_router: Any = None,
+    routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
@@ -379,7 +434,7 @@ def _register_agent_runtime_bridge(
 
     async def _bridge(inputs: dict) -> dict:
         agent_name = inputs.pop("agent_name", "workflow-agent")
-        model = inputs.pop("model", settings.ollama_default_model)
+        model = inputs.pop("model", None)
 
         # Try to look up actual registered definition first
         definition = None
@@ -409,6 +464,8 @@ def _register_agent_runtime_bridge(
             model=model,
             skill_injector=skill_injector,
             progressive_recall=progressive_recall,
+            effort_router=effort_router,
+            routing_metrics_emitter=routing_metrics_emitter,
         )
         result = await runtime.invoke(inputs)
         return result.output
@@ -482,3 +539,4 @@ app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
+app.include_router(reasoning.router)

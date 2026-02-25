@@ -176,9 +176,12 @@ class MCPSecurityScanner:
                 else:
                     session = await manager.connect_sse(url=server.url)
 
-                result = await session.call_tool(
-                    server.scan_tool_name,
+                result = await manager.call_tool(
+                    session=session,
+                    tool_name=server.scan_tool_name,
                     arguments={"target": target},
+                    connector_name=f"mcp:{server.name}",
+                    timeout_seconds=float(server.timeout_seconds),
                 )
 
                 return self._parse_scan_result(
@@ -189,14 +192,23 @@ class MCPSecurityScanner:
             finally:
                 await manager.close_all()
 
-        except Exception:
+        except Exception as exc:
             logger.warning(
                 "mcp_security_scan_failed",
                 server=server_name,
                 target=target,
                 exc_info=True,
             )
-            return []
+            return [
+                SecurityFinding(
+                    run_id=run_id,
+                    severity=FindingSeverity.HIGH,
+                    category=FindingCategory.CODE_QUALITY,
+                    title=f"{server_name} scan execution failed",
+                    description=(str(exc) or exc.__class__.__name__)[:500],
+                    tool=server_name,
+                )
+            ]
 
     def _parse_scan_result(
         self,

@@ -8,7 +8,8 @@ Covers:
   prompt injection rejection)
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -545,6 +546,64 @@ class TestInvokeIterativeRuntime:
         assert call_kwargs["model"] == "gpt-4o"
         assert call_kwargs["temperature"] == 0.3
 
+    async def test_reasoning_completed_returns_reasoning_output_path(self) -> None:
+        """Reasoning completion should return reasoning output directly."""
+        definition = _make_definition()
+        registry = _make_registry()
+        router = _make_router()
+        reasoning_protocol = MagicMock()
+        reasoning_protocol.run = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output="reasoned answer",
+                total_steps=4,
+                termination_reason="completed",
+            )
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=router,
+            tool_registry=registry,
+            reasoning_protocol=reasoning_protocol,
+        )
+
+        result = await runtime.invoke_iterative({"task": "reason this"})
+
+        assert result.output == {"response": "reasoned answer"}
+        assert result.raw_response == "reasoned answer"
+        assert result.termination_reason == "completed"
+        assert result.iterations == 4
+        assert router.complete.await_count == 0
+
+    async def test_reasoning_degraded_dispatch_failure_falls_back_to_tool_loop(self) -> None:
+        """Degraded dispatch failure in reasoning should fall back to tool loop."""
+        definition = _make_definition()
+        registry = _make_registry()
+        router = _make_router(_text_response('{"result": "tool loop completion"}'))
+        reasoning_protocol = MagicMock()
+        reasoning_protocol.run = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output="degraded output",
+                total_steps=1,
+                termination_reason="degraded_phase_dispatch_failure",
+            )
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=router,
+            tool_registry=registry,
+            reasoning_protocol=reasoning_protocol,
+        )
+
+        result = await runtime.invoke_iterative(
+            {"task": "recover from degraded reasoning"},
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        assert result.output == {"result": "tool loop completion"}
+        assert result.termination_reason == "completed"
+        assert result.iterations == 1
+        reasoning_protocol.run.assert_awaited_once()
+
 
 # ---------------------------------------------------------------------------
 # Route tests for POST /{name}/invoke-iterative
@@ -718,3 +777,35 @@ class TestInvokeIterativeRoute:
             json={"inputs": {"task": "no auth"}},
         )
         assert resp.status_code == 401
+
+    def test_iterative_route_injects_context_manager_by_default(self, client) -> None:
+        """Iterative invoke should wire a context manager into AgentRuntime."""
+        from agent33.agents.runtime import IterativeAgentResult
+
+        client.app.state.model_router = MagicMock()
+        client.app.state.tool_registry = _make_registry()
+
+        result = IterativeAgentResult(
+            output={"result": "ok"},
+            raw_response="ok",
+            tokens_used=1,
+            model="test-model",
+            iterations=1,
+            tool_calls_made=0,
+            tools_used=[],
+            termination_reason="completed",
+        )
+
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as runtime_cls:
+            runtime = MagicMock()
+            runtime.invoke_iterative = AsyncMock(return_value=result)
+            runtime_cls.return_value = runtime
+
+            resp = client.post(
+                "/v1/agents/iter-agent/invoke-iterative",
+                json={"inputs": {"task": "test"}, "enable_double_confirmation": False},
+            )
+
+            assert resp.status_code == 200
+            kwargs = runtime_cls.call_args.kwargs
+            assert kwargs["context_manager"] is not None

@@ -177,13 +177,56 @@ class TestMCPScanExecution:
             await scanner.scan("nonexistent", "/path", "secrun-1")
 
     @pytest.mark.asyncio
-    async def test_scan_connection_failure_returns_empty(self) -> None:
+    async def test_scan_connection_failure_returns_failure_finding(self) -> None:
         scanner = MCPSecurityScanner()
         scanner.register_server("failing", "stdio", {"command": "nonexistent-cmd"})
 
-        # The scan should catch the connection error and return empty list
         findings = await scanner.scan("failing", "/path", "secrun-fail")
+        assert len(findings) == 1
+        assert findings[0].run_id == "secrun-fail"
+        assert findings[0].severity == FindingSeverity.HIGH
+        assert findings[0].category == FindingCategory.CODE_QUALITY
+        assert findings[0].tool == "failing"
+        assert findings[0].title == "failing scan execution failed"
+
+    @pytest.mark.asyncio
+    async def test_scan_passes_server_timeout_to_mcp_manager(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pytest.importorskip("mcp")
+        scanner = MCPSecurityScanner()
+        scanner.register_server(
+            "timeout-test",
+            "stdio",
+            {"command": "scanner", "timeout_seconds": 123},
+        )
+        captured: dict[str, float] = {}
+
+        class _MockText:
+            text = "[]"
+
+        class _MockResult:
+            content = [_MockText()]
+
+        class _MockManager:
+            async def connect_stdio(self, command, args, env=None):  # noqa: ANN001, ARG002
+                return object()
+
+            async def call_tool(self, *args, **kwargs):  # noqa: ANN002
+                captured["timeout_seconds"] = kwargs["timeout_seconds"]
+                return _MockResult()
+
+            async def close_all(self):  # noqa: ANN201
+                return None
+
+        monkeypatch.setattr(
+            "agent33.tools.mcp_client.MCPClientManager",
+            _MockManager,
+        )
+
+        findings = await scanner.scan("timeout-test", "/path", "secrun-timeout")
         assert findings == []
+        assert captured["timeout_seconds"] == 123.0
 
 
 class TestMCPServerRoutes:

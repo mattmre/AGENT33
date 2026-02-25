@@ -62,6 +62,10 @@ class CTRFGenerator:
                     "model": result.model,
                     "tokens_used": result.total_tokens,
                     "trial_results": [t.score for t in result.trials],
+                    "skillsbench": {
+                        "mode": "with_skills" if result.skills_enabled else "without_skills",
+                        "std_dev": result.std_dev,
+                    },
                 },
             })
 
@@ -87,6 +91,15 @@ class CTRFGenerator:
                     "other": 0,
                     "start": start_ms,
                     "stop": stop_ms,
+                },
+                "extra": {
+                    "skillsbench": {
+                        "trials_per_combination": run.config.trials_per_combination,
+                        "skills_modes": run.config.skills_modes,
+                        "timeout_per_trial_seconds": run.config.timeout_per_trial_seconds,
+                        "parallel_trials": run.config.parallel_trials,
+                        "skills_impacts_count": len(run.skills_impacts),
+                    },
                 },
                 "tests": tests,
             },

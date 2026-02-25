@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
+from agent33.observability.alerts import AlertManager
 from agent33.observability.lineage import ExecutionLineage
 from agent33.observability.metrics import MetricsCollector
 
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/v1/dashboard", tags=["dashboard"])
 
 # Module-level singletons; replaced at app startup if needed.
 _metrics = MetricsCollector()
+_alerts = AlertManager(_metrics)
 _lineage = ExecutionLineage()
 
 _DASHBOARD_FILE = "dashboard.html"
@@ -30,6 +32,7 @@ _DEFAULT_METRICS: dict[str, Any] = {
         "min": 0.0,
         "max": 0.0,
     },
+    "effort_routing_high_effort_total": 0,
 }
 
 
@@ -63,6 +66,12 @@ def set_lineage(lineage: ExecutionLineage) -> None:
     _lineage = lineage
 
 
+def set_alert_manager(manager: AlertManager) -> None:
+    """Swap the global alert manager (called during app init)."""
+    global _alerts
+    _alerts = manager
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_page() -> HTMLResponse:
     """Serve the HTML dashboard."""
@@ -79,6 +88,12 @@ async def dashboard_metrics() -> dict[str, Any]:
     """Return current metrics summary as JSON."""
     summary = _metrics.get_summary()
     return summary if summary else _DEFAULT_METRICS
+
+
+@router.get("/alerts")
+async def dashboard_alerts() -> list[dict[str, Any]]:
+    """Return currently triggered alerts."""
+    return [alert.__dict__ for alert in _alerts.check_all()]
 
 
 @router.get("/lineage/{workflow_id}")

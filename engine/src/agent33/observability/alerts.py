@@ -27,6 +27,7 @@ class AlertRule:
     metric: str
     threshold: float
     comparator: str  # "gt", "lt", or "eq"
+    statistic: str = "value"  # "value", "count", "sum", "avg", "min", "max"
 
 
 @dataclass
@@ -55,13 +56,42 @@ class AlertManager:
         metric: str,
         threshold: float,
         comparator: str = "gt",
+        statistic: str = "value",
     ) -> None:
         """Register a new alert rule."""
         if comparator not in _COMPARATORS:
             raise ValueError(f"Unknown comparator: {comparator}. Use gt, lt, or eq.")
+        if statistic not in {"value", "count", "sum", "avg", "min", "max"}:
+            raise ValueError("Unknown statistic. Use value, count, sum, avg, min, or max.")
         self._rules.append(
-            AlertRule(name=name, metric=metric, threshold=threshold, comparator=comparator)
+            AlertRule(
+                name=name,
+                metric=metric,
+                threshold=threshold,
+                comparator=comparator,
+                statistic=statistic,
+            )
         )
+
+    @staticmethod
+    def _extract_value(metric_value: object, statistic: str) -> float | None:
+        if isinstance(metric_value, (int, float)):
+            return float(metric_value)
+        if isinstance(metric_value, dict):
+            # Observation summaries expose keys like count/sum/avg/min/max.
+            if statistic in metric_value:
+                stat_value = metric_value.get(statistic)
+                if isinstance(stat_value, (int, float)):
+                    return float(stat_value)
+            if statistic == "value":
+                count_value = metric_value.get("count")
+                if isinstance(count_value, (int, float)):
+                    return float(count_value)
+            # Labelled counters expose {"label=v": count}. For "value" use max label value.
+            numeric_values = [v for v in metric_value.values() if isinstance(v, (int, float))]
+            if statistic == "value" and numeric_values:
+                return float(max(numeric_values))
+        return None
 
     def check_all(self) -> list[Alert]:
         """Evaluate all rules and return triggered alerts."""
@@ -69,14 +99,14 @@ class AlertManager:
         triggered: list[Alert] = []
 
         for rule in self._rules:
-            value = summary.get(rule.metric)
+            metric_value = summary.get(rule.metric)
+            if metric_value is None:
+                continue
+            value = self._extract_value(metric_value, rule.statistic)
             if value is None:
                 continue
-            # Handle both scalar values and dicts with a "count" key.
-            if isinstance(value, dict):
-                value = value.get("count", 0)
             compare_fn = _COMPARATORS[rule.comparator]
-            if compare_fn(float(value), rule.threshold):
+            if compare_fn(value, rule.threshold):
                 triggered.append(
                     Alert(
                         rule_name=rule.name,
