@@ -25,6 +25,16 @@
 - If any gate fails, stop sequence and fix forward before proceeding to the next PR.
 - Validation reference: `docs/review-packets/validation-snapshots.md`.
 
+## Phase 35 Boundary-Touching Requirement
+
+- For any PR that touches Phase 35 connector-boundary behavior (messaging, multimodal, llm/embeddings, chat, or shared boundary governance), run and record all five smoke groups from `validation-snapshots.md` before merge:
+  1. Phase30/31/32 + tool-loop/invoke-iterative/skill/context
+  2. Messaging boundary + phase32
+  3. LLM memory/performance + phase32
+  4. Multimodal adapters/api + phase32
+  5. Chat + phase32
+- Preserve the currently validated aggregate baseline (**361 passed, 5 skipped**) unless new evidence supersedes it.
+
 ## Label Policy (CI-Enforced)
 - Use exactly one sequencing label per PR: `sequence:1`, `sequence:2`, or `sequence:3`.
 - PRs without a sequencing label are treated as unsequenced and pass the sequencing guard.
