@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from agent33.config import settings
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
 from agent33.security.injection import scan_input
 
 router = APIRouter(prefix="/v1", tags=["chat"])
@@ -23,9 +28,6 @@ class ChatRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int | None = None
     stream: bool = False
-
-
-from fastapi import Request, Response
 
 
 @router.post("/chat/completions")
@@ -58,17 +60,41 @@ async def chat_completions(request: Request) -> Response:
             # We explicitly pass the headers and yield the raw response so that streaming (SSE)
             # and exact OpenAI chunk formats are perfectly preserved back to the frontend.
             req = client.build_request("POST", f"{base_url}/chat/completions", json=payload)
-            r = await client.send(req, stream=True)
+            connector = "api:chat_proxy"
+            operation = "POST /chat/completions"
+
+            async def _send_request(_request: ConnectorRequest) -> httpx.Response:
+                return await client.send(req, stream=True)
+
+            boundary_executor = build_connector_boundary_executor(
+                default_timeout_seconds=120.0,
+                retry_attempts=1,
+            )
+            if boundary_executor is None:
+                r = await client.send(req, stream=True)
+            else:
+                boundary_request = ConnectorRequest(
+                    connector=connector,
+                    operation=operation,
+                    payload={"model": model},
+                    metadata={"base_url": base_url},
+                )
+                try:
+                    r = await boundary_executor.execute(boundary_request, _send_request)
+                except Exception as exc:
+                    raise map_connector_exception(exc, connector, operation) from exc
 
             # Read the response and return it exactly as the provider formatted it
             await r.aread()
             return Response(
                 content=r.content,
                 status_code=r.status_code,
-                media_type=r.headers.get("content-type", "application/json")
+                media_type=r.headers.get("content-type", "application/json"),
             )
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        raise HTTPException(status_code=503, detail=f"{engine} unavailable: {type(e).__name__} - {e}") from e
+        detail = f"{engine} unavailable: {type(e).__name__} - {e}"
+        raise HTTPException(status_code=503, detail=detail) from e

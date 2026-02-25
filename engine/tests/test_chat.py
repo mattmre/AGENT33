@@ -69,3 +69,66 @@ def test_chat_completions_ollama_unavailable(client: TestClient) -> None:
         )
 
     assert r.status_code == 503
+
+
+def test_chat_completions_boundary_governance_blocked_returns_503(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr(
+        "agent33.config.settings.connector_governance_blocked_connectors",
+        "api:chat_proxy",
+    )
+
+    with patch("agent33.api.routes.chat.httpx.AsyncClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_client.build_request.return_value = MagicMock()
+        mock_client.send = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_cls.return_value = mock_client
+
+        r = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+
+    assert r.status_code == 503
+    mock_client.send.assert_not_awaited()
+
+
+def test_chat_completions_boundary_disabled_passes_through_when_connector_blocked(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    upstream_payload = {"choices": [{"message": {"role": "assistant", "content": "Hello!"}}]}
+    mock_request = MagicMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.headers = {"content-type": "application/json"}
+    mock_response.content = json.dumps(upstream_payload).encode("utf-8")
+    mock_response.aread = AsyncMock(return_value=mock_response.content)
+
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", False)
+    monkeypatch.setattr(
+        "agent33.config.settings.connector_governance_blocked_connectors",
+        "api:chat_proxy",
+    )
+
+    with patch("agent33.api.routes.chat.httpx.AsyncClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_client.build_request.return_value = mock_request
+        mock_client.send = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_cls.return_value = mock_client
+
+        r = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+
+    assert r.status_code == 200
+    assert r.json() == upstream_payload
+    mock_client.send.assert_awaited_once_with(mock_request, stream=True)
