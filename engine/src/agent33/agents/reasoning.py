@@ -19,6 +19,7 @@ from agent33.llm.base import ChatMessage
 
 if TYPE_CHECKING:
     from agent33.agents.isc import GuardrailResult, ISCManager
+    from agent33.agents.stuck_detector import StuckDetection, StuckDetector
     from agent33.agents.tool_loop import ToolLoop
     from agent33.llm.router import ModelRouter
 
@@ -125,6 +126,9 @@ class ReasoningConfig:
     quality_gate_threshold: float = 0.7
     enable_anti_criteria: bool = True
     phases_enabled: tuple[ReasoningPhase, ...] = _ALL_PHASES
+    phase_dispatch_max_retries: int = 1
+    enable_graceful_degradation: bool = True
+    degraded_step_confidence: float = 0.8
 
 
 @dataclasses.dataclass(slots=True)
@@ -199,7 +203,7 @@ class ReasoningProtocol:
         self,
         config: ReasoningConfig | None = None,
         isc_manager: ISCManager | None = None,
-        stuck_detector: Any | None = None,
+        stuck_detector: StuckDetector | None = None,
     ) -> None:
         self._config = config or ReasoningConfig()
         self._isc_manager = isc_manager
@@ -232,7 +236,7 @@ class ReasoningProtocol:
                 continue
 
             # Call phase handler
-            step, next_action = await self._dispatch_phase(
+            step, next_action, terminal_reason = await self._dispatch_phase_with_recovery(
                 state=state,
                 task_input=task_input,
                 tool_loop=tool_loop,
@@ -242,6 +246,15 @@ class ReasoningProtocol:
                 max_tokens=max_tokens,
                 system_prompt=system_prompt,
             )
+
+            if terminal_reason is not None:
+                if step is not None:
+                    state.steps.append(step)
+                    state.current_step_index += 1
+                return self._build_result(state, terminal_reason)
+
+            if step is None or next_action is None:  # defensive: unreachable
+                return self._build_result(state, "phase_dispatch_failed")
 
             state.steps.append(step)
             state.current_step_index += 1
@@ -255,6 +268,25 @@ class ReasoningProtocol:
                     state.current_phase,
                 )
                 next_action = NextAction.CONTINUE
+
+            if self._stuck_detector is not None:
+                try:
+                    detection = self._stuck_detector.detect(
+                        steps=state.steps,
+                        phase_artifacts=state.phase_artifacts,
+                        current_phase=state.current_phase.value,
+                        normalized_action=next_action.value,
+                    )
+                    if detection is not None:
+                        state.phase_artifacts["stuck_detector"] = self._stuck_metadata(
+                            detection=detection,
+                            state=state,
+                            normalized_action=next_action,
+                        )
+                        return self._build_result(state, "stuck_detected")
+                except Exception as exc:  # pragma: no cover - covered by integration test
+                    logger.warning("Stuck detector failed: %s", exc)
+                    logger.debug("Stuck detector exception details", exc_info=True)
 
             # Quality gate: if confidence drops below threshold, reset
             if step.confidence < self._config.quality_gate_threshold:
@@ -346,6 +378,103 @@ class ReasoningProtocol:
             )
         # Unreachable, but satisfy type checker
         raise ValueError(f"Unknown phase: {phase}")  # pragma: no cover
+
+    async def _dispatch_phase_with_recovery(
+        self,
+        state: ReasoningState,
+        task_input: str,
+        tool_loop: ToolLoop,
+        model: str,
+        router: ModelRouter,
+        temperature: float,
+        max_tokens: int | None,
+        system_prompt: str,
+    ) -> tuple[ReasoningStep | None, NextAction | None, str | None]:
+        """Dispatch phase with bounded retries and optional graceful degradation."""
+        retries = max(0, self._config.phase_dispatch_max_retries)
+        total_attempts = retries + 1
+        last_error: Exception | None = None
+
+        for attempt in range(1, total_attempts + 1):
+            try:
+                step, action = await self._dispatch_phase(
+                    state=state,
+                    task_input=task_input,
+                    tool_loop=tool_loop,
+                    model=model,
+                    router=router,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system_prompt=system_prompt,
+                )
+                if attempt > 1:
+                    recovery_events = state.phase_artifacts.setdefault(
+                        "recovery_events", []
+                    )
+                    if isinstance(recovery_events, list):
+                        recovery_events.append(
+                            {
+                                "phase": state.current_phase.value,
+                                "status": "recovered",
+                                "attempts": attempt,
+                            }
+                        )
+                return step, action, None
+            except Exception as exc:  # pragma: no cover - exercised via tests
+                last_error = exc
+                if attempt < total_attempts:
+                    logger.warning(
+                        "Phase dispatch failed (phase=%s, attempt=%d/%d): %s",
+                        state.current_phase.value,
+                        attempt,
+                        total_attempts,
+                        exc,
+                    )
+                    continue
+
+        if not self._config.enable_graceful_degradation:
+            if last_error is None:
+                raise RuntimeError("Phase dispatch failed without exception context")
+            raise last_error
+
+        failure_phase = state.current_phase
+        fail_closed = failure_phase == ReasoningPhase.VERIFY
+        if fail_closed:
+            state.validated = False
+            degraded_action = NextAction.RESET
+        else:
+            degraded_action = NextAction.CONTINUE
+
+        degraded_confidence = max(
+            self._config.degraded_step_confidence,
+            min(1.0, self._config.quality_gate_threshold + 0.01),
+        )
+
+        state.phase_artifacts["degradation"] = {
+            "phase": failure_phase.value,
+            "attempts": total_attempts,
+            "error": str(last_error) if last_error is not None else "unknown_error",
+            "graceful": True,
+            "fail_closed": fail_closed,
+        }
+
+        degraded_step = ReasoningStep(
+            title=f"Degraded {failure_phase.value} after dispatch failure",
+            action=failure_phase.value,
+            result=(
+                f"Phase dispatch failed after {total_attempts} attempts; "
+                "terminating with graceful degradation"
+            ),
+            reasoning=(
+                "Retries exhausted during phase dispatch. "
+                f"Fail-closed={fail_closed}."
+            ),
+            next_action=degraded_action.value,
+            confidence=degraded_confidence,
+            phase=failure_phase.value,
+        )
+
+        return degraded_step, degraded_action, "degraded_phase_dispatch_failure"
 
     # ------------------------------------------------------------------
     # Phase handlers
@@ -619,3 +748,21 @@ class ReasoningProtocol:
             termination_reason=reason,
             total_steps=state.current_step_index,
         )
+
+    def _stuck_metadata(
+        self,
+        detection: StuckDetection,
+        state: ReasoningState,
+        normalized_action: NextAction,
+    ) -> dict[str, Any]:
+        return {
+            "triggered": True,
+            "pattern": detection.pattern,
+            "reason": detection.reason,
+            "window_size": detection.window_size,
+            "evidence": dict(detection.evidence),
+            "phase": state.current_phase.value,
+            "next_action": normalized_action.value,
+            "step_index": state.current_step_index,
+            "total_steps_seen": len(state.steps),
+        }

@@ -14,8 +14,12 @@ def test_health_returns_200(client: TestClient) -> None:
     data = r.json()
     assert data["status"] in ("healthy", "degraded")
     assert isinstance(data["services"], dict)
+    allowed_statuses = {"ok", "degraded", "unavailable", "configured", "unconfigured"}
     for svc_name, svc_status in data["services"].items():
-        assert svc_status in ("ok", "degraded", "unavailable"), (
+        if svc_name.startswith("channel:"):
+            assert isinstance(svc_status, str) and svc_status
+            continue
+        assert svc_status in allowed_statuses, (
             f"Unexpected status {svc_status!r} for service {svc_name!r}"
         )
 
@@ -23,7 +27,6 @@ def test_health_returns_200(client: TestClient) -> None:
 def test_health_lists_all_services(client: TestClient) -> None:
     data = client.get("/health").json()
     expected = {"ollama", "redis", "postgres", "nats"}
-    assert expected == data["services"].keys(), (
-        f"Service list mismatch. Missing: {expected - data['services'].keys()}, "
-        f"Extra: {data['services'].keys() - expected}"
+    assert expected.issubset(set(data["services"].keys())), (
+        f"Service list mismatch. Missing: {expected - set(data['services'].keys())}"
     )

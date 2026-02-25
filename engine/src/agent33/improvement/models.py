@@ -95,6 +95,56 @@ class RefreshScope(StrEnum):
 
 
 # ---------------------------------------------------------------------------
+# Learning signals
+# ---------------------------------------------------------------------------
+
+
+class LearningSignalType(StrEnum):
+    """Continuous learning signal classification."""
+
+    BUG = "bug"
+    INCIDENT = "incident"
+    FEEDBACK = "feedback"
+    PERFORMANCE = "performance"
+    SECURITY = "security"
+    PROCESS = "process"
+
+
+class LearningSignalSeverity(StrEnum):
+    """Impact/severity level for a learning signal."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class LearningSignal(BaseModel):
+    """A continuous-learning signal record (LS-*)."""
+
+    signal_id: str = Field(default_factory=lambda: _new_id("LS"))
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    signal_type: LearningSignalType = LearningSignalType.FEEDBACK
+    severity: LearningSignalSeverity = LearningSignalSeverity.MEDIUM
+    summary: str
+    details: str = ""
+    source: str = ""
+    context: dict[str, str] = Field(default_factory=dict)
+    intake_generated: bool = False
+    related_intake_id: str | None = None
+
+
+class LearningSummary(BaseModel):
+    """Aggregated snapshot of recent learning signals."""
+
+    total_signals: int = 0
+    counts_by_type: dict[str, int] = Field(default_factory=dict)
+    counts_by_severity: dict[str, int] = Field(default_factory=dict)
+    latest_recorded_at: datetime | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ---------------------------------------------------------------------------
 # Research Intake models
 # ---------------------------------------------------------------------------
 

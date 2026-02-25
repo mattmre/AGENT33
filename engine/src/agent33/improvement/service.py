@@ -10,7 +10,14 @@ from agent33.improvement.metrics import MetricsTracker, default_metrics
 from agent33.improvement.models import (
     ChecklistPeriod,
     ImprovementChecklist,
+    IntakeClassification,
+    IntakeContent,
+    IntakeRelevance,
     IntakeStatus,
+    LearningSignal,
+    LearningSignalSeverity,
+    LearningSignalType,
+    LearningSummary,
     LessonActionStatus,
     LessonLearned,
     MetricsSnapshot,
@@ -19,6 +26,13 @@ from agent33.improvement.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SEVERITY_RANK: dict[LearningSignalSeverity, int] = {
+    LearningSignalSeverity.LOW: 1,
+    LearningSignalSeverity.MEDIUM: 2,
+    LearningSignalSeverity.HIGH: 3,
+    LearningSignalSeverity.CRITICAL: 4,
+}
 
 
 # Valid intake status transitions
@@ -45,6 +59,8 @@ class ImprovementService:
         self._lessons: dict[str, LessonLearned] = {}
         self._checklists: dict[str, ImprovementChecklist] = {}
         self._refreshes: dict[str, RoadmapRefresh] = {}
+        self._learning_signals: dict[str, LearningSignal] = {}
+        self._learning_signal_intake_map: dict[str, str] = {}
         self._metrics_tracker = MetricsTracker()
         self._checklist_evaluator = ChecklistEvaluator()
 
@@ -297,3 +313,108 @@ class ImprovementService:
         if changes:
             refresh.changes_made = changes
         return refresh
+
+    # ----- Learning Signals -------------------------------------------------
+
+    def record_learning_signal(self, signal: LearningSignal) -> LearningSignal:
+        """Record a learning signal."""
+        self._learning_signals[signal.signal_id] = signal
+        logger.info(
+            "learning_signal_recorded",
+            signal_id=signal.signal_id,
+            signal_type=signal.signal_type.value,
+            severity=signal.severity.value,
+        )
+        return signal
+
+    def list_learning_signals(
+        self,
+        signal_type: LearningSignalType | None = None,
+        severity: LearningSignalSeverity | None = None,
+        limit: int = 50,
+    ) -> list[LearningSignal]:
+        """List learning signals with optional filters."""
+        result = list(self._learning_signals.values())
+        if signal_type is not None:
+            result = [s for s in result if s.signal_type == signal_type]
+        if severity is not None:
+            result = [s for s in result if s.severity == severity]
+        result.sort(key=lambda s: s.recorded_at, reverse=True)
+        return result[: max(0, limit)]
+
+    def summarize_learning_signals(self, limit: int = 50) -> LearningSummary:
+        """Summarize recent learning signals."""
+        signals = self.list_learning_signals(limit=limit)
+        counts_by_type: dict[str, int] = {}
+        counts_by_severity: dict[str, int] = {}
+        latest_recorded_at = signals[0].recorded_at if signals else None
+
+        for signal in signals:
+            stype = signal.signal_type.value
+            ssev = signal.severity.value
+            counts_by_type[stype] = counts_by_type.get(stype, 0) + 1
+            counts_by_severity[ssev] = counts_by_severity.get(ssev, 0) + 1
+
+        return LearningSummary(
+            total_signals=len(signals),
+            counts_by_type=counts_by_type,
+            counts_by_severity=counts_by_severity,
+            latest_recorded_at=latest_recorded_at,
+        )
+
+    def generate_intakes_from_learning_signals(
+        self,
+        *,
+        min_severity: LearningSignalSeverity = LearningSignalSeverity.HIGH,
+        max_items: int = 3,
+    ) -> list[ResearchIntake]:
+        """Generate research intakes from qualifying signals.
+
+        Uses an internal idempotency map so each signal produces at most one intake.
+        """
+        if max_items <= 0:
+            return []
+
+        created: list[ResearchIntake] = []
+        for signal in self.list_learning_signals(limit=1000):
+            if _SEVERITY_RANK[signal.severity] < _SEVERITY_RANK[min_severity]:
+                continue
+            if signal.signal_id in self._learning_signal_intake_map:
+                continue
+
+            urgency = (
+                "high"
+                if signal.severity
+                in {LearningSignalSeverity.HIGH, LearningSignalSeverity.CRITICAL}
+                else "medium"
+            )
+            priority_score = {
+                LearningSignalSeverity.LOW: 3,
+                LearningSignalSeverity.MEDIUM: 5,
+                LearningSignalSeverity.HIGH: 8,
+                LearningSignalSeverity.CRITICAL: 10,
+            }[signal.severity]
+
+            intake = self.submit_intake(
+                ResearchIntake(
+                    submitted_by="learning-service",
+                    classification=IntakeClassification(
+                        research_type="internal",
+                        category=f"learning:{signal.signal_type.value}",
+                        urgency=urgency,
+                    ),
+                    content=IntakeContent(
+                        title=f"Learning signal: {signal.summary}",
+                        summary=signal.details or signal.summary,
+                        source=signal.source,
+                    ),
+                    relevance=IntakeRelevance(priority_score=priority_score),
+                )
+            )
+            self._learning_signal_intake_map[signal.signal_id] = intake.intake_id
+            signal.related_intake_id = intake.intake_id
+            signal.intake_generated = True
+            created.append(intake)
+            if len(created) >= max_items:
+                break
+        return created
