@@ -230,6 +230,8 @@ class MatrixAdapter:
 
     async def _sync_loop(self) -> None:
         """Background task that long-polls ``/_matrix/client/v3/sync``."""
+        connector = "messaging:matrix"
+        operation = "sync_loop"
         while self._running:
             try:
                 params: dict[str, str] = {"timeout": str(self._sync_timeout_ms)}
@@ -237,7 +239,24 @@ class MatrixAdapter:
                     params["since"] = self._next_batch
 
                 client = self._ensure_client()
-                resp = await client.get("/_matrix/client/v3/sync", params=params)
+                frozen_params = params.copy()
+
+                async def _perform_sync(
+                    _request: object,
+                    *,
+                    _client: httpx.AsyncClient = client,
+                    _params: dict[str, str] = frozen_params,
+                ) -> httpx.Response:
+                    return await _client.get("/_matrix/client/v3/sync", params=_params)
+
+                resp = await execute_messaging_boundary_call(
+                    connector=connector,
+                    operation=operation,
+                    payload={"timeout_ms": self._sync_timeout_ms, "since": self._next_batch or ""},
+                    metadata={"platform": self.platform},
+                    call=_perform_sync,
+                    timeout_seconds=(self._sync_timeout_ms / 1000) + 10,
+                )
 
                 if resp.status_code == 429:
                     retry_ms = resp.json().get("retry_after_ms", 5000)

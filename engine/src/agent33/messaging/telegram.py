@@ -176,11 +176,28 @@ class TelegramAdapter:
         """Long-poll getUpdates in a background task."""
         offset = 0
         client = self._ensure_client()
+        connector = "messaging:telegram"
+        operation = "poll_updates"
         while self._running:
             try:
-                resp = await client.get(
-                    f"{self._base}/getUpdates",
-                    params={"offset": offset, "timeout": 30},
+                async def _perform_poll(
+                    _request: object,
+                    *,
+                    _offset: int = offset,
+                    _client: httpx.AsyncClient = client,
+                ) -> httpx.Response:
+                    return await _client.get(
+                        f"{self._base}/getUpdates",
+                        params={"offset": _offset, "timeout": 30},
+                    )
+
+                resp = await execute_messaging_boundary_call(
+                    connector=connector,
+                    operation=operation,
+                    payload={"offset": offset, "timeout": 30},
+                    metadata={"platform": self.platform},
+                    call=_perform_poll,
+                    timeout_seconds=60.0,
                 )
                 resp.raise_for_status()
                 updates = resp.json().get("result", [])
