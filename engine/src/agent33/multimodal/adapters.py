@@ -8,6 +8,7 @@ from typing import Any, Protocol
 import httpx
 
 from agent33.config import settings
+from agent33.connectors.boundary import enforce_connector_governance, map_connector_exception
 from agent33.multimodal.models import ModalityType, MultimodalRequest
 
 
@@ -24,6 +25,17 @@ class STTAdapter:
     def run(self, request: MultimodalRequest) -> dict[str, Any]:
         if not request.input_artifact_base64:
             raise ValueError("speech_to_text requires input_artifact_base64")
+        connector = "multimodal:speech_to_text"
+        operation = "run"
+        try:
+            enforce_connector_governance(
+                connector,
+                operation,
+                payload={"request_id": request.id, "modality": request.modality.value},
+                metadata={"timeout_seconds": request.requested_timeout_seconds},
+            )
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
 
         api_key = settings.openai_api_key.get_secret_value()
         if not api_key:
@@ -61,6 +73,17 @@ class TTSAdapter:
     def run(self, request: MultimodalRequest) -> dict[str, Any]:
         if not request.input_text:
             raise ValueError("text_to_speech requires input_text")
+        connector = "multimodal:text_to_speech"
+        operation = "run"
+        try:
+            enforce_connector_governance(
+                connector,
+                operation,
+                payload={"request_id": request.id, "modality": request.modality.value},
+                metadata={"timeout_seconds": request.requested_timeout_seconds},
+            )
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
 
         eleven_key = settings.elevenlabs_api_key.get_secret_value()
         openai_key = settings.openai_api_key.get_secret_value()
@@ -125,6 +148,17 @@ class VisionAdapter:
     def run(self, request: MultimodalRequest) -> dict[str, Any]:
         if not request.input_artifact_base64:
             raise ValueError("vision_analysis requires input_artifact_base64")
+        connector = "multimodal:vision_analysis"
+        operation = "run"
+        try:
+            enforce_connector_governance(
+                connector,
+                operation,
+                payload={"request_id": request.id, "modality": request.modality.value},
+                metadata={"timeout_seconds": request.requested_timeout_seconds},
+            )
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
 
         api_key = settings.openai_api_key.get_secret_value()
         if not api_key:

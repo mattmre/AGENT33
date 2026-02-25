@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import httpx
 
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
+
 _DEFAULT_BASE_URL = "http://localhost:11434"
 _DEFAULT_MODEL = "nomic-embed-text"
 _DEFAULT_TIMEOUT = 60.0
@@ -30,6 +36,10 @@ class EmbeddingProvider:
                 max_keepalive_connections=max_keepalive_connections,
             ),
         )
+        self._boundary_executor = build_connector_boundary_executor(
+            default_timeout_seconds=timeout,
+            retry_attempts=1,
+        )
 
     async def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -37,22 +47,66 @@ class EmbeddingProvider:
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding vector for a single text."""
-        response = await self._client.post(
-            f"{self._base_url}/api/embeddings",
-            json={"model": self._model, "prompt": text},
+        connector = "memory:ollama_embeddings"
+        operation = "POST /api/embeddings"
+        payload = {"model": self._model, "prompt": text}
+
+        async def _perform_embed() -> list[float]:
+            response = await self._client.post(
+                f"{self._base_url}/api/embeddings",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["embedding"]
+
+        async def _execute_embed(_request: ConnectorRequest) -> list[float]:
+            return await _perform_embed()
+
+        if self._boundary_executor is None:
+            return await _perform_embed()
+
+        request = ConnectorRequest(
+            connector=connector,
+            operation=operation,
+            payload=payload,
+            metadata={"base_url": self._base_url},
         )
-        response.raise_for_status()
-        data = response.json()
-        return data["embedding"]
+        try:
+            return await self._boundary_executor.execute(request, _execute_embed)
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts in a single batched request."""
         if not texts:
             return []
-        response = await self._client.post(
-            f"{self._base_url}/api/embed",
-            json={"model": self._model, "input": texts},
+        connector = "memory:ollama_embeddings"
+        operation = "POST /api/embed"
+        payload = {"model": self._model, "input": texts}
+
+        async def _perform_embed_batch() -> list[list[float]]:
+            response = await self._client.post(
+                f"{self._base_url}/api/embed",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["embeddings"]
+
+        async def _execute_embed_batch(_request: ConnectorRequest) -> list[list[float]]:
+            return await _perform_embed_batch()
+
+        if self._boundary_executor is None:
+            return await _perform_embed_batch()
+
+        request = ConnectorRequest(
+            connector=connector,
+            operation=operation,
+            payload=payload,
+            metadata={"base_url": self._base_url},
         )
-        response.raise_for_status()
-        data = response.json()
-        return data["embeddings"]
+        try:
+            return await self._boundary_executor.execute(request, _execute_embed_batch)
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
