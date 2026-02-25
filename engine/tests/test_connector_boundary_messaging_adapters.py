@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -139,4 +140,60 @@ async def test_health_check_governance_blocked_prevents_http_call(
 
     assert result.status == "unavailable"
     assert "Connector governance blocked" in result.detail
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_telegram_poll_loop_governance_blocked_prevents_http_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "default")
+    monkeypatch.setattr(
+        "agent33.config.settings.connector_governance_blocked_connectors",
+        "messaging:telegram",
+    )
+    monkeypatch.setattr("agent33.config.settings.connector_governance_blocked_operations", "")
+
+    adapter = TelegramAdapter(token="token")
+    client = _NeverCalledClient()
+    adapter._client = client
+    adapter._running = True
+
+    async def _stop_sleep(_seconds: float) -> None:
+        adapter._running = False
+
+    monkeypatch.setattr("agent33.messaging.telegram.asyncio.sleep", _stop_sleep)
+
+    await asyncio.wait_for(adapter._poll_loop(), timeout=1)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_sync_loop_governance_blocked_prevents_http_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "default")
+    monkeypatch.setattr(
+        "agent33.config.settings.connector_governance_blocked_connectors",
+        "messaging:matrix",
+    )
+    monkeypatch.setattr("agent33.config.settings.connector_governance_blocked_operations", "")
+
+    adapter = MatrixAdapter(
+        homeserver_url="https://matrix.example.com",
+        access_token="token",
+        user_id="@agent33:example.com",
+    )
+    client = _NeverCalledClient()
+    adapter._client = client
+    adapter._running = True
+
+    async def _stop_sleep(_seconds: float) -> None:
+        adapter._running = False
+
+    monkeypatch.setattr("agent33.messaging.matrix.asyncio.sleep", _stop_sleep)
+
+    await asyncio.wait_for(adapter._sync_loop(), timeout=1)
     assert client.calls == []
