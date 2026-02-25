@@ -12,6 +12,7 @@ from agent33.llm.base import ChatMessage, LLMResponse
 if TYPE_CHECKING:
     from agent33.agents.context_manager import ContextManager
     from agent33.agents.definition import AgentDefinition
+    from agent33.agents.effort import AgentEffort, AgentEffortRouter
     from agent33.agents.tool_loop import ToolLoopConfig
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
@@ -220,11 +221,16 @@ class AgentRuntime:
         runtime_enforcer: RuntimeEnforcer | None = None,
         context_manager: ContextManager | None = None,
         reasoning_protocol: Any | None = None,
+        effort: AgentEffort | str | None = None,
+        effort_router: AgentEffortRouter | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
+        self._requested_model = model
         self._model = model or "llama3.2"
         self._temperature = temperature
+        self._effort = effort
+        self._effort_router = effort_router
         self._observation_capture = observation_capture
         self._trace_emitter = trace_emitter
         self._session_id = session_id
@@ -241,6 +247,18 @@ class AgentRuntime:
     @property
     def definition(self) -> AgentDefinition:
         return self._definition
+
+    def _resolve_execution_parameters(self) -> tuple[str, int]:
+        max_tokens = self._definition.constraints.max_tokens
+        if self._effort_router is None:
+            return self._model, max_tokens
+        decision = self._effort_router.resolve(
+            requested_model=self._requested_model,
+            default_model=self._model,
+            max_tokens=max_tokens,
+            effort=self._effort,
+        )
+        return decision.model, decision.max_tokens
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -286,7 +304,7 @@ class AgentRuntime:
             ChatMessage(role="user", content=user_content),
         ]
 
-        max_tokens = self._definition.constraints.max_tokens
+        routed_model, max_tokens = self._resolve_execution_parameters()
         max_retries = self._definition.constraints.max_retries
 
         last_exc: Exception | None = None
@@ -296,7 +314,7 @@ class AgentRuntime:
             try:
                 response = await self._router.complete(
                     messages,
-                    model=self._model,
+                    model=routed_model,
                     temperature=self._temperature,
                     max_tokens=max_tokens,
                 )
@@ -384,6 +402,8 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
+        routed_model, routed_max_tokens = self._resolve_execution_parameters()
+
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
 
@@ -442,24 +462,31 @@ class AgentRuntime:
             reasoning_result = await self._reasoning_protocol.run(
                 task_input=task_input,
                 tool_loop=tool_loop,
-                model=self._model,
+                model=routed_model,
                 router=self._router,
                 temperature=self._temperature,
-                max_tokens=self._definition.constraints.max_tokens,
+                max_tokens=routed_max_tokens,
                 system_prompt=system_prompt,
             )
 
-            return IterativeAgentResult(
-                output={"response": reasoning_result.final_output}
-                if isinstance(reasoning_result.final_output, str)
-                else reasoning_result.final_output,
-                raw_response=reasoning_result.final_output,
-                tokens_used=0,
-                model=self._model,
-                iterations=reasoning_result.total_steps,
-                tool_calls_made=0,
-                tools_used=[],
-                termination_reason=reasoning_result.termination_reason,
+            if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
+                return IterativeAgentResult(
+                    output={"response": reasoning_result.final_output}
+                    if isinstance(reasoning_result.final_output, str)
+                    else reasoning_result.final_output,
+                    raw_response=reasoning_result.final_output,
+                    tokens_used=0,
+                    model=routed_model,
+                    iterations=reasoning_result.total_steps,
+                    tool_calls_made=0,
+                    tools_used=[],
+                    termination_reason=reasoning_result.termination_reason,
+                )
+
+            logger.warning(
+                "Reasoning protocol degraded with phase dispatch failure for agent %s; "
+                "falling back to standard iterative tool loop",
+                self._definition.name,
             )
 
         # Inject skill context if injector is available
@@ -514,12 +541,11 @@ class AgentRuntime:
             context_manager=self._context_manager,
         )
 
-        max_tokens = self._definition.constraints.max_tokens
         loop_result = await loop.run(
             messages=messages,
-            model=self._model,
+            model=routed_model,
             temperature=self._temperature,
-            max_tokens=max_tokens,
+            max_tokens=routed_max_tokens,
         )
 
         result = IterativeAgentResult(

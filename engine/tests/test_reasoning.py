@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent33.agents.isc import GuardrailResult, ISCCriterion, ISCManager
+from agent33.agents.isc import ISCCriterion, ISCManager
 from agent33.agents.reasoning import (
+    _VALID_ACTIONS,
     ExecuteArtifact,
     LearnArtifact,
     NextAction,
@@ -22,12 +23,11 @@ from agent33.agents.reasoning import (
     ReasoningState,
     ReasoningStep,
     VerifyArtifact,
-    _VALID_ACTIONS,
     _next_phase,
 )
+from agent33.agents.stuck_detector import StuckDetection
 from agent33.agents.tool_loop import ToolLoopResult
 from agent33.llm.base import LLMResponse
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -108,6 +108,9 @@ class TestReasoningConfig:
         assert cfg.quality_gate_threshold == 0.7
         assert cfg.enable_anti_criteria is True
         assert len(cfg.phases_enabled) == 5
+        assert cfg.phase_dispatch_max_retries == 1
+        assert cfg.enable_graceful_degradation is True
+        assert cfg.degraded_step_confidence == 0.8
 
     def test_frozen(self) -> None:
         cfg = ReasoningConfig()
@@ -638,3 +641,200 @@ class TestReasoningProtocol:
         verify = result.phase_artifacts.get("verify")
         assert isinstance(verify, VerifyArtifact)
         assert verify.all_passed is True
+
+    @pytest.mark.asyncio
+    async def test_phase_dispatch_transient_failure_retries_and_recovers(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        protocol = ReasoningProtocol(config=ReasoningConfig(max_steps=10))
+
+        original_dispatch = protocol._dispatch_phase
+        attempts = {"count": 0}
+
+        async def flaky_dispatch(*args: Any, **kwargs: Any) -> tuple[ReasoningStep, NextAction]:
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise RuntimeError("transient dispatch error")
+            return await original_dispatch(*args, **kwargs)
+
+        protocol._dispatch_phase = flaky_dispatch  # type: ignore[assignment]
+
+        result = await protocol.run(
+            task_input="test",
+            tool_loop=tool_loop,
+            model="m",
+            router=router,
+        )
+
+        assert result.termination_reason == "completed"
+        recovery_events = result.phase_artifacts.get("recovery_events")
+        assert isinstance(recovery_events, list)
+        assert recovery_events[0]["status"] == "recovered"
+        assert recovery_events[0]["attempts"] == 2
+
+    @pytest.mark.asyncio
+    async def test_phase_dispatch_exhausted_retries_degrades(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(max_steps=10, phase_dispatch_max_retries=1)
+        )
+
+        async def always_fail(*args: Any, **kwargs: Any) -> tuple[ReasoningStep, NextAction]:
+            raise RuntimeError("persistent dispatch error")
+
+        protocol._dispatch_phase = always_fail  # type: ignore[assignment]
+
+        result = await protocol.run(
+            task_input="test",
+            tool_loop=tool_loop,
+            model="m",
+            router=router,
+        )
+
+        assert result.termination_reason == "degraded_phase_dispatch_failure"
+        assert result.total_steps == 1
+        degradation = result.phase_artifacts.get("degradation")
+        assert isinstance(degradation, dict)
+        assert degradation["phase"] == "observe"
+        assert degradation["attempts"] == 2
+        assert degradation["graceful"] is True
+
+    @pytest.mark.asyncio
+    async def test_phase_dispatch_verify_failure_degrades_fail_closed(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(max_steps=10, phase_dispatch_max_retries=0)
+        )
+
+        original_dispatch = protocol._dispatch_phase
+
+        async def fail_verify_dispatch(
+            state: ReasoningState,
+            *args: Any,
+            **kwargs: Any,
+        ) -> tuple[ReasoningStep, NextAction]:
+            if state.current_phase == ReasoningPhase.VERIFY:
+                raise RuntimeError("verify dispatch error")
+            return await original_dispatch(state, *args, **kwargs)
+
+        protocol._dispatch_phase = fail_verify_dispatch  # type: ignore[assignment]
+
+        result = await protocol.run(
+            task_input="test",
+            tool_loop=tool_loop,
+            model="m",
+            router=router,
+        )
+
+        assert result.termination_reason == "degraded_phase_dispatch_failure"
+        degradation = result.phase_artifacts.get("degradation")
+        assert isinstance(degradation, dict)
+        assert degradation["phase"] == "verify"
+        assert degradation["fail_closed"] is True
+
+    @pytest.mark.asyncio
+    async def test_phase_dispatch_exhausted_without_graceful_raises(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(
+                max_steps=10,
+                phase_dispatch_max_retries=1,
+                enable_graceful_degradation=False,
+            )
+        )
+
+        async def always_fail(*args: Any, **kwargs: Any) -> tuple[ReasoningStep, NextAction]:
+            raise RuntimeError("persistent dispatch error")
+
+        protocol._dispatch_phase = always_fail  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="persistent dispatch error"):
+            await protocol.run(
+                task_input="test",
+                tool_loop=tool_loop,
+                model="m",
+                router=router,
+            )
+
+    @pytest.mark.asyncio
+    async def test_stuck_detector_triggered_terminates(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        detector = MagicMock()
+        detector.detect.return_value = StuckDetection(
+            pattern="abab_oscillation",
+            reason="loop detected",
+            window_size=4,
+            evidence={"sequence": ["observe", "plan", "observe", "plan"]},
+        )
+
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(max_steps=10),
+            stuck_detector=detector,
+        )
+
+        result = await protocol.run(
+            task_input="test",
+            tool_loop=tool_loop,
+            model="m",
+            router=router,
+        )
+
+        assert result.termination_reason == "stuck_detected"
+        assert result.total_steps == 1
+        metadata = result.phase_artifacts.get("stuck_detector")
+        assert isinstance(metadata, dict)
+        assert metadata["triggered"] is True
+        assert metadata["pattern"] == "abab_oscillation"
+
+    @pytest.mark.asyncio
+    async def test_stuck_detector_no_trigger_normal_completion(self) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop()
+        detector = MagicMock()
+        detector.detect.return_value = None
+
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(max_steps=10),
+            stuck_detector=detector,
+        )
+
+        result = await protocol.run(
+            task_input="test task",
+            tool_loop=tool_loop,
+            model="test-model",
+            router=router,
+            system_prompt="system",
+        )
+
+        assert result.termination_reason == "completed"
+        assert detector.detect.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_stuck_detector_exception_tolerated(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        router = _make_router()
+        tool_loop = _make_tool_loop("executed result")
+        detector = MagicMock()
+        detector.detect.side_effect = RuntimeError("detector boom")
+
+        protocol = ReasoningProtocol(
+            config=ReasoningConfig(max_steps=10),
+            stuck_detector=detector,
+        )
+
+        result = await protocol.run(
+            task_input="test task",
+            tool_loop=tool_loop,
+            model="test-model",
+            router=router,
+            system_prompt="system",
+        )
+
+        assert result.termination_reason == "completed"
+        assert "Stuck detector failed: detector boom" in caplog.text

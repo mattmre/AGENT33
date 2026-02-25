@@ -15,6 +15,7 @@ from agent33.agents.definition import (
     CapabilityCategory,
     SpecCapability,
 )
+from agent33.agents.effort import AgentEffort, AgentEffortRouter
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
@@ -41,6 +42,17 @@ if settings.openai_api_key.get_secret_value():
         _openai_kwargs["base_url"] = settings.openai_base_url
     _model_router.register("openai", OpenAIProvider(**_openai_kwargs))
 
+_effort_router = AgentEffortRouter(
+    enabled=settings.agent_effort_routing_enabled,
+    default_effort=settings.agent_effort_default,
+    low_model=settings.agent_effort_low_model or None,
+    medium_model=settings.agent_effort_medium_model or None,
+    high_model=settings.agent_effort_high_model or None,
+    low_token_multiplier=settings.agent_effort_low_token_multiplier,
+    medium_token_multiplier=settings.agent_effort_medium_token_multiplier,
+    high_token_multiplier=settings.agent_effort_high_token_multiplier,
+)
+
 
 # -- dependency injection -------------------------------------------------
 
@@ -62,6 +74,7 @@ class InvokeRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     temperature: float = 0.7
+    effort: AgentEffort | None = None
 
 
 class InvokeResponse(BaseModel):
@@ -79,6 +92,7 @@ class InvokeIterativeRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     temperature: float = 0.7
+    effort: AgentEffort | None = None
     max_iterations: int = 20
     max_tool_calls_per_iteration: int = 5
     enable_double_confirmation: bool = True
@@ -207,6 +221,7 @@ async def invoke_agent(
     # Pull subsystems from app state for agent runtime, falling back to
     # module-level singleton for backward compatibility.
     model_router = getattr(request.app.state, "model_router", _model_router)
+    effort_router = getattr(request.app.state, "effort_router", _effort_router)
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
@@ -215,6 +230,8 @@ async def invoke_agent(
         router=model_router,
         model=body.model,
         temperature=body.temperature,
+        effort=body.effort,
+        effort_router=effort_router,
         skill_injector=skill_injector,
         progressive_recall=progressive_recall,
     )
@@ -275,6 +292,7 @@ async def invoke_agent_iterative(
             detail="Tool registry not initialized",
         )
     tool_governance = getattr(request.app.state, "tool_governance", None)
+    effort_router = getattr(request.app.state, "effort_router", _effort_router)
     skill_injector = getattr(request.app.state, "skill_injector", None)
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
 
@@ -307,6 +325,8 @@ async def invoke_agent_iterative(
         router=model_router,
         model=body.model,
         temperature=body.temperature,
+        effort=body.effort,
+        effort_router=effort_router,
         skill_injector=skill_injector,
         progressive_recall=progressive_recall,
         tool_registry=tool_registry,
