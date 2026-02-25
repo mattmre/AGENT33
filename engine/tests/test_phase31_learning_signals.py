@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import re
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import ValidationError
 
 from agent33.config import settings
 from agent33.improvement.models import (
@@ -50,16 +54,40 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
         settings, "improvement_learning_persistence_migrate_on_start", False
     )
     monkeypatch.setattr(
+        settings,
+        "improvement_learning_persistence_migration_backup_on_start",
+        False,
+    )
+    monkeypatch.setattr(
+        settings,
+        "improvement_learning_persistence_migration_backup_path",
+        "var/improvement_learning_signals.backup.json",
+    )
+    monkeypatch.setattr(
         settings, "improvement_learning_file_corruption_behavior", "reset"
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_db_corruption_behavior", "reset"
     )
     _reset_service()
     monkeypatch.setattr(settings, "improvement_learning_enabled", False)
     monkeypatch.setattr(settings, "improvement_learning_summary_default_limit", 50)
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", False)
-    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
+    monkeypatch.setattr(
+        settings, "improvement_learning_auto_intake_min_severity", "high"
+    )
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 3)
     yield
     _reset_service()
+
+
+def test_settings_reject_invalid_learning_corruption_behavior() -> None:
+    from agent33.config import Settings
+
+    with pytest.raises(ValidationError, match="corruption behavior must be one of"):
+        Settings(improvement_learning_file_corruption_behavior="invalid")
+    with pytest.raises(ValidationError, match="corruption behavior must be one of"):
+        Settings(improvement_learning_db_corruption_behavior="invalid")
 
 
 def test_service_roundtrip_and_summary_counts(service: ImprovementService):
@@ -170,6 +198,31 @@ def test_file_to_db_migration_path(tmp_path: Path):
     assert len(db_service.list_intakes(tenant_id="tenant-a")) == 1
 
 
+def test_file_to_db_migration_path_creates_backup_when_requested(tmp_path: Path):
+    file_path = tmp_path / "learning_state.json"
+    db_path = tmp_path / "learning_state.sqlite3"
+    backup_path = tmp_path / "learning_state.backup.json"
+
+    seed = ImprovementService(learning_store=FileLearningSignalStore(str(file_path)))
+    seed.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Persisted in file backend",
+            tenant_id="tenant-a",
+        )
+    )
+
+    migrated = migrate_file_learning_state_to_db(
+        str(file_path), str(db_path), backup_path=str(backup_path)
+    )
+
+    assert len(migrated.signals) == 1
+    assert backup_path.exists()
+    backup_payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    assert len(backup_payload["signals"]) == 1
+
+
 def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
     source_path = tmp_path / "source_learning.json"
     backup_path = tmp_path / "backup_learning.json"
@@ -211,6 +264,97 @@ def test_file_store_corruption_recovery_is_deterministic(tmp_path: Path):
     assert state.signals == []
     assert not corrupt_path.exists()
     assert (tmp_path / "corrupt_learning.json.corrupt").exists()
+
+
+def test_sqlite_store_corruption_reset_writes_sidecar_and_clears_row(tmp_path: Path):
+    db_path = tmp_path / "corrupt_learning.sqlite3"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS learning_signal_state (
+                state_key INTEGER PRIMARY KEY CHECK (state_key = 1),
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO learning_signal_state(state_key, payload) VALUES (1, ?)",
+            ("{not-json",),
+        )
+        conn.commit()
+
+    store = SQLiteLearningSignalStore(str(db_path), on_corruption="reset")
+    loaded = store.load()
+
+    assert loaded.signals == []
+    sidecars = sorted(
+        tmp_path.glob("corrupt_learning.sqlite3.corrupt.payload*.json")
+    )
+    assert len(sidecars) == 1
+    assert sidecars[0].read_text(encoding="utf-8") == "{not-json"
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT payload FROM learning_signal_state WHERE state_key = 1"
+        ).fetchone()
+    assert row is None
+
+
+def test_sqlite_store_corruption_raise_throws_value_error(tmp_path: Path):
+    db_path = tmp_path / "corrupt_learning.sqlite3"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS learning_signal_state (
+                state_key INTEGER PRIMARY KEY CHECK (state_key = 1),
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO learning_signal_state(state_key, payload) VALUES (1, ?)",
+            ("{not-json",),
+        )
+        conn.commit()
+
+    store = SQLiteLearningSignalStore(str(db_path), on_corruption="raise")
+    with pytest.raises(
+        ValueError,
+        match=(
+            "^Corrupted learning-signal persistence payload in SQLite: "
+            f"{re.escape(str(db_path))}$"
+        ),
+    ):
+        store.load()
+
+
+def test_sqlite_database_corruption_reset_quarantines_db_file(tmp_path: Path):
+    db_path = tmp_path / "corrupt_db.sqlite3"
+    db_path.write_bytes(b"not-a-sqlite-database")
+
+    store = SQLiteLearningSignalStore(str(db_path), on_corruption="reset")
+    loaded = store.load()
+
+    assert loaded.signals == []
+    assert not db_path.exists()
+    sidecars = sorted(tmp_path.glob("corrupt_db.sqlite3.corrupt*"))
+    assert len(sidecars) == 1
+
+
+def test_sqlite_database_corruption_raise_throws_value_error(tmp_path: Path):
+    db_path = tmp_path / "corrupt_db.sqlite3"
+    db_path.write_bytes(b"not-a-sqlite-database")
+
+    store = SQLiteLearningSignalStore(str(db_path), on_corruption="raise")
+    with pytest.raises(
+        ValueError,
+        match=(
+            "^Corrupted learning-signal SQLite database: "
+            f"{re.escape(str(db_path))}$"
+        ),
+    ):
+        store.load()
 
 
 def test_summary_supports_tenant_and_window_trends(service: ImprovementService):
@@ -462,3 +606,99 @@ def test_routes_support_sqlite_backend_with_file_migration(
     )
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+
+def test_routes_sqlite_startup_migration_creates_backup_when_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    db_path = tmp_path / "learning_state.sqlite3"
+    backup_path = tmp_path / "learning_state.backup.json"
+
+    file_seed_service = ImprovementService(
+        learning_store=FileLearningSignalStore(str(file_path))
+    )
+    file_seed_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Migrate and backup me",
+            tenant_id="tenant-db",
+        )
+    )
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_path", str(file_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_db_path", str(db_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_migrate_on_start", True
+    )
+    monkeypatch.setattr(
+        settings,
+        "improvement_learning_persistence_migration_backup_on_start",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "improvement_learning_persistence_migration_backup_path",
+        str(backup_path),
+    )
+    _reset_service()
+
+    listed = client.get(
+        "/v1/improvements/learning/signals",
+        params={"tenant_id": "tenant-db", "limit": 10},
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert backup_path.exists()
+
+
+def test_routes_sqlite_startup_migration_does_not_overwrite_existing_db(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    db_path = tmp_path / "learning_state.sqlite3"
+
+    db_seed_service = ImprovementService(
+        learning_store=SQLiteLearningSignalStore(str(db_path))
+    )
+    db_seed_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Keep DB state",
+            tenant_id="tenant-db",
+        )
+    )
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_path", str(file_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_db_path", str(db_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_migrate_on_start", True
+    )
+    _reset_service()
+
+    listed = client.get(
+        "/v1/improvements/learning/signals",
+        params={"tenant_id": "tenant-db", "limit": 10},
+    )
+    assert listed.status_code == 200
+    payload = listed.json()
+    assert len(payload) == 1
+    assert payload[0]["summary"] == "Keep DB state"

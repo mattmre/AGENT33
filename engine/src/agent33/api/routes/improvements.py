@@ -30,6 +30,7 @@ from agent33.improvement.persistence import (
     InMemoryLearningSignalStore,
     SQLiteLearningSignalStore,
     migrate_file_learning_state_to_db,
+    should_migrate_file_learning_state_to_db,
 )
 from agent33.improvement.service import ImprovementService
 
@@ -45,18 +46,41 @@ def _build_improvement_service() -> ImprovementService:
         )
     elif backend in {"db", "sqlite"}:
         if settings.improvement_learning_persistence_migrate_on_start:
-            migrate_file_learning_state_to_db(
-                file_path=str(Path(settings.improvement_learning_persistence_path)),
-                db_path=str(Path(settings.improvement_learning_persistence_db_path)),
-                on_file_corruption=(
-                    settings.improvement_learning_file_corruption_behavior
-                ),
-            )
+            file_path = str(Path(settings.improvement_learning_persistence_path))
+            db_path = str(Path(settings.improvement_learning_persistence_db_path))
+            if should_migrate_file_learning_state_to_db(
+                file_path=file_path,
+                db_path=db_path,
+                on_file_corruption=settings.improvement_learning_file_corruption_behavior,
+                on_db_corruption=settings.improvement_learning_db_corruption_behavior,
+            ):
+                migrate_file_learning_state_to_db(
+                    file_path=file_path,
+                    db_path=db_path,
+                    on_file_corruption=(
+                        settings.improvement_learning_file_corruption_behavior
+                    ),
+                    backup_path=(
+                        str(
+                            Path(
+                                settings.improvement_learning_persistence_migration_backup_path
+                            )
+                        )
+                        if settings.improvement_learning_persistence_migration_backup_on_start
+                        else None
+                    ),
+                )
         store = SQLiteLearningSignalStore(
-            path=str(Path(settings.improvement_learning_persistence_db_path))
+            path=str(Path(settings.improvement_learning_persistence_db_path)),
+            on_corruption=settings.improvement_learning_db_corruption_behavior,
         )
-    else:
+    elif backend == "memory":
         store = InMemoryLearningSignalStore()
+    else:
+        raise ValueError(
+            "Unsupported improvement learning persistence backend: "
+            f"{settings.improvement_learning_persistence_backend}"
+        )
     return ImprovementService(learning_store=store)
 
 
