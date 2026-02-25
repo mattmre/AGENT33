@@ -9,23 +9,19 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
 
-from agent33.config import settings
-from agent33.connectors.circuit_breaker import CircuitBreaker
-from agent33.connectors.executor import ConnectorExecutor
-from agent33.connectors.governance import BlocklistConnectorPolicy
-from agent33.connectors.middleware import (
-    CircuitBreakerMiddleware,
-    GovernanceMiddleware,
-)
+from agent33.connectors.boundary import build_connector_boundary_executor
 from agent33.connectors.models import ConnectorRequest
 from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.schema import validate_params
+
+if TYPE_CHECKING:
+    from agent33.connectors.executor import ConnectorExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +35,6 @@ _BLOCKED_NETWORKS = (
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
 )
-
-
-def _parse_csv(value: str) -> frozenset[str]:
-    return frozenset(item.strip() for item in value.split(",") if item.strip())
 
 
 def _validate_mcp_url(url: str) -> str:
@@ -96,10 +88,12 @@ class MCPServerConnection:
         url: str,
         timeout: float = 30.0,
         boundary_executor: ConnectorExecutor | None = None,
+        policy_pack: str | None = None,
     ) -> None:
         self._name = name
         self._url = _validate_mcp_url(url)
         self._timeout = timeout
+        self._policy_pack = policy_pack
         self._tools: list[MCPToolSpec] = []
         self._connected = False
         self._client: httpx.AsyncClient | None = None
@@ -243,33 +237,11 @@ class MCPServerConnection:
         return body.get("result", body)
 
     def _build_boundary_executor(self) -> ConnectorExecutor | None:
-        if not settings.connector_boundary_enabled:
-            return None
-        middlewares = []
-        policy = BlocklistConnectorPolicy(
-            blocked_connectors=_parse_csv(
-                settings.connector_governance_blocked_connectors
-            ),
-            blocked_operations=_parse_csv(
-                settings.connector_governance_blocked_operations
-            ),
+        return build_connector_boundary_executor(
+            default_timeout_seconds=self._timeout,
+            retry_attempts=1,
+            policy_pack=self._policy_pack,
         )
-        middlewares.append(GovernanceMiddleware(policy))
-        if settings.connector_circuit_breaker_enabled:
-            middlewares.append(
-                CircuitBreakerMiddleware(
-                    CircuitBreaker(
-                        failure_threshold=settings.connector_circuit_failure_threshold,
-                        recovery_timeout_seconds=(
-                            settings.connector_circuit_recovery_seconds
-                        ),
-                        half_open_success_threshold=(
-                            settings.connector_circuit_half_open_successes
-                        ),
-                    )
-                )
-            )
-        return ConnectorExecutor(middlewares=middlewares)
 
 
 # ---------------------------------------------------------------------------
@@ -347,9 +319,20 @@ class MCPBridge:
         self._servers: dict[str, MCPServerConnection] = {}
         self._adapters: list[MCPToolAdapter] = []
 
-    def add_server(self, name: str, url: str, timeout: float = 30.0) -> None:
+    def add_server(
+        self,
+        name: str,
+        url: str,
+        timeout: float = 30.0,
+        policy_pack: str | None = None,
+    ) -> None:
         """Register an MCP server to connect to during initialization."""
-        self._servers[name] = MCPServerConnection(name=name, url=url, timeout=timeout)
+        self._servers[name] = MCPServerConnection(
+            name=name,
+            url=url,
+            timeout=timeout,
+            policy_pack=policy_pack,
+        )
         logger.info("MCP server queued: %s (%s)", name, url)
 
     async def initialize(self) -> None:

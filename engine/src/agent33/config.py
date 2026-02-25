@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_default_model: str = "llama3.2"
 
-    # Local "Heretic" & Ultra-Sparse Orchestration (optimized for single RTX 3090 - 24GB VRAM)
-    # Top targets: Qwen3-Coder-Next (via llama.cpp tensor offloading), Qwen2.5-Coder-32B-Instruct-abliterated, Lexi-3.0
+    # Local "Heretic" & Ultra-Sparse Orchestration
+    # (optimized for single RTX 3090 - 24GB VRAM).
+    # Top targets: Qwen3-Coder-Next (via llama.cpp tensor offloading),
+    # Qwen2.5-Coder-32B-Instruct-abliterated, Lexi-3.0.
     local_orchestration_model: str = "qwen3-coder-next"
     local_orchestration_format: str = "gguf_q4_k_m"
     local_orchestration_engine: str = "llama.cpp"
@@ -126,16 +128,26 @@ class Settings(BaseSettings):
         ""  # JSON object: {"tenant-id|domain": "low|medium|high"}
     )
     agent_effort_cost_per_1k_tokens: float = 0.0
+    observability_effort_alerts_enabled: bool = True
+    observability_effort_alert_high_effort_count_threshold: int = 25
+    observability_effort_alert_high_cost_usd_threshold: float = 5.0
+    observability_effort_alert_high_token_budget_threshold: int = 8000
 
     # Skills
     skill_definitions_dir: str = "skills"
     skill_max_instructions_chars: int = 16000
+    skillsbench_skill_matcher_enabled: bool = False
+    skillsbench_skill_matcher_model: str = "llama3.2"
+    skillsbench_skill_matcher_top_k: int = 20
+    skillsbench_skill_matcher_skip_llm_below: int = 3
+    skillsbench_context_manager_enabled: bool = True
 
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
     mcp_auto_discover: bool = True
     connector_boundary_enabled: bool = False
+    connector_policy_pack: str = "default"
     connector_governance_blocked_connectors: str = ""  # comma-separated
     connector_governance_blocked_operations: str = ""  # comma-separated
     connector_circuit_breaker_enabled: bool = False
@@ -169,10 +181,15 @@ class Settings(BaseSettings):
     improvement_learning_auto_intake_enabled: bool = False
     improvement_learning_auto_intake_min_severity: str = "high"
     improvement_learning_auto_intake_max_items: int = 3
-    improvement_learning_persistence_backend: str = "memory"  # memory | file
+    improvement_learning_persistence_backend: str = "memory"  # memory | file | db
     improvement_learning_persistence_path: str = (
         "var/improvement_learning_signals.json"
     )
+    improvement_learning_persistence_db_path: str = (
+        "var/improvement_learning_signals.sqlite3"
+    )
+    improvement_learning_persistence_migrate_on_start: bool = False
+    improvement_learning_file_corruption_behavior: str = "reset"  # reset | raise
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
