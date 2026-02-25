@@ -73,3 +73,11 @@ This order reduces integration risk and makes regressions easier to localize by 
 - Open review packets for each Phase 35 branch with explicit merge sequencing labels.
 - Re-run targeted suites post-merge in the same A → B → C order.
 - Track async convergence opportunities for multimodal governance helper usage in a subsequent wave.
+
+## Post-Merge Completion Update (2026-02-25)
+
+- Baseline stack merged: **PR #67 → #71**.
+- Phase 35 Wave 1 merged: **PR #72 → #74** (A: llm/embeddings, B: multimodal, C: chat proxy).
+- Post-merge targeted validation completed in four batches with aggregate result: **303 passed, 4 skipped**.
+- Architectural confirmation: connector-family boundary governance remains consistent across baseline + Wave 1 surfaces, with rollout order and naming contract preserved.
+- Deferred follow-up: evaluate multimodal async-governance convergence in a later wave after broader async call-site readiness.
