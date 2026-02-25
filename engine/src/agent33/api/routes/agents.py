@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -23,6 +24,11 @@ from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
+from agent33.observability.effort_telemetry import (
+    EffortTelemetryExporter,
+    EffortTelemetryExportError,
+    NoopEffortTelemetryExporter,
+)
 from agent33.observability.metrics import MetricsCollector
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import _get_token_payload, require_scope
@@ -137,12 +143,19 @@ _effort_router = AgentEffortRouter(
     cost_per_1k_tokens=settings.agent_effort_cost_per_1k_tokens,
 )
 _metrics = MetricsCollector()
+_effort_exporter: EffortTelemetryExporter = NoopEffortTelemetryExporter()
 
 
 def set_metrics(collector: MetricsCollector) -> None:
     """Swap the global metrics collector (called during app init)."""
     global _metrics
     _metrics = collector
+
+
+def set_effort_telemetry_exporter(exporter: EffortTelemetryExporter) -> None:
+    """Swap the global effort telemetry exporter (called during app init)."""
+    global _effort_exporter
+    _effort_exporter = exporter
 
 
 def _record_effort_routing_metrics(routing: dict[str, Any] | None) -> None:
@@ -179,6 +192,18 @@ def _record_effort_routing_metrics(routing: dict[str, Any] | None) -> None:
             "effort_routing_estimated_cost_usd",
             float(estimated_cost),
         )
+
+    event = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "routing": routing,
+    }
+    try:
+        _effort_exporter.export(event)
+    except EffortTelemetryExportError:
+        _metrics.increment("effort_routing_export_failures_total")
+        logger.warning("effort_routing_telemetry_export_failed", exc_info=True)
+        if settings.observability_effort_export_fail_closed:
+            raise HTTPException(status_code=503, detail="Effort telemetry export failed") from None
 
 
 # -- dependency injection -------------------------------------------------

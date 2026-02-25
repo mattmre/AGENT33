@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     observability_effort_alert_high_effort_count_threshold: int = 25
     observability_effort_alert_high_cost_usd_threshold: float = 5.0
     observability_effort_alert_high_token_budget_threshold: int = 8000
+    observability_effort_export_enabled: bool = False
+    observability_effort_export_path: str = "var/effort_routing_events.jsonl"
+    observability_effort_export_fail_closed: bool = False
 
     # Skills
     skill_definitions_dir: str = "skills"
