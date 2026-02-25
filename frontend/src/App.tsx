@@ -13,6 +13,8 @@ import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
+type AppTab = "chat" | "voice" | "setup" | "advanced";
+
 interface ActivityItem {
   id: string;
   at: string;
@@ -22,8 +24,15 @@ interface ActivityItem {
   url: string;
 }
 
+const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
+  { id: "chat", label: "💬 Chat Central" },
+  { id: "voice", label: "🎙️ Voice Call" },
+  { id: "setup", label: "🔌 Integrations" },
+  { id: "advanced", label: "⚙️ Advanced Settings" }
+];
+
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<"chat" | "voice" | "setup" | "advanced">("chat");
+  const [activeTab, setActiveTab] = useState<AppTab>("chat");
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
@@ -68,11 +77,17 @@ export default function App(): JSX.Element {
           <div className="logo-orb"></div>
           <h1>AGENT-33</h1>
         </div>
+        <GlobalSearch token={token || null} />
         <nav className="main-nav">
-          <button className={activeTab === "chat" ? "active" : ""} onClick={() => setActiveTab("chat")}>💬 Chat Central</button>
-          <button className={activeTab === "voice" ? "active" : ""} onClick={() => setActiveTab("voice")}>🎙️ Voice Call</button>
-          <button className={activeTab === "setup" ? "active" : ""} onClick={() => setActiveTab("setup")}>🔌 Integrations</button>
-          <button className={activeTab === "advanced" ? "active" : ""} onClick={() => setActiveTab("advanced")}>⚙️ Advanced Settings</button>
+          {APP_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={activeTab === tab.id ? "active" : ""}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
       </header>
 
@@ -80,6 +95,59 @@ export default function App(): JSX.Element {
         {/* Chat Central -> Render new ChatInterface */}
         {activeTab === "chat" && (
           <div className="consumer-chat-layout">
+            <div
+              style={{
+                display: "grid",
+                gap: "0.65rem",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+              }}
+            >
+              <button
+                onClick={() => setActiveTab("voice")}
+                style={{
+                  background: "rgba(11, 30, 39, 0.65)",
+                  border: "1px solid rgba(48, 213, 200, 0.35)",
+                  borderRadius: "10px",
+                  color: "#d9edf4",
+                  padding: "0.65rem 0.85rem",
+                  fontSize: "0.86rem",
+                  textAlign: "left",
+                  cursor: "pointer"
+                }}
+              >
+                🎙️ Start a voice session
+              </button>
+              <button
+                onClick={() => setActiveTab("setup")}
+                style={{
+                  background: "rgba(11, 30, 39, 0.65)",
+                  border: "1px solid rgba(48, 213, 200, 0.35)",
+                  borderRadius: "10px",
+                  color: "#d9edf4",
+                  padding: "0.65rem 0.85rem",
+                  fontSize: "0.86rem",
+                  textAlign: "left",
+                  cursor: "pointer"
+                }}
+              >
+                🔌 Connect integrations
+              </button>
+              <button
+                onClick={() => setActiveTab("advanced")}
+                style={{
+                  background: "rgba(11, 30, 39, 0.65)",
+                  border: "1px solid rgba(48, 213, 200, 0.35)",
+                  borderRadius: "10px",
+                  color: "#d9edf4",
+                  padding: "0.65rem 0.85rem",
+                  fontSize: "0.86rem",
+                  textAlign: "left",
+                  cursor: "pointer"
+                }}
+              >
+                ⚙️ Open control plane
+              </button>
+            </div>
             <ChatInterface token={token} apiKey={apiKey} />
           </div>
         )}
@@ -87,7 +155,7 @@ export default function App(): JSX.Element {
         {/* Voice Call -> Render LiveVoicePanel cleanly centered */}
         {activeTab === "voice" && (
           <div className="consumer-voice-layout">
-            <LiveVoicePanel token={token} />
+            <LiveVoicePanel token={token || null} onOpenSetup={() => setActiveTab("setup")} />
           </div>
         )}
 

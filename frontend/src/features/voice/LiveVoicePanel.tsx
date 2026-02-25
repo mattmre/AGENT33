@@ -1,13 +1,15 @@
 import { useState } from "react";
 
-export function LiveVoicePanel({ token }: { token: string | null }): JSX.Element {
+interface LiveVoicePanelProps {
+    token: string | null;
+    onOpenSetup?: () => void;
+}
+
+export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX.Element {
     const [isActive, setIsActive] = useState(false);
 
     async function toggleConnection() {
         setIsActive(!isActive);
-        // In a complete implementation, we would use:
-        // import { LiveKitRoom, RoomAudioRenderer, VoiceAssistantControlBar } from "@livekit/components-react";
-        // And request a token from our backend to join the specific room.
     }
 
     return (
@@ -24,6 +26,29 @@ export function LiveVoicePanel({ token }: { token: string | null }): JSX.Element
             <p style={{ margin: "0.3rem 0 0.7rem", color: "#9dc3cf", fontSize: "0.85rem" }}>
                 Connect via WebRTC for an ultra-low-latency, interruptible voice conversation with AGENT-33.
             </p>
+            {!token ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <p style={{ margin: 0, fontSize: "0.82rem", color: "#f6d37b" }}>
+                        Sign in first to enable live voice sessions.
+                    </p>
+                    {onOpenSetup ? (
+                        <button
+                            onClick={onOpenSetup}
+                            style={{
+                                width: "fit-content",
+                                background: "rgba(48, 213, 200, 0.12)",
+                                border: "1px solid rgba(48, 213, 200, 0.5)",
+                                color: "#d8f7f3",
+                                borderRadius: "8px",
+                                padding: "0.4rem 0.7rem",
+                                cursor: "pointer"
+                            }}
+                        >
+                            Open Integrations Setup
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
 
             <div className="voice-controls" style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
                 <button
@@ -41,6 +66,9 @@ export function LiveVoicePanel({ token }: { token: string | null }): JSX.Element
                 >
                     {isActive ? "Disconnect" : "Connect Microphone"}
                 </button>
+                {token && !isActive ? (
+                    <span style={{ fontSize: "0.8rem", color: "#9dc3cf" }}>Ready to start</span>
+                ) : null}
 
                 {isActive && (
                     <div className="audio-visualizer" style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "24px" }}>
