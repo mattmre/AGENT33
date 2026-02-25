@@ -8,7 +8,7 @@ Session 43 left three immediate priorities:
 2. Inventory **multimodal synchronous governance** call sites and define an async convergence plan.
 3. Preserve regression-gate continuity with explicit command groups.
 
-This wave addresses (1) with implementation and (2) with documented/deferred convergence planning, while keeping (3) as validation follow-through.
+This wave addresses (1) with implementation, completes multimodal convergence through Phase D, and keeps (3) as validation follow-through.
 
 ## Implemented Scope This Wave (Messaging Boundary Wrappers)
 
@@ -30,6 +30,29 @@ Wave 2 implementation added connector-boundary wrappers for messaging adapters s
 - Coverage added:
   - `engine/tests/test_connector_boundary_messaging_adapters.py`
   - Verifies governance-denied connectors do not execute outbound HTTP calls for `send`, `health_check`, and receive-loop operations.
+
+## Multimodal Async-Governance Convergence (Phase B/C Completed)
+
+Phase B/C convergence is now implemented and validated:
+
+- New helper:
+  - `engine/src/agent33/multimodal/boundary.py`
+    - `execute_multimodal_boundary_call(...)`
+    - Uses `build_connector_boundary_executor(...)`
+    - Normalizes failures with `map_connector_exception(...)`
+- Multimodal adapters now expose an async execution contract routed through connector boundary middleware:
+  - `engine/src/agent33/multimodal/adapters.py`
+    - `STTAdapter.run_async(...)`
+    - `TTSAdapter.run_async(...)`
+    - `VisionAdapter.run_async(...)`
+- Service + route async alignment implemented:
+  - `engine/src/agent33/multimodal/service.py`
+    - `execute_request(...)` is async and awaits `adapter.run_async(...)`
+  - `engine/src/agent33/api/routes/multimodal.py`
+    - create/execute endpoints await service execution path
+- Coverage updated:
+  - `engine/tests/test_connector_boundary_multimodal_adapters.py`
+  - `engine/tests/test_multimodal_api.py`
 
 ## Connector Naming Contract (Messaging + Existing Multimodal)
 
@@ -64,40 +87,39 @@ Phase 35 naming remains connector-family explicit to support policy and telemetr
 
 ## Multimodal Async-Governance Follow-up
 
-### Call-site Inventory (Documented)
+### Call-site Inventory (Updated)
 
-Current synchronous governance enforcement inside multimodal adapters:
+Legacy synchronous governance dependency is now retired from multimodal adapters, and both runtime entry paths route through the async boundary path:
 
 - `engine/src/agent33/multimodal/adapters.py`
-  - `STTAdapter.run(...)` → `enforce_connector_governance("multimodal:speech_to_text", "run", ...)`
-  - `TTSAdapter.run(...)` → `enforce_connector_governance("multimodal:text_to_speech", "run", ...)`
-  - `VisionAdapter.run(...)` → `enforce_connector_governance("multimodal:vision_analysis", "run", ...)`
+  - `STTAdapter.run_async(...)` / `TTSAdapter.run_async(...)` / `VisionAdapter.run_async(...)` route through `execute_multimodal_boundary_call(...)`
+  - `run(...)` remains as a compatibility wrapper that delegates to `run_async(...)` outside active event loops
 
-Async entry points invoking sync execution path:
+Route/service execution path is now async:
 
 - `engine/src/agent33/api/routes/multimodal.py`
-  - `create_request(...)` (when `execute_now=True`) calls `_service.execute_request(...)`
-  - `execute_request(...)` calls `_service.execute_request(...)`
+  - `create_request(...)` (when `execute_now=True`) awaits `_service.execute_request(...)`
+  - `execute_request(...)` awaits `_service.execute_request(...)`
 - `engine/src/agent33/multimodal/service.py`
-  - `execute_request(...)` is sync and calls `adapter.run(...)`
+  - `execute_request(...)` is async and awaits `adapter.run_async(...)`
 
-### Phased Convergence Plan (Documented / Deferred)
+### Phased Convergence Plan (Updated)
 
 1. **Phase A — Complete (this wave): inventory + contract lock**
    - Call sites documented above.
    - Connector naming contract preserved; no runtime behavior changes to multimodal path.
 
-2. **Phase B — Deferred: async adapter boundary path**
-   - Introduce async multimodal adapter execution contract (e.g., `async run_async(...)`).
-   - Route multimodal provider calls through async connector boundary execution helper.
+2. **Phase B — Complete: async adapter boundary path**
+   - Async multimodal adapter execution contract (`async run_async(...)`) is implemented.
+   - Multimodal provider calls route through async connector boundary execution helper.
 
-3. **Phase C — Deferred: service + route async alignment**
-   - Convert multimodal service execute path to async.
-   - Update API routes to `await` service execution directly.
+3. **Phase C — Complete: service + route async alignment**
+   - Multimodal service execute path converted to async.
+   - API routes updated to `await` service execution directly.
 
-4. **Phase D — Deferred: sync-governance retirement**
-    - Remove multimodal dependency on synchronous governance helper once async path is fully adopted.
-    - Keep exception mapping and connector names unchanged to maintain policy/telemetry continuity.
+4. **Phase D — Complete: sync-governance retirement**
+    - Removed multimodal dependency on legacy synchronous governance helper path in adapters.
+    - Kept connector names unchanged (`multimodal:*`) and preserved boundary-based error normalization.
 
 ## Validation Plan and Commands
 
@@ -112,8 +134,17 @@ python -m pytest tests/test_chat.py tests/test_phase32_connector_boundary.py -q
 
 - Validation evidence:
   - Phase30/31/32 + tool-loop/invoke-iterative/skill/context: **213 passed, 1 skipped**
-  - Messaging boundary + phase32: **29 passed, 1 skipped**
-  - Multimodal boundary + phase32: **33 passed, 1 skipped**
+  - Messaging boundary + phase32: **45 passed, 1 skipped**
+  - Multimodal boundary + phase32: **46 passed, 1 skipped**
   - LLM/embeddings boundary + phase32: **40 passed, 1 skipped**
   - Chat boundary + phase32: **17 passed, 1 skipped**
-  - Aggregate across batches: **332 passed, 5 skipped**
+  - Aggregate across batches: **361 passed, 5 skipped**
+  - Historical context: prior session artifacts recorded a **332 vs 339** drift window; fresh hardened rerun evidence supersedes that aggregate baseline.
+
+## Closeout Hardening Checklist (Concise)
+
+- Confirm boundary-touching merges run all five smoke groups and reference the snapshot packet.
+- Keep connector naming contracts unchanged (`messaging:*`, `multimodal:*`) unless explicitly planned.
+- Preserve async-first multimodal execution path; keep sync wrappers compatibility-only.
+- Reconcile any evidence drift in session docs before updating locked baseline totals.
+- Maintain PR sequencing discipline and stop merges immediately on gate failure.
