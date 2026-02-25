@@ -36,6 +36,18 @@ class _NeverCalledClient:
         return None
 
 
+class _SuccessfulResponse:
+    def __init__(self, *, status_code: int = 200, payload: dict[str, Any] | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload or {"ok": True, "result": []}
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
 def _adapter_factories() -> list[tuple[str, Any, str]]:
     return [
         (
@@ -107,8 +119,12 @@ async def test_send_governance_blocked_prevents_http_call(
     client = _NeverCalledClient()
     adapter._client = client
 
-    with pytest.raises(RuntimeError, match="Connector governance blocked"):
+    with pytest.raises(RuntimeError) as excinfo:
         await adapter.send(channel_id, "blocked")
+    assert str(excinfo.value) == (
+        f"Connector governance blocked messaging:{platform}/send: "
+        f"connector blocked by policy: messaging:{platform}"
+    )
 
     assert client.calls == []
 
@@ -139,8 +155,138 @@ async def test_health_check_governance_blocked_prevents_http_call(
     result = await adapter.health_check()
 
     assert result.status == "unavailable"
-    assert "Connector governance blocked" in result.detail
+    assert result.detail == (
+        f"Connector governance blocked messaging:{platform}/health_check: "
+        f"connector blocked by policy: messaging:{platform}"
+    )
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "adapter_factory", "channel_id"),
+    _adapter_factories(),
+)
+async def test_send_boundary_invocation_preserves_connector_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    adapter_factory: Any,
+    channel_id: str,
+) -> None:
+    adapter = adapter_factory()
+    adapter._client = _NeverCalledClient()
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_boundary_call(**kwargs):
+        calls.append(kwargs)
+        return _SuccessfulResponse()
+
+    monkeypatch.setattr(
+        "agent33.messaging.discord.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.imessage.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.matrix.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.signal.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.slack.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.telegram.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.whatsapp.execute_messaging_boundary_call", _fake_boundary_call
+    )
+
+    await adapter.send(channel_id, "hello")
+
+    assert len(calls) == 1
+    assert calls[0]["connector"] == f"messaging:{platform}"
+    assert calls[0]["operation"] == "send"
+    assert calls[0]["payload"] == {"channel_id": channel_id}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "adapter_factory", "expected_status"),
+    [
+        ("slack", lambda: SlackAdapter(bot_token="xoxb-test", signing_secret="secret"), "ok"),
+        ("discord", lambda: DiscordAdapter(bot_token="token", public_key="aa" * 32), "ok"),
+        ("telegram", lambda: TelegramAdapter(token="token"), "degraded"),
+        (
+            "whatsapp",
+            lambda: WhatsAppAdapter(
+                access_token="token",
+                phone_number_id="123",
+                verify_token="verify",
+                app_secret="secret",
+            ),
+            "ok",
+        ),
+        (
+            "signal",
+            lambda: SignalAdapter(bridge_url="https://signal.example", sender_number="+1555"),
+            "degraded",
+        ),
+        (
+            "matrix",
+            lambda: MatrixAdapter(
+                homeserver_url="https://matrix.example.com",
+                access_token="token",
+                user_id="@agent33:example.com",
+            ),
+            "degraded",
+        ),
+        ("imessage", lambda: IMessageAdapter(bridge_url="https://bb.example.com"), "degraded"),
+    ],
+)
+async def test_health_check_boundary_invocation_preserves_connector_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    adapter_factory: Any,
+    expected_status: str,
+) -> None:
+    adapter = adapter_factory()
+    adapter._client = _NeverCalledClient()
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_boundary_call(**kwargs):
+        calls.append(kwargs)
+        return _SuccessfulResponse()
+
+    monkeypatch.setattr(
+        "agent33.messaging.discord.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.imessage.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.matrix.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.signal.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.slack.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.telegram.execute_messaging_boundary_call", _fake_boundary_call
+    )
+    monkeypatch.setattr(
+        "agent33.messaging.whatsapp.execute_messaging_boundary_call", _fake_boundary_call
+    )
+
+    result = await adapter.health_check()
+
+    assert result.status == expected_status
+    assert len(calls) == 1
+    assert calls[0]["connector"] == f"messaging:{platform}"
+    assert calls[0]["operation"] == "health_check"
 
 
 @pytest.mark.asyncio
@@ -197,3 +343,57 @@ async def test_matrix_sync_loop_governance_blocked_prevents_http_call(
 
     await asyncio.wait_for(adapter._sync_loop(), timeout=1)
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_telegram_poll_loop_boundary_operation_name_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = TelegramAdapter(token="token")
+    adapter._client = _NeverCalledClient()
+    adapter._running = True
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_boundary_call(**kwargs):
+        calls.append(kwargs)
+        adapter._running = False
+        return _SuccessfulResponse(payload={"ok": True, "result": []})
+
+    monkeypatch.setattr(
+        "agent33.messaging.telegram.execute_messaging_boundary_call", _fake_boundary_call
+    )
+
+    await asyncio.wait_for(adapter._poll_loop(), timeout=1)
+
+    assert len(calls) == 1
+    assert calls[0]["connector"] == "messaging:telegram"
+    assert calls[0]["operation"] == "poll_updates"
+
+
+@pytest.mark.asyncio
+async def test_matrix_sync_loop_boundary_operation_name_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MatrixAdapter(
+        homeserver_url="https://matrix.example.com",
+        access_token="token",
+        user_id="@agent33:example.com",
+    )
+    adapter._client = _NeverCalledClient()
+    adapter._running = True
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_boundary_call(**kwargs):
+        calls.append(kwargs)
+        adapter._running = False
+        return _SuccessfulResponse(payload={"next_batch": "batch", "rooms": {"join": {}}})
+
+    monkeypatch.setattr(
+        "agent33.messaging.matrix.execute_messaging_boundary_call", _fake_boundary_call
+    )
+
+    await asyncio.wait_for(adapter._sync_loop(), timeout=1)
+
+    assert len(calls) == 1
+    assert calls[0]["connector"] == "messaging:matrix"
+    assert calls[0]["operation"] == "sync_loop"
