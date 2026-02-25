@@ -9,7 +9,7 @@ Covers:
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -777,3 +777,35 @@ class TestInvokeIterativeRoute:
             json={"inputs": {"task": "no auth"}},
         )
         assert resp.status_code == 401
+
+    def test_iterative_route_injects_context_manager_by_default(self, client) -> None:
+        """Iterative invoke should wire a context manager into AgentRuntime."""
+        from agent33.agents.runtime import IterativeAgentResult
+
+        client.app.state.model_router = MagicMock()
+        client.app.state.tool_registry = _make_registry()
+
+        result = IterativeAgentResult(
+            output={"result": "ok"},
+            raw_response="ok",
+            tokens_used=1,
+            model="test-model",
+            iterations=1,
+            tool_calls_made=0,
+            tools_used=[],
+            termination_reason="completed",
+        )
+
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as runtime_cls:
+            runtime = MagicMock()
+            runtime.invoke_iterative = AsyncMock(return_value=result)
+            runtime_cls.return_value = runtime
+
+            resp = client.post(
+                "/v1/agents/iter-agent/invoke-iterative",
+                json={"inputs": {"task": "test"}, "enable_double_confirmation": False},
+            )
+
+            assert resp.status_code == 200
+            kwargs = runtime_cls.call_args.kwargs
+            assert kwargs["context_manager"] is not None
