@@ -8,6 +8,11 @@ from typing import Any
 import httpx
 
 from agent33.config import settings
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,10 @@ class JinaEmbeddingProvider:
                 max_keepalive_connections=max_keepalive_connections,
             ),
         )
+        self._boundary_executor = build_connector_boundary_executor(
+            default_timeout_seconds=timeout,
+            retry_attempts=1,
+        )
 
     async def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -53,13 +62,35 @@ class JinaEmbeddingProvider:
         """Embed multiple texts in a single API call."""
         if not texts:
             return []
-        resp = await self._client.post(
-            _JINA_EMBED_URL,
-            headers=self._headers(),
-            json={"model": self.model, "input": texts},
+        connector = "memory:jina_embeddings"
+        operation = "POST /v1/embeddings"
+        payload = {"model": self.model, "input": texts}
+
+        async def _perform_embed_batch() -> list[list[float]]:
+            resp = await self._client.post(
+                _JINA_EMBED_URL,
+                headers=self._headers(),
+                json=payload,
+            )
+            resp.raise_for_status()
+            data: dict[str, Any] = resp.json()
+            # Sort by index to preserve order
+            embeddings = sorted(data["data"], key=lambda x: x["index"])
+            return [e["embedding"] for e in embeddings]
+
+        async def _execute_embed_batch(_request: ConnectorRequest) -> list[list[float]]:
+            return await _perform_embed_batch()
+
+        if self._boundary_executor is None:
+            return await _perform_embed_batch()
+
+        request = ConnectorRequest(
+            connector=connector,
+            operation=operation,
+            payload=payload,
+            metadata={"url": _JINA_EMBED_URL},
         )
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
-        # Sort by index to preserve order
-        embeddings = sorted(data["data"], key=lambda x: x["index"])
-        return [e["embedding"] for e in embeddings]
+        try:
+            return await self._boundary_executor.execute(request, _execute_embed_batch)
+        except Exception as exc:
+            raise map_connector_exception(exc, connector, operation) from exc
