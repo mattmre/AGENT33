@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agent33.agents.definition import (
     AgentConstraints,
@@ -14,6 +14,8 @@ from agent33.agents.effort import AgentEffort, AgentEffortRouter, EffortSelectio
 from agent33.agents.runtime import AgentRuntime
 from agent33.agents.tool_loop import ToolLoopConfig
 from agent33.llm.base import LLMResponse
+from agent33.observability.alerts import AlertManager
+from agent33.observability.metrics import MetricsCollector
 
 
 def _make_definition(max_tokens: int = 100) -> AgentDefinition:
@@ -287,3 +289,102 @@ class TestAgentRuntimeEffortRouting:
         assert call_kwargs["max_tokens"] == 180
         assert result.routing_decision is not None
         assert result.routing_decision["estimated_token_budget"] == 180
+
+
+class TestEffortRoutingObservabilityAPI:
+    def test_invoke_exports_effort_routing_metrics_to_dashboard(self, client) -> None:
+        from agent33.agents.registry import AgentRegistry
+        from agent33.agents.runtime import AgentResult
+        from agent33.api.routes import agents as agents_route
+        from agent33.api.routes import dashboard as dashboard_route
+        from agent33.main import app
+
+        metrics = MetricsCollector()
+        agents_route.set_metrics(metrics)
+        dashboard_route.set_metrics(metrics)
+
+        definition = _make_definition()
+        definition.name = "phase30-observability-agent"
+        app.state.agent_registry = AgentRegistry()
+        app.state.agent_registry.register(definition)
+
+        mock_result = AgentResult(
+            output={"result": "ok"},
+            raw_response='{"result":"ok"}',
+            tokens_used=42,
+            model="routed-model",
+            routing_decision={
+                "effort": "high",
+                "effort_source": "policy",
+                "estimated_token_budget": 1600,
+                "estimated_cost": 0.8,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_runtime_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_runtime_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/phase30-observability-agent/invoke",
+                json={"inputs": {"task": "route and export"}},
+            )
+        assert response.status_code == 200
+
+        metrics_response = client.get("/v1/dashboard/metrics")
+        assert metrics_response.status_code == 200
+        payload = metrics_response.json()
+        assert payload["effort_routing_decisions_total"]["effort=high,source=policy"] == 1
+        assert payload["effort_routing_high_effort_total"] == 1
+        assert (
+            payload["effort_routing_estimated_token_budget(effort=high,source=policy)"]["max"]
+            == 1600.0
+        )
+        assert (
+            payload["effort_routing_estimated_cost_usd(effort=high,source=policy)"]["max"]
+            == 0.8
+        )
+
+    def test_dashboard_alerts_endpoint_returns_triggered_effort_alerts(self, client) -> None:
+        from agent33.api.routes import dashboard as dashboard_route
+
+        metrics = MetricsCollector()
+        alert_manager = AlertManager(metrics)
+        alert_manager.add_rule(
+            name="test_high_cost_effort",
+            metric="effort_routing_estimated_cost_usd(effort=high,source=policy)",
+            threshold=0.5,
+            comparator="gt",
+            statistic="max",
+        )
+        dashboard_route.set_metrics(metrics)
+        dashboard_route.set_alert_manager(alert_manager)
+        metrics.observe(
+            "effort_routing_estimated_cost_usd",
+            0.75,
+            labels={"effort": "high", "source": "policy"},
+        )
+
+        response = client.get("/v1/dashboard/alerts")
+        assert response.status_code == 200
+        alerts = response.json()
+        assert len(alerts) == 1
+        assert alerts[0]["rule_name"] == "test_high_cost_effort"
+
+
+class TestEffortAlertManager:
+    def test_alert_manager_supports_statistic_thresholds(self) -> None:
+        metrics = MetricsCollector()
+        alerts = AlertManager(metrics)
+        alerts.add_rule(
+            name="max_cost",
+            metric="effort_routing_estimated_cost_usd",
+            threshold=1.0,
+            comparator="gt",
+            statistic="max",
+        )
+        metrics.observe("effort_routing_estimated_cost_usd", 1.25)
+
+        triggered = alerts.check_all()
+        assert len(triggered) == 1
+        assert triggered[0].rule_name == "max_cost"

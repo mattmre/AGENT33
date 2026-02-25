@@ -35,7 +35,11 @@ from agent33.evaluation.multi_trial import (
     SkillsImpact,
     TrialResult,
 )
-from agent33.evaluation.service import EvaluationService
+from agent33.evaluation.service import (
+    DeterministicFallbackEvaluator,
+    EvaluationService,
+    TrialEvaluationOutcome,
+)
 
 if TYPE_CHECKING:
     from starlette.testclient import TestClient
@@ -426,6 +430,7 @@ class TestCTRFGenerator:
         assert "tool" in results
         assert "summary" in results
         assert "tests" in results
+        assert "extra" in results
         assert results["tool"]["name"] == "agent33-eval"
         assert results["tool"]["version"] == "1.0.0"
 
@@ -470,7 +475,18 @@ class TestCTRFGenerator:
         assert "variance" in extra
         assert "tokens_used" in extra
         assert "trial_results" in extra
+        assert "skillsbench" in extra
         assert extra["trial_results"] == [1, 1, 1, 1, 1]
+
+    def test_run_level_skillsbench_metadata_present(self):
+        """Run-level CTRF extra should include SkillsBench metadata."""
+        gen = CTRFGenerator()
+        run = self._make_run()
+        report = gen.generate_report(run)
+        sb = report["results"]["extra"]["skillsbench"]
+        assert sb["trials_per_combination"] == 5
+        assert sb["skills_modes"] == [True, False]
+        assert sb["skills_impacts_count"] == 0
 
     def test_custom_threshold(self):
         """Custom pass_threshold changes which results are 'passed'."""
@@ -810,6 +826,35 @@ class TestEvaluationServiceMultiTrial:
         # They don't cross-contaminate
         assert svc.get_multi_trial_run(eval_run.run_id) is None
         assert svc.get_run(mt_run.run_id) is None
+
+    async def test_single_trial_uses_pluggable_adapter(self):
+        """Custom trial evaluator adapters should be used by the service."""
+        adapter = AsyncMock(return_value=TrialEvaluationOutcome(success=True))
+        mock_adapter = type("Adapter", (), {"evaluate": adapter})()
+        svc = EvaluationService(trial_evaluator=mock_adapter)
+
+        result = await svc._run_single_trial("GT-01", "a", "m", True)
+        assert result is True
+        adapter.assert_awaited_once()
+
+    async def test_deterministic_fallback_is_stable(self):
+        """Fallback evaluator should return stable results for same inputs."""
+        evaluator = DeterministicFallbackEvaluator()
+        first = await evaluator.evaluate(
+            task_id="GT-01", agent="agent-a", model="model-a", skills_enabled=True
+        )
+        second = await evaluator.evaluate(
+            task_id="GT-01", agent="agent-a", model="model-a", skills_enabled=True
+        )
+        assert first.success == second.success
+
+    async def test_deterministic_fallback_rejects_unknown_task(self):
+        """Unknown tasks should deterministically fail in fallback mode."""
+        evaluator = DeterministicFallbackEvaluator()
+        outcome = await evaluator.evaluate(
+            task_id="UNKNOWN", agent="a", model="m", skills_enabled=False
+        )
+        assert outcome.success is False
 
 
 # ===================================================================

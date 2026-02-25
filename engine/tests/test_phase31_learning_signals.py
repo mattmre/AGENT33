@@ -13,7 +13,13 @@ from agent33.improvement.models import (
     LearningSignalSeverity,
     LearningSignalType,
 )
-from agent33.improvement.persistence import FileLearningSignalStore
+from agent33.improvement.persistence import (
+    FileLearningSignalStore,
+    SQLiteLearningSignalStore,
+    backup_learning_state,
+    migrate_file_learning_state_to_db,
+    restore_learning_state,
+)
 from agent33.improvement.service import ImprovementService
 
 if TYPE_CHECKING:
@@ -36,6 +42,15 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         settings, "improvement_learning_persistence_path", "unused.json"
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_db_path", "unused.sqlite3"
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_migrate_on_start", False
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_file_corruption_behavior", "reset"
     )
     _reset_service()
     monkeypatch.setattr(settings, "improvement_learning_enabled", False)
@@ -125,6 +140,77 @@ def test_file_store_persists_signals_and_generated_intakes(tmp_path: Path):
     intakes = second.list_intakes(tenant_id="tenant-a")
     assert len(intakes) == 1
     assert intakes[0].generated_from_signal_id == signals[0].signal_id
+
+
+def test_file_to_db_migration_path(tmp_path: Path):
+    file_path = tmp_path / "learning_state.json"
+    db_path = tmp_path / "learning_state.sqlite3"
+
+    seed = ImprovementService(learning_store=FileLearningSignalStore(str(file_path)))
+    seed.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Persisted in file backend",
+            tenant_id="tenant-a",
+        )
+    )
+    seed.generate_intakes_from_learning_signals(max_items=1)
+
+    migrated = migrate_file_learning_state_to_db(str(file_path), str(db_path))
+    assert len(migrated.signals) == 1
+    assert len(migrated.generated_intakes) == 1
+
+    db_service = ImprovementService(
+        learning_store=SQLiteLearningSignalStore(str(db_path))
+    )
+    loaded_signals = db_service.list_learning_signals(tenant_id="tenant-a", limit=10)
+    assert len(loaded_signals) == 1
+    assert loaded_signals[0].summary == "Persisted in file backend"
+    assert len(db_service.list_intakes(tenant_id="tenant-a")) == 1
+
+
+def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
+    source_path = tmp_path / "source_learning.json"
+    backup_path = tmp_path / "backup_learning.json"
+    target_path = tmp_path / "target_learning.sqlite3"
+
+    source_store = FileLearningSignalStore(str(source_path))
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.INCIDENT,
+            severity=LearningSignalSeverity.CRITICAL,
+            summary="Needs backup",
+            tenant_id="tenant-backup",
+        )
+    )
+
+    backup_file = backup_learning_state(source_store, str(backup_path))
+    assert backup_file.exists()
+
+    target_store = SQLiteLearningSignalStore(str(target_path))
+    restored = restore_learning_state(target_store, str(backup_path))
+    assert len(restored.signals) == 1
+
+    restored_service = ImprovementService(learning_store=target_store)
+    restored_signals = restored_service.list_learning_signals(
+        tenant_id="tenant-backup", limit=10
+    )
+    assert len(restored_signals) == 1
+    assert restored_signals[0].summary == "Needs backup"
+
+
+def test_file_store_corruption_recovery_is_deterministic(tmp_path: Path):
+    corrupt_path = tmp_path / "corrupt_learning.json"
+    corrupt_path.write_text("{not-json", encoding="utf-8")
+
+    store = FileLearningSignalStore(str(corrupt_path), on_corruption="reset")
+    state = store.load()
+
+    assert state.signals == []
+    assert not corrupt_path.exists()
+    assert (tmp_path / "corrupt_learning.json.corrupt").exists()
 
 
 def test_summary_supports_tenant_and_window_trends(service: ImprovementService):
@@ -335,3 +421,44 @@ def test_summary_is_tenant_scoped_in_route(
     assert payload["tenant_id"] == "tenant-1"
     assert payload["total_signals"] == 1
     assert payload["counts_by_tenant"] == {"tenant-1": 1}
+
+
+def test_routes_support_sqlite_backend_with_file_migration(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    db_path = tmp_path / "learning_state.sqlite3"
+
+    file_seed_service = ImprovementService(
+        learning_store=FileLearningSignalStore(str(file_path))
+    )
+    file_seed_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Migrate me",
+            tenant_id="tenant-db",
+        )
+    )
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_path", str(file_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_db_path", str(db_path)
+    )
+    monkeypatch.setattr(
+        settings, "improvement_learning_persistence_migrate_on_start", True
+    )
+    _reset_service()
+
+    listed = client.get(
+        "/v1/improvements/learning/signals",
+        params={"tenant_id": "tenant-db", "limit": 10},
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
