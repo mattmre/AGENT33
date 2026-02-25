@@ -371,6 +371,47 @@ class TestEffortRoutingObservabilityAPI:
         assert len(alerts) == 1
         assert alerts[0]["rule_name"] == "test_high_cost_effort"
 
+    async def test_workflow_bridge_emits_effort_routing_metrics(self) -> None:
+        from agent33.agents.registry import AgentRegistry
+        from agent33.api.routes import agents as agents_route
+        from agent33.main import _register_agent_runtime_bridge
+        from agent33.workflows.actions.invoke_agent import get_agent, register_agent
+
+        metrics = MetricsCollector()
+        agents_route.set_metrics(metrics)
+
+        definition = _make_definition()
+        definition.name = "phase30-workflow-bridge-agent"
+        registry = AgentRegistry()
+        registry.register(definition)
+
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="bridge-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            default_effort=AgentEffort.HIGH,
+            high_model="bridge-model",
+            high_token_multiplier=1.0,
+            heuristic_enabled=False,
+        )
+        _register_agent_runtime_bridge(
+            model_router,
+            register_agent,
+            registry=registry,
+            effort_router=effort_router,
+            routing_metrics_emitter=agents_route._record_effort_routing_metrics,
+        )
+        bridge_handler = get_agent("__default__")
+        result = await bridge_handler(
+            {"agent_name": "phase30-workflow-bridge-agent", "task": "route me"}
+        )
+        assert "result" in result
+        call_kwargs = model_router.complete.call_args.kwargs
+        assert call_kwargs["model"] == "bridge-model"
+
+        summary = metrics.get_summary()
+        assert summary["effort_routing_decisions_total"]["effort=high,source=default"] == 1
+
 
 class TestEffortAlertManager:
     def test_alert_manager_supports_statistic_thresholds(self) -> None:

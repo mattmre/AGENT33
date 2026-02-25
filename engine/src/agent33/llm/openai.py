@@ -8,6 +8,11 @@ from typing import Any
 
 import httpx
 
+from agent33.connectors.boundary import (
+    build_connector_boundary_executor,
+    map_connector_exception,
+)
+from agent33.connectors.models import ConnectorRequest
 from agent33.llm.base import ChatMessage, LLMResponse, ToolCall, ToolCallFunction
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,10 @@ class OpenAIProvider:
                 max_keepalive_connections=max_keepalive_connections,
             ),
         )
+        self._boundary_executor = build_connector_boundary_executor(
+            default_timeout_seconds=timeout,
+            retry_attempts=1,
+        )
 
     async def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -56,16 +65,33 @@ class OpenAIProvider:
 
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         """POST with exponential-backoff retry."""
+        connector = "llm:openai"
+        operation = f"POST {path}"
+
+        async def _perform_post() -> dict[str, Any]:
+            response = await self._client.post(
+                f"{self._base_url}{path}",
+                json=payload,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            return response.json()  # type: ignore[no-any-return]
+
+        async def _execute_post(_request: ConnectorRequest) -> dict[str, Any]:
+            return await _perform_post()
+
         last_exc: Exception | None = None
         for attempt in range(_MAX_ATTEMPTS):
             try:
-                response = await self._client.post(
-                    f"{self._base_url}{path}",
-                    json=payload,
-                    headers=self._headers(),
+                if self._boundary_executor is None:
+                    return await _perform_post()
+                request = ConnectorRequest(
+                    connector=connector,
+                    operation=operation,
+                    payload=payload,
+                    metadata={"base_url": self._base_url},
                 )
-                response.raise_for_status()
-                return response.json()  # type: ignore[no-any-return]
+                return await self._boundary_executor.execute(request, _execute_post)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
@@ -78,21 +104,45 @@ class OpenAIProvider:
                         exc,
                     )
                     await asyncio.sleep(delay)
-        raise RuntimeError(
+            except Exception as exc:
+                if self._boundary_executor is not None:
+                    mapped = map_connector_exception(exc, connector, operation)
+                    raise mapped from exc
+                raise
+        failure = RuntimeError(
             f"OpenAI request to {path} failed after {_MAX_ATTEMPTS} attempts"
-        ) from last_exc
+        )
+        if self._boundary_executor is not None and last_exc is not None:
+            raise map_connector_exception(last_exc, connector, operation) from last_exc
+        raise failure from last_exc
 
     async def _get(self, path: str) -> dict[str, Any]:
         """GET with exponential-backoff retry."""
+        connector = "llm:openai"
+        operation = f"GET {path}"
+
+        async def _perform_get() -> dict[str, Any]:
+            response = await self._client.get(
+                f"{self._base_url}{path}",
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            return response.json()  # type: ignore[no-any-return]
+
+        async def _execute_get(_request: ConnectorRequest) -> dict[str, Any]:
+            return await _perform_get()
+
         last_exc: Exception | None = None
         for attempt in range(_MAX_ATTEMPTS):
             try:
-                response = await self._client.get(
-                    f"{self._base_url}{path}",
-                    headers=self._headers(),
+                if self._boundary_executor is None:
+                    return await _perform_get()
+                request = ConnectorRequest(
+                    connector=connector,
+                    operation=operation,
+                    metadata={"base_url": self._base_url},
                 )
-                response.raise_for_status()
-                return response.json()  # type: ignore[no-any-return]
+                return await self._boundary_executor.execute(request, _execute_get)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
@@ -105,9 +155,17 @@ class OpenAIProvider:
                         exc,
                     )
                     await asyncio.sleep(delay)
-        raise RuntimeError(
+            except Exception as exc:
+                if self._boundary_executor is not None:
+                    mapped = map_connector_exception(exc, connector, operation)
+                    raise mapped from exc
+                raise
+        failure = RuntimeError(
             f"OpenAI GET {path} failed after {_MAX_ATTEMPTS} attempts"
-        ) from last_exc
+        )
+        if self._boundary_executor is not None and last_exc is not None:
+            raise map_connector_exception(last_exc, connector, operation) from last_exc
+        raise failure from last_exc
 
     # -- public API -------------------------------------------------------
 
