@@ -104,7 +104,7 @@ class MultimodalService:
             raise RequestNotFoundError(f"Request not found: {request_id}")
         return request
 
-    def execute_request(
+    async def execute_request(
         self, request_id: str, *, tenant_id: str | None = None
     ) -> MultimodalRequest:
         request = self.get_request(request_id, tenant_id=tenant_id)
@@ -118,7 +118,7 @@ class MultimodalService:
 
         adapter = self._adapters[request.modality]
         try:
-            output = adapter.run(request)
+            output = await adapter.run(request)
         except Exception as exc:
             request.state = RequestState.FAILED
             request.error_message = str(exc)

@@ -54,7 +54,7 @@ async def create_request(body: CreateRequestBody, request: Request) -> dict[str,
             requested_by=body.requested_by,
         )
         if body.execute_now:
-            created = _service.execute_request(created.id, tenant_id=tenant_id or None)
+            created = await _service.execute_request(created.id, tenant_id=tenant_id or None)
     except PolicyViolationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except InvalidStateTransitionError as exc:
@@ -96,7 +96,7 @@ async def get_request(request_id: str, request: Request) -> dict[str, Any]:
 async def execute_request(request_id: str, request: Request) -> dict[str, Any]:
     tenant_id = _tenant_id(request)
     try:
-        record = _service.execute_request(request_id, tenant_id=tenant_id or None)
+        record = await _service.execute_request(request_id, tenant_id=tenant_id or None)
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidStateTransitionError as exc:
