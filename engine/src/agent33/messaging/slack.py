@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -58,9 +59,21 @@ class SlackAdapter:
 
     async def send(self, channel_id: str, text: str) -> None:
         client = self._ensure_client()
-        resp = await client.post(
-            "/chat.postMessage",
-            json={"channel": channel_id, "text": text},
+        connector = "messaging:slack"
+        operation = "send"
+
+        async def _perform_send(_request: object) -> httpx.Response:
+            return await client.post(
+                "/chat.postMessage",
+                json={"channel": channel_id, "text": text},
+            )
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -119,9 +132,23 @@ class SlackAdapter:
                 detail="Adapter not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
         start = time.monotonic()
         try:
-            resp = await self._client.post("/auth.test")
+            connector = "messaging:slack"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.post("/auth.test")
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": "/auth.test"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
+            )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200:
                 data = resp.json()

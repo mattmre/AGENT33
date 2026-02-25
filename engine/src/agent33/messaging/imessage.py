@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,21 @@ class IMessageAdapter:
 
     async def send(self, channel_id: str, text: str) -> None:
         client = self._ensure_client()
-        resp = await client.post(
-            f"{self._bridge_url}/api/v1/message/text",
-            json={"chatGuid": channel_id, "text": text},
+        connector = "messaging:imessage"
+        operation = "send"
+
+        async def _perform_send(_request: object) -> httpx.Response:
+            return await client.post(
+                f"{self._bridge_url}/api/v1/message/text",
+                json={"chatGuid": channel_id, "text": text},
+            )
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
         )
         resp.raise_for_status()
 
@@ -76,9 +89,23 @@ class IMessageAdapter:
                 detail="Not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
         start = time.monotonic()
         try:
-            resp = await self._client.get(f"{self._bridge_url}/api/v1/ping")
+            connector = "messaging:imessage"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.get(f"{self._bridge_url}/api/v1/ping")
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": f"{self._bridge_url}/api/v1/ping"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
+            )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200:
                 return ChannelHealthResult(

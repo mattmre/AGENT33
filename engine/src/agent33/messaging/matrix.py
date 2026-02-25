@@ -16,6 +16,7 @@ from urllib.parse import quote
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -121,12 +122,24 @@ class MatrixAdapter:
             f"m.room.message/{encoded_txn_id}"
         )
 
-        resp = await client.put(path, json=body)
+        connector = "messaging:matrix"
+        operation = "send"
 
-        if resp.status_code == 429:
-            retry_ms = resp.json().get("retry_after_ms", 5000)
-            await asyncio.sleep(retry_ms / 1000)
+        async def _perform_send(_request: object) -> httpx.Response:
             resp = await client.put(path, json=body)
+            if resp.status_code == 429:
+                retry_ms = resp.json().get("retry_after_ms", 5000)
+                await asyncio.sleep(retry_ms / 1000)
+                resp = await client.put(path, json=body)
+            return resp
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
+        )
 
         resp.raise_for_status()
 
@@ -151,10 +164,24 @@ class MatrixAdapter:
                 detail="Adapter not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
 
         start = time.monotonic()
         try:
-            resp = await self._client.get("/_matrix/client/v3/account/whoami")
+            connector = "messaging:matrix"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.get("/_matrix/client/v3/account/whoami")
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": "/_matrix/client/v3/account/whoami"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
+            )
             latency = (time.monotonic() - start) * 1000
 
             if resp.status_code == 200:

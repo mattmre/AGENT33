@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -42,13 +43,25 @@ class SignalAdapter:
     async def send(self, channel_id: str, text: str) -> None:
         """Send a message via the Signal bridge."""
         client = self._ensure_client()
-        resp = await client.post(
-            f"{self._bridge_url}/v2/send",
-            json={
-                "message": text,
-                "number": self._sender_number,
-                "recipients": [channel_id],
-            },
+        connector = "messaging:signal"
+        operation = "send"
+
+        async def _perform_send(_request: object) -> httpx.Response:
+            return await client.post(
+                f"{self._bridge_url}/v2/send",
+                json={
+                    "message": text,
+                    "number": self._sender_number,
+                    "recipients": [channel_id],
+                },
+            )
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
         )
         resp.raise_for_status()
 
@@ -84,9 +97,23 @@ class SignalAdapter:
                 detail="Not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
         start = time.monotonic()
         try:
-            resp = await self._client.get(f"{self._bridge_url}/v1/about")
+            connector = "messaging:signal"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.get(f"{self._bridge_url}/v1/about")
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": f"{self._bridge_url}/v1/about"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
+            )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200:
                 return ChannelHealthResult(

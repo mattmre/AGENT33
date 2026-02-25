@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -63,9 +64,21 @@ class TelegramAdapter:
     async def send(self, channel_id: str, text: str) -> None:
         """Send a text message to a Telegram chat."""
         client = self._ensure_client()
-        resp = await client.post(
-            f"{self._base}/sendMessage",
-            json={"chat_id": channel_id, "text": text, "parse_mode": "Markdown"},
+        connector = "messaging:telegram"
+        operation = "send"
+
+        async def _perform_send(_request: object) -> httpx.Response:
+            return await client.post(
+                f"{self._base}/sendMessage",
+                json={"chat_id": channel_id, "text": text, "parse_mode": "Markdown"},
+            )
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
         )
         resp.raise_for_status()
 
@@ -108,9 +121,24 @@ class TelegramAdapter:
                 detail="Adapter not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
         start = time.monotonic()
         try:
-            resp = await self._client.get(f"{self._base}/getMe")
+            connector = "messaging:telegram"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.get(f"{self._base}/getMe")
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": f"{self._base}/getMe"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
+                timeout_seconds=60.0,
+            )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200 and resp.json().get("ok"):
                 poll_alive = (
