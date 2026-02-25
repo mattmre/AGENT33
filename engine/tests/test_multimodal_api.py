@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import pytest
@@ -266,5 +267,5 @@ def test_service_policy_and_lifecycle_contracts() -> None:
         requested_timeout_seconds=5,
     )
     assert request.state == RequestState.PENDING
-    request = _service.execute_request(request.id, tenant_id="tenant-a")
+    request = asyncio.run(_service.execute_request(request.id, tenant_id="tenant-a"))
     assert request.state == RequestState.COMPLETED

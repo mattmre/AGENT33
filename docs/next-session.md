@@ -5,8 +5,8 @@ Last updated: 2026-02-25T23:59:59Z
 ## Current State
 
 - **Merge status**: Baseline stack (`#67`-`#71`) and Phase 35 Wave 1 (`#72`-`#74`) are merged.
-- **Wave 2 status**: Messaging connector-boundary wrappers are implemented with dedicated adapter governance tests; validation evidence is captured in review artifacts.
-- **Post-merge validation**: Five targeted batches completed with aggregate **332 passed, 5 skipped**.
+- **Wave 2 status**: Messaging connector-boundary wrappers and multimodal async-governance convergence (Phase B/C/D) are implemented with dedicated regression coverage; validation evidence is captured in review artifacts.
+- **Post-merge validation**: Five targeted batches completed with aggregate **339 passed, 5 skipped**.
 - **Latest session**: Session 44 (`docs/sessions/session-44-2026-02-25.md`)
 - **Prior milestone context**: Session 43 (`docs/sessions/session-43-2026-02-25.md`)
 
@@ -26,18 +26,22 @@ Last updated: 2026-02-25T23:59:59Z
 - `cd engine && python -m pytest tests/test_connector_boundary_llm_memory.py tests/test_performance_fixes.py tests/test_phase32_connector_boundary.py -q`
   - **40 passed, 1 skipped**
 - `cd engine && python -m pytest tests/test_connector_boundary_multimodal_adapters.py tests/test_multimodal_api.py tests/test_phase32_connector_boundary.py -q`
-  - **33 passed, 1 skipped**
+  - **40 passed, 1 skipped**
 - `cd engine && python -m pytest tests/test_chat.py tests/test_phase32_connector_boundary.py -q`
   - **17 passed, 1 skipped**
-- Aggregate: **332 passed, 5 skipped**
+- Aggregate: **339 passed, 5 skipped**
 
 ### Phase 35 Wave 2 Progress (Current Wave)
 - Messaging adapters now execute `send`, `health_check`, and receive-loop operations through connector boundary wrappers.
 - New messaging boundary helper added: `engine/src/agent33/messaging/boundary.py`.
 - Governance-deny regression coverage added: `engine/tests/test_connector_boundary_messaging_adapters.py`.
+- Multimodal adapters now use async connector-boundary execution (`run_async`) with async service/route alignment.
+- New multimodal boundary helper added: `engine/src/agent33/multimodal/boundary.py`.
+- Multimodal async-path coverage updated: `engine/tests/test_connector_boundary_multimodal_adapters.py`, `engine/tests/test_multimodal_api.py`.
+- Multimodal sync-wrapper regression coverage expanded across modalities.
 - Wave 2 research note added:
   - `docs/research/phase35-connector-boundary-wave2.md`
-- Multimodal async-governance follow-up inventory and phased convergence plan documented (deferred for implementation).
+- Phase D sync-governance retirement is complete; legacy `run(...)` now delegates to async boundary execution path.
 
 ## Immediate Next Priorities
 
@@ -45,9 +49,10 @@ Last updated: 2026-02-25T23:59:59Z
 - Keep smoke-gate command groups stable unless implementation scope changes.
 - Refresh counts in review artifacts only when reruns produce different results.
 
-### Priority 1: Multimodal async-governance convergence (Phase B)
-- Start async adapter contract + boundary-executor path for multimodal adapters.
+### Priority 1: Phase 35 closeout hardening
+- Keep async boundary path as default for multimodal execution and monitor compatibility wrappers.
 - Preserve existing connector naming (`multimodal:*`) and error-shape compatibility.
+- Add/maintain focused regression coverage when touching multimodal adapters or route execution flow.
 
 ### Priority 2: Regression gate continuity
 - Keep Phase 35 boundary smoke gates stable across messaging, multimodal, llm/embeddings, and chat.
