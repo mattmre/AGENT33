@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from agent33.config import settings
@@ -16,6 +18,7 @@ from agent33.connectors.middleware import (
     RetryMiddleware,
     TimeoutMiddleware,
 )
+from agent33.connectors.models import ConnectorRequest
 
 
 def _parse_csv(value: str) -> frozenset[str]:
@@ -51,6 +54,48 @@ def get_policy_pack(
     return _POLICY_PACKS.get(pack_name, _POLICY_PACKS["default"])
 
 
+def _resolve_blocklists(policy_pack: str | None) -> tuple[frozenset[str], frozenset[str]]:
+    pack_blocked_connectors, pack_blocked_operations = get_policy_pack(
+        policy_pack or getattr(settings, "connector_policy_pack", "default")
+    )
+    blocked_connectors = pack_blocked_connectors.union(
+        _parse_csv(settings.connector_governance_blocked_connectors)
+    )
+    blocked_operations = pack_blocked_operations.union(
+        _parse_csv(settings.connector_governance_blocked_operations)
+    )
+    return blocked_connectors, blocked_operations
+
+
+def enforce_connector_governance(
+    connector: str,
+    operation: str,
+    *,
+    policy_pack: str | None = None,
+    payload: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Synchronously enforce connector governance for non-async adapter calls."""
+    if not settings.connector_boundary_enabled:
+        return
+
+    blocked_connectors, blocked_operations = _resolve_blocklists(policy_pack)
+    policy = BlocklistConnectorPolicy(
+        blocked_connectors=blocked_connectors,
+        blocked_operations=blocked_operations,
+    )
+    request = ConnectorRequest(
+        connector=connector,
+        operation=operation,
+        payload=payload or {},
+        metadata=metadata or {},
+    )
+    decision = policy.evaluate(request)
+    if not decision.allowed:
+        reason = decision.reason or "connector call blocked by governance policy"
+        raise PermissionError(reason)
+
+
 def build_connector_boundary_executor(
     *,
     default_timeout_seconds: float | None = None,
@@ -62,16 +107,10 @@ def build_connector_boundary_executor(
         return None
 
     middlewares: list[ConnectorMiddleware] = []
-    pack_blocked_connectors, pack_blocked_operations = get_policy_pack(
-        policy_pack or getattr(settings, "connector_policy_pack", "default")
-    )
+    blocked_connectors, blocked_operations = _resolve_blocklists(policy_pack)
     policy = BlocklistConnectorPolicy(
-        blocked_connectors=pack_blocked_connectors.union(
-            _parse_csv(settings.connector_governance_blocked_connectors)
-        ),
-        blocked_operations=pack_blocked_operations.union(
-            _parse_csv(settings.connector_governance_blocked_operations)
-        ),
+        blocked_connectors=blocked_connectors,
+        blocked_operations=blocked_operations,
     )
     middlewares.append(GovernanceMiddleware(policy))
     if default_timeout_seconds is not None:
