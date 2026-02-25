@@ -269,8 +269,13 @@ class MatrixAdapter:
                 self._next_batch = data.get("next_batch")
                 self._process_sync_response(data)
 
-            except httpx.TimeoutException:
+            except (httpx.TimeoutException, TimeoutError):
                 continue  # Normal for long-polling
+            except RuntimeError as exc:
+                if isinstance(exc.__cause__, (TimeoutError, httpx.TimeoutException)):
+                    continue  # Boundary-wrapped long-poll timeout
+                logger.exception("Matrix sync error")
+                await asyncio.sleep(5)
             except asyncio.CancelledError:
                 raise
             except Exception:
