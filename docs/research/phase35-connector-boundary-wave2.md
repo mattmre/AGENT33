@@ -12,7 +12,7 @@ This wave addresses (1) with implementation and (2) with documented/deferred con
 
 ## Implemented Scope This Wave (Messaging Boundary Wrappers)
 
-Wave 2 implementation added connector-boundary wrappers for messaging adapters so `send` and `health_check` calls flow through centralized governance/error mapping:
+Wave 2 implementation added connector-boundary wrappers for messaging adapters so `send`, `health_check`, and receive-loop calls flow through centralized governance/error mapping:
 
 - New helper:
   - `engine/src/agent33/messaging/boundary.py`
@@ -29,7 +29,7 @@ Wave 2 implementation added connector-boundary wrappers for messaging adapters s
   - `engine/src/agent33/messaging/imessage.py`
 - Coverage added:
   - `engine/tests/test_connector_boundary_messaging_adapters.py`
-  - Verifies governance-denied connectors do not execute outbound HTTP calls for `send` and `health_check`.
+  - Verifies governance-denied connectors do not execute outbound HTTP calls for `send`, `health_check`, and receive-loop operations.
 
 ## Connector Naming Contract (Messaging + Existing Multimodal)
 
@@ -49,6 +49,8 @@ Phase 35 naming remains connector-family explicit to support policy and telemetr
 - Standard operations in this wave:
   - `send`
   - `health_check`
+  - `poll_updates` (telegram loop)
+  - `sync_loop` (matrix loop)
 
 ### Existing Multimodal (Wave 1 baseline retained)
 
@@ -97,11 +99,6 @@ Async entry points invoking sync execution path:
     - Remove multimodal dependency on synchronous governance helper once async path is fully adopted.
     - Keep exception mapping and connector names unchanged to maintain policy/telemetry continuity.
 
-### Additional Deferred Messaging Scope
-
-- Telegram polling (`getUpdates`) and Matrix sync (`/sync`) receive-loop HTTP calls remain outside boundary wrapping in this wave.
-- Wave 2 intentionally scopes messaging boundary adoption to `send` and `health_check`; receive-loop governance wrapping is tracked for a later hardening pass.
-
 ## Validation Plan and Commands
 
 ```bash
@@ -115,8 +112,8 @@ python -m pytest tests/test_chat.py tests/test_phase32_connector_boundary.py -q
 
 - Validation evidence:
   - Phase30/31/32 + tool-loop/invoke-iterative/skill/context: **213 passed, 1 skipped**
-  - Messaging boundary + phase32: **27 passed, 1 skipped**
+  - Messaging boundary + phase32: **29 passed, 1 skipped**
   - Multimodal boundary + phase32: **33 passed, 1 skipped**
   - LLM/embeddings boundary + phase32: **40 passed, 1 skipped**
   - Chat boundary + phase32: **17 passed, 1 skipped**
-  - Aggregate across batches: **330 passed, 5 skipped**
+  - Aggregate across batches: **332 passed, 5 skipped**
