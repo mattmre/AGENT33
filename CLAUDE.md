@@ -192,6 +192,7 @@ written. Do not present "X new tests" as evidence of completeness.
 
 - **GitHub Actions OIDC:** When testing Action workflows on PRs that require `id-token: write` permissions (such as `anthropics/claude-code-action`), be aware they often fail authentication on forks or PR branches due to missing `ACTIONS_ID_TOKEN_REQUEST_URL` context. If the job is auxiliary (like a PR reviewer bot), add `continue-on-error: true` so it does not block the primary CI/CD pipeline from going green.
 - **Stash Cleanliness:** Using `git stash` across multiple `worktrees` or multi-repo projects can accidentally capture deep untracked files (like Node modules or temporary script outputs). Always run `git diff --name-only` on stash pops to verify what was applied before committing.
+- **Session PR Discipline:** For every session that changes tracked code, work on a session branch and open a pull request so automated PR review runs. Do not push code changes directly to `main` except explicit emergency instruction.
 
 Add these to your existing pre-commit checklist:
 
