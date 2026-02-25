@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from agent33.messaging.boundary import execute_messaging_boundary_call
 from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
@@ -66,14 +67,26 @@ class WhatsAppAdapter:
     async def send(self, channel_id: str, text: str) -> None:
         """Send a text message. *channel_id* is the recipient phone number."""
         client = self._ensure_client()
-        resp = await client.post(
-            f"{_API_BASE}/{self._phone_number_id}/messages",
-            json={
-                "messaging_product": "whatsapp",
-                "to": channel_id,
-                "type": "text",
-                "text": {"body": text},
-            },
+        connector = "messaging:whatsapp"
+        operation = "send"
+
+        async def _perform_send(_request: object) -> httpx.Response:
+            return await client.post(
+                f"{_API_BASE}/{self._phone_number_id}/messages",
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": channel_id,
+                    "type": "text",
+                    "text": {"body": text},
+                },
+            )
+
+        resp = await execute_messaging_boundary_call(
+            connector=connector,
+            operation=operation,
+            payload={"channel_id": channel_id},
+            metadata={"platform": self.platform},
+            call=_perform_send,
         )
         resp.raise_for_status()
 
@@ -141,10 +154,24 @@ class WhatsAppAdapter:
                 detail="Adapter not started",
                 queue_depth=self._queue.qsize(),
             )
+        client = self._client
+        assert client is not None
         start = time.monotonic()
         try:
-            resp = await self._client.get(
-                f"{_API_BASE}/{self._phone_number_id}",
+            connector = "messaging:whatsapp"
+            operation = "health_check"
+
+            async def _perform_health_check(_request: object) -> httpx.Response:
+                return await client.get(
+                    f"{_API_BASE}/{self._phone_number_id}",
+                )
+
+            resp = await execute_messaging_boundary_call(
+                connector=connector,
+                operation=operation,
+                payload={"endpoint": f"{_API_BASE}/{self._phone_number_id}"},
+                metadata={"platform": self.platform},
+                call=_perform_health_check,
             )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200:
