@@ -119,10 +119,12 @@ class TestBM25Index:
 
     def test_add_documents_bulk(self) -> None:
         idx = BM25Index()
-        indices = idx.add_documents([
-            ("first doc", None),
-            ("second doc", {"key": "value"}),
-        ])
+        indices = idx.add_documents(
+            [
+                ("first doc", None),
+                ("second doc", {"key": "value"}),
+            ]
+        )
         assert indices == [0, 1]
         assert idx.size == 2
 
@@ -544,9 +546,7 @@ class TestHybridSearcher:
             SearchResult(text="vector result", score=0.8, metadata={}),
         ]
         bm25_docs = [("keyword match document", {})]
-        searcher, mock_memory, mock_embedder = self._make_searcher(
-            vector_hits, bm25_docs
-        )
+        searcher, mock_memory, mock_embedder = self._make_searcher(vector_hits, bm25_docs)
         results = await searcher.search("keyword match", top_k=5, bm25_only=True)
         # Embedder should NOT have been called.
         mock_embedder.embed.assert_not_called()
@@ -568,8 +568,7 @@ class TestHybridSearcher:
     @pytest.mark.asyncio
     async def test_top_k_limit(self) -> None:
         vector_hits = [
-            SearchResult(text=f"vec{i}", score=0.9 - i * 0.1, metadata={})
-            for i in range(10)
+            SearchResult(text=f"vec{i}", score=0.9 - i * 0.1, metadata={}) for i in range(10)
         ]
         bm25_docs = [(f"bm25doc{i} search term", {}) for i in range(10)]
         searcher, _, _ = self._make_searcher(vector_hits, bm25_docs)
@@ -610,9 +609,7 @@ class TestHybridSearcher:
             ("alpha search topic", {}),
         ]
         # With vector_weight=0.9, vector ranking (alpha #1) dominates.
-        searcher, _, _ = self._make_searcher(
-            vector_hits, bm25_docs, vector_weight=0.9
-        )
+        searcher, _, _ = self._make_searcher(vector_hits, bm25_docs, vector_weight=0.9)
         results = await searcher.search("search topic", top_k=2)
         assert results[0].text == "alpha search topic"
 

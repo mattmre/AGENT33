@@ -27,14 +27,16 @@ _PATH_TRAVERSAL_PATTERNS = (
 )
 
 # IV-04: Environment variables that must be stripped.
-_DANGEROUS_ENV_VARS = frozenset({
-    "LD_PRELOAD",
-    "LD_LIBRARY_PATH",
-    "DYLD_INSERT_LIBRARIES",
-    "DYLD_LIBRARY_PATH",
-    "PYTHONPATH",
-    "NODE_OPTIONS",
-})
+_DANGEROUS_ENV_VARS = frozenset(
+    {
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "PYTHONPATH",
+        "NODE_OPTIONS",
+    }
+)
 
 # IV-05: Maximum stdin size in bytes (1 MB).
 _MAX_STDIN_BYTES = 1_048_576
@@ -80,10 +82,7 @@ def check_argument_sanitization(arguments: list[str]) -> str | None:
     """
     for arg in arguments:
         if _SHELL_METACHAR_PATTERN.search(arg):
-            return (
-                f"IV-02: Argument contains shell metacharacters: "
-                f"'{arg[:80]}'"
-            )
+            return f"IV-02: Argument contains shell metacharacters: '{arg[:80]}'"
     return None
 
 
@@ -96,10 +95,7 @@ def check_path_traversal(paths: list[str]) -> str | None:
     for path in paths:
         for pattern in _PATH_TRAVERSAL_PATTERNS:
             if pattern in path:
-                return (
-                    f"IV-03: Path traversal or sensitive path detected: "
-                    f"'{path[:120]}'"
-                )
+                return f"IV-03: Path traversal or sensitive path detected: '{path[:120]}'"
     return None
 
 
@@ -120,10 +116,7 @@ def check_input_size(stdin: str | None) -> str | None:
     Returns a violation if stdin exceeds 1 MB (encoded as UTF-8).
     """
     if stdin is not None and len(stdin.encode("utf-8")) > _MAX_STDIN_BYTES:
-        return (
-            f"IV-05: Stdin exceeds maximum size of "
-            f"{_MAX_STDIN_BYTES} bytes"
-        )
+        return f"IV-05: Stdin exceeds maximum size of {_MAX_STDIN_BYTES} bytes"
     return None
 
 

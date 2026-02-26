@@ -56,9 +56,7 @@ async def optimize_agent(agent: str, req: OptimizeRequest) -> dict[str, Any]:
     if optimizer is None:
         raise HTTPException(503, "Training system not initialized")
 
-    new_prompt = await optimizer.optimize(
-        agent, req.current_prompt, iterations=req.iterations
-    )
+    new_prompt = await optimizer.optimize(agent, req.current_prompt, iterations=req.iterations)
     return {"agent": agent, "new_prompt": new_prompt}
 
 
@@ -86,9 +84,7 @@ async def get_metrics(agent: str) -> MetricsResponse:
 
     rollouts = await store.get_rollouts(agent, limit=1000)
     avg_reward = (
-        sum(r.get("total_reward", 0) for r in rollouts) / len(rollouts)
-        if rollouts
-        else 0.0
+        sum(r.get("total_reward", 0) for r in rollouts) / len(rollouts) if rollouts else 0.0
     )
 
     latest_prompt = await store.get_latest_prompt(agent)

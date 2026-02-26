@@ -36,9 +36,7 @@ class Algorithm(abc.ABC):
     """Base class for training algorithms."""
 
     @abc.abstractmethod
-    async def run(
-        self, rollouts: list[dict[str, Any]], current_prompt: str
-    ) -> str:
+    async def run(self, rollouts: list[dict[str, Any]], current_prompt: str) -> str:
         """Given rollout data and current prompt, return an improved prompt."""
         ...
 
@@ -54,9 +52,7 @@ class APO(Algorithm):
         self._router = router
         self._model = model or "llama3.2"
 
-    async def run(
-        self, rollouts: list[dict[str, Any]], current_prompt: str
-    ) -> str:
+    async def run(self, rollouts: list[dict[str, Any]], current_prompt: str) -> str:
         from agent33.llm.base import ChatMessage
 
         if not rollouts:
@@ -64,8 +60,8 @@ class APO(Algorithm):
 
         sorted_rollouts = sorted(rollouts, key=lambda r: r.get("total_reward", 0))
         mid = len(sorted_rollouts) // 2
-        bad = sorted_rollouts[:max(1, mid)]
-        good = sorted_rollouts[max(1, mid):]
+        bad = sorted_rollouts[: max(1, mid)]
+        good = sorted_rollouts[max(1, mid) :]
 
         good_text = "\n---\n".join(
             f"Reward: {r.get('total_reward', 0):.2f}\n"
@@ -101,16 +97,12 @@ class SFT(Algorithm):
     def __init__(self, router: ModelRouter | None = None) -> None:
         self._router = router
 
-    async def run(
-        self, rollouts: list[dict[str, Any]], current_prompt: str
-    ) -> str:
+    async def run(self, rollouts: list[dict[str, Any]], current_prompt: str) -> str:
         """Extract training pairs from top rollouts.
 
         Returns JSON string of training data, not a new prompt.
         """
-        sorted_rollouts = sorted(
-            rollouts, key=lambda r: r.get("total_reward", 0), reverse=True
-        )
+        sorted_rollouts = sorted(rollouts, key=lambda r: r.get("total_reward", 0), reverse=True)
 
         training_pairs: list[dict[str, str]] = []
         for r in sorted_rollouts[:10]:
@@ -118,10 +110,12 @@ class SFT(Algorithm):
             prompt_spans = [s for s in spans if s.get("span_type") == "prompt"]
             result_spans = [s for s in spans if s.get("span_type") == "result"]
             if prompt_spans and result_spans:
-                training_pairs.append({
-                    "input": prompt_spans[0].get("content", ""),
-                    "output": result_spans[-1].get("content", ""),
-                    "reward": str(r.get("total_reward", 0)),
-                })
+                training_pairs.append(
+                    {
+                        "input": prompt_spans[0].get("content", ""),
+                        "output": result_spans[-1].get("content", ""),
+                        "reward": str(r.get("total_reward", 0)),
+                    }
+                )
 
         return json.dumps(training_pairs, indent=2)

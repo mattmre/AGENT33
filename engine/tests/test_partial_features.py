@@ -10,6 +10,7 @@ from typing import Any
 # CA-007: Artifact-Graph Diffing
 # ---------------------------------------------------------------------------
 
+
 def test_artifact_graph_compute_diff():
     from agent33.automation.sensors.file_change import ArtifactGraph
 
@@ -50,6 +51,7 @@ def test_artifact_graph_no_change():
 # CA-011: Dry-Run Execution Mode (verify the executor already supports it)
 # ---------------------------------------------------------------------------
 
+
 def test_dry_run_flag_in_definition():
     """The WorkflowExecution model should accept dry_run=True."""
     from agent33.workflows.definition import WorkflowExecution
@@ -61,6 +63,7 @@ def test_dry_run_flag_in_definition():
 # ---------------------------------------------------------------------------
 # CA-013: Artifact Filtering Module
 # ---------------------------------------------------------------------------
+
 
 def test_artifact_filter_include_exclude():
     from agent33.automation.filters import Artifact, ArtifactFilter
@@ -105,6 +108,7 @@ def test_artifact_filter_by_age():
 # CA-024: Runtime Partitioning
 # ---------------------------------------------------------------------------
 
+
 def test_partition_executor_static_keys():
     from agent33.workflows.partitioning import PartitionDefinition, PartitionExecutor
 
@@ -140,6 +144,7 @@ def test_partition_executor_dynamic_discovery():
 # ---------------------------------------------------------------------------
 # CA-025: IO Manager Abstraction
 # ---------------------------------------------------------------------------
+
 
 def test_memory_io_manager():
     from agent33.workflows.io_manager import IOContext, MemoryIOManager
@@ -178,12 +183,14 @@ def test_database_io_manager():
 # CA-030: Workflow Migration Tooling
 # ---------------------------------------------------------------------------
 
+
 def test_workflow_migration_upgrade():
     from agent33.workflows.migration import WorkflowMigration
 
     mig = WorkflowMigration()
     mig.register(
-        "1.0.0", "2.0.0",
+        "1.0.0",
+        "2.0.0",
         upgrade_fn=lambda d: {**d, "new_field": True},
         downgrade_fn=lambda d: {k: v for k, v in d.items() if k != "new_field"},
     )
@@ -208,7 +215,8 @@ def test_workflow_migration_downgrade():
 
     mig = WorkflowMigration()
     mig.register(
-        "1.0.0", "2.0.0",
+        "1.0.0",
+        "2.0.0",
         upgrade_fn=lambda d: {**d, "added": True},
         downgrade_fn=lambda d: {k: v for k, v in d.items() if k != "added"},
     )
@@ -221,6 +229,7 @@ def test_workflow_migration_downgrade():
 # ---------------------------------------------------------------------------
 # CA-043: Backpressure Signaling
 # ---------------------------------------------------------------------------
+
 
 def test_backpressure_controller():
     from agent33.workflows.executor import BackpressureController
@@ -245,6 +254,7 @@ def test_backpressure_controller():
 # ---------------------------------------------------------------------------
 # CA-046: Deep History States
 # ---------------------------------------------------------------------------
+
 
 def test_history_state_deep():
     from agent33.workflows.state_machine import HistoryState
@@ -273,6 +283,7 @@ def test_history_state_shallow():
 # ---------------------------------------------------------------------------
 # CA-058: State Model Testing
 # ---------------------------------------------------------------------------
+
 
 def test_state_model_tester_detects_unreachable():
     from agent33.testing.state_model import StateModelTester
@@ -321,6 +332,7 @@ def test_state_model_tester_detects_deadlock():
 # ---------------------------------------------------------------------------
 # CA-060: Dollar-Cost Attribution
 # ---------------------------------------------------------------------------
+
 
 def test_cost_tracker_record_and_report():
     from agent33.observability.metrics import CostTracker

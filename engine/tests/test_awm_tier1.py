@@ -1602,4 +1602,3 @@ class TestMultiTurnResult:
         assert result.turns == 3
         assert result.tool_call_accuracy == 0.75
         assert result.tokens_used == 500
-

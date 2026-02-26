@@ -164,9 +164,7 @@ async def get_release(release_id: str) -> dict[str, Any]:
     try:
         release = _service.get_release(release_id)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     return release.model_dump(mode="json")
 
 
@@ -184,9 +182,7 @@ async def freeze_release(release_id: str) -> dict[str, Any]:
     try:
         release = _service.freeze(release_id)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     except InvalidReleaseTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"release_id": release.release_id, "status": release.status.value}
@@ -201,9 +197,7 @@ async def cut_rc(release_id: str, body: CutRCRequest) -> dict[str, Any]:
     try:
         release = _service.cut_rc(release_id, rc_version=body.rc_version)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     except InvalidReleaseTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"release_id": release.release_id, "status": release.status.value}
@@ -218,9 +212,7 @@ async def start_validation(release_id: str) -> dict[str, Any]:
     try:
         release = _service.start_validation(release_id)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     except InvalidReleaseTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"release_id": release.release_id, "status": release.status.value}
@@ -230,16 +222,12 @@ async def start_validation(release_id: str) -> dict[str, Any]:
     "/{release_id}/publish",
     dependencies=[require_scope("tools:execute")],
 )
-async def publish_release(
-    release_id: str, body: PublishRequest
-) -> dict[str, Any]:
+async def publish_release(release_id: str, body: PublishRequest) -> dict[str, Any]:
     """Publish a release (checklist must pass)."""
     try:
         release = _service.publish(release_id, released_by=body.released_by)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     except InvalidReleaseTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {
@@ -263,9 +251,7 @@ async def get_checklist(release_id: str) -> dict[str, Any]:
     try:
         release = _service.get_release(release_id)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     passed, failures = _service.evaluate_checklist(release_id)
     return {
         "release_id": release_id,
@@ -279,18 +265,12 @@ async def get_checklist(release_id: str) -> dict[str, Any]:
     "/{release_id}/checklist",
     dependencies=[require_scope("tools:execute")],
 )
-async def update_check(
-    release_id: str, body: UpdateCheckRequest
-) -> dict[str, Any]:
+async def update_check(release_id: str, body: UpdateCheckRequest) -> dict[str, Any]:
     """Update a checklist item status."""
     try:
-        _service.update_check(
-            release_id, body.check_id, body.status, body.message
-        )
+        _service.update_check(release_id, body.check_id, body.status, body.message)
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     return {"release_id": release_id, "check_id": body.check_id, "status": body.status.value}
 
 
@@ -311,9 +291,7 @@ async def apply_security_gate(
             policy=body.policy,
         )
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     return {
         "release_id": release_id,
         "run_id": result.run_id,
@@ -365,9 +343,7 @@ async def list_sync_rules() -> list[dict[str, Any]]:
     "/sync/rules/{rule_id}/dry-run",
     dependencies=[require_scope("tools:execute")],
 )
-async def sync_dry_run(
-    rule_id: str, body: DryRunRequest
-) -> dict[str, Any]:
+async def sync_dry_run(rule_id: str, body: DryRunRequest) -> dict[str, Any]:
     """Execute a dry-run sync."""
     exe = _service.sync_engine.dry_run(
         rule_id=rule_id,
@@ -387,9 +363,7 @@ async def sync_dry_run(
     "/sync/rules/{rule_id}/execute",
     dependencies=[require_scope("tools:execute")],
 )
-async def sync_execute(
-    rule_id: str, body: ExecuteSyncRequest
-) -> dict[str, Any]:
+async def sync_execute(rule_id: str, body: ExecuteSyncRequest) -> dict[str, Any]:
     """Execute a real sync."""
     exe = _service.sync_engine.execute(
         rule_id=rule_id,
@@ -415,9 +389,7 @@ async def sync_execute(
     status_code=201,
     dependencies=[require_scope("tools:execute")],
 )
-async def initiate_rollback(
-    release_id: str, body: InitiateRollbackRequest
-) -> dict[str, Any]:
+async def initiate_rollback(release_id: str, body: InitiateRollbackRequest) -> dict[str, Any]:
     """Initiate a rollback for a release."""
     try:
         release = _service.initiate_rollback(
@@ -428,9 +400,7 @@ async def initiate_rollback(
             initiated_by=body.initiated_by,
         )
     except ReleaseNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Release not found: {release_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Release not found: {release_id}") from None
     rollbacks = _service.rollback_manager.list_all(release_id=release_id, limit=1)
     rollback_id = rollbacks[0].rollback_id if rollbacks else ""
     return {
@@ -449,9 +419,7 @@ async def list_rollbacks(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """List rollback records."""
-    records = _service.rollback_manager.list_all(
-        release_id=release_id, limit=limit
-    )
+    records = _service.rollback_manager.list_all(release_id=release_id, limit=limit)
     return [r.model_dump(mode="json") for r in records]
 
 
@@ -463,9 +431,7 @@ async def recommend_rollback(
     body: RecommendRollbackRequest,
 ) -> dict[str, str]:
     """Get a rollback recommendation based on severity and impact."""
-    rollback_type, approval = _service.rollback_manager.recommend(
-        body.severity, body.impact
-    )
+    rollback_type, approval = _service.rollback_manager.recommend(body.severity, body.impact)
     return {
         "rollback_type": rollback_type.value,
         "approval_level": approval,

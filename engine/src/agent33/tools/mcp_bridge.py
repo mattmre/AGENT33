@@ -227,11 +227,7 @@ class MCPServerConnection:
 
         if "error" in body:
             error = body["error"]
-            msg = (
-                error.get("message", str(error))
-                if isinstance(error, dict)
-                else str(error)
-            )
+            msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
             raise RuntimeError(f"MCP RPC error from {self._name}: {msg}")
 
         return body.get("result", body)

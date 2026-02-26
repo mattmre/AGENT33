@@ -39,10 +39,13 @@ logger = logging.getLogger(__name__)
 # -- singletons ----------------------------------------------------------
 
 _model_router = ModelRouter()
-_model_router.register("ollama", OllamaProvider(
-    base_url=settings.ollama_base_url,
-    default_model=settings.ollama_default_model,
-))
+_model_router.register(
+    "ollama",
+    OllamaProvider(
+        base_url=settings.ollama_base_url,
+        default_model=settings.ollama_default_model,
+    ),
+)
 
 if settings.openai_api_key.get_secret_value():
     from agent33.llm.openai import OpenAIProvider
@@ -126,6 +129,7 @@ async def _resolve_active_skills(
 
     matched = [skill.name for skill in match_result.skills if skill.name in allowed]
     return matched or configured_skills
+
 
 _effort_router = AgentEffortRouter(
     enabled=settings.agent_effort_routing_enabled,
@@ -282,13 +286,16 @@ async def search_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
     role: str | None = Query(default=None, description="Filter by role"),
     spec_capability: str | None = Query(
-        default=None, description="Filter by spec capability ID",
+        default=None,
+        description="Filter by spec capability ID",
     ),
     category: str | None = Query(
-        default=None, description="Filter by capability category",
+        default=None,
+        description="Filter by capability category",
     ),
     status: str | None = Query(
-        default=None, description="Filter by lifecycle status",
+        default=None,
+        description="Filter by lifecycle status",
     ),
 ) -> list[dict[str, Any]]:
     """Search agents with multi-criteria AND filtering."""

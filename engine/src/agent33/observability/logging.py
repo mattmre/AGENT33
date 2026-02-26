@@ -8,9 +8,7 @@ from typing import Any
 import structlog
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
-_PHONE_RE = re.compile(
-    r"(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"
-)
+_PHONE_RE = re.compile(r"(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 
 _PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [

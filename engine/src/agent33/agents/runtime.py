@@ -151,8 +151,12 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
     # --- Agentic Memory Instructions ---
     parts.append("\n# Persistent Memory & Knowledge Retrieval")
     parts.append("- You have access to a persistent PGVector semantic memory database.")
-    parts.append("- Actively utilize your prior context to store conclusions and retrieve context before acting.")
-    parts.append("- Rely on retrieved RAG memories instead of blindly re-analyzing or re-asking the user for the same information.")
+    parts.append(
+        "- Actively utilize your prior context to store conclusions and retrieve context before acting."
+    )
+    parts.append(
+        "- Rely on retrieved RAG memories instead of blindly re-analyzing or re-asking the user for the same information."
+    )
 
     # --- Safety Guardrails ---
     parts.append("\n# Safety Rules")
@@ -471,16 +475,12 @@ class AgentRuntime:
             # Inject skill context
             if self._skill_injector is not None:
                 if self._definition.skills:
-                    system_prompt += (
-                        "\n\n"
-                        + self._skill_injector.build_skill_metadata_block(
-                            self._definition.skills
-                        )
+                    system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
+                        self._definition.skills
                     )
                 for skill_name in self._active_skills:
-                    system_prompt += (
-                        "\n\n"
-                        + self._skill_injector.build_skill_instructions_block(skill_name)
+                    system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
+                        skill_name
                     )
 
             # Inject memory context

@@ -102,9 +102,7 @@ class TestMultiSegmentCommandValidation:
         ctx = ToolContext(command_allowlist=["echo", "grep"])
         # This should parse but may fail at execution — the point is it
         # passes the validation stage.
-        result = await tool.execute(
-            {"command": "echo hello | grep hello"}, ctx
-        )
+        result = await tool.execute({"command": "echo hello | grep hello"}, ctx)
         # It passed validation (no "not in the allowlist" error)
         assert "not in the allowlist" not in (result.error or "")
 
@@ -158,9 +156,7 @@ class TestAutonomyLevels:
     def test_agent_definition_default_supervised(self) -> None:
         from agent33.agents.definition import AgentDefinition, AutonomyLevel
 
-        defn = AgentDefinition(
-            name="test-agent", version="1.0.0", role="implementer"
-        )
+        defn = AgentDefinition(name="test-agent", version="1.0.0", role="implementer")
         assert defn.autonomy_level == AutonomyLevel.SUPERVISED
 
     def test_agent_definition_explicit_readonly(self) -> None:
@@ -304,9 +300,7 @@ class TestPathTraversalHardening:
 
         tool = FileOpsTool()
         ctx = ToolContext(path_allowlist=[str(tmp_path)])
-        result = await tool.execute(
-            {"operation": "read", "path": f"{tmp_path}/test\x00.txt"}, ctx
-        )
+        result = await tool.execute({"operation": "read", "path": f"{tmp_path}/test\x00.txt"}, ctx)
         assert not result.success
         assert "null byte" in result.error.lower()
 
@@ -668,9 +662,7 @@ class TestGovernanceToolPolicies:
             tool_policies={"file_ops:write": "deny"},
         )
         # write blocked
-        assert not gov.pre_execute_check(
-            "file_ops", {"operation": "write", "path": "/tmp/x"}, ctx
-        )
+        assert not gov.pre_execute_check("file_ops", {"operation": "write", "path": "/tmp/x"}, ctx)
         # read allowed (no policy match, continues to normal checks)
         assert gov.pre_execute_check("file_ops", {"operation": "read", "path": "/tmp/x"}, ctx)
 

@@ -24,9 +24,7 @@ def set_executor(executor: CodeExecutor) -> None:
 def get_executor() -> CodeExecutor:
     """Return the configured executor or raise."""
     if _executor is None:
-        raise RuntimeError(
-            "CodeExecutor not configured — call set_executor() at startup"
-        )
+        raise RuntimeError("CodeExecutor not configured — call set_executor() at startup")
     return _executor
 
 

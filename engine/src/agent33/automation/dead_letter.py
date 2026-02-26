@@ -113,16 +113,13 @@ class DeadLetterQueue:
             Number of items purged.
         """
         cutoff = time.time() - older_than_seconds
-        to_remove = [
-            item_id
-            for item_id, item in self._items.items()
-            if item.captured_at < cutoff
-        ]
+        to_remove = [item_id for item_id, item in self._items.items() if item.captured_at < cutoff]
         for item_id in to_remove:
             del self._items[item_id]
         if to_remove:
             logger.info(
                 "Purged %d dead-letter items older than %ss",
-                len(to_remove), older_than_seconds,
+                len(to_remove),
+                older_than_seconds,
             )
         return len(to_remove)

@@ -341,8 +341,7 @@ class TestEffortRoutingObservabilityAPI:
             == 1600.0
         )
         assert (
-            payload["effort_routing_estimated_cost_usd(effort=high,source=policy)"]["max"]
-            == 0.8
+            payload["effort_routing_estimated_cost_usd(effort=high,source=policy)"]["max"] == 0.8
         )
 
     def test_dashboard_alerts_endpoint_returns_triggered_effort_alerts(self, client) -> None:

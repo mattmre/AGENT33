@@ -27,12 +27,14 @@ logger = structlog.get_logger()
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-_TERMINAL_STATES = frozenset({
-    RunStatus.COMPLETED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-    RunStatus.TIMEOUT,
-})
+_TERMINAL_STATES = frozenset(
+    {
+        RunStatus.COMPLETED,
+        RunStatus.FAILED,
+        RunStatus.CANCELLED,
+        RunStatus.TIMEOUT,
+    }
+)
 _SEVERITY_ORDER = {
     FindingSeverity.INFO: 0,
     FindingSeverity.LOW: 1,
@@ -330,9 +332,7 @@ class SecurityScanService:
             ) from exc
         if result.returncode not in {0, 1}:
             error_text = (
-                result.stderr.strip()
-                or result.stdout.strip()
-                or "Bandit execution failed"
+                result.stderr.strip() or result.stdout.strip() or "Bandit execution failed"
             )
             raise ToolExecutionError(error_text)
         return result.stdout
@@ -359,9 +359,7 @@ class SecurityScanService:
             ) from exc
         if result.returncode != 0:
             error_text = (
-                result.stderr.strip()
-                or result.stdout.strip()
-                or "gitleaks execution failed"
+                result.stderr.strip() or result.stdout.strip() or "gitleaks execution failed"
             )
             raise ToolExecutionError(error_text)
         return result.stdout
@@ -475,9 +473,7 @@ class SecurityScanService:
             for vulnerability in dependency.get("vulns", []):
                 vuln_id = vulnerability.get("id", "")
                 description = (
-                    vulnerability.get("description")
-                    or vuln_id
-                    or "Dependency vulnerability"
+                    vulnerability.get("description") or vuln_id or "Dependency vulnerability"
                 )
                 findings.append(
                     SecurityFinding(

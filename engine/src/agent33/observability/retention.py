@@ -31,9 +31,7 @@ class RetentionPolicy:
 # ---------------------------------------------------------------------------
 
 RETENTION_POLICIES: dict[ArtifactType, RetentionPolicy] = {
-    ArtifactType.TMP: RetentionPolicy(
-        ArtifactType.TMP, retention_days=7, initial_tier="hot"
-    ),
+    ArtifactType.TMP: RetentionPolicy(ArtifactType.TMP, retention_days=7, initial_tier="hot"),
     ArtifactType.LOG: RetentionPolicy(
         ArtifactType.LOG,
         retention_days=30,
@@ -71,10 +69,14 @@ RETENTION_POLICIES: dict[ArtifactType, RetentionPolicy] = {
         warm_to_cold_days=90,
     ),
     ArtifactType.REV: RetentionPolicy(
-        ArtifactType.REV, retention_days=0, initial_tier="cold"  # permanent
+        ArtifactType.REV,
+        retention_days=0,
+        initial_tier="cold",  # permanent
     ),
     ArtifactType.EVD: RetentionPolicy(
-        ArtifactType.EVD, retention_days=0, initial_tier="cold"  # permanent
+        ArtifactType.EVD,
+        retention_days=0,
+        initial_tier="cold",  # permanent
     ),
 }
 

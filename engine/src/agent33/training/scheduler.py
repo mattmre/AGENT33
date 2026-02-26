@@ -69,24 +69,20 @@ class TrainingScheduler:
             idle_time = now - self._last_request_time
             requests_since = self._request_count - last_optimized_count
 
-            should_optimize = (
-                (requests_since >= self._optimize_interval)
-                or (idle_time >= self._idle_seconds and requests_since > 0)
+            should_optimize = (requests_since >= self._optimize_interval) or (
+                idle_time >= self._idle_seconds and requests_since > 0
             )
 
             if should_optimize and self._agents:
                 logger.info(
                     "triggering optimization (requests=%d, idle=%.0fs)",
-                    requests_since, idle_time,
+                    requests_since,
+                    idle_time,
                 )
                 for agent_name, prompt in list(self._agents.items()):
                     try:
-                        new_prompt = await self._optimizer.optimize(
-                            agent_name, prompt
-                        )
+                        new_prompt = await self._optimizer.optimize(agent_name, prompt)
                         self._agents[agent_name] = new_prompt
                     except Exception:
-                        logger.warning(
-                            "optimization failed for %s", agent_name, exc_info=True
-                        )
+                        logger.warning("optimization failed for %s", agent_name, exc_info=True)
                 last_optimized_count = self._request_count

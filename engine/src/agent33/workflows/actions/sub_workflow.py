@@ -52,9 +52,7 @@ async def execute(
 
     current_depth = _nesting_depth.get()
     if current_depth >= _MAX_NESTING_DEPTH:
-        raise RuntimeError(
-            f"Sub-workflow nesting depth exceeded (max {_MAX_NESTING_DEPTH})"
-        )
+        raise RuntimeError(f"Sub-workflow nesting depth exceeded (max {_MAX_NESTING_DEPTH})")
 
     step_count = len(workflow_definition.get("steps", []))
     logger.info(

@@ -60,9 +60,7 @@ class AirLLMProvider:
         prefetch: bool = True,
     ) -> None:
         if AirLLMAutoModel is None:
-            raise ImportError(
-                "airllm is not installed. Install with: pip install airllm"
-            )
+            raise ImportError("airllm is not installed. Install with: pip install airllm")
         self._model_path = model_path
         self._device = device
         self._compression = compression
@@ -86,9 +84,7 @@ class AirLLMProvider:
                 self._prefetch,
             )
             loop = asyncio.get_running_loop()
-            self._model, self._tokenizer = await loop.run_in_executor(
-                None, self._load_sync
-            )
+            self._model, self._tokenizer = await loop.run_in_executor(None, self._load_sync)
             logger.info("airllm model loaded successfully")
 
     def _load_sync(self) -> tuple[object, object]:

@@ -38,17 +38,78 @@ logger = logging.getLogger(__name__)
 # BM25 scoring (lightweight, in-memory, skill-specific)
 # ---------------------------------------------------------------------------
 
-_STOP_WORDS = frozenset({
-    "a", "an", "the", "is", "are", "was", "were", "be", "been",
-    "being", "have", "has", "had", "do", "does", "did", "will",
-    "would", "shall", "should", "may", "might", "can", "could",
-    "of", "in", "to", "for", "on", "with", "at", "by", "from",
-    "as", "into", "through", "during", "before", "after", "above",
-    "below", "and", "or", "but", "not", "no", "nor", "so", "yet",
-    "both", "either", "neither", "each", "every", "all", "any",
-    "few", "more", "most", "other", "some", "such", "that", "this",
-    "these", "those", "it", "its",
-})
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "can",
+        "could",
+        "of",
+        "in",
+        "to",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "and",
+        "or",
+        "but",
+        "not",
+        "no",
+        "nor",
+        "so",
+        "yet",
+        "both",
+        "either",
+        "neither",
+        "each",
+        "every",
+        "all",
+        "any",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "that",
+        "this",
+        "these",
+        "those",
+        "it",
+        "its",
+    }
+)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -319,9 +380,7 @@ class SkillMatcher:
         candidates: list[SkillDefinition],
     ) -> list[SkillDefinition]:
         """Use LLM to leniently filter candidates by relevance."""
-        skill_list = "\n".join(
-            f"- {s.name}: {s.description}" for s in candidates
-        )
+        skill_list = "\n".join(f"- {s.name}: {s.description}" for s in candidates)
         user_msg = (
             f"Task: {query}\n\n"
             f"Available skills:\n{skill_list}\n\n"

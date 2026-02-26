@@ -49,12 +49,15 @@ class SkillDefinition(BaseModel):
     """
 
     name: str = Field(
-        ..., min_length=1, max_length=64,
+        ...,
+        min_length=1,
+        max_length=64,
         description="Unique slug (e.g. 'kubernetes-deploy').",
     )
     version: str = Field(default="1.0.0")
     description: str = Field(
-        default="", max_length=500,
+        default="",
+        max_length=500,
         description="Short description (L0 metadata for context budget).",
     )
     instructions: str = Field(
@@ -118,6 +121,7 @@ class SkillDefinition(BaseModel):
 
     # Runtime (set during loading, not from file)
     base_path: Path | None = Field(
-        default=None, exclude=True,
+        default=None,
+        exclude=True,
         description="Resolved directory containing this skill.",
     )

@@ -217,15 +217,9 @@ class TestExecuteWithRetry:
         # First two calls fail with retryable code, third succeeds
         adapter.execute = AsyncMock(
             side_effect=[
-                ExecutionResult(
-                    execution_id="t", success=False, exit_code=1, error="fail1"
-                ),
-                ExecutionResult(
-                    execution_id="t", success=False, exit_code=1, error="fail2"
-                ),
-                ExecutionResult(
-                    execution_id="t", success=True, exit_code=0, stdout="ok"
-                ),
+                ExecutionResult(execution_id="t", success=False, exit_code=1, error="fail1"),
+                ExecutionResult(execution_id="t", success=False, exit_code=1, error="fail2"),
+                ExecutionResult(execution_id="t", success=True, exit_code=0, stdout="ok"),
             ],
         )
         executor.register_adapter(adapter)

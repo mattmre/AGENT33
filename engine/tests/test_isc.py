@@ -155,9 +155,7 @@ class TestCompositeCriterion:
         c1 = ISCCriterion(name="a", description="d", check_fn=lambda ctx: True)
         c2 = ISCCriterion(name="b", description="d", check_fn=lambda ctx: True)
         c3 = ISCCriterion(name="c", description="d", check_fn=lambda ctx: True)
-        composite = CompositeCriterion(
-            operator=CompositeOperator.AND, criteria=[c1, c2]
-        )
+        composite = CompositeCriterion(operator=CompositeOperator.AND, criteria=[c1, c2])
         chained = composite & c3
         assert isinstance(chained, CompositeCriterion)
         r = chained.evaluate({})
@@ -167,9 +165,7 @@ class TestCompositeCriterion:
         c1 = ISCCriterion(name="a", description="d", check_fn=lambda ctx: False)
         c2 = ISCCriterion(name="b", description="d", check_fn=lambda ctx: False)
         c3 = ISCCriterion(name="c", description="d", check_fn=lambda ctx: True)
-        composite = CompositeCriterion(
-            operator=CompositeOperator.OR, criteria=[c1, c2]
-        )
+        composite = CompositeCriterion(operator=CompositeOperator.OR, criteria=[c1, c2])
         chained = composite | c3
         r = chained.evaluate({})
         assert r.success is True
@@ -224,9 +220,7 @@ class TestISCManager:
     def test_evaluate_all_anti_criteria_disabled(self) -> None:
         mgr = ISCManager()
         mgr.add(
-            ISCCriterion(
-                name="anti", description="d", check_fn=lambda ctx: True, is_anti=True
-            )
+            ISCCriterion(name="anti", description="d", check_fn=lambda ctx: True, is_anti=True)
         )
         mgr.add(ISCCriterion(name="normal", description="d", check_fn=lambda ctx: True))
         results = mgr.evaluate_all({}, enable_anti_criteria=False)
@@ -237,9 +231,7 @@ class TestISCManager:
     def test_evaluate_all_anti_criteria_enabled(self) -> None:
         mgr = ISCManager()
         mgr.add(
-            ISCCriterion(
-                name="anti", description="d", check_fn=lambda ctx: True, is_anti=True
-            )
+            ISCCriterion(name="anti", description="d", check_fn=lambda ctx: True, is_anti=True)
         )
         results = mgr.evaluate_all({}, enable_anti_criteria=True)
         assert len(results) == 1
@@ -304,9 +296,7 @@ class TestEnforceConstraintLength:
     def test_valid_8_words(self) -> None:
         assert enforce_constraint_length("output must contain valid JSON format always") is False
         assert (
-            enforce_constraint_length(
-                "the system must validate all input fields correctly"
-            )
+            enforce_constraint_length("the system must validate all input fields correctly")
             is True
         )
 
@@ -327,15 +317,15 @@ class TestEnforceConstraintLength:
         assert enforce_constraint_length("the quick brown fox jumped over the lazy dog") is False
 
     def test_keyword_variations(self) -> None:
-        assert enforce_constraint_length(
-            "we shall deliver the product on time every week"
-        ) is True
-        assert enforce_constraint_length(
-            "agents should never expose credentials in the output text"
-        ) is True
-        assert enforce_constraint_length(
-            "the pipeline ensure verify all assertions pass in tests"
-        ) is True
+        assert enforce_constraint_length("we shall deliver the product on time every week") is True
+        assert (
+            enforce_constraint_length("agents should never expose credentials in the output text")
+            is True
+        )
+        assert (
+            enforce_constraint_length("the pipeline ensure verify all assertions pass in tests")
+            is True
+        )
 
 
 # ---------------------------------------------------------------------------

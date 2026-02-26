@@ -185,12 +185,8 @@ class Settings(BaseSettings):
     improvement_learning_auto_intake_min_severity: str = "high"
     improvement_learning_auto_intake_max_items: int = 3
     improvement_learning_persistence_backend: str = "memory"  # memory | file | db
-    improvement_learning_persistence_path: str = (
-        "var/improvement_learning_signals.json"
-    )
-    improvement_learning_persistence_db_path: str = (
-        "var/improvement_learning_signals.sqlite3"
-    )
+    improvement_learning_persistence_path: str = "var/improvement_learning_signals.json"
+    improvement_learning_persistence_db_path: str = "var/improvement_learning_signals.sqlite3"
     improvement_learning_persistence_migrate_on_start: bool = False
     improvement_learning_persistence_migration_backup_on_start: bool = False
     improvement_learning_persistence_migration_backup_path: str = (

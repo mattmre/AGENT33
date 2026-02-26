@@ -61,10 +61,7 @@ def build_checklist(
     reference: str = "",
 ) -> ImprovementChecklist:
     """Build the canonical improvement checklist for the given period."""
-    items = [
-        ChecklistItem(check_id=cid, name=name)
-        for cid, name in _PERIOD_MAP[period]
-    ]
+    items = [ChecklistItem(check_id=cid, name=name) for cid, name in _PERIOD_MAP[period]]
     return ImprovementChecklist(
         period=period,
         reference=reference,
@@ -75,9 +72,7 @@ def build_checklist(
 class ChecklistEvaluator:
     """Evaluate an improvement checklist for completion."""
 
-    def evaluate(
-        self, checklist: ImprovementChecklist
-    ) -> tuple[bool, list[str]]:
+    def evaluate(self, checklist: ImprovementChecklist) -> tuple[bool, list[str]]:
         """Return (all_complete, list of incomplete item descriptions)."""
         incomplete: list[str] = []
         for item in checklist.items:

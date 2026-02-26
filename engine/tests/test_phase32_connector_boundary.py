@@ -169,9 +169,7 @@ async def test_mcp_connection_boundary_circuit_breaker_opens_after_failure() -> 
         recovery_timeout_seconds=60.0,
         half_open_success_threshold=1,
     )
-    executor = ConnectorExecutor(
-        [CircuitBreakerMiddleware(breaker)]
-    )
+    executor = ConnectorExecutor([CircuitBreakerMiddleware(breaker)])
     conn = MCPServerConnection(
         name="phase32",
         url="https://example.com/mcp",

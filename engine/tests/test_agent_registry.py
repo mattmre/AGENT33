@@ -126,7 +126,9 @@ class TestAgentDefinition:
 
     def test_load_from_json_file(self) -> None:
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False,
+            mode="w",
+            suffix=".json",
+            delete=False,
         ) as f:
             json.dump(_FULL_DEF, f)
             f.flush()

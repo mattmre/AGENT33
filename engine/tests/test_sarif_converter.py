@@ -161,9 +161,7 @@ class TestSarifToFindings:
                             "rules": [
                                 {
                                     "id": "EXT-001",
-                                    "shortDescription": {
-                                        "text": "External finding"
-                                    },
+                                    "shortDescription": {"text": "External finding"},
                                 }
                             ],
                         }
@@ -172,15 +170,11 @@ class TestSarifToFindings:
                         {
                             "ruleId": "EXT-001",
                             "level": "error",
-                            "message": {
-                                "text": "Found a vulnerability"
-                            },
+                            "message": {"text": "Found a vulnerability"},
                             "locations": [
                                 {
                                     "physicalLocation": {
-                                        "artifactLocation": {
-                                            "uri": "test.py"
-                                        },
+                                        "artifactLocation": {"uri": "test.py"},
                                         "region": {"startLine": 100},
                                     }
                                 }
@@ -190,9 +184,7 @@ class TestSarifToFindings:
                 }
             ],
         }
-        findings = SARIFConverter.sarif_to_findings(
-            external_sarif, run_id="secrun-ext"
-        )
+        findings = SARIFConverter.sarif_to_findings(external_sarif, run_id="secrun-ext")
         assert len(findings) == 1
         finding = findings[0]
         assert finding.severity == FindingSeverity.HIGH  # error → HIGH
@@ -203,9 +195,7 @@ class TestSarifToFindings:
 
     def test_empty_sarif(self) -> None:
         empty = {"version": SARIF_VERSION, "runs": []}
-        findings = SARIFConverter.sarif_to_findings(
-            empty, run_id="secrun-empty"
-        )
+        findings = SARIFConverter.sarif_to_findings(empty, run_id="secrun-empty")
         assert findings == []
 
     def test_missing_runs(self) -> None:
@@ -217,9 +207,7 @@ class TestSarifToFindings:
             "version": SARIF_VERSION,
             "runs": [
                 {
-                    "tool": {
-                        "driver": {"name": "tool-a", "rules": []}
-                    },
+                    "tool": {"driver": {"name": "tool-a", "rules": []}},
                     "results": [
                         {
                             "ruleId": "A-1",
@@ -229,9 +217,7 @@ class TestSarifToFindings:
                     ],
                 },
                 {
-                    "tool": {
-                        "driver": {"name": "tool-b", "rules": []}
-                    },
+                    "tool": {"driver": {"name": "tool-b", "rules": []}},
                     "results": [
                         {
                             "ruleId": "B-1",
@@ -242,9 +228,7 @@ class TestSarifToFindings:
                 },
             ],
         }
-        findings = SARIFConverter.sarif_to_findings(
-            sarif, run_id="secrun-multi"
-        )
+        findings = SARIFConverter.sarif_to_findings(sarif, run_id="secrun-multi")
         assert len(findings) == 2
         assert findings[0].tool == "tool-a"
         assert findings[1].tool == "tool-b"
@@ -282,9 +266,7 @@ class TestSarifRouteIntegration:
 
         _service._runs.clear()
         _service._findings.clear()
-        _service._command_runner = lambda cmd, t: __import__(
-            "subprocess"
-        ).CompletedProcess(
+        _service._command_runner = lambda cmd, t: __import__("subprocess").CompletedProcess(
             args=[], returncode=0, stdout='{"results": []}', stderr=""
         )
         _service._allowed_roots = []
@@ -293,9 +275,7 @@ class TestSarifRouteIntegration:
             "sarif-test",
             scopes=["component-security:read", "component-security:write"],
         )
-        client = TestClient(
-            app, headers={"Authorization": f"Bearer {token}"}
-        )
+        client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
         # Create a completed run
         create_resp = client.post(
@@ -309,9 +289,7 @@ class TestSarifRouteIntegration:
         run_id = create_resp.json()["id"]
 
         # SARIF export (empty findings for pending run)
-        sarif_resp = client.get(
-            f"/v1/component-security/runs/{run_id}/sarif"
-        )
+        sarif_resp = client.get(f"/v1/component-security/runs/{run_id}/sarif")
         assert sarif_resp.status_code == 200
         sarif = sarif_resp.json()
         assert sarif["version"] == SARIF_VERSION
@@ -336,13 +314,9 @@ class TestSarifRouteIntegration:
             "sarif-test",
             scopes=["component-security:read"],
         )
-        client = TestClient(
-            app, headers={"Authorization": f"Bearer {token}"}
-        )
+        client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
-        resp = client.get(
-            "/v1/component-security/runs/secrun-nonexistent/sarif"
-        )
+        resp = client.get("/v1/component-security/runs/secrun-nonexistent/sarif")
         assert resp.status_code == 404
 
         _service._runs.clear()

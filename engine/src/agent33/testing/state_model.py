@@ -89,10 +89,12 @@ class StateModelTester:
             # Check invariants
             for inv_name, inv_fn in self._invariants.items():
                 if not inv_fn(state_name, self._definition.context):
-                    violations.append({
-                        "invariant": inv_name,
-                        "state": state_name,
-                    })
+                    violations.append(
+                        {
+                            "invariant": inv_name,
+                            "state": state_name,
+                        }
+                    )
 
             # Detect deadlocks: non-final state with no outgoing transitions
             if not state_node.final and not state_node.on:
@@ -159,9 +161,7 @@ class StateModelTester:
                 continue
             for transition_def in node.on.values():
                 target = (
-                    transition_def
-                    if isinstance(transition_def, str)
-                    else transition_def.target
+                    transition_def if isinstance(transition_def, str) else transition_def.target
                 )
                 stack.append(target)
 
@@ -179,8 +179,7 @@ class StateModelTester:
 
         # Check if any state in the cycle reaches a final state
         has_final = any(
-            (n := self._definition.states.get(s)) is not None and n.final
-            for s in visited
+            (n := self._definition.states.get(s)) is not None and n.final for s in visited
         )
 
         return not has_final

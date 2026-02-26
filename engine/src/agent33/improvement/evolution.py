@@ -47,7 +47,7 @@ class EvolutionEngine:
 def optimized_func():
     pass
 """,
-            created_at=datetime.now(UTC)
+            created_at=datetime.now(UTC),
         )
 
     def execute_git_workflow(self, proposal: ImprovementProposal) -> dict[str, Any]:
@@ -60,11 +60,7 @@ def optimized_func():
             def run_git(*args: str) -> str:
                 cmd = ["git"] + list(args)
                 result = subprocess.run(
-                    cmd,
-                    cwd=self._workspace_root,
-                    capture_output=True,
-                    text=True,
-                    check=True
+                    cmd, cwd=self._workspace_root, capture_output=True, text=True, check=True
                 )
                 return result.stdout.strip()
 
@@ -90,18 +86,11 @@ def optimized_func():
                 "status": "success",
                 "branch": branch_name,
                 "proposal_id": proposal.proposal_id,
-                "message": f"Successfully committed autonomous PR branch {branch_name}"
+                "message": f"Successfully committed autonomous PR branch {branch_name}",
             }
         except subprocess.CalledProcessError as e:
             logger.error("Git workflow failed: %s %s", e.stdout, e.stderr)
-            return {
-                "status": "failed",
-                "error": str(e),
-                "stderr": e.stderr
-            }
+            return {"status": "failed", "error": str(e), "stderr": e.stderr}
         except Exception as e:
             logger.exception("Unexpected error during Git execution")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            return {"status": "error", "error": str(e)}

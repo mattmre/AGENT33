@@ -112,11 +112,14 @@ class SlackAdapter:
         if abs(time.time() - float(timestamp)) > 300:
             return False
         sig_basestring = f"v0:{timestamp}:{body.decode()}"
-        computed = "v0=" + hmac.new(
-            self._signing_secret.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256,
-        ).hexdigest()
+        computed = (
+            "v0="
+            + hmac.new(
+                self._signing_secret.encode(),
+                sig_basestring.encode(),
+                hashlib.sha256,
+            ).hexdigest()
+        )
         return hmac.compare_digest(computed, signature)
 
     # ------------------------------------------------------------------

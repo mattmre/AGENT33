@@ -69,6 +69,7 @@ async def test_search_connection_error(
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         import httpx
+
         mock_client.get.side_effect = httpx.ConnectError("Connection refused")
         mock_client_cls.return_value = mock_client
 

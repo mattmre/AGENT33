@@ -46,6 +46,7 @@ async def execute(
     if schema is not None:
         try:
             import jsonschema
+
             jsonschema.validate(instance=data, schema=schema)
         except ImportError:
             errors.append("jsonschema package not installed; cannot validate schema")

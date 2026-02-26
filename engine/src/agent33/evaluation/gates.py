@@ -31,45 +31,61 @@ logger = logging.getLogger(__name__)
 DEFAULT_THRESHOLDS: list[GateThreshold] = [
     # M-01: Success Rate
     GateThreshold(
-        metric_id=MetricId.M_01, gate=GateType.G_PR,
-        operator=ThresholdOperator.GTE, value=80.0,
+        metric_id=MetricId.M_01,
+        gate=GateType.G_PR,
+        operator=ThresholdOperator.GTE,
+        value=80.0,
         action=GateAction.BLOCK,
     ),
     GateThreshold(
-        metric_id=MetricId.M_01, gate=GateType.G_MRG,
-        operator=ThresholdOperator.GTE, value=90.0,
+        metric_id=MetricId.M_01,
+        gate=GateType.G_MRG,
+        operator=ThresholdOperator.GTE,
+        value=90.0,
         action=GateAction.BLOCK,
     ),
     GateThreshold(
-        metric_id=MetricId.M_01, gate=GateType.G_REL,
-        operator=ThresholdOperator.GTE, value=95.0,
+        metric_id=MetricId.M_01,
+        gate=GateType.G_REL,
+        operator=ThresholdOperator.GTE,
+        value=95.0,
         action=GateAction.BLOCK,
     ),
     # M-03: Rework Rate
     GateThreshold(
-        metric_id=MetricId.M_03, gate=GateType.G_PR,
-        operator=ThresholdOperator.LTE, value=30.0,
+        metric_id=MetricId.M_03,
+        gate=GateType.G_PR,
+        operator=ThresholdOperator.LTE,
+        value=30.0,
         action=GateAction.WARN,
     ),
     GateThreshold(
-        metric_id=MetricId.M_03, gate=GateType.G_MRG,
-        operator=ThresholdOperator.LTE, value=20.0,
+        metric_id=MetricId.M_03,
+        gate=GateType.G_MRG,
+        operator=ThresholdOperator.LTE,
+        value=20.0,
         action=GateAction.BLOCK,
     ),
     GateThreshold(
-        metric_id=MetricId.M_03, gate=GateType.G_REL,
-        operator=ThresholdOperator.LTE, value=10.0,
+        metric_id=MetricId.M_03,
+        gate=GateType.G_REL,
+        operator=ThresholdOperator.LTE,
+        value=10.0,
         action=GateAction.BLOCK,
     ),
     # M-05: Scope Adherence
     GateThreshold(
-        metric_id=MetricId.M_05, gate=GateType.G_PR,
-        operator=ThresholdOperator.GTE, value=90.0,
+        metric_id=MetricId.M_05,
+        gate=GateType.G_PR,
+        operator=ThresholdOperator.GTE,
+        value=90.0,
         action=GateAction.BLOCK,
     ),
     GateThreshold(
-        metric_id=MetricId.M_05, gate=GateType.G_MRG,
-        operator=ThresholdOperator.EQ, value=100.0,
+        metric_id=MetricId.M_05,
+        gate=GateType.G_MRG,
+        operator=ThresholdOperator.EQ,
+        value=100.0,
         action=GateAction.BLOCK,
     ),
 ]
@@ -103,9 +119,7 @@ def _check_threshold(threshold: GateThreshold, actual: float) -> bool:
 class GateEnforcer:
     """Evaluate metrics and golden task results against gate thresholds."""
 
-    def __init__(
-        self, thresholds: list[GateThreshold] | None = None
-    ) -> None:
+    def __init__(self, thresholds: list[GateThreshold] | None = None) -> None:
         self._thresholds = thresholds or DEFAULT_THRESHOLDS
 
     @property
@@ -154,8 +168,7 @@ class GateEnforcer:
         if task_results is not None:
             report.golden_task_results = list(task_results)
             failed_tasks = [
-                r for r in task_results
-                if r.result not in (TaskResult.PASS, TaskResult.SKIP)
+                r for r in task_results if r.result not in (TaskResult.PASS, TaskResult.SKIP)
             ]
             if failed_tasks and gate in (GateType.G_MRG, GateType.G_REL):
                 report.overall = GateResult.FAIL

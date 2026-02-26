@@ -156,4 +156,3 @@ class ExplanationMetadata(BaseModel):
         default_factory=dict,
         description="Additional metadata (model used, confidence, etc.)",
     )
-

@@ -65,9 +65,7 @@ class ShellTool:
 
         # Block subshell injection ($(...) and backticks)
         if _SUBSHELL_PATTERNS.search(command):
-            return ToolResult.fail(
-                "Subshell patterns ($() and backticks) are not allowed"
-            )
+            return ToolResult.fail("Subshell patterns ($() and backticks) are not allowed")
 
         # Multi-segment validation: split on chain operators and validate each segment
         try:
@@ -113,9 +111,7 @@ class ShellTool:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(context.working_dir),
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError:
             proc.kill()  # type: ignore[union-attr]
             return ToolResult.fail(f"Command timed out after {timeout}s")

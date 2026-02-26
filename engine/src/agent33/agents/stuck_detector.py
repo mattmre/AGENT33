@@ -99,10 +99,7 @@ class OpenHandsStyleStuckDetector:
             last_actions = actions[-2:]
             last_text = combined[-2:]
             last_fp = fingerprints[-2:]
-            error_hits = [
-                any(term in text.lower() for term in _ERROR_TERMS)
-                for text in last_text
-            ]
+            error_hits = [any(term in text.lower() for term in _ERROR_TERMS) for text in last_text]
             if len(set(last_actions)) == 1 and all(error_hits) and len(set(last_fp)) == 1:
                 return StuckDetection(
                     pattern="repeated_action_error",
@@ -151,8 +148,7 @@ class OpenHandsStyleStuckDetector:
         if len(recent) >= 4:
             last_texts = combined[-4:]
             condensation_mentions = [
-                any(term in text.lower() for term in _CONDENSATION_TERMS)
-                for text in last_texts
+                any(term in text.lower() for term in _CONDENSATION_TERMS) for text in last_texts
             ]
             if sum(condensation_mentions) >= 3 and len(set(fingerprints[-4:])) <= 3:
                 return StuckDetection(

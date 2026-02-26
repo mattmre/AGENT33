@@ -131,9 +131,7 @@ async def get_budget(budget_id: str) -> dict[str, Any]:
     try:
         budget = _service.get_budget(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     return budget.model_dump(mode="json")
 
 
@@ -146,9 +144,7 @@ async def delete_budget(budget_id: str) -> dict[str, str]:
     try:
         _service.delete_budget(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"status": "deleted"}
@@ -163,18 +159,12 @@ async def delete_budget(budget_id: str) -> dict[str, str]:
     "/budgets/{budget_id}/transition",
     dependencies=[require_scope("tools:execute")],
 )
-async def transition_budget(
-    budget_id: str, body: TransitionRequest
-) -> dict[str, Any]:
+async def transition_budget(budget_id: str, body: TransitionRequest) -> dict[str, Any]:
     """Transition a budget to a new state."""
     try:
-        budget = _service.transition(
-            budget_id, body.to_state, approved_by=body.approved_by
-        )
+        budget = _service.transition(budget_id, body.to_state, approved_by=body.approved_by)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"budget_id": budget.budget_id, "state": budget.state.value}
@@ -189,9 +179,7 @@ async def activate_budget(budget_id: str) -> dict[str, Any]:
     try:
         budget = _service.activate(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"budget_id": budget.budget_id, "state": budget.state.value}
@@ -206,9 +194,7 @@ async def suspend_budget(budget_id: str) -> dict[str, Any]:
     try:
         budget = _service.suspend(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"budget_id": budget.budget_id, "state": budget.state.value}
@@ -223,9 +209,7 @@ async def complete_budget(budget_id: str) -> dict[str, Any]:
     try:
         budget = _service.complete(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"budget_id": budget.budget_id, "state": budget.state.value}
@@ -245,9 +229,7 @@ async def run_preflight(budget_id: str) -> dict[str, Any]:
     try:
         report = _service.run_preflight(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     return report.model_dump(mode="json")
 
 
@@ -266,9 +248,7 @@ async def create_enforcer(budget_id: str) -> dict[str, str]:
     try:
         _service.create_enforcer(budget_id)
     except BudgetNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Budget not found: {budget_id}"
-        ) from None
+        raise HTTPException(status_code=404, detail=f"Budget not found: {budget_id}") from None
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"budget_id": budget_id, "status": "enforcer_created"}
@@ -297,9 +277,7 @@ async def enforce_file(budget_id: str, body: CheckFileRequest) -> dict[str, Any]
     "/budgets/{budget_id}/enforce/command",
     dependencies=[require_scope("tools:execute")],
 )
-async def enforce_command(
-    budget_id: str, body: CheckCommandRequest
-) -> dict[str, Any]:
+async def enforce_command(budget_id: str, body: CheckCommandRequest) -> dict[str, Any]:
     """Check command execution against budget enforcement rules."""
     enforcer = _service.get_enforcer(budget_id)
     if enforcer is None:
@@ -315,9 +293,7 @@ async def enforce_command(
     "/budgets/{budget_id}/enforce/network",
     dependencies=[require_scope("tools:execute")],
 )
-async def enforce_network(
-    budget_id: str, body: CheckNetworkRequest
-) -> dict[str, Any]:
+async def enforce_network(budget_id: str, body: CheckNetworkRequest) -> dict[str, Any]:
     """Check network access against budget enforcement rules."""
     enforcer = _service.get_enforcer(budget_id)
     if enforcer is None:
@@ -355,9 +331,7 @@ async def list_escalations(
     status_code=201,
     dependencies=[require_scope("tools:execute")],
 )
-async def trigger_escalation(
-    budget_id: str, body: TriggerEscalationRequest
-) -> dict[str, Any]:
+async def trigger_escalation(budget_id: str, body: TriggerEscalationRequest) -> dict[str, Any]:
     """Manually trigger an escalation for a budget."""
     enforcer = _service.get_enforcer(budget_id)
     if enforcer is None:

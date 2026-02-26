@@ -118,8 +118,7 @@ class MatrixAdapter:
         encoded_channel_id = quote(channel_id, safe="")
         encoded_txn_id = quote(txn_id, safe="")
         path = (
-            f"/_matrix/client/v3/rooms/{encoded_channel_id}/send/"
-            f"m.room.message/{encoded_txn_id}"
+            f"/_matrix/client/v3/rooms/{encoded_channel_id}/send/m.room.message/{encoded_txn_id}"
         )
 
         connector = "messaging:matrix"
@@ -185,9 +184,7 @@ class MatrixAdapter:
             latency = (time.monotonic() - start) * 1000
 
             if resp.status_code == 200:
-                sync_alive = (
-                    self._sync_task is not None and not self._sync_task.done()
-                )
+                sync_alive = self._sync_task is not None and not self._sync_task.done()
                 queue_depth = self._queue.qsize()
                 if self._running and sync_alive:
                     status = "ok" if queue_depth < 100 else "degraded"

@@ -35,9 +35,19 @@ class TestProviderCatalog:
 
     def test_known_providers_present(self) -> None:
         expected = [
-            "openai", "anthropic", "groq", "together", "mistral",
-            "fireworks", "deepseek", "perplexity", "cohere",
-            "google", "xai", "openrouter", "ollama",
+            "openai",
+            "anthropic",
+            "groq",
+            "together",
+            "mistral",
+            "fireworks",
+            "deepseek",
+            "perplexity",
+            "cohere",
+            "google",
+            "xai",
+            "openrouter",
+            "ollama",
         ]
         for name in expected:
             assert name in PROVIDER_CATALOG, f"Missing provider: {name}"
@@ -55,9 +65,7 @@ class TestProviderCatalog:
         skip = {"azure_openai"}
         for name, info in PROVIDER_CATALOG.items():
             if info.openai_compatible and info.env_key_var and name not in skip:
-                assert info.base_url, (
-                    f"OpenAI-compatible provider '{name}' missing base_url"
-                )
+                assert info.base_url, f"OpenAI-compatible provider '{name}' missing base_url"
 
     def test_get_provider_info(self) -> None:
         info = get_provider_info("groq")

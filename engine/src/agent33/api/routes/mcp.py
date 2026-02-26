@@ -35,28 +35,34 @@ try:
                 inputSchema={
                     "type": "object",
                     "properties": {},
-                }
+                },
             ),
             types.Tool(
                 name="retrieve_context_ledger",
                 description="Fetch the active Context Ledger from executing sub-agents.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "session_id": {"type": "string"}
-                    },
-                    "required": ["session_id"]
-                }
-            )
+                    "properties": {"session_id": {"type": "string"}},
+                    "required": ["session_id"],
+                },
+            ),
         ]
 
     @mcp_server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
         if name == "get_agent33_status":
-            return [types.TextContent(type="text", text="AGENT-33 is operational and awaiting handoff.")]
+            return [
+                types.TextContent(
+                    type="text", text="AGENT-33 is operational and awaiting handoff."
+                )
+            ]
         elif name == "retrieve_context_ledger":
             session = arguments.get("session_id", "unknown")
-            return [types.TextContent(type="text", text=f"Ledger for {session} not found (Prototype boundary).")]
+            return [
+                types.TextContent(
+                    type="text", text=f"Ledger for {session} not found (Prototype boundary)."
+                )
+            ]
         raise ValueError(f"Unknown tool: {name}")
 
 except ImportError:
@@ -65,6 +71,7 @@ except ImportError:
 
 # Note: In a complete implementation, we would map SseServerTransport to these endpoints
 # using the starlette/fastapi adaptors provided by the MCP sdk.
+
 
 @router.get("/sse")
 async def mcp_sse(request: Request) -> StreamingResponse:
@@ -81,6 +88,7 @@ async def mcp_sse(request: Request) -> StreamingResponse:
         yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
 
     return StreamingResponse(mock_stream(), media_type="text/event-stream")
+
 
 @router.post("/messages")
 async def mcp_messages(request: Request) -> dict[str, str]:

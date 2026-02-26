@@ -102,6 +102,7 @@ class TestLeakageDetectorIntegration:
     @pytest.mark.asyncio
     async def test_leakage_detector_filters_output(self) -> None:
         """When detector returns True, tool output is replaced."""
+
         def detector(text: str) -> bool:
             return "secret answer" in text.lower()
 
@@ -155,6 +156,7 @@ class TestLeakageDetectorIntegration:
     @pytest.mark.asyncio
     async def test_leakage_detector_not_triggered(self) -> None:
         """When detector returns False, tool output is preserved."""
+
         def detector(text: str) -> bool:
             return False
 
@@ -186,9 +188,7 @@ class TestLeakageDetectorIntegration:
 
         registry = MagicMock()
         registry.list_all.return_value = []
-        registry.validated_execute = AsyncMock(
-            return_value=ToolResult.ok("file1.txt file2.txt")
-        )
+        registry.validated_execute = AsyncMock(return_value=ToolResult.ok("file1.txt file2.txt"))
         registry.get_entry.return_value = None
 
         loop = ToolLoop(
@@ -254,6 +254,7 @@ class TestLeakageDetectorIntegration:
     @pytest.mark.asyncio
     async def test_leakage_detector_skips_failed_results(self) -> None:
         """Leakage check only applies to successful tool results."""
+
         def detector(text: str) -> bool:
             return True
 
@@ -286,9 +287,7 @@ class TestLeakageDetectorIntegration:
         registry = MagicMock()
         registry.list_all.return_value = []
         # Return a failed result — leakage check should not apply
-        registry.validated_execute = AsyncMock(
-            return_value=ToolResult.fail("Command not found")
-        )
+        registry.validated_execute = AsyncMock(return_value=ToolResult.fail("Command not found"))
         registry.get_entry.return_value = None
 
         loop = ToolLoop(

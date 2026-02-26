@@ -53,9 +53,7 @@ class SyncEngine:
     # File matching
     # ------------------------------------------------------------------
 
-    def match_files(
-        self, rule: SyncRule, available_files: list[str]
-    ) -> list[str]:
+    def match_files(self, rule: SyncRule, available_files: list[str]) -> list[str]:
         """Match available files against a rule's patterns."""
         matched: list[str] = []
         for f in available_files:
@@ -69,9 +67,7 @@ class SyncEngine:
             ):
                 continue
             # Check exclude patterns
-            if any(
-                fnmatch.fnmatch(normalized, p) for p in rule.exclude_patterns
-            ):
+            if any(fnmatch.fnmatch(normalized, p) for p in rule.exclude_patterns):
                 continue
             matched.append(f)
         return matched
@@ -122,9 +118,7 @@ class SyncEngine:
             file_results=file_results,
         )
         self._executions[exe.execution_id] = exe
-        logger.info(
-            "sync_dry_run rule=%s files=%d", rule_id, len(file_results)
-        )
+        logger.info("sync_dry_run rule=%s files=%d", rule_id, len(file_results))
         return exe
 
     def execute(
@@ -172,9 +166,7 @@ class SyncEngine:
             completed_at=datetime.now(UTC),
         )
         self._executions[exe.execution_id] = exe
-        logger.info(
-            "sync_executed rule=%s files=%d", rule_id, len(file_results)
-        )
+        logger.info("sync_executed rule=%s files=%d", rule_id, len(file_results))
         return exe
 
     # ------------------------------------------------------------------

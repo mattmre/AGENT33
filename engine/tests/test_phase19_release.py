@@ -146,9 +146,7 @@ class TestChecklist:
         release = Release(version="1.0.0")
         checks = build_checklist(release)
         evaluator = ChecklistEvaluator()
-        result = evaluator.update_check(
-            checks, "RL-01", CheckStatus.PASS, "All PRs merged"
-        )
+        result = evaluator.update_check(checks, "RL-01", CheckStatus.PASS, "All PRs merged")
         assert result is not None
         assert result.status == CheckStatus.PASS
         assert result.message == "All PRs merged"
@@ -369,9 +367,7 @@ class TestReleaseService:
 
     def test_create_release(self):
         svc = ReleaseService()
-        release = svc.create_release(
-            version="1.0.0", description="Initial release"
-        )
+        release = svc.create_release(version="1.0.0", description="Initial release")
         assert release.status == ReleaseStatus.PLANNED
         assert len(release.evidence.checklist) == 8
 
@@ -508,9 +504,7 @@ class TestReleaseService:
         svc.publish(rid)
 
         # Now rollback
-        result = svc.initiate_rollback(
-            rid, reason="Critical bug", initiated_by="admin"
-        )
+        result = svc.initiate_rollback(rid, reason="Critical bug", initiated_by="admin")
         assert result.status == ReleaseStatus.ROLLED_BACK
         rollbacks = svc.rollback_manager.list_all(release_id=rid)
         assert len(rollbacks) == 1
@@ -537,9 +531,7 @@ class TestReleaseAPI:
         _service._sync._executions.clear()
         _service._rollback._records.clear()
 
-        return TestClient(
-            app, headers={"Authorization": f"Bearer {auth_token}"}
-        )
+        return TestClient(app, headers={"Authorization": f"Bearer {auth_token}"})
 
     def test_create_release(self, client: TestClient):
         resp = client.post(
@@ -560,9 +552,7 @@ class TestReleaseAPI:
         assert len(resp.json()) == 2
 
     def test_get_release(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         resp = client.get(f"/v1/releases/{rid}")
         assert resp.status_code == 200
@@ -573,18 +563,14 @@ class TestReleaseAPI:
         assert resp.status_code == 404
 
     def test_freeze_release(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         resp = client.post(f"/v1/releases/{rid}/freeze")
         assert resp.status_code == 200
         assert resp.json()["status"] == "frozen"
 
     def test_cut_rc(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         client.post(f"/v1/releases/{rid}/freeze")
         resp = client.post(
@@ -596,9 +582,7 @@ class TestReleaseAPI:
 
     def test_validate_and_publish(self, client: TestClient):
         # Create -> Freeze -> RC -> Validate
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         client.post(f"/v1/releases/{rid}/freeze")
         client.post(f"/v1/releases/{rid}/rc", json={})
@@ -621,31 +605,23 @@ class TestReleaseAPI:
         assert resp.json()["status"] == "released"
 
     def test_publish_fails_without_checks(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         client.post(f"/v1/releases/{rid}/freeze")
         client.post(f"/v1/releases/{rid}/rc", json={})
         client.post(f"/v1/releases/{rid}/validate")
-        resp = client.post(
-            f"/v1/releases/{rid}/publish", json={}
-        )
+        resp = client.post(f"/v1/releases/{rid}/publish", json={})
         assert resp.status_code == 409
 
     def test_invalid_transition_returns_409(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         # Can't go directly to RC from PLANNED
         resp = client.post(f"/v1/releases/{rid}/rc", json={})
         assert resp.status_code == 409
 
     def test_checklist_get(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         resp = client.get(f"/v1/releases/{rid}/checklist")
         assert resp.status_code == 200
@@ -654,9 +630,7 @@ class TestReleaseAPI:
         assert len(data["checks"]) == 8
 
     def test_checklist_update(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         resp = client.patch(
             f"/v1/releases/{rid}/checklist",
@@ -757,9 +731,7 @@ class TestReleaseAPI:
 
     def test_rollback_lifecycle(self, client: TestClient):
         # Create and publish a release
-        create_resp = client.post(
-            "/v1/releases", json={"version": "1.0.0"}
-        )
+        create_resp = client.post("/v1/releases", json={"version": "1.0.0"})
         rid = create_resp.json()["release_id"]
         client.post(f"/v1/releases/{rid}/freeze")
         client.post(f"/v1/releases/{rid}/rc", json={})

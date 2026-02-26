@@ -139,9 +139,7 @@ class CheckpointManager:
             A list of checkpoint summary dicts.
         """
         async with self._session_factory() as session:
-            stmt = select(WorkflowCheckpoint).order_by(
-                WorkflowCheckpoint.created_at.desc()
-            )
+            stmt = select(WorkflowCheckpoint).order_by(WorkflowCheckpoint.created_at.desc())
             if workflow_id is not None:
                 stmt = stmt.where(WorkflowCheckpoint.workflow_id == workflow_id)
 

@@ -119,9 +119,7 @@ class TestExplanationRetrieval:
         assert data["entity_type"] == "workflow"
         assert data["entity_id"] == "test-flow"
 
-    def test_get_nonexistent_explanation_returns_404(
-        self, reader_client: TestClient
-    ) -> None:
+    def test_get_nonexistent_explanation_returns_404(self, reader_client: TestClient) -> None:
         """Should return 404 for nonexistent explanation."""
         resp = reader_client.get("/v1/explanations/expl-nonexistent")
         assert resp.status_code == 404
@@ -212,9 +210,7 @@ class TestExplanationDeletion:
         get_resp = writer_client.get(f"/v1/explanations/{explanation_id}")
         assert get_resp.status_code == 404
 
-    def test_delete_nonexistent_explanation_returns_404(
-        self, writer_client: TestClient
-    ) -> None:
+    def test_delete_nonexistent_explanation_returns_404(self, writer_client: TestClient) -> None:
         """Should return 404 when deleting nonexistent explanation."""
         resp = writer_client.delete("/v1/explanations/expl-nonexistent")
         assert resp.status_code == 404
@@ -302,9 +298,7 @@ class TestExplanationAuthorization:
 class TestFactCheckHook:
     """Tests for fact-check hook integration."""
 
-    def test_fact_check_hook_invoked_on_creation(
-        self, writer_client: TestClient
-    ) -> None:
+    def test_fact_check_hook_invoked_on_creation(self, writer_client: TestClient) -> None:
         """Fact-check hook should be invoked and set status."""
         resp = writer_client.post(
             "/v1/explanations/",

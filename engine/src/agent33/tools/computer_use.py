@@ -1,7 +1,7 @@
 """Computer Use tool for autonomous spatial desktop interaction.
 
 Follows the reference paradigm set by Anthropic's Computer Use API, allowing
-the agent to manipulate standard OS interfaces via mouse and keyboard tracking. 
+the agent to manipulate standard OS interfaces via mouse and keyboard tracking.
 Pairs effectively with the Vision MCP server.
 """
 
@@ -13,6 +13,7 @@ from typing import Any
 from agent33.tools.base import SchemaAwareTool, ToolContext, ToolResult
 
 logger = logging.getLogger(__name__)
+
 
 class ComputerUseTool(SchemaAwareTool):
     """Executes actions on the operating system's desktop environment."""
@@ -32,20 +33,31 @@ class ComputerUseTool(SchemaAwareTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["mouse_move", "left_click", "left_click_drag", "right_click", "middle_click", "double_click", "screenshot", "cursor_position", "type", "key"],
-                    "description": "The desktop action to perform."
+                    "enum": [
+                        "mouse_move",
+                        "left_click",
+                        "left_click_drag",
+                        "right_click",
+                        "middle_click",
+                        "double_click",
+                        "screenshot",
+                        "cursor_position",
+                        "type",
+                        "key",
+                    ],
+                    "description": "The desktop action to perform.",
                 },
                 "coordinate": {
                     "type": "array",
                     "items": {"type": "integer"},
-                    "description": "[x, y] coordinates. Required for mouse_move and drag actions."
+                    "description": "[x, y] coordinates. Required for mouse_move and drag actions.",
                 },
                 "text": {
                     "type": "string",
-                    "description": "Text to type or keys to press. Required for 'type' and 'key' actions."
-                }
+                    "description": "Text to type or keys to press. Required for 'type' and 'key' actions.",
+                },
             },
-            "required": ["action"]
+            "required": ["action"],
         }
 
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:

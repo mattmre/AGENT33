@@ -55,13 +55,9 @@ class SkillInjector:
         # Governance info
         governance_lines: list[str] = []
         if skill.allowed_tools:
-            governance_lines.append(
-                f"- Allowed tools: {', '.join(skill.allowed_tools)}"
-            )
+            governance_lines.append(f"- Allowed tools: {', '.join(skill.allowed_tools)}")
         if skill.disallowed_tools:
-            governance_lines.append(
-                f"- Blocked tools: {', '.join(skill.disallowed_tools)}"
-            )
+            governance_lines.append(f"- Blocked tools: {', '.join(skill.disallowed_tools)}")
         if skill.autonomy_level:
             governance_lines.append(f"- Autonomy: {skill.autonomy_level}")
         if skill.approval_required_for:
@@ -111,9 +107,7 @@ class SkillInjector:
             # Intersect allowed tools
             if skill.allowed_tools:
                 skill_allowed = set(skill.allowed_tools)
-                allowed = (
-                    skill_allowed if allowed is None else allowed & skill_allowed
-                )
+                allowed = skill_allowed if allowed is None else allowed & skill_allowed
 
         # Remove blocked from allowed
         if allowed is not None:

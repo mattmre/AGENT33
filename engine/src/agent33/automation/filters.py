@@ -128,14 +128,16 @@ class ArtifactFilter:
         # Include filter
         if self._include_patterns:
             filtered = (
-                a for a in filtered
+                a
+                for a in filtered
                 if any(fnmatch.fnmatch(a.name, p) for p in self._include_patterns)
             )
 
         # Exclude filter
         if self._exclude_patterns:
             filtered = (
-                a for a in filtered
+                a
+                for a in filtered
                 if not any(fnmatch.fnmatch(a.name, p) for p in self._exclude_patterns)
             )
 

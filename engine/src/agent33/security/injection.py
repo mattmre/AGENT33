@@ -57,7 +57,8 @@ def _check_encoded_payloads(text: str) -> list[str]:
     for match in b64_re.finditer(text):
         try:
             decoded = base64.b64decode(
-                match.group(), validate=True,
+                match.group(),
+                validate=True,
             ).decode("utf-8", errors="ignore")
             # Re-scan the decoded content for known attack patterns
             for pat in _SYSTEM_OVERRIDE_PATTERNS + _INSTRUCTION_OVERRIDE_PATTERNS:

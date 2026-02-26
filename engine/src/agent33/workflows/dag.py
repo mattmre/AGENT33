@@ -61,9 +61,7 @@ class DAGBuilder:
         groups: list[list[str]] = []
 
         # Start with all zero in-degree nodes
-        queue: deque[str] = deque(
-            sid for sid, deg in in_degree.items() if deg == 0
-        )
+        queue: deque[str] = deque(sid for sid, deg in in_degree.items() if deg == 0)
 
         while queue:
             # All items currently in the queue form a parallel group
