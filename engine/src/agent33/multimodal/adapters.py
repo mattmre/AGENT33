@@ -28,7 +28,7 @@ class STTAdapter:
             raise ValueError("speech_to_text requires input_artifact_base64")
         connector = "multimodal:speech_to_text"
         operation = "run"
-        
+
         executor = build_connector_boundary_executor(
             default_timeout_seconds=request.requested_timeout_seconds
         )
@@ -67,7 +67,10 @@ class STTAdapter:
             return {
                 "output_text": result.get("text", ""),
                 "output_artifact_id": "",
-                "output_data": {"modality": ModalityType.SPEECH_TO_TEXT.value, "provider": "openai"},
+                "output_data": {
+                    "modality": ModalityType.SPEECH_TO_TEXT.value,
+                    "provider": "openai",
+                },
             }
 
         try:
@@ -86,7 +89,7 @@ class TTSAdapter:
             raise ValueError("text_to_speech requires input_text")
         connector = "multimodal:text_to_speech"
         operation = "run"
-        
+
         executor = build_connector_boundary_executor(
             default_timeout_seconds=request.requested_timeout_seconds
         )
@@ -103,7 +106,8 @@ class TTSAdapter:
             timeout = req.metadata.get("timeout_seconds", request.requested_timeout_seconds)
 
             if eleven_key:
-                url = "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM"
+                voice_id = settings.elevenlabs_voice_id
+                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
                 headers = {"xi-api-key": eleven_key, "Content-Type": "application/json"}
                 payload = {
                     "text": request.input_text,
@@ -126,7 +130,10 @@ class TTSAdapter:
                 }
             elif openai_key:
                 url = f"{settings.openai_base_url.rstrip('/') or 'https://api.openai.com/v1'}/audio/speech"
-                headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
+                headers = {
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                }
                 payload = {"model": "tts-1", "input": request.input_text, "voice": "alloy"}
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     resp = await client.post(url, headers=headers, json=payload)
@@ -152,6 +159,7 @@ class TTSAdapter:
                         "chars": len(request.input_text),
                     },
                 }
+
         try:
             if executor:
                 return await executor.execute(connector_request, _handler)
@@ -168,7 +176,7 @@ class VisionAdapter:
             raise ValueError("vision_analysis requires input_artifact_base64")
         connector = "multimodal:vision_analysis"
         operation = "run"
-        
+
         executor = build_connector_boundary_executor(
             default_timeout_seconds=request.requested_timeout_seconds
         )
@@ -206,7 +214,9 @@ class VisionAdapter:
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{request.input_artifact_base64}"
+                                    "url": (
+                                        f"data:image/jpeg;base64,{request.input_artifact_base64}"
+                                    )
                                 },
                             },
                         ],
