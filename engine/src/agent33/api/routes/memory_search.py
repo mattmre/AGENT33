@@ -41,12 +41,9 @@ def _get_user_subject(request: Request) -> str:
     response_model=MemorySearchResponse,
     dependencies=[require_scope("agents:read")],
 )
-async def search_memory(req: MemorySearchRequest) -> MemorySearchResponse:
+async def search_memory(req: MemorySearchRequest, request: Request) -> MemorySearchResponse:
     """Search memory with progressive recall at specified detail level."""
-    # Progressive recall is wired via app.state in main.py
-    from agent33.main import app
-
-    recall = getattr(app.state, "progressive_recall", None)
+    recall = getattr(request.app.state, "progressive_recall", None)
     if recall is None:
         raise HTTPException(503, "Memory system not initialized")
 
@@ -70,9 +67,7 @@ async def list_observations(session_id: str, request: Request) -> dict[str, Any]
 
     Only returns observations belonging to the authenticated user's sessions.
     """
-    from agent33.main import app
-
-    capture = getattr(app.state, "observation_capture", None)
+    capture = getattr(request.app.state, "observation_capture", None)
     if capture is None:
         raise HTTPException(503, "Observation capture not initialized")
 
@@ -107,10 +102,8 @@ async def summarize_session(session_id: str, request: Request) -> SummarizeRespo
 
     Only allows summarization of sessions owned by the authenticated user.
     """
-    from agent33.main import app
-
-    capture = getattr(app.state, "observation_capture", None)
-    summarizer = getattr(app.state, "session_summarizer", None)
+    capture = getattr(request.app.state, "observation_capture", None)
+    summarizer = getattr(request.app.state, "session_summarizer", None)
     if capture is None or summarizer is None:
         raise HTTPException(503, "Memory system not initialized")
 
