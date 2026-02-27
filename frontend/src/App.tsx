@@ -9,12 +9,13 @@ import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ChatInterface } from "./features/chat/ChatInterface";
 import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel";
+import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDashboardPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
-type AppTab = "chat" | "voice" | "setup" | "operations" | "advanced";
+type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "advanced";
 
 interface ActivityItem {
   id: string;
@@ -30,6 +31,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "voice", label: "🎙️ Voice Call" },
   { id: "setup", label: "🔌 Integrations" },
   { id: "operations", label: "Operations Hub" },
+  { id: "outcomes", label: "Outcomes" },
   { id: "advanced", label: "⚙️ Advanced Settings" }
 ];
 
@@ -182,6 +184,13 @@ export default function App(): JSX.Element {
         {activeTab === "operations" && (
           <div className="consumer-operations-layout">
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
+          </div>
+        )}
+
+        {/* Outcomes Dashboard -> Trend analysis, domain filtering, decline-triggered improvements */}
+        {activeTab === "outcomes" && (
+          <div className="consumer-outcomes-layout">
+            <OutcomesDashboardPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
 
