@@ -480,8 +480,8 @@ class SkillMatcher:
             parsed = json.loads(text)
             if isinstance(parsed, list):
                 return [str(item) for item in parsed]
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.debug("Failed to parse LLM JSON response: %s", e)
 
         # Try extracting from markdown code fence
         match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
@@ -490,8 +490,8 @@ class SkillMatcher:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, list):
                     return [str(item) for item in parsed]
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.debug("Failed to parse LLM JSON response: %s", e)
 
         # Try finding array pattern in text
         match = re.search(r"\[.*?\]", text, re.DOTALL)
@@ -500,8 +500,8 @@ class SkillMatcher:
                 parsed = json.loads(match.group(0))
                 if isinstance(parsed, list):
                     return [str(item) for item in parsed]
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.debug("Failed to parse LLM JSON response: %s", e)
 
         return []
 
@@ -515,8 +515,8 @@ class SkillMatcher:
             parsed = json.loads(text)
             if isinstance(parsed, dict) and "keep" in parsed:
                 return parsed
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.debug("Failed to parse LLM JSON response: %s", e)
 
         # Try extracting from code fence
         match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
@@ -525,8 +525,8 @@ class SkillMatcher:
                 parsed = json.loads(match.group(1))
                 if isinstance(parsed, dict) and "keep" in parsed:
                     return parsed
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.debug("Failed to parse LLM JSON response: %s", e)
 
         # Try finding JSON object in text using balanced brace matching.
         # A non-greedy match would break on nested objects, so we find
@@ -546,8 +546,8 @@ class SkillMatcher:
                             parsed = json.loads(candidate)
                             if isinstance(parsed, dict) and "keep" in parsed:
                                 return parsed
-                        except (json.JSONDecodeError, TypeError):
-                            pass
+                        except (json.JSONDecodeError, TypeError) as e:
+                            logger.debug("Failed to parse LLM JSON response: %s", e)
                         break
 
         return {}

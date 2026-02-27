@@ -119,7 +119,7 @@ async def stream_operations(request: Request) -> StreamingResponse:
                 except TimeoutError:
                     yield ": keepalive\n\n"
         except asyncio.CancelledError:
-            pass
+            logger.debug("SSE connection cancelled")
 
     return StreamingResponse(
         event_generator(),
