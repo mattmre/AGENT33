@@ -93,9 +93,7 @@ jobs:
       - name: Ruff format check
         run: ruff format --check src/ tests/
 
-      - name: Mypy (non-blocking baseline)
-        # TODO: Re-enable blocking mypy once baseline strict-type debt is remediated.
-        continue-on-error: true
+      - name: Mypy strict type check
         run: mypy src/
 
   test:
