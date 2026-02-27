@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import SecretStr, field_validator
+import logging
+
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -63,6 +67,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
     elevenlabs_api_key: SecretStr = SecretStr("")
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
@@ -205,6 +210,40 @@ class Settings(BaseSettings):
         if normalized not in {"reset", "raise"}:
             raise ValueError("corruption behavior must be one of: reset, raise")
         return normalized
+
+    @model_validator(mode="after")
+    def _validate_jwt_secret_not_default(self) -> Settings:
+        """AEP-A01: Reject the default JWT secret in non-dev/test environments."""
+        _safe_envs = {"development", "test"}
+        if (
+            self.jwt_secret.get_secret_value() == "change-me-in-production"
+            and self.environment not in _safe_envs
+        ):
+            _logger.critical(
+                "FATAL: jwt_secret is using the insecure default value "
+                "in environment=%s. Set the JWT_SECRET environment variable "
+                "to a strong random value before starting the application.",
+                self.environment,
+            )
+            raise SystemExit(
+                "Refusing to start: jwt_secret must be changed from the default "
+                f"in environment={self.environment!r}. "
+                "Set JWT_SECRET to a cryptographically random value."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _warn_default_database_credentials(self) -> Settings:
+        """AEP-A02: Warn when default database credentials are detected."""
+        _safe_envs = {"development", "test"}
+        if "agent33:agent33@" in self.database_url and self.environment not in _safe_envs:
+            _logger.warning(
+                "Default database credentials detected in database_url "
+                "for environment=%s. Rotate the credentials before "
+                "deploying to a non-development environment.",
+                self.environment,
+            )
+        return self
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
