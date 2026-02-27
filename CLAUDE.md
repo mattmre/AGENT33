@@ -192,6 +192,7 @@ written. Do not present "X new tests" as evidence of completeness.
 
 - **GitHub Actions OIDC:** When testing Action workflows on PRs that require `id-token: write` permissions (such as `anthropics/claude-code-action`), be aware they often fail authentication on forks or PR branches due to missing `ACTIONS_ID_TOKEN_REQUEST_URL` context. If the job is auxiliary (like a PR reviewer bot), add `continue-on-error: true` so it does not block the primary CI/CD pipeline from going green.
 - **Stash Cleanliness:** Using `git stash` across multiple `worktrees` or multi-repo projects can accidentally capture deep untracked files (like Node modules or temporary script outputs). Always run `git diff --name-only` on stash pops to verify what was applied before committing.
+- **Async Test Refactoring:** When converting service methods (like `execute_request`) from synchronous to `async`, tests that call these methods directly (rather than via `TestClient`) must also be converted to `async def` (and decorated with `@pytest.mark.asyncio` if auto-mode isn't enabled). A missing `await` will manifest as `RuntimeWarning: coroutine was never awaited` and `AttributeError` on the return value.
 
 Add these to your existing pre-commit checklist:
 

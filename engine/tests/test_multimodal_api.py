@@ -295,7 +295,7 @@ def test_cancel_completed_request_returns_409(writer_client: TestClient) -> None
     assert cancel_response.status_code == 409
 
 
-def test_service_policy_and_lifecycle_contracts() -> None:
+async def test_service_policy_and_lifecycle_contracts() -> None:
     _service.set_policy(
         "tenant-a",
         MultimodalPolicy(allowed_modalities={ModalityType.TEXT_TO_SPEECH}, max_text_chars=10),
@@ -307,5 +307,5 @@ def test_service_policy_and_lifecycle_contracts() -> None:
         requested_timeout_seconds=5,
     )
     assert request.state == RequestState.PENDING
-    request = asyncio.run(_service.execute_request(request.id, tenant_id="tenant-a"))
+    request = await _service.execute_request(request.id, tenant_id="tenant-a")
     assert request.state == RequestState.COMPLETED
