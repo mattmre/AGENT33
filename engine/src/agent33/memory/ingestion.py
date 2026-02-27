@@ -428,7 +428,7 @@ class DocumentExtractor:
             from PIL import Image
 
             image = Image.open(io.BytesIO(image_bytes))
-            text = pytesseract.image_to_string(image)
+            text: str = pytesseract.image_to_string(image)
             logger.info("extract_image_ocr", text_len=len(text))
             return text
         except ImportError as exc:

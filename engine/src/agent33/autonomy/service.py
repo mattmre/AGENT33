@@ -9,8 +9,9 @@ from agent33.autonomy.models import (
     AutonomyBudget,
     BudgetState,
     EscalationRecord,
+    PreflightReport,
 )
-from agent33.autonomy.preflight import PreflightChecker, PreflightReport
+from agent33.autonomy.preflight import PreflightChecker
 
 logger = logging.getLogger(__name__)
 
@@ -206,9 +207,9 @@ class AutonomyService:
                 if esc.escalation_id == escalation_id:
                     esc.acknowledged = True
                     return True
-        esc = self._escalations.get(escalation_id)
-        if esc:
-            esc.acknowledged = True
+        found_esc = self._escalations.get(escalation_id)
+        if found_esc:
+            found_esc.acknowledged = True
             return True
         return False
 
@@ -219,8 +220,8 @@ class AutonomyService:
                 if esc.escalation_id == escalation_id:
                     esc.resolved = True
                     return True
-        esc = self._escalations.get(escalation_id)
-        if esc:
-            esc.resolved = True
+        found_esc = self._escalations.get(escalation_id)
+        if found_esc:
+            found_esc.resolved = True
             return True
         return False

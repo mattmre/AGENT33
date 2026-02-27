@@ -183,4 +183,7 @@ def is_retryable(category: FailureCategory) -> bool:
 def escalate_after(category: FailureCategory) -> int:
     """Return the retry count after which to escalate for *category*."""
     meta = _CATEGORY_META.get(category, {})
-    return int(meta.get("escalate_after", 0))
+    value = meta.get("escalate_after", 0)
+    if isinstance(value, (int, str)):
+        return int(value)
+    return 0

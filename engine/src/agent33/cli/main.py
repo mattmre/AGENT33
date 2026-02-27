@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -36,6 +37,7 @@ def init(
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    definition: dict[str, Any]
     if kind == "agent":
         definition = {
             "name": name,

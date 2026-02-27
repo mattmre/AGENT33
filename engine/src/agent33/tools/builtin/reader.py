@@ -19,7 +19,7 @@ from agent33.tools.base import ToolContext, ToolResult
 try:
     import trafilatura
 except ImportError:  # pragma: no cover
-    trafilatura = None  # type: ignore[assignment]
+    trafilatura = None
 
 _TIMEOUT = 30
 _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB

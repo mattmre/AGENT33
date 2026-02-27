@@ -114,5 +114,36 @@ warn_unused_configs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["nats.*", "apscheduler.*", "pgvector.*", "langchain_core.*"]
+module = [
+    "nats",
+    "nats.*",
+    "apscheduler",
+    "apscheduler.*",
+    "pgvector",
+    "pgvector.*",
+    "langchain_core",
+    "langchain_core.*",
+    "mcp",
+    "mcp.*",
+    "airllm",
+    "airllm.*",
+    "tiktoken",
+    "tiktoken.*",
+    "trafilatura",
+    "trafilatura.*",
+    "pdfplumber",
+    "pdfplumber.*",
+    "opentelemetry",
+    "opentelemetry.*",
+    "asyncpg",
+    "asyncpg.*",
+    "fitz",
+    "fitz.*",
+    "pytesseract",
+    "pytesseract.*",
+    "yaml",
+    "yaml.*",
+    "jsonschema",
+    "jsonschema.*",
+]
 ignore_missing_imports = true

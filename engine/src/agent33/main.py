@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         import redis.asyncio as aioredis
 
-        _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]
         await _redis_client.ping()
         redis_conn = _redis_client
         logger.info("redis_connected", url=_redact_url(settings.redis_url))
@@ -369,9 +369,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Shutdown ----------------------------------------------------------
     logger.info("agent33_stopping")
 
-    training_store = getattr(app.state, "training_store", None)
-    if training_store is not None:
-        await training_store.close()
+    _training_store: Any = getattr(app.state, "training_store", None)
+    if _training_store is not None:
+        await _training_store.close()
 
     scheduler = getattr(app.state, "training_scheduler", None)
     if scheduler is not None:
@@ -428,7 +428,7 @@ def _register_agent_runtime_bridge(
     )
     from agent33.agents.runtime import AgentRuntime
 
-    async def _bridge(inputs: dict) -> dict:
+    async def _bridge(inputs: dict[str, Any]) -> dict[str, Any]:
         agent_name = inputs.pop("agent_name", "workflow-agent")
         model = inputs.pop("model", None)
 
@@ -475,7 +475,9 @@ def _register_agent_runtime_bridge(
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose Content-Length exceeds the configured limit."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Any]
+    ) -> Response:
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > settings.max_request_size_bytes:
             return Response(
@@ -483,7 +485,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                 status_code=413,
                 media_type="application/json",
             )
-        return await call_next(request)
+        response: Response = await call_next(request)
+        return response
 
 
 # -- Application factory ------------------------------------------------------

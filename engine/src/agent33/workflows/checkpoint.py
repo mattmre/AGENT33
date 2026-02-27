@@ -48,7 +48,7 @@ class CheckpointManager:
         url = database_url or settings.database_url
         self._engine = create_async_engine(url, echo=False)
         self._session_factory = sessionmaker(
-            self._engine, class_=AsyncSession, expire_on_commit=False
+            self._engine, class_=AsyncSession, expire_on_commit=False  # type: ignore[call-overload]
         )
 
     async def initialize(self) -> None:
@@ -124,7 +124,8 @@ class CheckpointManager:
             workflow_id=workflow_id,
             step_id=row.step_id,
         )
-        return json.loads(row.state_json)
+        parsed: dict[str, Any] = json.loads(row.state_json)
+        return parsed
 
     async def list_checkpoints(
         self,

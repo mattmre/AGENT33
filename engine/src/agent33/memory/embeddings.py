@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import httpx
 
 from agent33.connectors.boundary import (
@@ -58,7 +60,7 @@ class EmbeddingProvider:
             )
             response.raise_for_status()
             data = response.json()
-            return data["embedding"]
+            return cast("list[float]", data["embedding"])
 
         async def _execute_embed(_request: ConnectorRequest) -> list[float]:
             return await _perform_embed()
@@ -73,7 +75,8 @@ class EmbeddingProvider:
             metadata={"base_url": self._base_url},
         )
         try:
-            return await self._boundary_executor.execute(request, _execute_embed)
+            result = await self._boundary_executor.execute(request, _execute_embed)
+            return cast("list[float]", result)
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc
 
@@ -92,7 +95,7 @@ class EmbeddingProvider:
             )
             response.raise_for_status()
             data = response.json()
-            return data["embeddings"]
+            return cast("list[list[float]]", data["embeddings"])
 
         async def _execute_embed_batch(_request: ConnectorRequest) -> list[list[float]]:
             return await _perform_embed_batch()
@@ -107,6 +110,9 @@ class EmbeddingProvider:
             metadata={"base_url": self._base_url},
         )
         try:
-            return await self._boundary_executor.execute(request, _execute_embed_batch)
+            return cast(
+                "list[list[float]]",
+                await self._boundary_executor.execute(request, _execute_embed_batch),
+            )
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc

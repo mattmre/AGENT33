@@ -80,7 +80,7 @@ class ImprovementService:
         self._intakes[intake.intake_id] = intake
         if intake.generated_from_signal_id is not None:
             self._persist_learning_state()
-        logger.info("intake_submitted", intake_id=intake.intake_id)
+        logger.info("intake_submitted", extra={"intake_id": intake.intake_id})
         return intake
 
     def get_intake(self, intake_id: str) -> ResearchIntake | None:
@@ -136,9 +136,11 @@ class ImprovementService:
 
         logger.info(
             "intake_transitioned",
-            intake_id=intake_id,
-            from_status=current.value,
-            to_status=new_status.value,
+            extra={
+                "intake_id": intake_id,
+                "from_status": current.value,
+                "to_status": new_status.value,
+            },
         )
         if intake.generated_from_signal_id is not None:
             self._persist_learning_state()
@@ -149,7 +151,7 @@ class ImprovementService:
     def record_lesson(self, lesson: LessonLearned) -> LessonLearned:
         """Record a new lesson learned."""
         self._lessons[lesson.lesson_id] = lesson
-        logger.info("lesson_recorded", lesson_id=lesson.lesson_id)
+        logger.info("lesson_recorded", extra={"lesson_id": lesson.lesson_id})
         return lesson
 
     def get_lesson(self, lesson_id: str) -> LessonLearned | None:
@@ -266,8 +268,10 @@ class ImprovementService:
         self._refreshes[refresh.refresh_id] = refresh
         logger.info(
             "roadmap_refresh_recorded",
-            refresh_id=refresh.refresh_id,
-            scope=refresh.scope.value,
+            extra={
+                "refresh_id": refresh.refresh_id,
+                "scope": refresh.scope.value,
+            },
         )
         return refresh
 
@@ -306,9 +310,11 @@ class ImprovementService:
         self._persist_learning_state()
         logger.info(
             "learning_signal_recorded",
-            signal_id=signal.signal_id,
-            signal_type=signal.signal_type.value,
-            severity=signal.severity.value,
+            extra={
+                "signal_id": signal.signal_id,
+                "signal_type": signal.signal_type.value,
+                "severity": signal.severity.value,
+            },
         )
         return signal
 

@@ -9,7 +9,7 @@ encoder at runtime.
 from __future__ import annotations
 
 import logging
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +68,9 @@ class TiktokenCounter:
     ) -> None:
         self._fallback: TokenCounter = fallback or EstimateTokenCounter()
         self._available: bool = False
-        self._encoding: object | None = None
+        self._encoding: Any = None
         try:
-            import tiktoken  # type: ignore[import-untyped]
+            import tiktoken
 
             self._encoding = tiktoken.encoding_for_model(model)
             self._available = True
@@ -83,7 +83,7 @@ class TiktokenCounter:
 
     def count(self, text: str) -> int:
         if self._available and self._encoding is not None:
-            return len(self._encoding.encode(text))  # type: ignore[union-attr]
+            return len(self._encoding.encode(text))
         return self._fallback.count(text)
 
     def count_messages(self, messages: list[dict]) -> int:  # type: ignore[type-arg]
@@ -94,7 +94,7 @@ class TiktokenCounter:
             total += 4
             for key, value in msg.items():
                 if isinstance(value, str):
-                    total += len(self._encoding.encode(value))  # type: ignore[union-attr]
+                    total += len(self._encoding.encode(value))
                 if key == "name":
                     total += -1
             # Each message carries a separator (empty assistant prompt).

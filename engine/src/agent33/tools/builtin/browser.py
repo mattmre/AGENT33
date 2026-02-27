@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 _PLAYWRIGHT_AVAILABLE = True
 try:
-    from playwright.async_api import async_playwright  # type: ignore[import-untyped]
+    from playwright.async_api import async_playwright
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
 

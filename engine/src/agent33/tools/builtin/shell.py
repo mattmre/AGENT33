@@ -113,7 +113,7 @@ class ShellTool:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError:
-            proc.kill()  # type: ignore[union-attr]
+            proc.kill()
             return ToolResult.fail(f"Command timed out after {timeout}s")
         except FileNotFoundError:
             return ToolResult.fail(f"Command not found: {executables[0]}")

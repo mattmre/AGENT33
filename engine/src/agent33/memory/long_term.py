@@ -14,7 +14,7 @@ from sqlalchemy.orm import DeclarativeBase
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:  # pragma: no cover
-    Vector = None  # type: ignore[assignment,misc]
+    Vector = None
 
 
 class _Base(DeclarativeBase):

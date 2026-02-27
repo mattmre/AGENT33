@@ -113,7 +113,7 @@ class WorkflowExecutor:
                 parallel_limit = execution.parallel_limit
 
                 for group in groups:
-                    if len(group) == 1 or execution.mode == ExecutionMode.SEQUENTIAL:
+                    if len(group) == 1:
                         for sid in group:
                             result = await self._execute_step(
                                 self._steps[sid], state, execution.dry_run

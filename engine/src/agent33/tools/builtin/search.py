@@ -45,7 +45,7 @@ class SearchTool:
         num_results: int = params.get("num_results", 10)
         categories: str = params.get("categories", "general")
         url = f"{settings.searxng_url}/search"
-        request_params = {
+        request_params: dict[str, str | int] = {
             "q": query,
             "format": "json",
             "pageno": 1,

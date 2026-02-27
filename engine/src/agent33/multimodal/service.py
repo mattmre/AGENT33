@@ -6,7 +6,7 @@ import base64
 import binascii
 from datetime import UTC, datetime
 
-from agent33.multimodal.adapters import STTAdapter, TTSAdapter, VisionAdapter
+from agent33.multimodal.adapters import MultimodalAdapter, STTAdapter, TTSAdapter, VisionAdapter
 from agent33.multimodal.models import (
     ModalityType,
     MultimodalPolicy,
@@ -35,7 +35,7 @@ class MultimodalService:
         self._requests: dict[str, MultimodalRequest] = {}
         self._results: dict[str, MultimodalResult] = {}
         self._policies: dict[str, MultimodalPolicy] = {}
-        self._adapters = {
+        self._adapters: dict[ModalityType, MultimodalAdapter] = {
             ModalityType.SPEECH_TO_TEXT: STTAdapter(),
             ModalityType.TEXT_TO_SPEECH: TTSAdapter(),
             ModalityType.VISION: VisionAdapter(),

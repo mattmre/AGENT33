@@ -20,7 +20,7 @@ try:
 
     vision_server = Server("vision-mcp-service")
 
-    @vision_server.list_tools()
+    @vision_server.list_tools()  # type: ignore[untyped-decorator]
     async def list_tools() -> list[types.Tool]:
         return [
             types.Tool(
@@ -50,7 +50,7 @@ try:
             )
         ]
 
-    @vision_server.call_tool()
+    @vision_server.call_tool()  # type: ignore[untyped-decorator]
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
         if name == "analyze_image":
             _image_b64 = arguments.get("image_base64")

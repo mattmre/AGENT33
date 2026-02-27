@@ -99,9 +99,10 @@ class AgentOptimizer:
         # For simplicity, re-fetch the latest which will be the one before current
         prev = await self._store.get_latest_prompt(agent_name)
         if prev:
-            self._current_prompts[agent_name] = prev["prompt_text"]
+            prompt_text: str = prev["prompt_text"]
+            self._current_prompts[agent_name] = prompt_text
             self._prompt_versions[agent_name] = target_version
-            return prev["prompt_text"]
+            return prompt_text
         return None
 
     def get_current_prompt(self, agent_name: str) -> str | None:

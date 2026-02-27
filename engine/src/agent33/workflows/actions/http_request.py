@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -117,7 +117,7 @@ async def execute(
             metadata={"timeout_seconds": float(timeout_seconds)},
         )
         try:
-            return await boundary_executor.execute(request, _do_request)
+            return cast("dict[str, Any]", await boundary_executor.execute(request, _do_request))
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc
 
