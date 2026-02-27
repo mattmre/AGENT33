@@ -8,7 +8,10 @@ over SSE (Server-Sent Events) via the standard MCP server protocol.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -26,7 +29,7 @@ try:
 
     mcp_server = Server("agent33-core")
 
-    @mcp_server.list_tools()
+    @mcp_server.list_tools()  # type: ignore[untyped-decorator]
     async def list_tools() -> list[types.Tool]:
         return [
             types.Tool(
@@ -48,7 +51,7 @@ try:
             ),
         ]
 
-    @mcp_server.call_tool()
+    @mcp_server.call_tool()  # type: ignore[untyped-decorator]
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
         if name == "get_agent33_status":
             return [
@@ -84,7 +87,7 @@ async def mcp_sse(request: Request) -> StreamingResponse:
     # request.app.state.mcp_transport = transport
     # return StreamingResponse(transport.handle_sse(), media_type="text/event-stream")
 
-    async def mock_stream():
+    async def mock_stream() -> AsyncGenerator[str, None]:
         yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
 
     return StreamingResponse(mock_stream(), media_type="text/event-stream")

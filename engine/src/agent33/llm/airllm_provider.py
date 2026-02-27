@@ -12,17 +12,21 @@ logger = logging.getLogger(__name__)
 
 # Optional airllm import - only available when GPU extras installed
 try:
-    from airllm import AutoModel as AirLLMAutoModel
+    from airllm import AutoModel as _AirLLMAutoModel
+
+    AirLLMAutoModel: Any = _AirLLMAutoModel
 except ImportError:
-    AirLLMAutoModel = None  # type: ignore[assignment,misc]
+    AirLLMAutoModel = None
 
 try:
-    from transformers import AutoTokenizer
+    from transformers import AutoTokenizer as _AutoTokenizer
+
+    AutoTokenizer: Any = _AutoTokenizer
 except ImportError:
-    AutoTokenizer = None  # type: ignore[assignment,misc]
+    AutoTokenizer = None
 
 
-def _format_chat(messages: list[ChatMessage], tokenizer: object | None = None) -> str:
+def _format_chat(messages: list[ChatMessage], tokenizer: Any = None) -> str:
     """Format chat messages into a prompt string.
 
     Uses the tokenizer's chat template if available, otherwise falls back
@@ -31,9 +35,10 @@ def _format_chat(messages: list[ChatMessage], tokenizer: object | None = None) -
     if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
         msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
         try:
-            return tokenizer.apply_chat_template(  # type: ignore[union-attr]
+            result: str = tokenizer.apply_chat_template(
                 msg_dicts, tokenize=False, add_generation_prompt=True
             )
+            return result
         except Exception:
             logger.debug("chat template failed, falling back to simple format")
 
@@ -66,8 +71,8 @@ class AirLLMProvider:
         self._compression = compression
         self._max_seq_len = max_seq_len
         self._prefetch = prefetch
-        self._model: object | None = None
-        self._tokenizer: object | None = None
+        self._model: Any = None
+        self._tokenizer: Any = None
         self._lock = asyncio.Lock()
 
     async def _ensure_loaded(self) -> None:
@@ -87,7 +92,7 @@ class AirLLMProvider:
             self._model, self._tokenizer = await loop.run_in_executor(None, self._load_sync)
             logger.info("airllm model loaded successfully")
 
-    def _load_sync(self) -> tuple[object, object]:
+    def _load_sync(self) -> tuple[Any, Any]:
         """Synchronous model loading (runs in executor)."""
         kwargs: dict[str, object] = {
             "device": self._device,
@@ -98,10 +103,10 @@ class AirLLMProvider:
         elif self._compression == "8bit":
             kwargs["compression"] = "8bit"
 
-        model = AirLLMAutoModel.from_pretrained(  # type: ignore[union-attr]
+        model = AirLLMAutoModel.from_pretrained(
             self._model_path, **kwargs
         )
-        tokenizer = AutoTokenizer.from_pretrained(self._model_path)  # type: ignore[union-attr]
+        tokenizer = AutoTokenizer.from_pretrained(self._model_path)
         return model, tokenizer
 
     async def complete(
@@ -137,7 +142,7 @@ class AirLLMProvider:
         """Synchronous generation (runs in executor)."""
 
         tokenizer = self._tokenizer
-        input_ids = tokenizer(  # type: ignore[misc]
+        input_ids = tokenizer(
             prompt,
             return_tensors="pt",
             truncation=True,
@@ -146,7 +151,7 @@ class AirLLMProvider:
 
         prompt_len = input_ids.shape[1]
 
-        generation_output = self._model.generate(  # type: ignore[union-attr]
+        generation_output = self._model.generate(
             input_ids=input_ids,
             max_new_tokens=max_new_tokens,
             use_cache=True,
@@ -155,7 +160,7 @@ class AirLLMProvider:
         )
 
         output_ids = generation_output.sequences[0][prompt_len:]
-        text: str = tokenizer.decode(output_ids, skip_special_tokens=True)  # type: ignore[union-attr]
+        text: str = tokenizer.decode(output_ids, skip_special_tokens=True)
         return text, prompt_len
 
     async def list_models(self) -> list[str]:

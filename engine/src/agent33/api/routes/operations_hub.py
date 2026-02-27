@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
@@ -101,10 +104,10 @@ async def stream_operations(request: Request) -> StreamingResponse:
     if not nats_bus:
         raise HTTPException(status_code=503, detail="NATS not available")
 
-    async def event_generator():
-        queue = asyncio.Queue()
+    async def event_generator() -> AsyncGenerator[str, None]:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
-        async def handler(data: dict):
+        async def handler(data: dict[str, Any]) -> None:
             await queue.put(data)
 
         await nats_bus.subscribe("agent.observation", handler)

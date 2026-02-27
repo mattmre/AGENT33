@@ -33,7 +33,8 @@ def _get_user_subject(request: Request) -> str:
     payload = getattr(request.state, "user", None)
     if payload is None:
         return ""
-    return payload.sub
+    result: str = payload.sub
+    return result
 
 
 @router.post(

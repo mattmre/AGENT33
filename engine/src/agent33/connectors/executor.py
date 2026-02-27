@@ -24,7 +24,11 @@ class ConnectorExecutor:
             current = middleware
             downstream = next_handler
 
-            async def wrapped(req: ConnectorRequest, m=current, n=downstream) -> Any:
+            async def wrapped(
+                req: ConnectorRequest,
+                m: ConnectorMiddleware = current,
+                n: ConnectorHandler = downstream,
+            ) -> Any:
                 return await m(req, n)
 
             next_handler = wrapped

@@ -26,7 +26,7 @@ class NATSMessageBus:
     def __init__(self, url: str | None = None) -> None:
         self._url = url or settings.nats_url
         self._nc: NATSClient | None = None
-        self._subscriptions: list[nats.aio.subscription.Subscription] = []
+        self._subscriptions: list[Any] = []
 
     @property
     def is_connected(self) -> bool:
@@ -83,4 +83,5 @@ class NATSMessageBus:
             raise RuntimeError("Not connected to NATS")
         payload = json.dumps(data).encode()
         reply: Msg = await self._nc.request(subject, payload, timeout=timeout)
-        return json.loads(reply.data.decode())
+        result: dict[str, Any] = json.loads(reply.data.decode())
+        return result

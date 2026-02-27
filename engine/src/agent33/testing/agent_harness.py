@@ -111,7 +111,7 @@ class AgentTestHarness:
 
         provider = _CannedProvider(responses)
         router = ModelRouter()
-        router.register("mock", provider)  # type: ignore[arg-type]
+        router.register("mock", provider)
 
         runtime = AgentRuntime(definition=defn, router=router, model="mock")
         return await runtime.invoke(input_data)

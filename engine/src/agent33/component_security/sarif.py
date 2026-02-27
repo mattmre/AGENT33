@@ -217,7 +217,8 @@ class SARIFConverter:
 def rule_by_id_title(rules_by_id: dict[str, dict[str, Any]], rule_id: str, fallback: str) -> str:
     """Extract title from rule, falling back to message."""
     rule = rules_by_id.get(rule_id, {})
-    return rule.get("shortDescription", {}).get("text", fallback)
+    result: str = rule.get("shortDescription", {}).get("text", fallback)
+    return result
 
 
 def _guess_category_from_rule(rule_id: str) -> FindingCategory:

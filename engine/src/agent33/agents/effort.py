@@ -161,11 +161,10 @@ class AgentEffortRouter:
     ) -> EffortHeuristicDecision:
         """Deterministically classify effort from request shape."""
         if not inputs:
-            reasons = ("empty_or_missing_inputs",)
             return EffortHeuristicDecision(
                 effort=AgentEffort.LOW,
                 confidence=0.8,
-                reasons=reasons,
+                reasons=("empty_or_missing_inputs",),
             )
 
         payload = json.dumps(inputs, sort_keys=True, ensure_ascii=False)

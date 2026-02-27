@@ -238,7 +238,7 @@ async def schedule_workflow(
         else:
             job_id = scheduler.schedule_interval(
                 workflow_name=name,
-                seconds=request.interval_seconds,
+                seconds=request.interval_seconds or 0,
                 inputs=request.inputs,
             )
             schedule_type = "interval"

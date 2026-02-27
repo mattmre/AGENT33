@@ -12,6 +12,7 @@ import contextlib
 import logging
 import time
 from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -279,7 +280,7 @@ class MatrixAdapter:
                 logger.exception("Matrix sync error")
                 await asyncio.sleep(5)
 
-    def _process_sync_response(self, data: dict) -> None:
+    def _process_sync_response(self, data: dict[str, Any]) -> None:
         """Extract text messages from a sync response and enqueue them."""
         rooms = data.get("rooms", {}).get("join", {})
         for room_id, room_data in rooms.items():

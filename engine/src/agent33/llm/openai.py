@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -91,7 +91,8 @@ class OpenAIProvider:
                     payload=payload,
                     metadata={"base_url": self._base_url},
                 )
-                return await self._boundary_executor.execute(request, _execute_post)
+                result = await self._boundary_executor.execute(request, _execute_post)
+                return cast("dict[str, Any]", result)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
@@ -140,7 +141,8 @@ class OpenAIProvider:
                     operation=operation,
                     metadata={"base_url": self._base_url},
                 )
-                return await self._boundary_executor.execute(request, _execute_get)
+                result = await self._boundary_executor.execute(request, _execute_get)
+                return cast("dict[str, Any]", result)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:

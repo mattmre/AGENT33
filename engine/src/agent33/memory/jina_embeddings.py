@@ -91,6 +91,9 @@ class JinaEmbeddingProvider:
             metadata={"url": _JINA_EMBED_URL},
         )
         try:
-            return await self._boundary_executor.execute(request, _execute_embed_batch)
+            result: list[list[float]] = await self._boundary_executor.execute(
+                request, _execute_embed_batch
+            )
+            return result
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc

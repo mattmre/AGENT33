@@ -97,6 +97,7 @@ class MCPServerConnection:
         self._tools: list[MCPToolSpec] = []
         self._connected = False
         self._client: httpx.AsyncClient | None = None
+        self._boundary_executor: ConnectorExecutor | None
         if boundary_executor is not None:
             self._boundary_executor = boundary_executor
         else:
@@ -230,7 +231,8 @@ class MCPServerConnection:
             msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
             raise RuntimeError(f"MCP RPC error from {self._name}: {msg}")
 
-        return body.get("result", body)
+        result: dict[str, Any] = body.get("result", body)
+        return result
 
     def _build_boundary_executor(self) -> ConnectorExecutor | None:
         return build_connector_boundary_executor(

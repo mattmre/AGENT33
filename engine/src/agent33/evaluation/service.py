@@ -10,7 +10,10 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 from agent33.evaluation.ctrf import CTRFGenerator
 from agent33.evaluation.experiment import ExperimentRunner
@@ -171,7 +174,7 @@ class EvaluationService:
 
     def save_baseline(
         self,
-        metrics: list[object],
+        metrics: Sequence[object],
         task_results: list[TaskRunResult],
         commit_hash: str = "",
         branch: str = "",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -75,7 +75,7 @@ class STTAdapter:
 
         try:
             if executor:
-                return await executor.execute(connector_request, _handler)
+                return cast("dict[str, Any]", await executor.execute(connector_request, _handler))
             return await _handler(connector_request)
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc
@@ -162,7 +162,7 @@ class TTSAdapter:
 
         try:
             if executor:
-                return await executor.execute(connector_request, _handler)
+                return cast("dict[str, Any]", await executor.execute(connector_request, _handler))
             return await _handler(connector_request)
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc
@@ -244,7 +244,7 @@ class VisionAdapter:
 
         try:
             if executor:
-                return await executor.execute(connector_request, _handler)
+                return cast("dict[str, Any]", await executor.execute(connector_request, _handler))
             return await _handler(connector_request)
         except Exception as exc:
             raise map_connector_exception(exc, connector, operation) from exc

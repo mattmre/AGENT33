@@ -28,6 +28,7 @@ from agent33.improvement.models import (
 from agent33.improvement.persistence import (
     FileLearningSignalStore,
     InMemoryLearningSignalStore,
+    LearningSignalStore,
     SQLiteLearningSignalStore,
     migrate_file_learning_state_to_db,
     should_migrate_file_learning_state_to_db,
@@ -39,6 +40,7 @@ router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 
 def _build_improvement_service() -> ImprovementService:
     backend = settings.improvement_learning_persistence_backend.strip().lower()
+    store: LearningSignalStore
     if backend == "file":
         store = FileLearningSignalStore(
             path=str(Path(settings.improvement_learning_persistence_path)),

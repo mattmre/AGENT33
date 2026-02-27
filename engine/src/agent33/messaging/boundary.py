@@ -71,7 +71,8 @@ async def execute_messaging_boundary_call(
         return await call(request)
 
     try:
-        return await boundary_executor.execute(request, call)
+        result: _T = await boundary_executor.execute(request, call)
+        return result
     except asyncio.CancelledError:
         raise
     except Exception as exc:

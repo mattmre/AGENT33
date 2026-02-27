@@ -59,15 +59,15 @@ def create_tldr_snapshot(file_path: str) -> str:
     output.append("\n[L1/L3/L5] STRUCTURE & SEMANTICS:")
 
     class Visitor(ast.NodeVisitor):
-        def __init__(self):
-            self.lines = []
-            self.indent = 0
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+            self.indent: int = 0
 
-        def get_indent(self):
+        def get_indent(self) -> str:
             return "  " * self.indent
 
-        def extract_returns(self, node):
-            returns = []
+        def extract_returns(self, node: ast.AST) -> list[str]:
+            returns: list[str] = []
             for child in ast.walk(node):
                 if isinstance(child, ast.Return):
                     returns.append("return")
@@ -75,7 +75,7 @@ def create_tldr_snapshot(file_path: str) -> str:
                     returns.append("yield")
             return list(set(returns))
 
-        def visit_ClassDef(self, node):
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
             doc = ast.get_docstring(node)
             doc_str = f'  """{doc.split(chr(10))[0]}..."""' if doc else ""
             self.lines.append(f"{self.get_indent()}class {node.name}:{doc_str}")
@@ -84,13 +84,17 @@ def create_tldr_snapshot(file_path: str) -> str:
             self.generic_visit(node)
             self.indent -= 1
 
-        def visit_FunctionDef(self, node):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
             self._handle_func(node)
 
-        def visit_AsyncFunctionDef(self, node):
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
             self._handle_func(node, is_async=True)
 
-        def _handle_func(self, node, is_async=False):
+        def _handle_func(
+            self,
+            node: ast.FunctionDef | ast.AsyncFunctionDef,
+            is_async: bool = False,
+        ) -> None:
             doc = ast.get_docstring(node)
             doc_str = f'  """{doc.split(chr(10))[0]}..."""' if doc else ""
 

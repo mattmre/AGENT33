@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from typing import Any
 
 import jwt
 from pydantic import BaseModel
@@ -37,7 +38,7 @@ def create_access_token(
 ) -> str:
     """Create a signed JWT for *subject* with the given *scopes*."""
     now = int(time.time())
-    payload: dict = {
+    payload: dict[str, Any] = {
         "sub": subject,
         "scopes": scopes or [],
         "iat": now,
@@ -68,7 +69,7 @@ def verify_token(token: str) -> TokenPayload:
 # ---------------------------------------------------------------------------
 
 # Mapping from key-hash -> {"key_id": str, "subject": str, "scopes": [...], ...}
-_api_keys: dict[str, dict] = {}
+_api_keys: dict[str, dict[str, Any]] = {}
 
 
 def _hash_key(key: str) -> str:
@@ -80,7 +81,7 @@ def generate_api_key(
     scopes: list[str] | None = None,
     tenant_id: str = "",
     expires_in_seconds: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Generate a new API key and return its metadata including the raw key.
 
     Returns ``{"key_id": ..., "key": ..., "subject": ..., "scopes": [...], ...}``.

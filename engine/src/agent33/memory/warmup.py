@@ -8,7 +8,7 @@ search works immediately without waiting for new ingestions.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent33.memory.bm25 import BM25Index
@@ -49,7 +49,9 @@ async def warm_up_bm25(
             break
 
         # Use batch add for performance (O(n) instead of O(n^2))
-        docs_to_add = [(record.text, record.metadata) for record in records]
+        docs_to_add: list[tuple[str, dict[str, Any] | None]] = [
+            (record.text, record.metadata) for record in records
+        ]
         bm25_index.add_documents(docs_to_add)
         loaded += len(docs_to_add)
 

@@ -63,7 +63,8 @@ class MultiTrialResult(BaseModel):
     @property
     def std_dev(self) -> float:
         """Population standard deviation of trial scores."""
-        return self.variance**0.5
+        result: float = self.variance**0.5
+        return result
 
 
 class SkillsImpact(BaseModel):
