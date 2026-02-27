@@ -405,7 +405,8 @@ class ToolLoop:
 
             args_dict = json.loads(tc.function.arguments)
             sorted_args = json.dumps(args_dict, sort_keys=True)
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.debug("Tool call JSON parse fallback: %s", e)
             sorted_args = tc.function.arguments
 
         signature = f"{tc.function.name}:{sorted_args}"
@@ -606,8 +607,8 @@ class ToolLoop:
             parsed = json.loads(stripped)
             if isinstance(parsed, dict):
                 return parsed
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.debug("Tool call JSON parse fallback: %s", e)
 
         # Strip markdown code fences and retry
         if stripped.startswith("```"):
@@ -627,8 +628,8 @@ class ToolLoop:
                 parsed = json.loads(inner)
                 if isinstance(parsed, dict):
                     return parsed
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.debug("Tool call JSON parse fallback: %s", e)
 
         return {"response": raw}
 

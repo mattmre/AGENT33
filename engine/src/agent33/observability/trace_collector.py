@@ -197,8 +197,8 @@ class TraceCollector:
             trace.outcome.failure_code = category.value
             trace.outcome.failure_message = message
             trace.outcome.failure_category = category.value
-        except TraceNotFoundError:
-            pass
+        except TraceNotFoundError as e:
+            logger.debug("Trace not found during collection: %s", e)
 
         logger.info(
             "failure_recorded id=%s trace=%s category=%s",

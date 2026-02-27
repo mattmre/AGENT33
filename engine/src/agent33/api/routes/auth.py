@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 from typing import Any
 
@@ -17,6 +18,8 @@ from agent33.security.auth import (
     revoke_api_key,
 )
 from agent33.security.permissions import _get_token_payload, require_scope
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -37,8 +40,8 @@ def _get_user_salt(user: dict[str, Any]) -> bytes:
     if isinstance(salt_hex, str):
         try:
             return bytes.fromhex(salt_hex)
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.warning("Auth header parse failed: %s", e)
     # Backward-compatible fallback for legacy in-memory test fixtures.
     return _LEGACY_PBKDF2_SALT
 

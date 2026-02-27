@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,8 @@ from agent33.autonomy.service import BudgetNotFoundError
 from agent33.improvement.models import IntakeStatus
 from agent33.observability.trace_collector import TraceNotFoundError
 from agent33.observability.trace_models import TraceStatus
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_INCLUDE = frozenset({"traces", "budgets", "improvements", "workflows"})
 _MAX_LIMIT = 100
@@ -103,16 +106,16 @@ class OperationsHubService:
             if tenant_id and trace.tenant_id != tenant_id:
                 raise ProcessNotFoundError(process_id)
             return self._trace_detail(trace)
-        except TraceNotFoundError:
-            pass
+        except TraceNotFoundError as e:
+            logger.warning("Missing %s during dashboard aggregation: %s", "trace", e)
 
         if not tenant_id:
             autonomy_service = get_autonomy_service()
             try:
                 budget = autonomy_service.get_budget(process_id)
                 return self._budget_detail(budget)
-            except BudgetNotFoundError:
-                pass
+            except BudgetNotFoundError as e:
+                logger.warning("Missing %s during dashboard aggregation: %s", "budget", e)
 
             improvement = get_improvement_service().get_intake(process_id)
             if improvement is not None:
@@ -140,8 +143,8 @@ class OperationsHubService:
                 failure_message="Cancelled via operations hub",
             )
             return self.get_process(process_id, tenant_id=tenant_id)
-        except TraceNotFoundError:
-            pass
+        except TraceNotFoundError as e:
+            logger.warning("Missing %s during dashboard aggregation: %s", "trace", e)
 
         if tenant_id:
             raise ProcessNotFoundError(process_id)
