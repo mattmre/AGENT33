@@ -138,9 +138,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         alert_manager.add_rule(
             name="high_effort_routing_volume",
             metric="effort_routing_high_effort_total",
-            threshold=float(
-                settings.observability_effort_alert_high_effort_count_threshold
-            ),
+            threshold=float(settings.observability_effort_alert_high_effort_count_threshold),
             comparator="gt",
         )
         alert_manager.add_rule(
@@ -153,9 +151,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         alert_manager.add_rule(
             name="high_effort_token_budget_spike",
             metric="effort_routing_estimated_token_budget",
-            threshold=float(
-                settings.observability_effort_alert_high_token_budget_threshold
-            ),
+            threshold=float(settings.observability_effort_alert_high_token_budget_threshold),
             comparator="gt",
             statistic="max",
         )
@@ -512,7 +508,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
-
 
 
 # -- Routers -------------------------------------------------------------------

@@ -1,6 +1,9 @@
 import ast
 import os
+import traceback
 from typing import Any
+
+from agent33.tools.base import Tool, ToolContext, ToolResult
 
 
 def create_tldr_snapshot(file_path: str) -> str:
@@ -32,10 +35,9 @@ def create_tldr_snapshot(file_path: str) -> str:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                for alias in node.names:
-                    imports.append(f"{node.module}.{alias.name}")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                imports.append(f"{node.module}.{alias.name}")
     if imports:
         output.append("\n[L2] DEPENDENCIES (Imports):")
         for imp in imports:
@@ -75,7 +77,7 @@ def create_tldr_snapshot(file_path: str) -> str:
 
         def visit_ClassDef(self, node):
             doc = ast.get_docstring(node)
-            doc_str = f"  \"\"\"{doc.split(chr(10))[0]}...\"\"\"" if doc else ""
+            doc_str = f'  """{doc.split(chr(10))[0]}..."""' if doc else ""
             self.lines.append(f"{self.get_indent()}class {node.name}:{doc_str}")
 
             self.indent += 1
@@ -90,12 +92,14 @@ def create_tldr_snapshot(file_path: str) -> str:
 
         def _handle_func(self, node, is_async=False):
             doc = ast.get_docstring(node)
-            doc_str = f"  \"\"\"{doc.split(chr(10))[0]}...\"\"\"" if doc else ""
+            doc_str = f'  """{doc.split(chr(10))[0]}..."""' if doc else ""
 
             # Extract arguments
             args = [a.arg for a in node.args.args]
-            if node.args.vararg: args.append(f"*{node.args.vararg.arg}")
-            if node.args.kwarg: args.append(f"**{node.args.kwarg.arg}")
+            if node.args.vararg:
+                args.append(f"*{node.args.vararg.arg}")
+            if node.args.kwarg:
+                args.append(f"**{node.args.kwarg.arg}")
             arg_str = ", ".join(args)
 
             # Extract Returns
@@ -103,7 +107,9 @@ def create_tldr_snapshot(file_path: str) -> str:
             ret_str = f" -> [{','.join(ret_types)}]" if ret_types else ""
 
             prefix = "async def" if is_async else "def"
-            self.lines.append(f"{self.get_indent()}{prefix} {node.name}({arg_str}){ret_str}:{doc_str}")
+            self.lines.append(
+                f"{self.get_indent()}{prefix} {node.name}({arg_str}){ret_str}:{doc_str}"
+            )
 
             self.indent += 1
             self.generic_visit(node)
@@ -120,24 +126,27 @@ def create_tldr_snapshot(file_path: str) -> str:
         "\n--- END SNAPSHOT ---",
         f"Original Size: {len(source)} chars",
         f"TLDR Size: {len(summary)} chars",
-        f"Compression: {100 - (len(summary)/max(1, len(source))*100):.1f}% reduction"
+        f"Compression: {100 - (len(summary) / max(1, len(source)) * 100):.1f}% reduction",
     ]
 
     return summary + "\n".join(footer)
 
-import traceback
-
-from agent33.tools.base import Tool, ToolContext, ToolResult
-
 
 class TLDRReadEnforcerTool(Tool):
-    """Tool that reads a python file and returns a highly compressed 5-layer AST semantic snapshot instead of raw tokens.
-    
-    To be used INSTEAD of cat or view_file when trying to understand the architecture or structure of a file to prevent context window bloat.
+    """Compressed 5-layer AST semantic snapshot reader.
+
+    Reads a Python file and returns a highly compressed AST snapshot
+    instead of raw tokens. Use INSTEAD of cat or view_file when trying
+    to understand file architecture, preventing context window bloat.
     """
 
     name = "tldr_read_enforcer"
-    description = "Reads a Python file and returns a 5-layer AST semantic snapshot (Signatures, Imports, Docstrings, Globals, Returns) instead of raw text, saving 95% of tokens. Use this to understand file architecture."
+    description = (
+        "Reads a Python file and returns a 5-layer AST semantic"
+        " snapshot (Signatures, Imports, Docstrings, Globals,"
+        " Returns) instead of raw text, saving 95% of tokens."
+        " Use this to understand file architecture."
+    )
 
     @property
     def parameters_schema(self) -> dict[str, Any]:
@@ -146,10 +155,10 @@ class TLDRReadEnforcerTool(Tool):
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "The absolute path to the Python file to analyze"
+                    "description": "The absolute path to the Python file to analyze",
                 }
             },
-            "required": ["file_path"]
+            "required": ["file_path"],
         }
 
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -161,11 +170,15 @@ class TLDRReadEnforcerTool(Tool):
             snapshot = create_tldr_snapshot(file_path)
             return ToolResult.ok(snapshot)
         except Exception as e:
-            return ToolResult.fail(f"Failed to generate TLDR snapshot: {str(e)}\n{traceback.format_exc()}")
+            return ToolResult.fail(
+                f"Failed to generate TLDR snapshot: {str(e)}\n{traceback.format_exc()}"
+            )
+
 
 if __name__ == "__main__":
     # Quick test if run directly
     import sys
+
     if len(sys.argv) > 1:
         print(create_tldr_snapshot(sys.argv[1]))
     else:

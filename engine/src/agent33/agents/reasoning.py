@@ -408,9 +408,7 @@ class ReasoningProtocol:
                     system_prompt=system_prompt,
                 )
                 if attempt > 1:
-                    recovery_events = state.phase_artifacts.setdefault(
-                        "recovery_events", []
-                    )
+                    recovery_events = state.phase_artifacts.setdefault("recovery_events", [])
                     if isinstance(recovery_events, list):
                         recovery_events.append(
                             {
@@ -465,10 +463,7 @@ class ReasoningProtocol:
                 f"Phase dispatch failed after {total_attempts} attempts; "
                 "terminating with graceful degradation"
             ),
-            reasoning=(
-                "Retries exhausted during phase dispatch. "
-                f"Fail-closed={fail_closed}."
-            ),
+            reasoning=(f"Retries exhausted during phase dispatch. Fail-closed={fail_closed}."),
             next_action=degraded_action.value,
             confidence=degraded_confidence,
             phase=failure_phase.value,
@@ -589,9 +584,7 @@ class ReasoningProtocol:
             ChatMessage(role="user", content=task_input),
         ]
 
-        loop_result = await tool_loop.run(
-            messages=messages, model=model, max_tokens=max_tokens
-        )
+        loop_result = await tool_loop.run(messages=messages, model=model, max_tokens=max_tokens)
 
         artifact = ExecuteArtifact(
             tool_loop_result=loop_result,

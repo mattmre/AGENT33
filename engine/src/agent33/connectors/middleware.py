@@ -24,8 +24,7 @@ class ConnectorMiddleware(Protocol):
         self,
         request: ConnectorRequest,
         call_next: ConnectorHandler,
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
 
 class GovernanceMiddleware:

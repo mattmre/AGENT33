@@ -41,7 +41,8 @@ class AgentRegistry:
                 loaded += 1
                 logger.info(
                     "loaded agent definition: %s (v%s)",
-                    definition.name, definition.version,
+                    definition.name,
+                    definition.version,
                 )
             except Exception:
                 logger.exception("failed to load agent definition from %s", json_file)
@@ -86,17 +87,20 @@ class AgentRegistry:
         return [d for d in self._agents.values() if d.role == role]
 
     def find_by_spec_capability(
-        self, cap: SpecCapability,
+        self,
+        cap: SpecCapability,
     ) -> list[AgentDefinition]:
         """Return definitions that declare the given spec capability."""
         return [d for d in self._agents.values() if cap in d.spec_capabilities]
 
     def find_by_capability_category(
-        self, category: CapabilityCategory,
+        self,
+        category: CapabilityCategory,
     ) -> list[AgentDefinition]:
         """Return definitions with any capability in the category."""
         return [
-            d for d in self._agents.values()
+            d
+            for d in self._agents.values()
             if any(c.category == category for c in d.spec_capabilities)
         ]
 
@@ -117,13 +121,10 @@ class AgentRegistry:
         if role is not None:
             results = [d for d in results if d.role == role]
         if spec_capability is not None:
-            results = [
-                d for d in results if spec_capability in d.spec_capabilities
-            ]
+            results = [d for d in results if spec_capability in d.spec_capabilities]
         if category is not None:
             results = [
-                d for d in results
-                if any(c.category == category for c in d.spec_capabilities)
+                d for d in results if any(c.category == category for c in d.spec_capabilities)
             ]
         if status is not None:
             results = [d for d in results if d.status == status]

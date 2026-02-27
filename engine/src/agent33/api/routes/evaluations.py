@@ -157,9 +157,7 @@ async def get_run(run_id: str) -> dict[str, Any]:
     "/runs/{run_id}/results",
     dependencies=[require_scope("tools:execute")],
 )
-async def submit_results(
-    run_id: str, body: SubmitResultsRequest
-) -> dict[str, Any]:
+async def submit_results(run_id: str, body: SubmitResultsRequest) -> dict[str, Any]:
     """Submit golden task results to an evaluation run."""
     from agent33.evaluation.models import TaskRunResult
 
@@ -200,9 +198,7 @@ async def submit_results(
     status_code=201,
     dependencies=[require_scope("tools:execute")],
 )
-async def save_baseline_from_run(
-    run_id: str, body: SaveBaselineRequest
-) -> dict[str, Any]:
+async def save_baseline_from_run(run_id: str, body: SaveBaselineRequest) -> dict[str, Any]:
     """Save the results of a completed run as a baseline."""
     run = _service.get_run(run_id)
     if run is None:
@@ -265,9 +261,7 @@ async def list_regressions(
     "/regressions/{regression_id}/triage",
     dependencies=[require_scope("tools:execute")],
 )
-async def update_triage(
-    regression_id: str, body: UpdateTriageRequest
-) -> dict[str, Any]:
+async def update_triage(regression_id: str, body: UpdateTriageRequest) -> dict[str, Any]:
     """Update triage status for a regression."""
     record = _service.recorder.update_triage(
         regression_id=regression_id,
@@ -275,9 +269,7 @@ async def update_triage(
         assignee=body.assignee,
     )
     if record is None:
-        raise HTTPException(
-            status_code=404, detail=f"Regression not found: {regression_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Regression not found: {regression_id}")
     return {"regression_id": record.regression_id, "status": record.triage_status.value}
 
 
@@ -285,9 +277,7 @@ async def update_triage(
     "/regressions/{regression_id}/resolve",
     dependencies=[require_scope("tools:execute")],
 )
-async def resolve_regression(
-    regression_id: str, body: ResolveRegressionRequest
-) -> dict[str, Any]:
+async def resolve_regression(regression_id: str, body: ResolveRegressionRequest) -> dict[str, Any]:
     """Mark a regression as resolved."""
     record = _service.recorder.resolve(
         regression_id=regression_id,
@@ -295,9 +285,7 @@ async def resolve_regression(
         fix_commit=body.fix_commit,
     )
     if record is None:
-        raise HTTPException(
-            status_code=404, detail=f"Regression not found: {regression_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Regression not found: {regression_id}")
     return {
         "regression_id": record.regression_id,
         "status": record.triage_status.value,
@@ -354,9 +342,7 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     """Get multi-trial experiment status and results."""
     run = _service.get_multi_trial_run(run_id)
     if run is None:
-        raise HTTPException(
-            status_code=404, detail=f"Experiment not found: {run_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Experiment not found: {run_id}")
     return run.model_dump(mode="json")
 
 
@@ -368,9 +354,7 @@ async def get_experiment_ctrf(run_id: str) -> dict[str, Any]:
     """Export multi-trial experiment as a CTRF report."""
     report = _service.export_ctrf(run_id)
     if report is None:
-        raise HTTPException(
-            status_code=404, detail=f"Experiment not found: {run_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Experiment not found: {run_id}")
     return report
 
 
@@ -382,9 +366,7 @@ async def get_experiment_skills_impact(run_id: str) -> dict[str, Any]:
     """Get skills impact data for a multi-trial experiment."""
     run = _service.get_multi_trial_run(run_id)
     if run is None:
-        raise HTTPException(
-            status_code=404, detail=f"Experiment not found: {run_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Experiment not found: {run_id}")
     return {
         "run_id": run.run_id,
         "impacts": [i.model_dump(mode="json") for i in run.skills_impacts],

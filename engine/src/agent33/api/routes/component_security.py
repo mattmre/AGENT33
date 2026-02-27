@@ -167,9 +167,7 @@ async def get_run_status(run_id: str, request: Request) -> dict[str, str]:
 async def get_run_sarif(run_id: str, request: Request) -> dict[str, Any]:
     """Export findings as SARIF 2.1.0 JSON."""
     try:
-        sarif = _service.sarif_export(
-            run_id, tenant_id=_tenant_id(request) or None
-        )
+        sarif = _service.sarif_export(run_id, tenant_id=_tenant_id(request) or None)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return sarif

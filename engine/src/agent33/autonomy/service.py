@@ -17,12 +17,19 @@ logger = logging.getLogger(__name__)
 # Valid state transitions for budget lifecycle
 _VALID_TRANSITIONS: dict[BudgetState, frozenset[BudgetState]] = {
     BudgetState.DRAFT: frozenset({BudgetState.PENDING_APPROVAL, BudgetState.ACTIVE}),
-    BudgetState.PENDING_APPROVAL: frozenset({
-        BudgetState.ACTIVE, BudgetState.REJECTED,
-    }),
-    BudgetState.ACTIVE: frozenset({
-        BudgetState.SUSPENDED, BudgetState.EXPIRED, BudgetState.COMPLETED,
-    }),
+    BudgetState.PENDING_APPROVAL: frozenset(
+        {
+            BudgetState.ACTIVE,
+            BudgetState.REJECTED,
+        }
+    ),
+    BudgetState.ACTIVE: frozenset(
+        {
+            BudgetState.SUSPENDED,
+            BudgetState.EXPIRED,
+            BudgetState.COMPLETED,
+        }
+    ),
     BudgetState.SUSPENDED: frozenset({BudgetState.ACTIVE, BudgetState.EXPIRED}),
     BudgetState.REJECTED: frozenset({BudgetState.DRAFT}),
     BudgetState.EXPIRED: frozenset(),
@@ -40,9 +47,7 @@ class InvalidStateTransitionError(Exception):
     def __init__(self, from_state: BudgetState, to_state: BudgetState) -> None:
         self.from_state = from_state
         self.to_state = to_state
-        super().__init__(
-            f"Invalid transition: {from_state.value} → {to_state.value}"
-        )
+        super().__init__(f"Invalid transition: {from_state.value} → {to_state.value}")
 
 
 class AutonomyService:
@@ -188,9 +193,7 @@ class AutonomyService:
         all_escalations.extend(self._escalations.values())
 
         if budget_id is not None:
-            all_escalations = [
-                e for e in all_escalations if e.budget_id == budget_id
-            ]
+            all_escalations = [e for e in all_escalations if e.budget_id == budget_id]
         if unresolved_only:
             all_escalations = [e for e in all_escalations if not e.resolved]
         all_escalations.sort(key=lambda e: e.created_at, reverse=True)

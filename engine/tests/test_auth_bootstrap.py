@@ -66,4 +66,3 @@ def test_bootstrap_login_disabled(monkeypatch) -> None:
     finally:
         auth_routes._users.clear()
         auth_routes._users.update(original_users)
-

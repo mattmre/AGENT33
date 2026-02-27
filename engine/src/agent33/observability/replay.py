@@ -40,9 +40,7 @@ class ExecutionReplay:
             )
         )
 
-    def replay(
-        self, workflow_id: str
-    ) -> Generator[tuple[str, dict[str, Any]], None, None]:
+    def replay(self, workflow_id: str) -> Generator[tuple[str, dict[str, Any]], None, None]:
         """Yield (step_id, state) tuples for replaying a workflow."""
         for step in self._steps:
             if step.workflow_id == workflow_id:

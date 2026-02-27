@@ -56,9 +56,7 @@ class _OpenAISuccessClient:
 class _OllamaSuccessClient:
     async def post(self, url: str, **kwargs: Any) -> _Response:  # noqa: ARG002
         assert url.endswith("/api/chat")
-        return _Response(
-            {"message": {"content": "ok"}, "prompt_eval_count": 1, "eval_count": 1}
-        )
+        return _Response({"message": {"content": "ok"}, "prompt_eval_count": 1, "eval_count": 1})
 
     async def get(self, url: str, **kwargs: Any) -> _Response:  # noqa: ARG002
         assert url.endswith("/api/tags")

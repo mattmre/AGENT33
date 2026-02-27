@@ -182,9 +182,7 @@ class HybridSearcher:
                 v_rrf = 1.0 / (self._rrf_k + result.vector_rank)
             if result.bm25_rank > 0:
                 b_rrf = 1.0 / (self._rrf_k + result.bm25_rank)
-            result.score = (
-                self._vector_weight * v_rrf + self._bm25_weight * b_rrf
-            )
+            result.score = self._vector_weight * v_rrf + self._bm25_weight * b_rrf
 
         # Sort by fused score descending.
         ranked = sorted(merged.values(), key=lambda r: r.score, reverse=True)

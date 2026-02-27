@@ -94,15 +94,9 @@ class ImprovementService:
     ) -> list[ResearchIntake]:
         result = list(self._intakes.values())
         if status is not None:
-            result = [
-                i for i in result if i.disposition.status == status
-            ]
+            result = [i for i in result if i.disposition.status == status]
         if research_type is not None:
-            result = [
-                i
-                for i in result
-                if i.classification.research_type.value == research_type
-            ]
+            result = [i for i in result if i.classification.research_type.value == research_type]
         if tenant_id is not None:
             result = [i for i in result if i.tenant_id == tenant_id]
         return result
@@ -124,9 +118,7 @@ class ImprovementService:
         current = intake.disposition.status
         allowed = _INTAKE_TRANSITIONS.get(current, set())
         if new_status not in allowed:
-            raise ValueError(
-                f"Cannot transition from {current.value} to {new_status.value}"
-            )
+            raise ValueError(f"Cannot transition from {current.value} to {new_status.value}")
 
         intake.disposition.status = new_status
         if decision_by:
@@ -170,15 +162,9 @@ class ImprovementService:
     ) -> list[LessonLearned]:
         result = list(self._lessons.values())
         if phase is not None:
-            result = [
-                lesson for lesson in result if lesson.phase == phase
-            ]
+            result = [lesson for lesson in result if lesson.phase == phase]
         if event_type is not None:
-            result = [
-                lesson
-                for lesson in result
-                if lesson.event_type.value == event_type
-            ]
+            result = [lesson for lesson in result if lesson.event_type.value == event_type]
         return result
 
     def complete_lesson_action(
@@ -195,9 +181,7 @@ class ImprovementService:
         lesson.actions[action_index].status = LessonActionStatus.COMPLETED
         return lesson
 
-    def verify_lesson(
-        self, lesson_id: str, evidence: str = ""
-    ) -> LessonLearned:
+    def verify_lesson(self, lesson_id: str, evidence: str = "") -> LessonLearned:
         """Mark a lesson as implemented and verified."""
         lesson = self._lessons.get(lesson_id)
         if lesson is None:
@@ -221,9 +205,7 @@ class ImprovementService:
     def get_checklist(self, checklist_id: str) -> ImprovementChecklist | None:
         return self._checklists.get(checklist_id)
 
-    def list_checklists(
-        self, period: ChecklistPeriod | None = None
-    ) -> list[ImprovementChecklist]:
+    def list_checklists(self, period: ChecklistPeriod | None = None) -> list[ImprovementChecklist]:
         result = list(self._checklists.values())
         if period is not None:
             result = [c for c in result if c.period == period]
@@ -239,16 +221,12 @@ class ImprovementService:
         checklist = self._checklists.get(checklist_id)
         if checklist is None:
             raise ValueError(f"Checklist {checklist_id} not found")
-        item = self._checklist_evaluator.complete_item(
-            checklist, check_id, notes
-        )
+        item = self._checklist_evaluator.complete_item(checklist, check_id, notes)
         if item is None:
             raise ValueError(f"Check {check_id} not found in checklist")
         return checklist
 
-    def evaluate_checklist(
-        self, checklist_id: str
-    ) -> tuple[bool, list[str]]:
+    def evaluate_checklist(self, checklist_id: str) -> tuple[bool, list[str]]:
         """Evaluate a checklist for completion."""
         checklist = self._checklists.get(checklist_id)
         if checklist is None:
@@ -257,9 +235,7 @@ class ImprovementService:
 
     # ----- Metrics ---------------------------------------------------------
 
-    def save_metrics_snapshot(
-        self, snapshot: MetricsSnapshot
-    ) -> MetricsSnapshot:
+    def save_metrics_snapshot(self, snapshot: MetricsSnapshot) -> MetricsSnapshot:
         """Save a metrics snapshot."""
         return self._metrics_tracker.save_snapshot(snapshot)
 
@@ -267,21 +243,15 @@ class ImprovementService:
         """Return the latest metrics snapshot."""
         return self._metrics_tracker.latest()
 
-    def list_metrics_snapshots(
-        self, limit: int = 10
-    ) -> list[MetricsSnapshot]:
+    def list_metrics_snapshots(self, limit: int = 10) -> list[MetricsSnapshot]:
         return self._metrics_tracker.list_snapshots(limit)
 
-    def get_metric_trend(
-        self, metric_id: str, periods: int = 4
-    ) -> tuple[str, list[float]]:
+    def get_metric_trend(self, metric_id: str, periods: int = 4) -> tuple[str, list[float]]:
         """Return (trend, values) for a metric."""
         trend, values = self._metrics_tracker.get_trend(metric_id, periods)
         return trend.value, values
 
-    def create_default_snapshot(
-        self, period: str = ""
-    ) -> MetricsSnapshot:
+    def create_default_snapshot(self, period: str = "") -> MetricsSnapshot:
         """Create a snapshot with the five canonical metrics at defaults."""
         snapshot = MetricsSnapshot(
             period=period,
@@ -304,9 +274,7 @@ class ImprovementService:
     def get_refresh(self, refresh_id: str) -> RoadmapRefresh | None:
         return self._refreshes.get(refresh_id)
 
-    def list_refreshes(
-        self, scope: str | None = None
-    ) -> list[RoadmapRefresh]:
+    def list_refreshes(self, scope: str | None = None) -> list[RoadmapRefresh]:
         result = list(self._refreshes.values())
         if scope is not None:
             result = [r for r in result if r.scope.value == scope]
@@ -384,9 +352,7 @@ class ImprovementService:
             window_start_at = now - timedelta(days=window_days)
             previous_window_start = window_start_at - timedelta(days=window_days)
             summary_signals = [
-                signal
-                for signal in all_scoped
-                if signal.recorded_at >= window_start_at
+                signal for signal in all_scoped if signal.recorded_at >= window_start_at
             ]
             previous_window_total = len(
                 [
@@ -414,9 +380,7 @@ class ImprovementService:
             ssev = signal.severity.value
             counts_by_type[stype] = counts_by_type.get(stype, 0) + 1
             counts_by_severity[ssev] = counts_by_severity.get(ssev, 0) + 1
-            counts_by_tenant[signal.tenant_id] = (
-                counts_by_tenant.get(signal.tenant_id, 0) + 1
-            )
+            counts_by_tenant[signal.tenant_id] = counts_by_tenant.get(signal.tenant_id, 0) + 1
             quality_total += signal.quality_score
             if signal.quality_label == "high":
                 high_quality_signals += 1
@@ -427,9 +391,7 @@ class ImprovementService:
             counts_by_severity=counts_by_severity,
             counts_by_tenant=counts_by_tenant,
             latest_recorded_at=latest_recorded_at,
-            average_quality_score=(
-                round(quality_total / len(signals), 3) if signals else 0.0
-            ),
+            average_quality_score=(round(quality_total / len(signals), 3) if signals else 0.0),
             high_quality_signals=high_quality_signals,
             tenant_id=tenant_id,
             window_days=window_days,
@@ -521,9 +483,7 @@ class ImprovementService:
 
     def _load_learning_state(self) -> None:
         state = self._learning_store.load()
-        self._learning_signals = {
-            signal.signal_id: signal for signal in state.signals
-        }
+        self._learning_signals = {signal.signal_id: signal for signal in state.signals}
         self._learning_signal_intake_map = dict(state.signal_intake_map)
         for intake in state.generated_intakes:
             self._intakes[intake.intake_id] = intake
@@ -534,9 +494,7 @@ class ImprovementService:
             for intake in self._intakes.values()
             if intake.generated_from_signal_id is not None
         ]
-        signals = sorted(
-            self._learning_signals.values(), key=lambda signal: signal.signal_id
-        )
+        signals = sorted(self._learning_signals.values(), key=lambda signal: signal.signal_id)
         generated_intakes.sort(key=lambda intake: intake.intake_id)
         self._learning_store.save(
             LearningPersistenceState(

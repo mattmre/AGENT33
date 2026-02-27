@@ -44,6 +44,7 @@ class TraceEmitter:
     def emit_prompt(self, agent: str, messages: list[dict[str, str]]) -> str:
         """Record a prompt span."""
         import json
+
         span = Span(
             rollout_id=self._rollout_id,
             span_type="prompt",
@@ -56,6 +57,7 @@ class TraceEmitter:
     def emit_tool_call(self, agent: str, tool: str, params: dict[str, object]) -> str:
         """Record a tool call span."""
         import json
+
         span = Span(
             rollout_id=self._rollout_id,
             span_type="tool_call",
@@ -80,6 +82,7 @@ class TraceEmitter:
     def emit_reward(self, agent: str, score: float, reason: str = "") -> str:
         """Record a reward signal span."""
         import json
+
         span = Span(
             rollout_id=self._rollout_id,
             span_type="reward",

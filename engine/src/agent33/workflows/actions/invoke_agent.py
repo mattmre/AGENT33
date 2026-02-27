@@ -50,9 +50,7 @@ def get_agent(name: str) -> Any:
         if defn is not None:
             return defn
 
-    raise KeyError(
-        f"Agent '{name}' is not registered in the workflow agent registry"
-    )
+    raise KeyError(f"Agent '{name}' is not registered in the workflow agent registry")
 
 
 async def execute(

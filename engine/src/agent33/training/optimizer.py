@@ -48,7 +48,9 @@ class AgentOptimizer:
         if len(rollouts) < self._min_rollouts:
             logger.info(
                 "skipping optimization for %s: only %d rollouts (need %d)",
-                agent_name, len(rollouts), self._min_rollouts,
+                agent_name,
+                len(rollouts),
+                self._min_rollouts,
             )
             return current_prompt
 
@@ -78,7 +80,9 @@ class AgentOptimizer:
                 best_prompt = new_prompt
                 logger.info(
                     "new prompt v%d for %s (avg_reward=%.3f)",
-                    version, agent_name, avg_reward,
+                    version,
+                    agent_name,
+                    avg_reward,
                 )
 
         self._current_prompts[agent_name] = best_prompt

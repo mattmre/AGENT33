@@ -72,6 +72,7 @@ class ObservationCapture:
                 )
             except Exception:
                 import logging
+
                 logging.getLogger(__name__).warning(
                     "failed to store observation %s", obs.id, exc_info=True
                 )
@@ -88,12 +89,15 @@ class ObservationCapture:
                         "content": obs.content,
                         "metadata": obs.metadata,
                         "tags": obs.tags,
-                        "timestamp": obs.timestamp.isoformat()
-                    }
+                        "timestamp": obs.timestamp.isoformat(),
+                    },
                 )
             except Exception:
                 import logging
-                logging.getLogger(__name__).warning("failed to publish observation to NATS", exc_info=True)
+
+                logging.getLogger(__name__).warning(
+                    "failed to publish observation to NATS", exc_info=True
+                )
 
         return obs.id
 

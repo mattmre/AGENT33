@@ -117,9 +117,7 @@ class TestBuildSystemPrompt:
 
     def test_includes_ownership(self) -> None:
         d = _make_definition(
-            ownership=AgentOwnership(
-                owner="platform-team", escalation_target="orchestrator"
-            )
+            ownership=AgentOwnership(owner="platform-team", escalation_target="orchestrator")
         )
         prompt = _build_system_prompt(d)
         assert "# Ownership" in prompt
@@ -219,8 +217,7 @@ class TestBuildSystemPrompt:
         positions = [prompt.find(s) for s in sections]
         # All sections must be present
         assert all(p >= 0 for p in positions), (
-            f"Missing sections: "
-            f"{[s for s, p in zip(sections, positions, strict=True) if p < 0]}"
+            f"Missing sections: {[s for s, p in zip(sections, positions, strict=True) if p < 0]}"
         )
         assert positions == sorted(positions), "Sections should appear in order"
 
@@ -241,9 +238,7 @@ class TestBuildSystemPrompt:
 
     def test_governance_partial_fields(self) -> None:
         """Only scope set -- should still render the governance section."""
-        d = _make_definition(
-            governance=GovernanceConstraints(scope="read-only")
-        )
+        d = _make_definition(governance=GovernanceConstraints(scope="read-only"))
         prompt = _build_system_prompt(d)
         assert "# Governance Constraints" in prompt
         assert "read-only" in prompt
@@ -271,11 +266,7 @@ class TestBuildSystemPrompt:
 
     def test_governance_only_tool_policies(self) -> None:
         """Tool policies alone should render governance section."""
-        d = _make_definition(
-            governance=GovernanceConstraints(
-                tool_policies={"*": "ask"}
-            )
-        )
+        d = _make_definition(governance=GovernanceConstraints(tool_policies={"*": "ask"}))
         prompt = _build_system_prompt(d)
         assert "# Governance Constraints" in prompt
         assert "Tool policies:" in prompt

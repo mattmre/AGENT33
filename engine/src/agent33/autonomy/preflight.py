@@ -63,11 +63,14 @@ class PreflightChecker:
         """PF-01: Budget exists and has an ID."""
         if not budget.budget_id:
             return PreflightCheck(
-                check_id="PF-01", name="Budget exists",
-                status=PreflightStatus.FAIL, message="Budget has no ID",
+                check_id="PF-01",
+                name="Budget exists",
+                status=PreflightStatus.FAIL,
+                message="Budget has no ID",
             )
         return PreflightCheck(
-            check_id="PF-01", name="Budget exists",
+            check_id="PF-01",
+            name="Budget exists",
             status=PreflightStatus.PASS,
         )
 
@@ -75,12 +78,14 @@ class PreflightChecker:
         """PF-02: Budget is in a valid state for execution."""
         if budget.state != BudgetState.ACTIVE:
             return PreflightCheck(
-                check_id="PF-02", name="Budget valid",
+                check_id="PF-02",
+                name="Budget valid",
                 status=PreflightStatus.FAIL,
                 message=f"Budget state is {budget.state.value}, must be active",
             )
         return PreflightCheck(
-            check_id="PF-02", name="Budget valid",
+            check_id="PF-02",
+            name="Budget valid",
             status=PreflightStatus.PASS,
         )
 
@@ -88,12 +93,14 @@ class PreflightChecker:
         """PF-03: Budget has not expired."""
         if budget.expires_at is not None and budget.expires_at < datetime.now(UTC):
             return PreflightCheck(
-                check_id="PF-03", name="Budget not expired",
+                check_id="PF-03",
+                name="Budget not expired",
                 status=PreflightStatus.FAIL,
                 message="Budget has expired",
             )
         return PreflightCheck(
-            check_id="PF-03", name="Budget not expired",
+            check_id="PF-03",
+            name="Budget not expired",
             status=PreflightStatus.PASS,
         )
 
@@ -101,12 +108,14 @@ class PreflightChecker:
         """PF-04: In-scope and out-of-scope are defined."""
         if not budget.in_scope:
             return PreflightCheck(
-                check_id="PF-04", name="Scope defined",
+                check_id="PF-04",
+                name="Scope defined",
                 status=PreflightStatus.FAIL,
                 message="No in_scope items defined",
             )
         return PreflightCheck(
-            check_id="PF-04", name="Scope defined",
+            check_id="PF-04",
+            name="Scope defined",
             status=PreflightStatus.PASS,
         )
 
@@ -114,12 +123,14 @@ class PreflightChecker:
         """PF-05: File read/write patterns are defined."""
         if not budget.files.read and not budget.files.write:
             return PreflightCheck(
-                check_id="PF-05", name="Files scoped",
+                check_id="PF-05",
+                name="Files scoped",
                 status=PreflightStatus.WARN,
                 message="No file read/write patterns defined",
             )
         return PreflightCheck(
-            check_id="PF-05", name="Files scoped",
+            check_id="PF-05",
+            name="Files scoped",
             status=PreflightStatus.PASS,
         )
 
@@ -127,12 +138,14 @@ class PreflightChecker:
         """PF-06: Command allowlist is defined."""
         if not budget.allowed_commands:
             return PreflightCheck(
-                check_id="PF-06", name="Commands scoped",
+                check_id="PF-06",
+                name="Commands scoped",
                 status=PreflightStatus.WARN,
                 message="No command allowlist defined",
             )
         return PreflightCheck(
-            check_id="PF-06", name="Commands scoped",
+            check_id="PF-06",
+            name="Commands scoped",
             status=PreflightStatus.PASS,
         )
 
@@ -140,12 +153,14 @@ class PreflightChecker:
         """PF-07: Network permissions are explicit."""
         if budget.network.enabled and not budget.network.allowed_domains:
             return PreflightCheck(
-                check_id="PF-07", name="Network scoped",
+                check_id="PF-07",
+                name="Network scoped",
                 status=PreflightStatus.WARN,
                 message="Network enabled but no domains specified",
             )
         return PreflightCheck(
-            check_id="PF-07", name="Network scoped",
+            check_id="PF-07",
+            name="Network scoped",
             status=PreflightStatus.PASS,
         )
 
@@ -154,12 +169,14 @@ class PreflightChecker:
         limits = budget.limits
         if limits.max_iterations <= 0 or limits.max_duration_minutes <= 0:
             return PreflightCheck(
-                check_id="PF-08", name="Limits set",
+                check_id="PF-08",
+                name="Limits set",
                 status=PreflightStatus.WARN,
                 message="Iteration or duration limit not set",
             )
         return PreflightCheck(
-            check_id="PF-08", name="Limits set",
+            check_id="PF-08",
+            name="Limits set",
             status=PreflightStatus.PASS,
         )
 
@@ -167,12 +184,14 @@ class PreflightChecker:
         """PF-09: Stop conditions are defined."""
         if not budget.stop_conditions:
             return PreflightCheck(
-                check_id="PF-09", name="Stop conditions",
+                check_id="PF-09",
+                name="Stop conditions",
                 status=PreflightStatus.WARN,
                 message="No stop conditions defined",
             )
         return PreflightCheck(
-            check_id="PF-09", name="Stop conditions",
+            check_id="PF-09",
+            name="Stop conditions",
             status=PreflightStatus.PASS,
         )
 
@@ -180,11 +199,13 @@ class PreflightChecker:
         """PF-10: Escalation path is defined."""
         if not budget.escalation_triggers and not budget.default_escalation_target:
             return PreflightCheck(
-                check_id="PF-10", name="Escalation path",
+                check_id="PF-10",
+                name="Escalation path",
                 status=PreflightStatus.WARN,
                 message="No escalation triggers or default target",
             )
         return PreflightCheck(
-            check_id="PF-10", name="Escalation path",
+            check_id="PF-10",
+            name="Escalation path",
             status=PreflightStatus.PASS,
         )

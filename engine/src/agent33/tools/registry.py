@@ -37,7 +37,8 @@ def _yaml_to_entry(data: dict[str, Any], source: str = "") -> ToolRegistryEntry:
     except ValueError:
         logger.warning(
             "Invalid status value '%s' in %s, defaulting to 'active'.",
-            status_raw, source or "<unknown>",
+            status_raw,
+            source or "<unknown>",
         )
         status = ToolStatus.ACTIVE
 
@@ -99,7 +100,9 @@ class ToolRegistry:
                 logger.exception("Failed to load tool entry point: %s", ep.name)
         return count
 
-    async def discover_mcp_stdio_server(self, command: str, args: list[str], env: dict[str, str] | None = None) -> int:
+    async def discover_mcp_stdio_server(
+        self, command: str, args: list[str], env: dict[str, str] | None = None
+    ) -> int:
         """Connect to an MCP STDIO server and register its tools dynamically."""
         try:
             from agent33.tools.mcp_client import MCPClientManager
@@ -120,7 +123,9 @@ class ToolRegistry:
             logger.info("Discovered %d tools from MCP STDIO server: %s", count, command)
             return count
         except Exception:
-            logger.error("Failed to discover tools from MCP STDIO server: %s", command, exc_info=True)
+            logger.error(
+                "Failed to discover tools from MCP STDIO server: %s", command, exc_info=True
+            )
             return 0
 
     async def discover_mcp_sse_server(self, url: str) -> int:
@@ -202,9 +207,7 @@ class ToolRegistry:
         if schema:
             result = validate_params(params, schema)
             if not result.valid:
-                return ToolResult.fail(
-                    f"Parameter validation failed: {'; '.join(result.errors)}"
-                )
+                return ToolResult.fail(f"Parameter validation failed: {'; '.join(result.errors)}")
 
         return await tool.execute(params, context)
 

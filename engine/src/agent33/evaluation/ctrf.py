@@ -35,46 +35,37 @@ class CTRFGenerator:
         total_skipped = 0
 
         for result in run.results:
-            status = (
-                "passed"
-                if result.pass_rate >= self._pass_threshold
-                else "failed"
-            )
+            status = "passed" if result.pass_rate >= self._pass_threshold else "failed"
             if status == "passed":
                 total_passed += 1
             else:
                 total_failed += 1
 
             skills_label = " +skills" if result.skills_enabled else " -skills"
-            tests.append({
-                "name": (
-                    f"{result.task_id} [{result.agent}/{result.model}]"
-                    + skills_label
-                ),
-                "status": status,
-                "duration": result.total_duration_ms,
-                "extra": {
-                    "trials": len(result.trials),
-                    "pass_rate": result.pass_rate,
-                    "variance": result.variance,
-                    "skills_enabled": result.skills_enabled,
-                    "agent": result.agent,
-                    "model": result.model,
-                    "tokens_used": result.total_tokens,
-                    "trial_results": [t.score for t in result.trials],
-                    "skillsbench": {
-                        "mode": "with_skills" if result.skills_enabled else "without_skills",
-                        "std_dev": result.std_dev,
+            tests.append(
+                {
+                    "name": (f"{result.task_id} [{result.agent}/{result.model}]" + skills_label),
+                    "status": status,
+                    "duration": result.total_duration_ms,
+                    "extra": {
+                        "trials": len(result.trials),
+                        "pass_rate": result.pass_rate,
+                        "variance": result.variance,
+                        "skills_enabled": result.skills_enabled,
+                        "agent": result.agent,
+                        "model": result.model,
+                        "tokens_used": result.total_tokens,
+                        "trial_results": [t.score for t in result.trials],
+                        "skillsbench": {
+                            "mode": "with_skills" if result.skills_enabled else "without_skills",
+                            "std_dev": result.std_dev,
+                        },
                     },
-                },
-            })
+                }
+            )
 
         start_ms = int(run.started_at.timestamp() * 1000)
-        stop_ms = (
-            int(run.completed_at.timestamp() * 1000)
-            if run.completed_at
-            else start_ms
-        )
+        stop_ms = int(run.completed_at.timestamp() * 1000) if run.completed_at else start_ms
 
         return {
             "results": {

@@ -78,9 +78,7 @@ async def execute(
     except TimeoutError as exc:
         proc.kill()
         await proc.communicate()
-        raise TimeoutError(
-            f"Command timed out after {timeout_seconds}s: {command}"
-        ) from exc
+        raise TimeoutError(f"Command timed out after {timeout_seconds}s: {command}") from exc
 
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -94,8 +92,6 @@ async def execute(
     )
 
     if return_code != 0:
-        raise RuntimeError(
-            f"Command failed with code {return_code}: {stderr or stdout}"
-        )
+        raise RuntimeError(f"Command failed with code {return_code}: {stderr or stdout}")
 
     return {"stdout": stdout, "stderr": stderr, "return_code": return_code}

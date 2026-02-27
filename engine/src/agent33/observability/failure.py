@@ -138,9 +138,7 @@ class FailureRecord(BaseModel):
     trace_id: str = ""
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    classification: FailureClassification = Field(
-        default_factory=FailureClassification
-    )
+    classification: FailureClassification = Field(default_factory=FailureClassification)
     message: str = ""
     stack_trace: str = ""
     context: dict[str, str] = Field(default_factory=dict)

@@ -74,9 +74,7 @@ def test_outcomes_scope_enforcement(
     assert "outcomes:read" in read_response.json()["detail"]
 
 
-def test_events_are_tenant_scoped(
-    writer_client: TestClient, tenant_b_writer: TestClient
-) -> None:
+def test_events_are_tenant_scoped(writer_client: TestClient, tenant_b_writer: TestClient) -> None:
     writer_client.post(
         "/v1/outcomes/events",
         json={

@@ -78,8 +78,7 @@ class ReaderTool:
             for allowed in context.domain_allowlist
         ):
             return ToolResult.fail(
-                f"Domain '{domain}' is not in the allowlist: "
-                f"{context.domain_allowlist}"
+                f"Domain '{domain}' is not in the allowlist: {context.domain_allowlist}"
             )
 
         boundary_executor = build_connector_boundary_executor(
@@ -193,8 +192,7 @@ class ReaderTool:
 
         if len(resp.content) > _MAX_RESPONSE_BYTES:
             return ToolResult.fail(
-                f"Response too large ({len(resp.content)} bytes, "
-                f"limit {_MAX_RESPONSE_BYTES})"
+                f"Response too large ({len(resp.content)} bytes, limit {_MAX_RESPONSE_BYTES})"
             )
         if 300 <= resp.status_code < 400:
             return ToolResult.fail("Redirect responses are blocked by policy")

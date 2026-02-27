@@ -29,9 +29,7 @@ _LEGACY_PBKDF2_SALT = b"agent33-salt"
 
 
 def _hash_password(password: str, salt: bytes) -> str:
-    return hashlib.pbkdf2_hmac(
-        "sha256", password.encode(), salt, 100_000
-    ).hex()
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000).hex()
 
 
 def _get_user_salt(user: dict[str, Any]) -> bytes:
@@ -68,6 +66,7 @@ def _bootstrap_default_user() -> None:
             "scopes": _parse_scopes(settings.auth_bootstrap_admin_scopes, ensure_admin=True),
         },
     )
+
 
 # ---------------------------------------------------------------------------
 # Request / response models

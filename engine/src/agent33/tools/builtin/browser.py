@@ -72,11 +72,20 @@ async def _cleanup_stale_sessions() -> None:
         await _close_session(sid)
 
 
-_VALID_ACTIONS = frozenset({
-    "navigate", "screenshot", "extract_text",
-    "click", "type_text", "select", "scroll", "wait_for", "get_elements",
-    "close_session",
-})
+_VALID_ACTIONS = frozenset(
+    {
+        "navigate",
+        "screenshot",
+        "extract_text",
+        "click",
+        "type_text",
+        "select",
+        "scroll",
+        "wait_for",
+        "get_elements",
+        "close_session",
+    }
+)
 
 
 class BrowserTool:

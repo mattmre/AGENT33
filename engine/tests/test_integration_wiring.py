@@ -87,9 +87,7 @@ class TestSecurityMiddleware:
         from agent33.security.middleware import AuthMiddleware
 
         app, _, _ = patched_app
-        middleware_classes = [
-            getattr(m, "cls", None) for m in app.user_middleware
-        ]
+        middleware_classes = [getattr(m, "cls", None) for m in app.user_middleware]
         assert AuthMiddleware in middleware_classes
 
     def test_unauthenticated_request_returns_401(self, patched_app):
@@ -103,9 +101,7 @@ class TestSecurityMiddleware:
         from starlette.middleware.cors import CORSMiddleware
 
         app, _, _ = patched_app
-        middleware_classes = [
-            getattr(m, "cls", None) for m in app.user_middleware
-        ]
+        middleware_classes = [getattr(m, "cls", None) for m in app.user_middleware]
         assert CORSMiddleware in middleware_classes
 
     def test_preflight_options_not_rejected_by_auth(self, patched_app):
@@ -279,7 +275,8 @@ class TestAgentInvokeSubsystemPassthrough:
         )
 
         with mock_patch(
-            "agent33.api.routes.agents.AgentRuntime", autospec=True,
+            "agent33.api.routes.agents.AgentRuntime",
+            autospec=True,
         ) as mock_runtime_cls:
             mock_instance = MagicMock()
             mock_instance.invoke = AsyncMock(return_value=mock_result)
@@ -336,16 +333,15 @@ class TestAgentInvokeSubsystemPassthrough:
         skill_ok = type("MatchedSkill", (), {"name": "skill-b"})()
         skill_other = type("MatchedSkill", (), {"name": "not-allowed"})()
         mock_matcher = MagicMock()
-        mock_matcher.match = AsyncMock(return_value=MagicMock(
-            skills=[skill_ok, skill_other]
-        ))
+        mock_matcher.match = AsyncMock(return_value=MagicMock(skills=[skill_ok, skill_other]))
         app.state.skill_matcher = mock_matcher
 
         original = settings.skillsbench_skill_matcher_enabled
         settings.skillsbench_skill_matcher_enabled = True
         try:
             with mock_patch(
-                "agent33.api.routes.agents.AgentRuntime", autospec=True,
+                "agent33.api.routes.agents.AgentRuntime",
+                autospec=True,
             ) as mock_runtime_cls:
                 mock_instance = MagicMock()
                 mock_instance.invoke = AsyncMock(return_value=mock_result)

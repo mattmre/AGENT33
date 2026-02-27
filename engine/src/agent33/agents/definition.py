@@ -181,9 +181,7 @@ class AgentOwnership(BaseModel):
 class AgentDefinition(BaseModel):
     """Full agent definition matching agent.schema.json."""
 
-    name: str = Field(
-        ..., min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9-]*$"
-    )
+    name: str = Field(..., min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9-]*$")
     version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
     role: AgentRole
     description: str = Field(default="", max_length=500)

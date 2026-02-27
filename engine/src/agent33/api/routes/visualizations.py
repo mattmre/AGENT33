@@ -53,9 +53,7 @@ async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
     if execution_history:
         # Find most recent execution for this workflow
         recent_executions = [
-            entry
-            for entry in execution_history
-            if entry["workflow_name"] == workflow_id
+            entry for entry in execution_history if entry["workflow_name"] == workflow_id
         ]
         if recent_executions:
             # Get the most recent one

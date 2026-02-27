@@ -82,9 +82,7 @@ class ExpressionEvaluator:
         template = self._env.from_string(template_str)
         return template.render(**context)
 
-    def resolve_inputs(
-        self, inputs: dict[str, Any], context: dict[str, Any]
-    ) -> dict[str, Any]:
+    def resolve_inputs(self, inputs: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         """Resolve a mapping of input values, evaluating any string expressions.
 
         Args:
@@ -102,8 +100,7 @@ class ExpressionEvaluator:
                 resolved[key] = self.resolve_inputs(value, context)
             elif isinstance(value, list):
                 resolved[key] = [
-                    self.evaluate(v, context) if isinstance(v, str) else v
-                    for v in value
+                    self.evaluate(v, context) if isinstance(v, str) else v for v in value
                 ]
             else:
                 resolved[key] = value

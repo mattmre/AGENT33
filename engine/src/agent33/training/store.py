@@ -112,9 +112,7 @@ class TrainingStore:
                 )
                 session.add(span_record)
 
-    async def get_rollouts(
-        self, agent_name: str, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    async def get_rollouts(self, agent_name: str, limit: int = 50) -> list[dict[str, Any]]:
         """Query rollouts for an agent."""
         sql = text(
             "SELECT rollout_id, agent_name, total_reward, span_count, created_at "
@@ -135,9 +133,7 @@ class TrainingStore:
             for r in rows
         ]
 
-    async def get_top_rollouts(
-        self, agent_name: str, top_k: int = 5
-    ) -> list[dict[str, Any]]:
+    async def get_top_rollouts(self, agent_name: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Get highest-reward rollouts for learning."""
         sql = text(
             "SELECT rollout_id, agent_name, total_reward, span_count, created_at "

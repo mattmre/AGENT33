@@ -70,8 +70,7 @@ class FileOpsTool:
         # Block symlinks that escape the allowlist
         if not self._path_allowed(resolved, context):
             return ToolResult.fail(
-                f"Path '{resolved}' is outside the allowed directories: "
-                f"{context.path_allowlist}"
+                f"Path '{resolved}' is outside the allowed directories: {context.path_allowlist}"
             )
 
         # If the target is a symlink, resolve and re-check

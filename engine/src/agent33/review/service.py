@@ -160,9 +160,7 @@ class ReviewService:
         record = self.get(review_id)
 
         if record.state != SignoffState.L1_REVIEW:
-            raise ReviewStateError(
-                f"Cannot submit L1 review in state {record.state.value}"
-            )
+            raise ReviewStateError(f"Cannot submit L1 review in state {record.state.value}")
 
         record.l1_review.decision = decision
         record.l1_review.completed_at = datetime.now(UTC)
@@ -185,9 +183,7 @@ class ReviewService:
             record.risk_assessment.l2_required = True
             self._transition(record, SignoffState.L1_APPROVED)
 
-        logger.info(
-            "l1_submitted id=%s decision=%s", review_id, decision.value
-        )
+        logger.info("l1_submitted id=%s decision=%s", review_id, decision.value)
         return record
 
     def assign_l2(self, review_id: str) -> ReviewRecord:
@@ -220,9 +216,7 @@ class ReviewService:
         record = self.get(review_id)
 
         if record.state != SignoffState.L2_REVIEW:
-            raise ReviewStateError(
-                f"Cannot submit L2 review in state {record.state.value}"
-            )
+            raise ReviewStateError(f"Cannot submit L2 review in state {record.state.value}")
 
         record.l2_review.decision = decision
         record.l2_review.completed_at = datetime.now(UTC)
@@ -241,9 +235,7 @@ class ReviewService:
             # Escalation keeps it in L2 but flags for human
             self._transition(record, SignoffState.L2_CHANGES_REQUESTED)
 
-        logger.info(
-            "l2_submitted id=%s decision=%s", review_id, decision.value
-        )
+        logger.info("l2_submitted id=%s decision=%s", review_id, decision.value)
         return record
 
     def approve(
@@ -256,9 +248,7 @@ class ReviewService:
         record = self.get(review_id)
 
         if record.state != SignoffState.APPROVED:
-            raise ReviewStateError(
-                f"Cannot approve review in state {record.state.value}"
-            )
+            raise ReviewStateError(f"Cannot approve review in state {record.state.value}")
 
         # Determine approval type
         if record.l2_review.decision is not None:

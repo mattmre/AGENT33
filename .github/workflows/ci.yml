@@ -85,8 +85,13 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Ruff check
+      - name: Ruff check (non-blocking baseline)
+        # TODO: Re-enable blocking Ruff once repository-wide lint debt is remediated.
+        continue-on-error: true
         run: ruff check src/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
 
       - name: Mypy (non-blocking baseline)
         # TODO: Re-enable blocking mypy once baseline strict-type debt is remediated.

@@ -57,15 +57,9 @@ def _build_improvement_service() -> ImprovementService:
                 migrate_file_learning_state_to_db(
                     file_path=file_path,
                     db_path=db_path,
-                    on_file_corruption=(
-                        settings.improvement_learning_file_corruption_behavior
-                    ),
+                    on_file_corruption=(settings.improvement_learning_file_corruption_behavior),
                     backup_path=(
-                        str(
-                            Path(
-                                settings.improvement_learning_persistence_migration_backup_path
-                            )
-                        )
+                        str(Path(settings.improvement_learning_persistence_migration_backup_path))
                         if settings.improvement_learning_persistence_migration_backup_on_start
                         else None
                     ),
@@ -234,9 +228,7 @@ def list_intakes(
         try:
             intake_status = IntakeStatus(status)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid status: {status}"
-            ) from None
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
     intakes = _service.list_intakes(
         status=intake_status, research_type=research_type, tenant_id=tenant_id
     )
@@ -253,16 +245,12 @@ def get_intake(intake_id: str) -> dict[str, Any]:
 
 
 @router.post("/intakes/{intake_id}/transition")
-def transition_intake(
-    intake_id: str, req: TransitionIntakeRequest
-) -> dict[str, Any]:
+def transition_intake(intake_id: str, req: TransitionIntakeRequest) -> dict[str, Any]:
     """Transition an intake through its lifecycle."""
     try:
         new_status = IntakeStatus(req.new_status)
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid status: {req.new_status}"
-        ) from None
+        raise HTTPException(status_code=400, detail=f"Invalid status: {req.new_status}") from None
     try:
         result = _service.transition_intake(
             intake_id,
@@ -334,9 +322,7 @@ def get_lesson(lesson_id: str) -> dict[str, Any]:
 
 
 @router.post("/lessons/{lesson_id}/complete-action")
-def complete_lesson_action(
-    lesson_id: str, req: CompleteLessonActionRequest
-) -> dict[str, Any]:
+def complete_lesson_action(lesson_id: str, req: CompleteLessonActionRequest) -> dict[str, Any]:
     """Mark a lesson action item as completed."""
     try:
         result = _service.complete_lesson_action(lesson_id, req.action_index)
@@ -346,9 +332,7 @@ def complete_lesson_action(
 
 
 @router.post("/lessons/{lesson_id}/verify")
-def verify_lesson(
-    lesson_id: str, req: VerifyLessonRequest
-) -> dict[str, Any]:
+def verify_lesson(lesson_id: str, req: VerifyLessonRequest) -> dict[str, Any]:
     """Mark a lesson as implemented and verified."""
     try:
         result = _service.verify_lesson(lesson_id, evidence=req.evidence)
@@ -368,9 +352,7 @@ def create_checklist(req: CreateChecklistRequest) -> dict[str, Any]:
     try:
         period = ChecklistPeriod(req.period)
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid period: {req.period}"
-        ) from None
+        raise HTTPException(status_code=400, detail=f"Invalid period: {req.period}") from None
     checklist = _service.create_checklist(period, req.reference)
     return checklist.model_dump(mode="json")
 
@@ -383,9 +365,7 @@ def list_checklists(period: str | None = None) -> list[dict[str, Any]]:
         try:
             p = ChecklistPeriod(period)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid period: {period}"
-            ) from None
+            raise HTTPException(status_code=400, detail=f"Invalid period: {period}") from None
     return [c.model_dump(mode="json") for c in _service.list_checklists(p)]
 
 
@@ -399,14 +379,10 @@ def get_checklist(checklist_id: str) -> dict[str, Any]:
 
 
 @router.post("/checklists/{checklist_id}/complete")
-def complete_checklist_item(
-    checklist_id: str, req: CompleteCheckItemRequest
-) -> dict[str, Any]:
+def complete_checklist_item(checklist_id: str, req: CompleteCheckItemRequest) -> dict[str, Any]:
     """Complete a checklist item."""
     try:
-        result = _service.complete_checklist_item(
-            checklist_id, req.check_id, req.notes
-        )
+        result = _service.complete_checklist_item(checklist_id, req.check_id, req.notes)
         return result.model_dump(mode="json")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -439,19 +415,14 @@ def get_latest_metrics() -> dict[str, Any]:
 @router.get("/metrics/history")
 def get_metrics_history(limit: int = 10) -> list[dict[str, Any]]:
     """Get metrics snapshot history."""
-    return [
-        s.model_dump(mode="json")
-        for s in _service.list_metrics_snapshots(limit)
-    ]
+    return [s.model_dump(mode="json") for s in _service.list_metrics_snapshots(limit)]
 
 
 @router.post("/metrics/snapshot")
 def save_metrics_snapshot(req: SaveSnapshotRequest) -> dict[str, Any]:
     """Save a new metrics snapshot."""
     try:
-        metrics = [
-            ImprovementMetric(**m) for m in req.metrics
-        ] if req.metrics else []
+        metrics = [ImprovementMetric(**m) for m in req.metrics] if req.metrics else []
         snapshot = MetricsSnapshot(period=req.period, metrics=metrics)
         result = _service.save_metrics_snapshot(snapshot)
         return result.model_dump(mode="json")
@@ -496,10 +467,7 @@ def record_refresh(req: RecordRefreshRequest) -> dict[str, Any]:
 @router.get("/refreshes")
 def list_refreshes(scope: str | None = None) -> list[dict[str, Any]]:
     """List roadmap refresh events."""
-    return [
-        r.model_dump(mode="json")
-        for r in _service.list_refreshes(scope=scope)
-    ]
+    return [r.model_dump(mode="json") for r in _service.list_refreshes(scope=scope)]
 
 
 @router.get("/refreshes/{refresh_id}")
@@ -512,14 +480,10 @@ def get_refresh(refresh_id: str) -> dict[str, Any]:
 
 
 @router.post("/refreshes/{refresh_id}/complete")
-def complete_refresh(
-    refresh_id: str, req: CompleteRefreshRequest
-) -> dict[str, Any]:
+def complete_refresh(refresh_id: str, req: CompleteRefreshRequest) -> dict[str, Any]:
     """Mark a roadmap refresh as completed."""
     try:
-        result = _service.complete_refresh(
-            refresh_id, outcome=req.outcome, changes=req.changes
-        )
+        result = _service.complete_refresh(refresh_id, outcome=req.outcome, changes=req.changes)
         return result.model_dump(mode="json")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -576,9 +540,7 @@ def list_learning_signals(
         try:
             parsed_severity = LearningSignalSeverity(severity)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid severity: {severity}"
-            ) from None
+            raise HTTPException(status_code=400, detail=f"Invalid severity: {severity}") from None
 
     return [
         signal.model_dump(mode="json")
@@ -601,9 +563,7 @@ def get_learning_summary(
     """Get learning summary and optionally generate intake records."""
     _ensure_learning_enabled()
     effective_limit = (
-        settings.improvement_learning_summary_default_limit
-        if limit is None
-        else limit
+        settings.improvement_learning_summary_default_limit if limit is None else limit
     )
     summary = _service.summarize_learning_signals(
         limit=effective_limit, tenant_id=tenant_id, window_days=window_days

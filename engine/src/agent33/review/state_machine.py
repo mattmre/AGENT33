@@ -15,19 +15,25 @@ from agent33.review.models import SignoffState
 _VALID_TRANSITIONS: dict[SignoffState, frozenset[SignoffState]] = {
     SignoffState.DRAFT: frozenset({SignoffState.READY}),
     SignoffState.READY: frozenset({SignoffState.L1_REVIEW}),
-    SignoffState.L1_REVIEW: frozenset({
-        SignoffState.L1_APPROVED,
-        SignoffState.L1_CHANGES_REQUESTED,
-    }),
+    SignoffState.L1_REVIEW: frozenset(
+        {
+            SignoffState.L1_APPROVED,
+            SignoffState.L1_CHANGES_REQUESTED,
+        }
+    ),
     SignoffState.L1_CHANGES_REQUESTED: frozenset({SignoffState.DRAFT}),
-    SignoffState.L1_APPROVED: frozenset({
-        SignoffState.L2_REVIEW,
-        SignoffState.APPROVED,
-    }),
-    SignoffState.L2_REVIEW: frozenset({
-        SignoffState.L2_APPROVED,
-        SignoffState.L2_CHANGES_REQUESTED,
-    }),
+    SignoffState.L1_APPROVED: frozenset(
+        {
+            SignoffState.L2_REVIEW,
+            SignoffState.APPROVED,
+        }
+    ),
+    SignoffState.L2_REVIEW: frozenset(
+        {
+            SignoffState.L2_APPROVED,
+            SignoffState.L2_CHANGES_REQUESTED,
+        }
+    ),
     SignoffState.L2_CHANGES_REQUESTED: frozenset({SignoffState.DRAFT}),
     SignoffState.L2_APPROVED: frozenset({SignoffState.APPROVED}),
     SignoffState.APPROVED: frozenset({SignoffState.MERGED}),
@@ -41,9 +47,7 @@ class InvalidTransitionError(Exception):
     def __init__(self, from_state: SignoffState, to_state: SignoffState) -> None:
         self.from_state = from_state
         self.to_state = to_state
-        super().__init__(
-            f"Invalid transition: {from_state.value} -> {to_state.value}"
-        )
+        super().__init__(f"Invalid transition: {from_state.value} -> {to_state.value}")
 
 
 class SignoffStateMachine:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import pytest
@@ -191,6 +192,46 @@ def test_execute_request_transitions_state(writer_client: TestClient) -> None:
     execute_response = writer_client.post(f"/v1/multimodal/requests/{request_id}/execute")
     assert execute_response.status_code == 200
     assert execute_response.json()["state"] == "completed"
+
+
+def test_execute_request_route_uses_adapter_run_async(writer_client: TestClient) -> None:
+    create_response = writer_client.post(
+        "/v1/multimodal/requests",
+        json={"modality": "text_to_speech", "input_text": "run-async-only", "execute_now": False},
+    )
+    request_id = create_response.json()["id"]
+
+    class _RunAsyncOnlyAdapter:
+        def __init__(self) -> None:
+            self.run_calls = 0
+            self.run_async_calls = 0
+
+        def run(self, _request: object) -> dict[str, object]:
+            self.run_calls += 1
+            raise AssertionError("execute_request must not call sync adapter.run()")
+
+        async def run_async(self, _request: object) -> dict[str, object]:
+            self.run_async_calls += 1
+            return {
+                "output_text": "",
+                "output_artifact_id": "artifact-run-async-only",
+                "output_data": {
+                    "modality": ModalityType.TEXT_TO_SPEECH.value,
+                    "test": "run_async",
+                },
+            }
+
+    original_adapter = _service._adapters[ModalityType.TEXT_TO_SPEECH]
+    adapter = _RunAsyncOnlyAdapter()
+    _service._adapters[ModalityType.TEXT_TO_SPEECH] = adapter
+    try:
+        execute_response = writer_client.post(f"/v1/multimodal/requests/{request_id}/execute")
+        assert execute_response.status_code == 200
+        assert execute_response.json()["state"] == "completed"
+        assert adapter.run_calls == 0
+        assert adapter.run_async_calls == 1
+    finally:
+        _service._adapters[ModalityType.TEXT_TO_SPEECH] = original_adapter
 
 
 def test_execute_request_requires_write_scope(

@@ -309,9 +309,7 @@ class TestRegistryValidatedExecute:
         registry = ToolRegistry()
         registry.register(_SchemaToolGreeter())
         ctx = ToolContext()
-        result = await registry.validated_execute(
-            "greeter", {"name": "Alice"}, ctx
-        )
+        result = await registry.validated_execute("greeter", {"name": "Alice"}, ctx)
         assert result.success
         assert "Hello, Alice!" in result.output
 
@@ -341,9 +339,7 @@ class TestRegistryValidatedExecute:
         registry = ToolRegistry()
         registry.register(_SchemaToolGreeter())
         ctx = ToolContext()
-        result = await registry.validated_execute(
-            "greeter", {"name": "Alice", "times": 0}, ctx
-        )
+        result = await registry.validated_execute("greeter", {"name": "Alice", "times": 0}, ctx)
         assert not result.success
 
     @pytest.mark.asyncio
@@ -360,9 +356,7 @@ class TestRegistryValidatedExecute:
         registry = ToolRegistry()
         registry.register(_PlainTool())
         ctx = ToolContext()
-        result = await registry.validated_execute(
-            "plain", {"value": "anything"}, ctx
-        )
+        result = await registry.validated_execute("plain", {"value": "anything"}, ctx)
         assert result.success
         assert "plain: anything" in result.output
 

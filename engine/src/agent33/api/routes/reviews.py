@@ -97,9 +97,7 @@ def _get_tenant_id(request: Request) -> str:
 
 
 @router.post("/", status_code=201, dependencies=[require_scope("workflows:write")])
-async def create_review(
-    body: CreateReviewRequest, request: Request
-) -> dict[str, Any]:
+async def create_review(body: CreateReviewRequest, request: Request) -> dict[str, Any]:
     """Create a new review record in DRAFT state."""
     tenant_id = _get_tenant_id(request)
     record = _service.create(
@@ -149,9 +147,7 @@ async def delete_review(review_id: str) -> dict[str, str]:
     return {"deleted": review_id}
 
 
-@router.post(
-    "/{review_id}/assess", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/assess", dependencies=[require_scope("workflows:write")])
 async def assess_risk(review_id: str, body: AssessRiskRequest) -> dict[str, Any]:
     """Run risk assessment on a review."""
     try:
@@ -167,9 +163,7 @@ async def assess_risk(review_id: str, body: AssessRiskRequest) -> dict[str, Any]
     }
 
 
-@router.post(
-    "/{review_id}/ready", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/ready", dependencies=[require_scope("workflows:write")])
 async def mark_ready(review_id: str) -> dict[str, Any]:
     """Move review from DRAFT to READY."""
     try:
@@ -181,9 +175,7 @@ async def mark_ready(review_id: str) -> dict[str, Any]:
     return {"id": record.id, "state": record.state.value}
 
 
-@router.post(
-    "/{review_id}/assign-l1", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/assign-l1", dependencies=[require_scope("workflows:write")])
 async def assign_l1(review_id: str) -> dict[str, Any]:
     """Assign L1 reviewer and move to L1_REVIEW."""
     try:
@@ -200,9 +192,7 @@ async def assign_l1(review_id: str) -> dict[str, Any]:
     }
 
 
-@router.post(
-    "/{review_id}/l1", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/l1", dependencies=[require_scope("workflows:write")])
 async def submit_l1(review_id: str, body: SubmitL1Request) -> dict[str, Any]:
     """Submit L1 review decision."""
     try:
@@ -224,9 +214,7 @@ async def submit_l1(review_id: str, body: SubmitL1Request) -> dict[str, Any]:
     }
 
 
-@router.post(
-    "/{review_id}/assign-l2", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/assign-l2", dependencies=[require_scope("workflows:write")])
 async def assign_l2(review_id: str) -> dict[str, Any]:
     """Assign L2 reviewer and move to L2_REVIEW."""
     try:
@@ -243,9 +231,7 @@ async def assign_l2(review_id: str) -> dict[str, Any]:
     }
 
 
-@router.post(
-    "/{review_id}/l2", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/l2", dependencies=[require_scope("workflows:write")])
 async def submit_l2(review_id: str, body: SubmitL2Request) -> dict[str, Any]:
     """Submit L2 review decision."""
     try:
@@ -267,12 +253,8 @@ async def submit_l2(review_id: str, body: SubmitL2Request) -> dict[str, Any]:
     }
 
 
-@router.post(
-    "/{review_id}/approve", dependencies=[require_scope("workflows:write")]
-)
-async def approve_review(
-    review_id: str, body: ApproveRequest
-) -> dict[str, Any]:
+@router.post("/{review_id}/approve", dependencies=[require_scope("workflows:write")])
+async def approve_review(review_id: str, body: ApproveRequest) -> dict[str, Any]:
     """Record final signoff on an approved review."""
     try:
         record = _service.approve(
@@ -292,9 +274,7 @@ async def approve_review(
     }
 
 
-@router.post(
-    "/{review_id}/merge", dependencies=[require_scope("workflows:write")]
-)
+@router.post("/{review_id}/merge", dependencies=[require_scope("workflows:write")])
 async def merge_review(review_id: str) -> dict[str, Any]:
     """Mark a review as merged (final state)."""
     try:

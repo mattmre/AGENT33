@@ -57,8 +57,7 @@ class WebFetchTool:
             for allowed in context.domain_allowlist
         ):
             return ToolResult.fail(
-                f"Domain '{domain}' is not in the allowlist: "
-                f"{context.domain_allowlist}"
+                f"Domain '{domain}' is not in the allowlist: {context.domain_allowlist}"
             )
 
         method: str = params.get("method", "GET").upper()
@@ -68,6 +67,7 @@ class WebFetchTool:
         headers: dict[str, str] = params.get("headers", {})
         body: str | None = params.get("body")
         timeout: int = params.get("timeout", _DEFAULT_TIMEOUT)
+
         async def _perform_fetch(_request: ConnectorRequest) -> httpx.Response:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 if method == "GET":
@@ -98,8 +98,7 @@ class WebFetchTool:
             content_length = len(resp.content)
             if content_length > _MAX_RESPONSE_BYTES:
                 return ToolResult.fail(
-                    f"Response too large ({content_length} bytes, "
-                    f"limit {_MAX_RESPONSE_BYTES})"
+                    f"Response too large ({content_length} bytes, limit {_MAX_RESPONSE_BYTES})"
                 )
 
             return ToolResult.ok(resp.text)

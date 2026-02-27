@@ -46,9 +46,7 @@ class SelfEvaluator:
         self._router = router
         self._model = model or "llama3.2"
 
-    async def evaluate(
-        self, agent_result: str, task_context: str
-    ) -> float:
+    async def evaluate(self, agent_result: str, task_context: str) -> float:
         """Score an agent result using LLM-as-judge (0.0 to 1.0)."""
         from agent33.llm.base import ChatMessage
 
@@ -72,9 +70,7 @@ class SelfEvaluator:
         )
         return self._parse_score(response.content)
 
-    async def evaluate_workflow(
-        self, result: str, expected: str
-    ) -> float:
+    async def evaluate_workflow(self, result: str, expected: str) -> float:
         """Score by comparing output to expected result."""
         from agent33.llm.base import ChatMessage
 

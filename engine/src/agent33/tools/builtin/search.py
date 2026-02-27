@@ -79,15 +79,12 @@ class SearchTool:
                 mapped = map_connector_exception(exc, "search:searxng", "GET")
                 return ToolResult.fail(str(mapped))
             if isinstance(exc, httpx.ConnectError):
-                return ToolResult.fail(
-                    f"Could not connect to SearXNG at {settings.searxng_url}."
-                )
+                return ToolResult.fail(f"Could not connect to SearXNG at {settings.searxng_url}.")
             if isinstance(exc, httpx.TimeoutException):
                 return ToolResult.fail("SearXNG request timed out.")
             if isinstance(exc, httpx.HTTPStatusError):
                 return ToolResult.fail(
-                    f"SearXNG returned HTTP {exc.response.status_code}: "
-                    f"{exc.response.text[:500]}"
+                    f"SearXNG returned HTTP {exc.response.status_code}: {exc.response.text[:500]}"
                 )
             if isinstance(exc, httpx.RequestError):
                 return ToolResult.fail(f"SearXNG request error: {exc}")
