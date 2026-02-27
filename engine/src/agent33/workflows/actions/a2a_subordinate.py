@@ -38,10 +38,12 @@ class DeployA2ASubordinateTool(Tool):
 
     name = "deploy_a2a_subordinate"
     description = (
-        "Deploys an isolated A2A subordinate agent to solve a hyper-specific trial-and-error task. "
-        "Use this for tasks that require many iterations (like regex, complex bash pipes, or tricky CSS) "
-        "to avoid bloating your own context window. The subordinate runs on a distinct external API "
-        "and will only return the final validated solution."
+        "Deploys an isolated A2A subordinate agent to solve a"
+        " hyper-specific trial-and-error task. Use this for tasks"
+        " that require many iterations (like regex, complex bash"
+        " pipes, or tricky CSS) to avoid bloating your own context"
+        " window. The subordinate runs on a distinct external API"
+        " and will only return the final validated solution."
     )
 
     @property
@@ -51,15 +53,21 @@ class DeployA2ASubordinateTool(Tool):
             "properties": {
                 "task_description": {
                     "type": "string",
-                    "description": "Exhaustive instructions of what the subordinate needs to achieve.",
+                    "description": (
+                        "Exhaustive instructions of what the subordinate needs to achieve."
+                    ),
                 },
                 "target_file": {
                     "type": "string",
-                    "description": "Optional path to a specific file the subordinate should operate on.",
+                    "description": (
+                        "Optional path to a specific file the subordinate should operate on."
+                    ),
                 },
                 "validation_criteria": {
                     "type": "string",
-                    "description": "How the subordinate should verify its own work before returning.",
+                    "description": (
+                        "How the subordinate should verify its own work before returning."
+                    ),
                 },
             },
             "required": ["task_description"],
@@ -70,7 +78,7 @@ class DeployA2ASubordinateTool(Tool):
         if not task_desc:
             return ToolResult.fail("task_description is required.")
 
-        target_file = params.get("target_file")
+        _target_file = params.get("target_file")
         validation = params.get("validation_criteria")
 
         logger.info(f"PHASE 34: Booting A2A Subordinate for task: {task_desc[:50]}...")
@@ -80,7 +88,8 @@ class DeployA2ASubordinateTool(Tool):
 
         # Log observation so it streams to UI
         if hasattr(context, "observation_capture") and context.observation_capture:
-            # Wait, ToolContext doesn't have observation_capture by default, but tool_loop records tool_calls anyway.
+            # ToolContext doesn't have observation_capture by default,
+            # but tool_loop records tool_calls anyway.
             pass
 
         simulated_response = (

@@ -14,7 +14,6 @@ from agent33.agents.isc import (
     enforce_constraint_length,
 )
 
-
 # ---------------------------------------------------------------------------
 # GuardrailResult
 # ---------------------------------------------------------------------------
@@ -309,7 +308,10 @@ class TestEnforceConstraintLength:
         assert enforce_constraint_length("must be valid") is False
 
     def test_too_long(self) -> None:
-        text = "the system must always ensure that all outputs are validated and correct and complete today"
+        text = (
+            "the system must always ensure that all outputs"
+            " are validated and correct and complete today"
+        )
         assert len(text.split()) > 12
         assert enforce_constraint_length(text) is False
 

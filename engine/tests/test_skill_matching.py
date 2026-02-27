@@ -399,7 +399,8 @@ class TestSkillMatcher:
             side_effect=[
                 _llm_response('["deploy-a", "deploy-b"]'),
                 _llm_response(
-                    '{"keep": ["deploy-a"], "reject": [{"name": "deploy-b", "reason": "irrelevant"}]}'
+                    '{"keep": ["deploy-a"], "reject":'
+                    ' [{"name": "deploy-b", "reason": "irrelevant"}]}'
                 ),
             ]
         )

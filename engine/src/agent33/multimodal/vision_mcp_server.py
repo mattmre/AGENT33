@@ -25,7 +25,10 @@ try:
         return [
             types.Tool(
                 name="analyze_image",
-                description="Process a base64 encoded image to find specific objects, extract OCR text, or describe the scene.",
+                description=(
+                    "Process a base64 encoded image to find specific"
+                    " objects, extract OCR text, or describe the scene."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -35,7 +38,11 @@ try:
                         },
                         "prompt": {
                             "type": "string",
-                            "description": "Specific instruction for the VLM (e.g. 'Extract all text' or 'Find the coordinates of the login button').",
+                            "description": (
+                                "Specific instruction for the VLM"
+                                " (e.g. 'Extract all text' or"
+                                " 'Find the login button coords')."
+                            ),
                         },
                     },
                     "required": ["image_base64", "prompt"],
@@ -46,10 +53,11 @@ try:
     @vision_server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
         if name == "analyze_image":
-            image_b64 = arguments.get("image_base64")
-            prompt = arguments.get("prompt")
+            _image_b64 = arguments.get("image_base64")
+            _prompt = arguments.get("prompt")
 
-            # In a production environment, this parses the base64, passes it to the VLM via its native API
+            # In a production environment, this parses the base64,
+            # passes it to the VLM via its native API
             # For Anthropic: client.messages.create(..., content=[{"type": "image", ...}])
 
             logger.info("Vision MCP received image analysis request.")

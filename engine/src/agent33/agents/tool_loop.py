@@ -263,7 +263,7 @@ class ToolLoop:
                     )
 
                 # --- PHASE 34: Segmented Context Wipe (Handoff Interceptor) ---
-                for tc, result in zip(processed_tool_calls, tool_results):
+                for tc, result in zip(processed_tool_calls, tool_results, strict=False):
                     if tc.function.name == "handoff" and result.success:
                         logger.info("PHASE 34: Intercepting Handoff -> Triggering Context Wipe.")
                         from agent33.workflows.actions.handoff import StateLedger, execute_handoff
@@ -286,9 +286,10 @@ class ToolLoop:
                             messages.extend(wiped_messages)
 
                             # Log to ui/observation for user visibility
+                            obj = ledger.objective
                             await self._record_observation(
                                 event_type="handoff_context_wipe",
-                                content=f"Agent memory wiped. Continuing with fresh context window + Target Objective: {ledger.objective}",
+                                content=f"Agent memory wiped. Fresh context + Objective: {obj}",
                                 metadata={
                                     "source": ledger.source_agent,
                                     "target": ledger.target_agent,

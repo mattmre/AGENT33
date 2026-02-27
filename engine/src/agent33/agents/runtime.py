@@ -5,12 +5,13 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from agent33.agents.context_manager import ContextManager
     from agent33.agents.definition import AgentDefinition
     from agent33.agents.effort import AgentEffort, AgentEffortRouter
@@ -152,10 +153,12 @@ def _build_system_prompt(definition: AgentDefinition) -> str:
     parts.append("\n# Persistent Memory & Knowledge Retrieval")
     parts.append("- You have access to a persistent PGVector semantic memory database.")
     parts.append(
-        "- Actively utilize your prior context to store conclusions and retrieve context before acting."
+        "- Actively utilize your prior context to store conclusions"
+        " and retrieve context before acting."
     )
     parts.append(
-        "- Rely on retrieved RAG memories instead of blindly re-analyzing or re-asking the user for the same information."
+        "- Rely on retrieved RAG memories instead of blindly"
+        " re-analyzing or re-asking the user for the same information."
     )
 
     # --- Safety Guardrails ---

@@ -1,6 +1,9 @@
 import ast
 import os
+import traceback
 from typing import Any
+
+from agent33.tools.base import Tool, ToolContext, ToolResult
 
 
 def create_tldr_snapshot(file_path: str) -> str:
@@ -32,10 +35,9 @@ def create_tldr_snapshot(file_path: str) -> str:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                for alias in node.names:
-                    imports.append(f"{node.module}.{alias.name}")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                imports.append(f"{node.module}.{alias.name}")
     if imports:
         output.append("\n[L2] DEPENDENCIES (Imports):")
         for imp in imports:
@@ -130,19 +132,21 @@ def create_tldr_snapshot(file_path: str) -> str:
     return summary + "\n".join(footer)
 
 
-import traceback
-
-from agent33.tools.base import Tool, ToolContext, ToolResult
-
-
 class TLDRReadEnforcerTool(Tool):
-    """Tool that reads a python file and returns a highly compressed 5-layer AST semantic snapshot instead of raw tokens.
+    """Compressed 5-layer AST semantic snapshot reader.
 
-    To be used INSTEAD of cat or view_file when trying to understand the architecture or structure of a file to prevent context window bloat.
+    Reads a Python file and returns a highly compressed AST snapshot
+    instead of raw tokens. Use INSTEAD of cat or view_file when trying
+    to understand file architecture, preventing context window bloat.
     """
 
     name = "tldr_read_enforcer"
-    description = "Reads a Python file and returns a 5-layer AST semantic snapshot (Signatures, Imports, Docstrings, Globals, Returns) instead of raw text, saving 95% of tokens. Use this to understand file architecture."
+    description = (
+        "Reads a Python file and returns a 5-layer AST semantic"
+        " snapshot (Signatures, Imports, Docstrings, Globals,"
+        " Returns) instead of raw text, saving 95% of tokens."
+        " Use this to understand file architecture."
+    )
 
     @property
     def parameters_schema(self) -> dict[str, Any]:

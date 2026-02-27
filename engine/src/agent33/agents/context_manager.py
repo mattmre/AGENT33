@@ -447,7 +447,7 @@ MODEL_CONTEXT_LIMITS: dict[str, int] = {
 
 
 def truncate_tool_output(output: str, max_chars: int = 15000) -> str:
-    """Safely truncate massive tool outputs (like `cat file.txt` or `curl`) before they hit the LLM.
+    """Truncate massive tool outputs before they hit the LLM.
 
     If the string length exceeds max_chars, it will be sliced and appended with a
     truncation warning so the model knows there's more data it didn't see.
@@ -460,7 +460,7 @@ def truncate_tool_output(output: str, max_chars: int = 15000) -> str:
     half = max_chars // 2
     return (
         output[:half]
-        + f"\n\n... [TRUNCATED: {len(output) - max_chars} characters omitted due to Context Limits] ...\n\n"
+        + f"\n\n... [TRUNCATED: {len(output) - max_chars} chars omitted] ...\n\n"
         + output[-half:]
     )
 

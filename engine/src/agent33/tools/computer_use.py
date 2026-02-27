@@ -24,7 +24,10 @@ class ComputerUseTool(SchemaAwareTool):
 
     @property
     def description(self) -> str:
-        return "Interact with the desktop environment via coordinate clicking, typing, and taking screenshots."
+        return (
+            "Interact with the desktop environment via"
+            " coordinate clicking, typing, and screenshots."
+        )
 
     @property
     def parameters_schema(self) -> dict[str, Any]:
@@ -54,7 +57,9 @@ class ComputerUseTool(SchemaAwareTool):
                 },
                 "text": {
                     "type": "string",
-                    "description": "Text to type or keys to press. Required for 'type' and 'key' actions.",
+                    "description": (
+                        "Text to type or keys to press. Required for 'type' and 'key' actions."
+                    ),
                 },
             },
             "required": ["action"],
