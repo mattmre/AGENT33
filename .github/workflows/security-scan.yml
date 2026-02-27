@@ -144,12 +144,35 @@ jobs:
     permissions:
       security-events: write
       contents: read
-      id-token: write
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine Claude security review mode (API key only)
+        id: claude-review
+        run: |
+          if [ "${{ vars.ENABLE_CLAUDE_SECURITY_REVIEW }}" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=ENABLE_CLAUDE_SECURITY_REVIEW is not true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=ANTHROPIC_API_KEY is not configured" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "reason=enabled" >> "$GITHUB_OUTPUT"
+
+      - name: Skip notice
+        if: steps.claude-review.outputs.enabled != 'true'
+        run: |
+          echo "Skipping Claude Code Security Review: ${{ steps.claude-review.outputs.reason }}"
+
       - name: Run Claude Code Security Review
+        if: steps.claude-review.outputs.enabled == 'true'
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
