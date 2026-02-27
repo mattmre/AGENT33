@@ -105,8 +105,7 @@ class WhatsAppAdapter:
                 messages = value.get("messages", [])
                 contacts = value.get("contacts", [])
                 contact_map = {
-                    c.get("wa_id", ""): c.get("profile", {}).get("name", "")
-                    for c in contacts
+                    c.get("wa_id", ""): c.get("profile", {}).get("name", "") for c in contacts
                 }
                 for msg in messages:
                     if msg.get("type") != "text":
@@ -127,15 +126,11 @@ class WhatsAppAdapter:
 
     def verify_signature(self, signature: str, body: bytes) -> bool:
         """Verify the X-Hub-Signature-256 header."""
-        expected = hmac.new(
-            self._app_secret.encode(), body, hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(self._app_secret.encode(), body, hashlib.sha256).hexdigest()
         provided = signature.removeprefix("sha256=")
         return hmac.compare_digest(expected, provided)
 
-    def verify_webhook_challenge(
-        self, mode: str, token: str, challenge: str
-    ) -> str | None:
+    def verify_webhook_challenge(self, mode: str, token: str, challenge: str) -> str | None:
         """Return the challenge string if the verification token matches."""
         if mode == "subscribe" and token == self._verify_token:
             return challenge

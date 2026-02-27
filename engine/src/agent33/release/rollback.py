@@ -40,9 +40,7 @@ class RollbackManager:
     def __init__(self) -> None:
         self._records: dict[str, RollbackRecord] = {}
 
-    def recommend(
-        self, severity: str, impact: str
-    ) -> tuple[RollbackType, str]:
+    def recommend(self, severity: str, impact: str) -> tuple[RollbackType, str]:
         """Get recommended rollback type and approval level.
 
         Args:
@@ -53,9 +51,7 @@ class RollbackManager:
             (rollback_type, approval_level)
         """
         key = (severity.lower(), impact.lower())
-        return _DECISION_MATRIX.get(
-            key, (RollbackType.PLANNED, "team-lead")
-        )
+        return _DECISION_MATRIX.get(key, (RollbackType.PLANNED, "team-lead"))
 
     def create(
         self,
@@ -91,9 +87,7 @@ class RollbackManager:
         record.status = RollbackStatus.IN_PROGRESS
         return record
 
-    def complete_step(
-        self, rollback_id: str, step_description: str
-    ) -> RollbackRecord | None:
+    def complete_step(self, rollback_id: str, step_description: str) -> RollbackRecord | None:
         """Record completion of a rollback step."""
         record = self._records.get(rollback_id)
         if record is None:
@@ -111,9 +105,7 @@ class RollbackManager:
         logger.info("rollback_completed id=%s", rollback_id)
         return record
 
-    def fail(
-        self, rollback_id: str, error: str
-    ) -> RollbackRecord | None:
+    def fail(self, rollback_id: str, error: str) -> RollbackRecord | None:
         """Mark a rollback as failed."""
         record = self._records.get(rollback_id)
         if record is None:

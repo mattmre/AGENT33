@@ -41,18 +41,10 @@ def service() -> ImprovementService:
 def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
     from agent33.api.routes.improvements import _reset_service
 
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_backend", "memory"
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_path", "unused.json"
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_db_path", "unused.sqlite3"
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_migrate_on_start", False
-    )
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "memory")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", "unused.json")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_db_path", "unused.sqlite3")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_migrate_on_start", False)
     monkeypatch.setattr(
         settings,
         "improvement_learning_persistence_migration_backup_on_start",
@@ -63,19 +55,13 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
         "improvement_learning_persistence_migration_backup_path",
         "var/improvement_learning_signals.backup.json",
     )
-    monkeypatch.setattr(
-        settings, "improvement_learning_file_corruption_behavior", "reset"
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_db_corruption_behavior", "reset"
-    )
+    monkeypatch.setattr(settings, "improvement_learning_file_corruption_behavior", "reset")
+    monkeypatch.setattr(settings, "improvement_learning_db_corruption_behavior", "reset")
     _reset_service()
     monkeypatch.setattr(settings, "improvement_learning_enabled", False)
     monkeypatch.setattr(settings, "improvement_learning_summary_default_limit", 50)
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", False)
-    monkeypatch.setattr(
-        settings, "improvement_learning_auto_intake_min_severity", "high"
-    )
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 3)
     yield
     _reset_service()
@@ -113,9 +99,7 @@ def test_service_roundtrip_and_summary_counts(service: ImprovementService):
         )
     )
 
-    only_bugs = service.list_learning_signals(
-        signal_type=LearningSignalType.BUG, limit=10
-    )
+    only_bugs = service.list_learning_signals(signal_type=LearningSignalType.BUG, limit=10)
     assert len(only_bugs) == 2
 
     summary = service.summarize_learning_signals(limit=10)
@@ -145,9 +129,7 @@ def test_learning_signal_quality_enrichment_applied(service: ImprovementService)
 
 def test_file_store_persists_signals_and_generated_intakes(tmp_path: Path):
     store_path = tmp_path / "learning_state.json"
-    first = ImprovementService(
-        learning_store=FileLearningSignalStore(str(store_path))
-    )
+    first = ImprovementService(learning_store=FileLearningSignalStore(str(store_path)))
     first.record_learning_signal(
         LearningSignal(
             signal_type=LearningSignalType.INCIDENT,
@@ -159,9 +141,7 @@ def test_file_store_persists_signals_and_generated_intakes(tmp_path: Path):
     created = first.generate_intakes_from_learning_signals(max_items=1)
     assert len(created) == 1
 
-    second = ImprovementService(
-        learning_store=FileLearningSignalStore(str(store_path))
-    )
+    second = ImprovementService(learning_store=FileLearningSignalStore(str(store_path)))
     signals = second.list_learning_signals(tenant_id="tenant-a", limit=10)
     assert len(signals) == 1
     assert signals[0].related_intake_id is not None
@@ -189,9 +169,7 @@ def test_file_to_db_migration_path(tmp_path: Path):
     assert len(migrated.signals) == 1
     assert len(migrated.generated_intakes) == 1
 
-    db_service = ImprovementService(
-        learning_store=SQLiteLearningSignalStore(str(db_path))
-    )
+    db_service = ImprovementService(learning_store=SQLiteLearningSignalStore(str(db_path)))
     loaded_signals = db_service.list_learning_signals(tenant_id="tenant-a", limit=10)
     assert len(loaded_signals) == 1
     assert loaded_signals[0].summary == "Persisted in file backend"
@@ -247,9 +225,7 @@ def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
     assert len(restored.signals) == 1
 
     restored_service = ImprovementService(learning_store=target_store)
-    restored_signals = restored_service.list_learning_signals(
-        tenant_id="tenant-backup", limit=10
-    )
+    restored_signals = restored_service.list_learning_signals(tenant_id="tenant-backup", limit=10)
     assert len(restored_signals) == 1
     assert restored_signals[0].summary == "Needs backup"
 
@@ -288,9 +264,7 @@ def test_sqlite_store_corruption_reset_writes_sidecar_and_clears_row(tmp_path: P
     loaded = store.load()
 
     assert loaded.signals == []
-    sidecars = sorted(
-        tmp_path.glob("corrupt_learning.sqlite3.corrupt.payload*.json")
-    )
+    sidecars = sorted(tmp_path.glob("corrupt_learning.sqlite3.corrupt.payload*.json"))
     assert len(sidecars) == 1
     assert sidecars[0].read_text(encoding="utf-8") == "{not-json"
     with sqlite3.connect(db_path) as conn:
@@ -322,8 +296,7 @@ def test_sqlite_store_corruption_raise_throws_value_error(tmp_path: Path):
     with pytest.raises(
         ValueError,
         match=(
-            "^Corrupted learning-signal persistence payload in SQLite: "
-            f"{re.escape(str(db_path))}$"
+            f"^Corrupted learning-signal persistence payload in SQLite: {re.escape(str(db_path))}$"
         ),
     ):
         store.load()
@@ -349,10 +322,7 @@ def test_sqlite_database_corruption_raise_throws_value_error(tmp_path: Path):
     store = SQLiteLearningSignalStore(str(db_path), on_corruption="raise")
     with pytest.raises(
         ValueError,
-        match=(
-            "^Corrupted learning-signal SQLite database: "
-            f"{re.escape(str(db_path))}$"
-        ),
+        match=(f"^Corrupted learning-signal SQLite database: {re.escape(str(db_path))}$"),
     ):
         store.load()
 
@@ -387,9 +357,7 @@ def test_summary_supports_tenant_and_window_trends(service: ImprovementService):
         )
     )
 
-    summary = service.summarize_learning_signals(
-        limit=10, tenant_id="tenant-a", window_days=7
-    )
+    summary = service.summarize_learning_signals(limit=10, tenant_id="tenant-a", window_days=7)
     assert summary.total_signals == 1
     assert summary.counts_by_tenant == {"tenant-a": 1}
     assert summary.previous_window_total == 1
@@ -448,17 +416,18 @@ def test_idempotent_intake_generation(service: ImprovementService):
 
 
 def test_routes_404_when_feature_disabled(client: TestClient):
-    assert client.post(
-        "/v1/improvements/learning/signals",
-        json={"signal_type": "bug", "severity": "high", "summary": "x"},
-    ).status_code == 404
+    assert (
+        client.post(
+            "/v1/improvements/learning/signals",
+            json={"signal_type": "bug", "severity": "high", "summary": "x"},
+        ).status_code
+        == 404
+    )
     assert client.get("/v1/improvements/learning/signals").status_code == 404
     assert client.get("/v1/improvements/learning/summary").status_code == 404
 
 
-def test_routes_record_and_list_when_enabled(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
+def test_routes_record_and_list_when_enabled(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
 
     created = client.post(
@@ -513,9 +482,7 @@ def test_summary_generate_intakes_respects_auto_intake_flag(
     assert no_intakes.json()["generated_intakes"] == []
 
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", True)
-    monkeypatch.setattr(
-        settings, "improvement_learning_auto_intake_min_severity", "high"
-    )
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 3)
 
     with_intakes = client.get(
@@ -533,9 +500,7 @@ def test_summary_generate_intakes_respects_auto_intake_flag(
     assert second.json()["generated_intakes"] == []
 
 
-def test_summary_is_tenant_scoped_in_route(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
+def test_summary_is_tenant_scoped_in_route(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
     client.post(
         "/v1/improvements/learning/signals",
@@ -575,9 +540,7 @@ def test_routes_support_sqlite_backend_with_file_migration(
     file_path = tmp_path / "learning_state.json"
     db_path = tmp_path / "learning_state.sqlite3"
 
-    file_seed_service = ImprovementService(
-        learning_store=FileLearningSignalStore(str(file_path))
-    )
+    file_seed_service = ImprovementService(learning_store=FileLearningSignalStore(str(file_path)))
     file_seed_service.record_learning_signal(
         LearningSignal(
             signal_type=LearningSignalType.BUG,
@@ -589,15 +552,9 @@ def test_routes_support_sqlite_backend_with_file_migration(
 
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
     monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_path", str(file_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_db_path", str(db_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_migrate_on_start", True
-    )
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_db_path", str(db_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_migrate_on_start", True)
     _reset_service()
 
     listed = client.get(
@@ -617,9 +574,7 @@ def test_routes_sqlite_startup_migration_creates_backup_when_enabled(
     db_path = tmp_path / "learning_state.sqlite3"
     backup_path = tmp_path / "learning_state.backup.json"
 
-    file_seed_service = ImprovementService(
-        learning_store=FileLearningSignalStore(str(file_path))
-    )
+    file_seed_service = ImprovementService(learning_store=FileLearningSignalStore(str(file_path)))
     file_seed_service.record_learning_signal(
         LearningSignal(
             signal_type=LearningSignalType.BUG,
@@ -631,15 +586,9 @@ def test_routes_sqlite_startup_migration_creates_backup_when_enabled(
 
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
     monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_path", str(file_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_db_path", str(db_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_migrate_on_start", True
-    )
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_db_path", str(db_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_migrate_on_start", True)
     monkeypatch.setattr(
         settings,
         "improvement_learning_persistence_migration_backup_on_start",
@@ -669,9 +618,7 @@ def test_routes_sqlite_startup_migration_does_not_overwrite_existing_db(
     file_path = tmp_path / "learning_state.json"
     db_path = tmp_path / "learning_state.sqlite3"
 
-    db_seed_service = ImprovementService(
-        learning_store=SQLiteLearningSignalStore(str(db_path))
-    )
+    db_seed_service = ImprovementService(learning_store=SQLiteLearningSignalStore(str(db_path)))
     db_seed_service.record_learning_signal(
         LearningSignal(
             signal_type=LearningSignalType.BUG,
@@ -683,15 +630,9 @@ def test_routes_sqlite_startup_migration_does_not_overwrite_existing_db(
 
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
     monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "db")
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_path", str(file_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_db_path", str(db_path)
-    )
-    monkeypatch.setattr(
-        settings, "improvement_learning_persistence_migrate_on_start", True
-    )
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_db_path", str(db_path))
+    monkeypatch.setattr(settings, "improvement_learning_persistence_migrate_on_start", True)
     _reset_service()
 
     listed = client.get(

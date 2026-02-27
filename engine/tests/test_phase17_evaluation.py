@@ -143,20 +143,28 @@ class TestMetricsCalculator:
         self.calc = MetricsCalculator()
         self.results = [
             TaskRunResult(
-                item_id="GT-01", result=TaskResult.PASS,
-                duration_ms=100, checks_total=4,
+                item_id="GT-01",
+                result=TaskResult.PASS,
+                duration_ms=100,
+                checks_total=4,
             ),
             TaskRunResult(
-                item_id="GT-02", result=TaskResult.PASS,
-                duration_ms=200, checks_total=4,
+                item_id="GT-02",
+                result=TaskResult.PASS,
+                duration_ms=200,
+                checks_total=4,
             ),
             TaskRunResult(
-                item_id="GT-03", result=TaskResult.FAIL,
-                duration_ms=300, checks_total=4,
+                item_id="GT-03",
+                result=TaskResult.FAIL,
+                duration_ms=300,
+                checks_total=4,
             ),
             TaskRunResult(
-                item_id="GT-04", result=TaskResult.PASS,
-                duration_ms=150, checks_total=4,
+                item_id="GT-04",
+                result=TaskResult.PASS,
+                duration_ms=150,
+                checks_total=4,
             ),
         ]
 
@@ -556,9 +564,7 @@ class TestEvaluationService:
         completed = self.service.submit_results(run.run_id, current_results)
         assert completed is not None
         assert len(completed.regressions) >= 1
-        assert any(
-            r.indicator == RegressionIndicator.RI_01 for r in completed.regressions
-        )
+        assert any(r.indicator == RegressionIndicator.RI_01 for r in completed.regressions)
 
     def test_submit_results_not_found(self):
         result = self.service.submit_results("nonexistent", [])
@@ -633,9 +639,7 @@ class TestEvaluationAPI:
         assert len(data) >= 1
 
     def test_get_run(self):
-        create_resp = self.client.post(
-            "/v1/evaluations/runs", json={"gate": "G-MRG"}
-        )
+        create_resp = self.client.post("/v1/evaluations/runs", json={"gate": "G-MRG"})
         run_id = create_resp.json()["run_id"]
         resp = self.client.get(f"/v1/evaluations/runs/{run_id}")
         assert resp.status_code == 200
@@ -646,9 +650,7 @@ class TestEvaluationAPI:
         assert resp.status_code == 404
 
     def test_submit_results(self):
-        create_resp = self.client.post(
-            "/v1/evaluations/runs", json={"gate": "G-PR"}
-        )
+        create_resp = self.client.post("/v1/evaluations/runs", json={"gate": "G-PR"})
         run_id = create_resp.json()["run_id"]
         resp = self.client.post(
             f"/v1/evaluations/runs/{run_id}/results",
@@ -673,9 +675,7 @@ class TestEvaluationAPI:
 
     def test_save_baseline_from_run(self):
         # Create and complete a run
-        create_resp = self.client.post(
-            "/v1/evaluations/runs", json={"gate": "G-PR"}
-        )
+        create_resp = self.client.post("/v1/evaluations/runs", json={"gate": "G-PR"})
         run_id = create_resp.json()["run_id"]
         self.client.post(
             f"/v1/evaluations/runs/{run_id}/results",
@@ -690,9 +690,7 @@ class TestEvaluationAPI:
         assert "baseline_id" in resp.json()
 
     def test_save_baseline_incomplete_run(self):
-        create_resp = self.client.post(
-            "/v1/evaluations/runs", json={"gate": "G-PR"}
-        )
+        create_resp = self.client.post("/v1/evaluations/runs", json={"gate": "G-PR"})
         run_id = create_resp.json()["run_id"]
         resp = self.client.post(
             f"/v1/evaluations/runs/{run_id}/baseline",

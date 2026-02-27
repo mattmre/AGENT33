@@ -27,15 +27,24 @@ logger = logging.getLogger(__name__)
 # Valid state transitions for release lifecycle
 _VALID_TRANSITIONS: dict[ReleaseStatus, frozenset[ReleaseStatus]] = {
     ReleaseStatus.PLANNED: frozenset({ReleaseStatus.FROZEN}),
-    ReleaseStatus.FROZEN: frozenset({
-        ReleaseStatus.RC, ReleaseStatus.PLANNED,
-    }),
-    ReleaseStatus.RC: frozenset({
-        ReleaseStatus.VALIDATING, ReleaseStatus.FAILED,
-    }),
-    ReleaseStatus.VALIDATING: frozenset({
-        ReleaseStatus.RELEASED, ReleaseStatus.FAILED,
-    }),
+    ReleaseStatus.FROZEN: frozenset(
+        {
+            ReleaseStatus.RC,
+            ReleaseStatus.PLANNED,
+        }
+    ),
+    ReleaseStatus.RC: frozenset(
+        {
+            ReleaseStatus.VALIDATING,
+            ReleaseStatus.FAILED,
+        }
+    ),
+    ReleaseStatus.VALIDATING: frozenset(
+        {
+            ReleaseStatus.RELEASED,
+            ReleaseStatus.FAILED,
+        }
+    ),
     ReleaseStatus.RELEASED: frozenset({ReleaseStatus.ROLLED_BACK}),
     ReleaseStatus.FAILED: frozenset({ReleaseStatus.PLANNED}),
     ReleaseStatus.ROLLED_BACK: frozenset({ReleaseStatus.PLANNED}),
@@ -52,9 +61,7 @@ class InvalidReleaseTransitionError(Exception):
     def __init__(self, from_status: ReleaseStatus, to_status: ReleaseStatus) -> None:
         self.from_status = from_status
         self.to_status = to_status
-        super().__init__(
-            f"Invalid transition: {from_status.value} -> {to_status.value}"
-        )
+        super().__init__(f"Invalid transition: {from_status.value} -> {to_status.value}")
 
 
 class ReleaseService:
@@ -121,9 +128,7 @@ class ReleaseService:
     # Lifecycle transitions
     # ------------------------------------------------------------------
 
-    def transition(
-        self, release_id: str, to_status: ReleaseStatus
-    ) -> Release:
+    def transition(self, release_id: str, to_status: ReleaseStatus) -> Release:
         release = self.get_release(release_id)
         valid = _VALID_TRANSITIONS.get(release.status, frozenset())
         if to_status not in valid:
@@ -180,14 +185,10 @@ class ReleaseService:
         message: str = "",
     ) -> Release:
         release = self.get_release(release_id)
-        self._evaluator.update_check(
-            release.evidence.checklist, check_id, status, message
-        )
+        self._evaluator.update_check(release.evidence.checklist, check_id, status, message)
         return release
 
-    def evaluate_checklist(
-        self, release_id: str
-    ) -> tuple[bool, list[str]]:
+    def evaluate_checklist(self, release_id: str) -> tuple[bool, list[str]]:
         """Evaluate the release checklist. Returns (passed, failures)."""
         release = self.get_release(release_id)
         return self._evaluator.evaluate(release.evidence.checklist)

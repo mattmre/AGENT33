@@ -142,12 +142,8 @@ class TestPreflightChecker:
             "files": FileScope(read=["src/**"]),
             "allowed_commands": [CommandPermission(command="pytest")],
             "limits": ResourceLimits(max_iterations=10, max_duration_minutes=5),
-            "stop_conditions": [
-                StopCondition(description="Max iterations")
-            ],
-            "escalation_triggers": [
-                EscalationTrigger(description="Failure threshold")
-            ],
+            "stop_conditions": [StopCondition(description="Max iterations")],
+            "escalation_triggers": [EscalationTrigger(description="Failure threshold")],
             "default_escalation_target": "orchestrator",
         }
         defaults.update(kwargs)
@@ -170,18 +166,14 @@ class TestPreflightChecker:
 
     def test_pf03_budget_not_expired(self):
         checker = PreflightChecker()
-        budget = self._active_budget(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        budget = self._active_budget(expires_at=datetime.now(UTC) - timedelta(hours=1))
         report = checker.check(budget)
         pf03 = next(c for c in report.checks if c.check_id == "PF-03")
         assert pf03.status == PreflightStatus.FAIL
 
     def test_pf03_non_expired_passes(self):
         checker = PreflightChecker()
-        budget = self._active_budget(
-            expires_at=datetime.now(UTC) + timedelta(hours=1)
-        )
+        budget = self._active_budget(expires_at=datetime.now(UTC) + timedelta(hours=1))
         report = checker.check(budget)
         pf03 = next(c for c in report.checks if c.check_id == "PF-03")
         assert pf03.status == PreflightStatus.PASS
@@ -209,18 +201,14 @@ class TestPreflightChecker:
 
     def test_pf07_network_warn_when_open(self):
         checker = PreflightChecker()
-        budget = self._active_budget(
-            network=NetworkScope(enabled=True, allowed_domains=[])
-        )
+        budget = self._active_budget(network=NetworkScope(enabled=True, allowed_domains=[]))
         report = checker.check(budget)
         pf07 = next(c for c in report.checks if c.check_id == "PF-07")
         assert pf07.status == PreflightStatus.WARN
 
     def test_pf07_network_pass_when_disabled(self):
         checker = PreflightChecker()
-        budget = self._active_budget(
-            network=NetworkScope(enabled=False)
-        )
+        budget = self._active_budget(network=NetworkScope(enabled=False))
         report = checker.check(budget)
         pf07 = next(c for c in report.checks if c.check_id == "PF-07")
         assert pf07.status == PreflightStatus.PASS
@@ -243,9 +231,7 @@ class TestPreflightChecker:
 
     def test_pf10_escalation_warn_when_no_path(self):
         checker = PreflightChecker()
-        budget = self._active_budget(
-            escalation_triggers=[], default_escalation_target=""
-        )
+        budget = self._active_budget(escalation_triggers=[], default_escalation_target="")
         report = checker.check(budget)
         pf10 = next(c for c in report.checks if c.check_id == "PF-10")
         assert pf10.status == PreflightStatus.WARN
@@ -288,9 +274,7 @@ class TestRuntimeEnforcer:
             ),
             "allowed_commands": [
                 CommandPermission(command="pytest"),
-                CommandPermission(
-                    command="ruff", args_pattern=r"check.*"
-                ),
+                CommandPermission(command="ruff", args_pattern=r"check.*"),
             ],
             "denied_commands": ["rm", "sudo"],
             "require_approval_commands": ["git"],
@@ -392,9 +376,7 @@ class TestRuntimeEnforcer:
         assert e.check_network("unknown.io") == EnforcementResult.BLOCKED
 
     def test_ef04_network_disabled(self):
-        e = self._enforcer(
-            network=NetworkScope(enabled=False)
-        )
+        e = self._enforcer(network=NetworkScope(enabled=False))
         assert e.check_network("api.example.com") == EnforcementResult.BLOCKED
 
     def test_ef04_network_request_limit(self):
@@ -651,9 +633,7 @@ class TestAutonomyAPI:
         _service._enforcers.clear()
         _service._escalations.clear()
 
-        return TestClient(
-            app, headers={"Authorization": f"Bearer {auth_token}"}
-        )
+        return TestClient(app, headers={"Authorization": f"Bearer {auth_token}"})
 
     def test_create_budget(self, client: TestClient):
         resp = client.post(
@@ -667,20 +647,14 @@ class TestAutonomyAPI:
         assert data["budget_id"].startswith("BDG-")
 
     def test_list_budgets(self, client: TestClient):
-        client.post(
-            "/v1/autonomy/budgets", json={"task_id": "t1"}
-        )
-        client.post(
-            "/v1/autonomy/budgets", json={"task_id": "t2"}
-        )
+        client.post("/v1/autonomy/budgets", json={"task_id": "t1"})
+        client.post("/v1/autonomy/budgets", json={"task_id": "t2"})
         resp = client.get("/v1/autonomy/budgets")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
     def test_get_budget(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={"task_id": "t1"}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={"task_id": "t1"})
         budget_id = create_resp.json()["budget_id"]
         resp = client.get(f"/v1/autonomy/budgets/{budget_id}")
         assert resp.status_code == 200
@@ -691,9 +665,7 @@ class TestAutonomyAPI:
         assert resp.status_code == 404
 
     def test_delete_budget(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         resp = client.delete(f"/v1/autonomy/budgets/{budget_id}")
         assert resp.status_code == 200
@@ -703,18 +675,14 @@ class TestAutonomyAPI:
         assert resp.status_code == 404
 
     def test_activate_budget(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         resp = client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         assert resp.status_code == 200
         assert resp.json()["state"] == "active"
 
     def test_suspend_budget(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         resp = client.post(f"/v1/autonomy/budgets/{budget_id}/suspend")
@@ -722,9 +690,7 @@ class TestAutonomyAPI:
         assert resp.json()["state"] == "suspended"
 
     def test_complete_budget(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         resp = client.post(f"/v1/autonomy/budgets/{budget_id}/complete")
@@ -732,9 +698,7 @@ class TestAutonomyAPI:
         assert resp.json()["state"] == "completed"
 
     def test_transition_invalid_returns_409(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         resp = client.post(
             f"/v1/autonomy/budgets/{budget_id}/transition",
@@ -749,30 +713,22 @@ class TestAutonomyAPI:
         )
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
-        resp = client.get(
-            f"/v1/autonomy/budgets/{budget_id}/preflight"
-        )
+        resp = client.get(f"/v1/autonomy/budgets/{budget_id}/preflight")
         assert resp.status_code == 200
         data = resp.json()
         assert data["budget_id"] == budget_id
         assert len(data["checks"]) == 10
 
     def test_create_enforcer(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
-        resp = client.post(
-            f"/v1/autonomy/budgets/{budget_id}/enforcer"
-        )
+        resp = client.post(f"/v1/autonomy/budgets/{budget_id}/enforcer")
         assert resp.status_code == 201
         assert resp.json()["status"] == "enforcer_created"
 
     def test_enforce_file_read(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         client.post(f"/v1/autonomy/budgets/{budget_id}/enforcer")
@@ -784,9 +740,7 @@ class TestAutonomyAPI:
         assert resp.json()["result"] in ("allowed", "blocked")
 
     def test_enforce_command(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         client.post(f"/v1/autonomy/budgets/{budget_id}/enforcer")
@@ -798,9 +752,7 @@ class TestAutonomyAPI:
         assert resp.json()["result"] in ("allowed", "blocked")
 
     def test_enforce_network(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         client.post(f"/v1/autonomy/budgets/{budget_id}/enforcer")
@@ -813,9 +765,7 @@ class TestAutonomyAPI:
         assert resp.json()["result"] == "blocked"
 
     def test_enforce_no_enforcer_returns_404(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         resp = client.post(
             f"/v1/autonomy/budgets/{budget_id}/enforce/file",
@@ -825,9 +775,7 @@ class TestAutonomyAPI:
 
     def test_escalation_lifecycle(self, client: TestClient):
         # Create budget → activate → enforcer → escalate → ack → resolve
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         client.post(f"/v1/autonomy/budgets/{budget_id}/enforcer")
@@ -846,29 +794,21 @@ class TestAutonomyAPI:
         assert len(list_resp.json()) >= 1
 
         # Acknowledge
-        ack_resp = client.post(
-            f"/v1/autonomy/escalations/{esc_id}/acknowledge"
-        )
+        ack_resp = client.post(f"/v1/autonomy/escalations/{esc_id}/acknowledge")
         assert ack_resp.status_code == 200
         assert ack_resp.json()["acknowledged"] is True
 
         # Resolve
-        resolve_resp = client.post(
-            f"/v1/autonomy/escalations/{esc_id}/resolve"
-        )
+        resolve_resp = client.post(f"/v1/autonomy/escalations/{esc_id}/resolve")
         assert resolve_resp.status_code == 200
         assert resolve_resp.json()["resolved"] is True
 
     def test_escalation_not_found(self, client: TestClient):
-        resp = client.post(
-            "/v1/autonomy/escalations/nonexistent/acknowledge"
-        )
+        resp = client.post("/v1/autonomy/escalations/nonexistent/acknowledge")
         assert resp.status_code == 404
 
     def test_delete_active_budget_returns_409(self, client: TestClient):
-        create_resp = client.post(
-            "/v1/autonomy/budgets", json={}
-        )
+        create_resp = client.post("/v1/autonomy/budgets", json={})
         budget_id = create_resp.json()["budget_id"]
         client.post(f"/v1/autonomy/budgets/{budget_id}/activate")
         resp = client.delete(f"/v1/autonomy/budgets/{budget_id}")

@@ -84,8 +84,7 @@ async def execute(
 
     if _is_private_url(url):
         raise ValueError(
-            f"SSRF protection: requests to private/reserved addresses "
-            f"are blocked ({url})"
+            f"SSRF protection: requests to private/reserved addresses are blocked ({url})"
         )
 
     logger.info("http_request", url=url, method=method, dry_run=dry_run)

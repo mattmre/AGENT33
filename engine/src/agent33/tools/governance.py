@@ -122,14 +122,9 @@ class ToolGovernance:
             from agent33.agents.definition import AutonomyLevel
 
             if autonomy_level == AutonomyLevel.READ_ONLY and tool_name in _WRITE_TOOLS:
-                logger.warning(
-                    "Autonomy denied: tool=%s blocked in read-only mode", tool_name
-                )
+                logger.warning("Autonomy denied: tool=%s blocked in read-only mode", tool_name)
                 return False
-            if (
-                autonomy_level == AutonomyLevel.SUPERVISED
-                and tool_name in _DESTRUCTIVE_PARAMS
-            ):
+            if autonomy_level == AutonomyLevel.SUPERVISED and tool_name in _DESTRUCTIVE_PARAMS:
                 op = params.get("operation", "")
                 if op in _DESTRUCTIVE_PARAMS[tool_name]:
                     logger.info(
@@ -236,8 +231,7 @@ class ToolGovernance:
         # 3. Check wildcard operation patterns (sorted by length for specificity)
         if operation:
             wildcard_op_keys = [
-                k for k in policies
-                if ":" in k and ("*" in k or "?" in k or "[" in k)
+                k for k in policies if ":" in k and ("*" in k or "?" in k or "[" in k)
             ]
             wildcard_op_keys.sort(key=len, reverse=True)
 
@@ -252,8 +246,7 @@ class ToolGovernance:
 
         # 4. Check wildcard tool patterns (sorted by length for specificity)
         wildcard_tool_keys = [
-            k for k in policies
-            if ":" not in k and ("*" in k or "?" in k or "[" in k) and k != "*"
+            k for k in policies if ":" not in k and ("*" in k or "?" in k or "[" in k) and k != "*"
         ]
         wildcard_tool_keys.sort(key=len, reverse=True)
 

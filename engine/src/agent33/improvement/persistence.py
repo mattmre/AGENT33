@@ -74,9 +74,7 @@ class FileLearningSignalStore:
 
     def _handle_corruption(self, exc: Exception) -> LearningPersistenceState:
         if self._on_corruption == "raise":
-            raise ValueError(
-                f"Corrupted learning-signal persistence file: {self._path}"
-            ) from exc
+            raise ValueError(f"Corrupted learning-signal persistence file: {self._path}") from exc
         self._quarantine_corrupted_file()
         return LearningPersistenceState()
 
@@ -160,10 +158,7 @@ class SQLiteLearningSignalStore:
     def _handle_corruption(
         self, payload: object, exc: Exception | None
     ) -> LearningPersistenceState:
-        message = (
-            "Corrupted learning-signal persistence payload in SQLite: "
-            f"{self._path}"
-        )
+        message = f"Corrupted learning-signal persistence payload in SQLite: {self._path}"
         if self._on_corruption == "raise":
             raise ValueError(message) from exc
         self._write_corrupt_payload_sidecar(payload)
@@ -187,9 +182,7 @@ class SQLiteLearningSignalStore:
         if isinstance(payload, str):
             sidecar_text = payload
         else:
-            sidecar_text = json.dumps(
-                {"payload": payload}, indent=2, sort_keys=True, default=str
-            )
+            sidecar_text = json.dumps({"payload": payload}, indent=2, sort_keys=True, default=str)
         sidecar_path.write_text(sidecar_text, encoding="utf-8")
         return sidecar_path
 

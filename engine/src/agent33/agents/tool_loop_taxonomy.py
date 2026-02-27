@@ -140,9 +140,11 @@ def tool_loop_to_trace_outcome(result: ToolLoopResult) -> TraceOutcome:
     return TraceOutcome(
         status=status,
         failure_code=classification.subcode,
-        failure_message=str(TOOL_LOOP_SUBCODES.get(
-            result.termination_reason, {}
-        ).get("description", result.termination_reason)),
+        failure_message=str(
+            TOOL_LOOP_SUBCODES.get(result.termination_reason, {}).get(
+                "description", result.termination_reason
+            )
+        ),
         failure_category=classification.category.value,
     )
 

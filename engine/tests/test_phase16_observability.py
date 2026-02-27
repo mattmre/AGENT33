@@ -362,21 +362,15 @@ class TestRetention:
             assert policy.artifact_type == art_type
 
     def test_storage_path_session(self):
-        path = get_storage_path(
-            ArtifactType.SES, 2026, 2, 14, session_id="SES-001"
-        )
+        path = get_storage_path(ArtifactType.SES, 2026, 2, 14, session_id="SES-001")
         assert path == "artifacts/sessions/2026/02/14/SES-001"
 
     def test_storage_path_evidence(self):
-        path = get_storage_path(
-            ArtifactType.EVD, 2026, 2, 14, task_id="T24"
-        )
+        path = get_storage_path(ArtifactType.EVD, 2026, 2, 14, task_id="T24")
         assert path == "artifacts/evidence/2026/02/T24"
 
     def test_storage_path_review(self):
-        path = get_storage_path(
-            ArtifactType.REV, 2026, 1, 16, task_id="T15"
-        )
+        path = get_storage_path(ArtifactType.REV, 2026, 1, 16, task_id="T15")
         assert path == "artifacts/reviews/2026/01/T15"
 
     def test_storage_path_logs(self):

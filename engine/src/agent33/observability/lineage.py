@@ -16,9 +16,7 @@ class LineageRecord:
     inputs_hash: str
     outputs_hash: str
     parent_id: str | None = None
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class ExecutionLineage:

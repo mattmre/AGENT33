@@ -96,6 +96,7 @@ async def stream_operations(request: Request) -> StreamingResponse:
     """Stream operations events to the UI via SSE."""
     import asyncio
     import json
+
     nats_bus = getattr(request.app.state, "nats_bus", None)
     if not nats_bus:
         raise HTTPException(status_code=503, detail="NATS not available")
@@ -120,7 +121,11 @@ async def stream_operations(request: Request) -> StreamingResponse:
         except asyncio.CancelledError:
             pass
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/processes/{process_id}", dependencies=[require_scope("workflows:read")])

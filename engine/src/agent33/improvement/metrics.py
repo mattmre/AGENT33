@@ -85,9 +85,7 @@ class MetricsTracker:
         """Return the most recent N snapshots (newest first)."""
         return list(reversed(self._snapshots[-limit:]))
 
-    def get_trend(
-        self, metric_id: str, periods: int = 4
-    ) -> tuple[MetricTrend, list[float]]:
+    def get_trend(self, metric_id: str, periods: int = 4) -> tuple[MetricTrend, list[float]]:
         """Compute trend for a specific metric across recent snapshots.
 
         Returns (trend_direction, chronological values).

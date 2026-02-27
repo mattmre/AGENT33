@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class LiveVoiceDaemon:
     """Orchestrates bi-directional voice streaming over LiveKit."""
 

@@ -118,9 +118,7 @@ class TestReasoningConfig:
             cfg.max_steps = 10  # type: ignore[misc]
 
     def test_custom_phases(self) -> None:
-        cfg = ReasoningConfig(
-            phases_enabled=(ReasoningPhase.OBSERVE, ReasoningPhase.EXECUTE)
-        )
+        cfg = ReasoningConfig(phases_enabled=(ReasoningPhase.OBSERVE, ReasoningPhase.EXECUTE))
         assert len(cfg.phases_enabled) == 2
 
 
@@ -144,8 +142,11 @@ class TestReasoningState:
 class TestReasoningResult:
     def test_frozen(self) -> None:
         r = ReasoningResult(
-            steps=[], final_output="", phase_artifacts={},
-            termination_reason="completed", total_steps=0,
+            steps=[],
+            final_output="",
+            phase_artifacts={},
+            termination_reason="completed",
+            total_steps=0,
         )
         with pytest.raises(dataclasses.FrozenInstanceError):
             r.total_steps = 5  # type: ignore[misc]
@@ -299,10 +300,13 @@ class TestReasoningProtocol:
 
         # Add ISC criteria that will fail → validated stays False
         isc = ISCManager()
-        isc.add(ISCCriterion(
-            name="must-fail", description="d",
-            check_fn=lambda ctx: False,
-        ))
+        isc.add(
+            ISCCriterion(
+                name="must-fail",
+                description="d",
+                check_fn=lambda ctx: False,
+            )
+        )
 
         protocol = ReasoningProtocol(
             config=ReasoningConfig(max_steps=50),
@@ -326,10 +330,13 @@ class TestReasoningProtocol:
         tool_loop = _make_tool_loop("final output")
 
         isc = ISCManager()
-        isc.add(ISCCriterion(
-            name="always-pass", description="d",
-            check_fn=lambda ctx: True,
-        ))
+        isc.add(
+            ISCCriterion(
+                name="always-pass",
+                description="d",
+                check_fn=lambda ctx: True,
+            )
+        )
 
         protocol = ReasoningProtocol(
             config=ReasoningConfig(max_steps=10),
@@ -354,10 +361,13 @@ class TestReasoningProtocol:
 
         # Criteria that fail → triggers resets
         isc = ISCManager()
-        isc.add(ISCCriterion(
-            name="fail", description="d",
-            check_fn=lambda ctx: False,
-        ))
+        isc.add(
+            ISCCriterion(
+                name="fail",
+                description="d",
+                check_fn=lambda ctx: False,
+            )
+        )
 
         protocol = ReasoningProtocol(
             config=ReasoningConfig(max_steps=30),
@@ -382,10 +392,13 @@ class TestReasoningProtocol:
         tool_loop = _make_tool_loop()
 
         isc = ISCManager()
-        isc.add(ISCCriterion(
-            name="always-fail", description="d",
-            check_fn=lambda ctx: False,
-        ))
+        isc.add(
+            ISCCriterion(
+                name="always-fail",
+                description="d",
+                check_fn=lambda ctx: False,
+            )
+        )
 
         protocol = ReasoningProtocol(
             config=ReasoningConfig(max_steps=50),
@@ -619,11 +632,14 @@ class TestReasoningProtocol:
 
         isc = ISCManager()
         # Anti-criterion: check_fn returns False → inverted → success=True
-        isc.add(ISCCriterion(
-            name="no-pii", description="d",
-            check_fn=lambda ctx: False,
-            is_anti=True,
-        ))
+        isc.add(
+            ISCCriterion(
+                name="no-pii",
+                description="d",
+                check_fn=lambda ctx: False,
+                is_anti=True,
+            )
+        )
 
         protocol = ReasoningProtocol(
             config=ReasoningConfig(max_steps=10, enable_anti_criteria=True),

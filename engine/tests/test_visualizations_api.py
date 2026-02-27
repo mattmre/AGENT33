@@ -202,9 +202,7 @@ class TestWorkflowGraphGeneration:
         assert data["layout"]["width"] > 0
         assert data["layout"]["height"] > 0
 
-    def test_get_dag_workflow_graph(
-        self, reader_client: TestClient, dag_workflow: str
-    ) -> None:
+    def test_get_dag_workflow_graph(self, reader_client: TestClient, dag_workflow: str) -> None:
         """DAG workflow should have correct parallel structure."""
         resp = reader_client.get(f"/v1/visualizations/workflows/{dag_workflow}/graph")
         assert resp.status_code == 200
@@ -261,9 +259,7 @@ class TestWorkflowGraphGeneration:
         for node in nodes:
             assert node["status"] == "success"
 
-    def test_graph_node_metadata(
-        self, reader_client: TestClient, dag_workflow: str
-    ) -> None:
+    def test_graph_node_metadata(self, reader_client: TestClient, dag_workflow: str) -> None:
         """Nodes should include useful metadata."""
         resp = reader_client.get(f"/v1/visualizations/workflows/{dag_workflow}/graph")
         assert resp.status_code == 200
@@ -313,15 +309,11 @@ class TestWorkflowGraphAuthorization:
         self, no_scope_client: TestClient, simple_workflow: str
     ) -> None:
         """Endpoint should require workflows:read scope."""
-        resp = no_scope_client.get(
-            f"/v1/visualizations/workflows/{simple_workflow}/graph"
-        )
+        resp = no_scope_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         assert resp.status_code == 403
         assert "workflows:read" in resp.json()["detail"]
 
-    def test_read_scope_sufficient(
-        self, reader_client: TestClient, simple_workflow: str
-    ) -> None:
+    def test_read_scope_sufficient(self, reader_client: TestClient, simple_workflow: str) -> None:
         """workflows:read scope should be sufficient."""
         resp = reader_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         assert resp.status_code == 200
@@ -333,9 +325,7 @@ class TestWorkflowGraphAuthorization:
 class TestDeterministicLayout:
     """Tests for layout determinism and correctness."""
 
-    def test_layout_is_deterministic(
-        self, reader_client: TestClient, dag_workflow: str
-    ) -> None:
+    def test_layout_is_deterministic(self, reader_client: TestClient, dag_workflow: str) -> None:
         """Multiple calls should return identical layout."""
         resp1 = reader_client.get(f"/v1/visualizations/workflows/{dag_workflow}/graph")
         resp2 = reader_client.get(f"/v1/visualizations/workflows/{dag_workflow}/graph")
@@ -349,9 +339,7 @@ class TestDeterministicLayout:
 
         assert nodes1 == nodes2
 
-    def test_parallel_nodes_same_layer(
-        self, reader_client: TestClient, dag_workflow: str
-    ) -> None:
+    def test_parallel_nodes_same_layer(self, reader_client: TestClient, dag_workflow: str) -> None:
         """Parallel nodes should be at same x coordinate (layer)."""
         resp = reader_client.get(f"/v1/visualizations/workflows/{dag_workflow}/graph")
         data = resp.json()
@@ -387,9 +375,7 @@ class TestWorkflowExecutionIntegration:
     ) -> None:
         """Status overlay should update after execution."""
         # Get initial graph - no status
-        resp1 = writer_client.get(
-            f"/v1/visualizations/workflows/{simple_workflow}/graph"
-        )
+        resp1 = writer_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         data1 = resp1.json()
         assert all(n["status"] is None for n in data1["nodes"])
 
@@ -400,8 +386,6 @@ class TestWorkflowExecutionIntegration:
         )
 
         # Get graph again - should have status
-        resp2 = writer_client.get(
-            f"/v1/visualizations/workflows/{simple_workflow}/graph"
-        )
+        resp2 = writer_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         data2 = resp2.json()
         assert all(n["status"] == "success" for n in data2["nodes"])

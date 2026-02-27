@@ -81,7 +81,8 @@ class CodeExecutor:
         return None
 
     def list_adapters(
-        self, tool_id: str | None = None,
+        self,
+        tool_id: str | None = None,
     ) -> list[AdapterDefinition]:
         """Return adapter definitions, optionally filtered by *tool_id*."""
         defs = [a.definition for a in self._adapters.values()]
@@ -99,7 +100,8 @@ class CodeExecutor:
 
         # 1. Validate
         vr = validate_contract(
-            contract, command_allowlist=self._command_allowlist,
+            contract,
+            command_allowlist=self._command_allowlist,
         )
         if not vr.is_valid:
             elapsed = (time.monotonic() - start) * 1000
@@ -143,11 +145,7 @@ class CodeExecutor:
                 success=False,
                 error=(
                     f"No adapter found for tool_id='{contract.tool_id}'"
-                    + (
-                        f", adapter_id='{contract.adapter_id}'"
-                        if contract.adapter_id
-                        else ""
-                    )
+                    + (f", adapter_id='{contract.adapter_id}'" if contract.adapter_id else "")
                 ),
                 duration_ms=round(elapsed, 2),
             )
@@ -179,7 +177,8 @@ class CodeExecutor:
         return result
 
     async def execute_with_retry(
-        self, contract: ExecutionContract,
+        self,
+        contract: ExecutionContract,
     ) -> ExecutionResult:
         """Execute with retry logic from the resolved adapter's config.
 
@@ -236,11 +235,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     """Recursively merge *override* into a copy of *base*."""
     merged = dict(base)
     for key, value in override.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
         else:
             merged[key] = value

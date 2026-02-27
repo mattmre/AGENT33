@@ -126,11 +126,13 @@ class TestRiskAssessor:
         assert result.risk_level == RiskLevel.CRITICAL
 
     def test_multiple_triggers_uses_highest(self):
-        result = self.assessor.assess([
-            RiskTrigger.CONFIG,          # low
-            RiskTrigger.API_INTERNAL,    # medium
-            RiskTrigger.SECURITY,        # high
-        ])
+        result = self.assessor.assess(
+            [
+                RiskTrigger.CONFIG,  # low
+                RiskTrigger.API_INTERNAL,  # medium
+                RiskTrigger.SECURITY,  # high
+            ]
+        )
         assert result.risk_level == RiskLevel.HIGH
         assert len(result.triggers_identified) == 3
 
@@ -187,10 +189,12 @@ class TestReviewerAssignment:
         assert l2.agent_id == "AGT-003"  # default architect
 
     def test_multiple_triggers_uses_highest_risk(self):
-        l1, l2 = self.assigner.assign([
-            RiskTrigger.CONFIG,    # low
-            RiskTrigger.SECRETS,   # critical
-        ])
+        l1, l2 = self.assigner.assign(
+            [
+                RiskTrigger.CONFIG,  # low
+                RiskTrigger.SECRETS,  # critical
+            ]
+        )
         # Secrets is highest → security assignment
         assert l1.reviewer_role == "security"
         assert l2.human_required is True
@@ -205,21 +209,15 @@ class TestSignoffStateMachine:
     """Test SignoffStateMachine transition rules."""
 
     def test_draft_to_ready(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.DRAFT, SignoffState.READY
-        )
+        result = SignoffStateMachine.transition(SignoffState.DRAFT, SignoffState.READY)
         assert result == SignoffState.READY
 
     def test_ready_to_l1_review(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.READY, SignoffState.L1_REVIEW
-        )
+        result = SignoffStateMachine.transition(SignoffState.READY, SignoffState.L1_REVIEW)
         assert result == SignoffState.L1_REVIEW
 
     def test_l1_review_to_l1_approved(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.L1_REVIEW, SignoffState.L1_APPROVED
-        )
+        result = SignoffStateMachine.transition(SignoffState.L1_REVIEW, SignoffState.L1_APPROVED)
         assert result == SignoffState.L1_APPROVED
 
     def test_l1_review_to_changes_requested(self):
@@ -235,33 +233,23 @@ class TestSignoffStateMachine:
         assert result == SignoffState.DRAFT
 
     def test_l1_approved_to_l2_review(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.L1_APPROVED, SignoffState.L2_REVIEW
-        )
+        result = SignoffStateMachine.transition(SignoffState.L1_APPROVED, SignoffState.L2_REVIEW)
         assert result == SignoffState.L2_REVIEW
 
     def test_l1_approved_to_approved(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.L1_APPROVED, SignoffState.APPROVED
-        )
+        result = SignoffStateMachine.transition(SignoffState.L1_APPROVED, SignoffState.APPROVED)
         assert result == SignoffState.APPROVED
 
     def test_l2_review_to_l2_approved(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.L2_REVIEW, SignoffState.L2_APPROVED
-        )
+        result = SignoffStateMachine.transition(SignoffState.L2_REVIEW, SignoffState.L2_APPROVED)
         assert result == SignoffState.L2_APPROVED
 
     def test_l2_approved_to_approved(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.L2_APPROVED, SignoffState.APPROVED
-        )
+        result = SignoffStateMachine.transition(SignoffState.L2_APPROVED, SignoffState.APPROVED)
         assert result == SignoffState.APPROVED
 
     def test_approved_to_merged(self):
-        result = SignoffStateMachine.transition(
-            SignoffState.APPROVED, SignoffState.MERGED
-        )
+        result = SignoffStateMachine.transition(SignoffState.APPROVED, SignoffState.MERGED)
         assert result == SignoffState.MERGED
 
     def test_merged_is_terminal(self):
@@ -275,23 +263,15 @@ class TestSignoffStateMachine:
 
     def test_cannot_skip_l1(self):
         with pytest.raises(InvalidTransitionError):
-            SignoffStateMachine.transition(
-                SignoffState.READY, SignoffState.L2_REVIEW
-            )
+            SignoffStateMachine.transition(SignoffState.READY, SignoffState.L2_REVIEW)
 
     def test_cannot_go_backwards_from_approved(self):
         with pytest.raises(InvalidTransitionError):
-            SignoffStateMachine.transition(
-                SignoffState.APPROVED, SignoffState.L1_REVIEW
-            )
+            SignoffStateMachine.transition(SignoffState.APPROVED, SignoffState.L1_REVIEW)
 
     def test_can_transition_returns_bool(self):
-        assert SignoffStateMachine.can_transition(
-            SignoffState.DRAFT, SignoffState.READY
-        ) is True
-        assert SignoffStateMachine.can_transition(
-            SignoffState.DRAFT, SignoffState.MERGED
-        ) is False
+        assert SignoffStateMachine.can_transition(SignoffState.DRAFT, SignoffState.READY) is True
+        assert SignoffStateMachine.can_transition(SignoffState.DRAFT, SignoffState.MERGED) is False
 
 
 # ===================================================================
@@ -406,15 +386,11 @@ class TestReviewServiceL1L2Flow:
 
         record = self.svc.mark_ready(record.id)
         record = self.svc.assign_l1(record.id)
-        record = self.svc.submit_l1(
-            record.id, decision=ReviewDecision.APPROVED
-        )
+        record = self.svc.submit_l1(record.id, decision=ReviewDecision.APPROVED)
         record = self.svc.assign_l2(record.id)
         assert record.l2_review.reviewer_id == "HUMAN"
 
-        record = self.svc.submit_l2(
-            record.id, decision=ReviewDecision.APPROVED
-        )
+        record = self.svc.submit_l2(record.id, decision=ReviewDecision.APPROVED)
         record = self.svc.approve(record.id, approver_id="human-admin")
         assert record.final_signoff.approval_type == "l1_l2_human"
         record = self.svc.merge(record.id)
@@ -474,9 +450,7 @@ class TestReviewServiceEscalation:
         self.svc.assign_l1(record.id)
 
         # L1 escalates → L2 now required
-        record = self.svc.submit_l1(
-            record.id, decision=ReviewDecision.ESCALATED
-        )
+        record = self.svc.submit_l1(record.id, decision=ReviewDecision.ESCALATED)
         assert record.risk_assessment.l2_required is True
         assert record.state == SignoffState.L1_APPROVED
 
@@ -710,9 +684,7 @@ class TestReviewAPI:
         created = self._create_review()
         rid = created["id"]
 
-        self.client.post(
-            f"/v1/reviews/{rid}/assess", json={"triggers": ["code-isolated"]}
-        )
+        self.client.post(f"/v1/reviews/{rid}/assess", json={"triggers": ["code-isolated"]})
         self.client.post(f"/v1/reviews/{rid}/ready")
         self.client.post(f"/v1/reviews/{rid}/assign-l1")
 

@@ -102,15 +102,11 @@ class StateMachine:
             raise RuntimeError(f"Unknown state: {self._current_state}")
 
         if state_node.final:
-            raise RuntimeError(
-                f"Cannot send events to final state '{self._current_state}'"
-            )
+            raise RuntimeError(f"Cannot send events to final state '{self._current_state}'")
 
         transition_def = state_node.on.get(event)
         if transition_def is None:
-            raise ValueError(
-                f"No transition for event '{event}' in state '{self._current_state}'"
-            )
+            raise ValueError(f"No transition for event '{event}' in state '{self._current_state}'")
 
         # Normalize to Transition
         if isinstance(transition_def, str):
@@ -240,10 +236,7 @@ class HistoryState(BaseModel):
             self._saved_configuration = dict(configuration)
         else:
             # Shallow: only save top-level
-            self._saved_configuration = {
-                k: v for k, v in configuration.items()
-                if "." not in k
-            }
+            self._saved_configuration = {k: v for k, v in configuration.items() if "." not in k}
 
     def restore(self) -> dict[str, str]:
         """Restore the saved state configuration.

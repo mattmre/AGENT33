@@ -239,9 +239,7 @@ async def ingest_document(req: IngestRequest, request: Request) -> IngestRespons
     # Add to BM25 index (batch for performance)
     bm25_indexed = False
     if bm25_index is not None:
-        docs_for_bm25 = [
-            (chunk.text, {**req.metadata, **chunk.metadata}) for chunk in chunks
-        ]
+        docs_for_bm25 = [(chunk.text, {**req.metadata, **chunk.metadata}) for chunk in chunks]
         bm25_index.add_documents(docs_for_bm25)
         bm25_indexed = True
 

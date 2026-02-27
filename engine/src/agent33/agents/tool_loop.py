@@ -247,6 +247,7 @@ class ToolLoop:
                     tc_name = tc.function.name if tc else ""
                     # Truncate raw tool output before adding to LLM context
                     from agent33.agents.context_manager import truncate_tool_output
+
                     content = (
                         truncate_tool_output(tool_result.output)
                         if tool_result.success
@@ -262,24 +263,37 @@ class ToolLoop:
                     )
 
                 # --- PHASE 34: Segmented Context Wipe (Handoff Interceptor) ---
-                for tc, result in zip(processed_tool_calls, tool_results):
+                for tc, result in zip(processed_tool_calls, tool_results, strict=False):
                     if tc.function.name == "handoff" and result.success:
                         logger.info("PHASE 34: Intercepting Handoff -> Triggering Context Wipe.")
                         from agent33.workflows.actions.handoff import StateLedger, execute_handoff
+
                         try:
                             # Re-parse args, the registry already validated them
                             parsed_args = json.loads(tc.function.arguments)
                             ledger = StateLedger(**parsed_args.get("ledger_data", {}))
                             # Wipe and reset the entire conversation array
                             messages.clear()
-                            wiped_messages = execute_handoff(ledger, [ChatMessage(role="system", content=messages[0].content if messages else "")])
+                            wiped_messages = execute_handoff(
+                                ledger,
+                                [
+                                    ChatMessage(
+                                        role="system",
+                                        content=messages[0].content if messages else "",
+                                    )
+                                ],
+                            )
                             messages.extend(wiped_messages)
 
                             # Log to ui/observation for user visibility
+                            obj = ledger.objective
                             await self._record_observation(
                                 event_type="handoff_context_wipe",
-                                content=f"Agent memory wiped. Continuing with fresh context window + Target Objective: {ledger.objective}",
-                                metadata={"source": ledger.source_agent, "target": ledger.target_agent}
+                                content=f"Agent memory wiped. Fresh context + Objective: {obj}",
+                                metadata={
+                                    "source": ledger.source_agent,
+                                    "target": ledger.target_agent,
+                                },
                             )
                         except Exception as e:
                             logger.error(f"Handoff wipe failed unexpectedly: {e}")
@@ -310,9 +324,7 @@ class ToolLoop:
                     if confirmed is False:
                         # LLM said CONTINUE — keep going
                         state.confirmation_pending = False
-                        messages.append(
-                            ChatMessage(role="assistant", content=response.content)
-                        )
+                        messages.append(ChatMessage(role="assistant", content=response.content))
                         continue
 
                     if confirmed is None:
@@ -528,9 +540,7 @@ class ToolLoop:
                 and self._leakage_detector(result.output)
             ):
                 logger.info("Leakage detected in tool output for %s", tool_name)
-                result = ToolResult.ok(
-                    "[Tool output filtered: potential answer leakage detected]"
-                )
+                result = ToolResult.ok("[Tool output filtered: potential answer leakage detected]")
                 await self._record_observation(
                     event_type="leakage_detected",
                     content=f"Answer leakage filtered from {tool_name} output",

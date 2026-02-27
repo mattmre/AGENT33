@@ -101,15 +101,11 @@ class SARIFConverter:
                     }
                 }
                 if finding.line_number is not None:
-                    location["physicalLocation"]["region"] = {
-                        "startLine": finding.line_number
-                    }
+                    location["physicalLocation"]["region"] = {"startLine": finding.line_number}
                 sarif_result["locations"] = [location]
 
             if finding.remediation:
-                sarif_result["fixes"] = [
-                    {"description": {"text": finding.remediation}}
-                ]
+                sarif_result["fixes"] = [{"description": {"text": finding.remediation}}]
 
             results.append(sarif_result)
 
@@ -146,13 +142,9 @@ class SARIFConverter:
         runs = sarif.get("runs", [])
 
         for run in runs:
-            tool_name = (
-                run.get("tool", {}).get("driver", {}).get("name", "unknown")
-            )
+            tool_name = run.get("tool", {}).get("driver", {}).get("name", "unknown")
             rules_by_id: dict[str, dict[str, Any]] = {}
-            for rule in (
-                run.get("tool", {}).get("driver", {}).get("rules", [])
-            ):
+            for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
                 rules_by_id[rule.get("id", "")] = rule
 
             for result in run.get("results", []):
@@ -166,13 +158,9 @@ class SARIFConverter:
                     try:
                         severity = FindingSeverity(props["severity"])
                     except ValueError:
-                        severity = _LEVEL_TO_SEVERITY.get(
-                            level, FindingSeverity.INFO
-                        )
+                        severity = _LEVEL_TO_SEVERITY.get(level, FindingSeverity.INFO)
                 else:
-                    severity = _LEVEL_TO_SEVERITY.get(
-                        level, FindingSeverity.INFO
-                    )
+                    severity = _LEVEL_TO_SEVERITY.get(level, FindingSeverity.INFO)
 
                 # Determine category from properties or rule prefix
                 if "category" in props:
@@ -189,9 +177,7 @@ class SARIFConverter:
                 locations = result.get("locations", [])
                 if locations:
                     phys = locations[0].get("physicalLocation", {})
-                    file_path = phys.get("artifactLocation", {}).get(
-                        "uri", ""
-                    )
+                    file_path = phys.get("artifactLocation", {}).get("uri", "")
                     region = phys.get("region", {})
                     line_number = region.get("startLine")
 
@@ -199,9 +185,7 @@ class SARIFConverter:
                 remediation = ""
                 fixes = result.get("fixes", [])
                 if fixes:
-                    remediation = (
-                        fixes[0].get("description", {}).get("text", "")
-                    )
+                    remediation = fixes[0].get("description", {}).get("text", "")
 
                 # Extract CWE from rule ID
                 cwe_id = ""
@@ -230,9 +214,7 @@ class SARIFConverter:
         return findings
 
 
-def rule_by_id_title(
-    rules_by_id: dict[str, dict[str, Any]], rule_id: str, fallback: str
-) -> str:
+def rule_by_id_title(rules_by_id: dict[str, dict[str, Any]], rule_id: str, fallback: str) -> str:
     """Extract title from rule, falling back to message."""
     rule = rules_by_id.get(rule_id, {})
     return rule.get("shortDescription", {}).get("text", fallback)

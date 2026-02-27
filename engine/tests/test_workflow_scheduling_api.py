@@ -99,9 +99,7 @@ class TestBackwardCompatibility:
         assert "executions" not in data
         assert "results_summary" not in data
 
-    def test_dry_run_still_works(
-        self, executor_client: TestClient, test_workflow: str
-    ) -> None:
+    def test_dry_run_still_works(self, executor_client: TestClient, test_workflow: str) -> None:
         """Dry run flag should still work as before."""
         resp = executor_client.post(
             f"/v1/workflows/{test_workflow}/execute",
@@ -136,11 +134,10 @@ class TestRepeatExecution:
         assert "outputs" in data
         assert "status" in data
 
-    def test_repeat_with_interval(
-        self, executor_client: TestClient, test_workflow: str
-    ) -> None:
+    def test_repeat_with_interval(self, executor_client: TestClient, test_workflow: str) -> None:
         """Repeat with interval should add delays between executions."""
         import time
+
         start = time.time()
 
         resp = executor_client.post(
@@ -233,9 +230,7 @@ class TestScheduleManagement:
         assert data["schedule_expr"] == "0 12 * * *"
         assert data["inputs"] == {"scheduled": True}
 
-    def test_schedule_with_interval(
-        self, executor_client: TestClient, test_workflow: str
-    ) -> None:
+    def test_schedule_with_interval(self, executor_client: TestClient, test_workflow: str) -> None:
         """Should be able to schedule workflow with interval."""
         resp = executor_client.post(
             f"/v1/workflows/{test_workflow}/schedule",
@@ -289,9 +284,7 @@ class TestScheduleManagement:
         assert resp.status_code == 400
         assert "must provide" in resp.json()["detail"].lower()
 
-    def test_schedule_nonexistent_workflow_returns_404(
-        self, executor_client: TestClient
-    ) -> None:
+    def test_schedule_nonexistent_workflow_returns_404(self, executor_client: TestClient) -> None:
         """Scheduling nonexistent workflow should return 404."""
         resp = executor_client.post(
             "/v1/workflows/nonexistent/schedule",
@@ -299,9 +292,7 @@ class TestScheduleManagement:
         )
         assert resp.status_code == 404
 
-    def test_list_schedules(
-        self, executor_client: TestClient, test_workflow: str
-    ) -> None:
+    def test_list_schedules(self, executor_client: TestClient, test_workflow: str) -> None:
         """Should be able to list all scheduled jobs."""
         # Schedule a job first
         schedule_resp = executor_client.post(
@@ -320,9 +311,7 @@ class TestScheduleManagement:
         found = any(s["job_id"] == job_id for s in schedules)
         assert found
 
-    def test_delete_schedule(
-        self, executor_client: TestClient, test_workflow: str
-    ) -> None:
+    def test_delete_schedule(self, executor_client: TestClient, test_workflow: str) -> None:
         """Should be able to delete a scheduled job."""
         # Schedule a job
         schedule_resp = executor_client.post(
@@ -342,9 +331,7 @@ class TestScheduleManagement:
         found = any(s["job_id"] == job_id for s in schedules)
         assert not found
 
-    def test_delete_nonexistent_schedule_returns_404(
-        self, executor_client: TestClient
-    ) -> None:
+    def test_delete_nonexistent_schedule_returns_404(self, executor_client: TestClient) -> None:
         """Deleting nonexistent schedule should return 404."""
         resp = executor_client.delete("/v1/workflows/schedules/nonexistent-job-id")
         assert resp.status_code == 404
@@ -430,9 +417,7 @@ class TestWorkflowHistory:
         timestamps = [e["timestamp"] for e in history]
         assert timestamps == sorted(timestamps, reverse=True)
 
-    def test_history_empty_for_never_executed_workflow(
-        self, executor_client: TestClient
-    ) -> None:
+    def test_history_empty_for_never_executed_workflow(self, executor_client: TestClient) -> None:
         """History should be empty for workflows that haven't been executed."""
         # Create a workflow but don't execute it
         workflow_name = f"never-executed-{uuid.uuid4().hex[:8]}"
@@ -451,9 +436,7 @@ class TestWorkflowHistory:
         history = history_resp.json()
         assert len(history) == 0
 
-    def test_history_includes_error_information(
-        self, executor_client: TestClient
-    ) -> None:
+    def test_history_includes_error_information(self, executor_client: TestClient) -> None:
         """History should capture error information for failed executions."""
         # Create a workflow that will fail
         workflow_name = f"failing-workflow-{uuid.uuid4().hex[:8]}"
@@ -511,17 +494,13 @@ class TestSchedulingAccessControl:
         assert resp.status_code == 403
         assert "workflows:execute" in resp.json()["detail"]
 
-    def test_list_schedules_requires_read_scope(
-        self, executor_client: TestClient
-    ) -> None:
+    def test_list_schedules_requires_read_scope(self, executor_client: TestClient) -> None:
         """Listing schedules should require workflows:read scope."""
         # This test uses executor_client which has read scope
         resp = executor_client.get("/v1/workflows/schedules")
         assert resp.status_code == 200
 
-    def test_delete_schedule_requires_execute_scope(
-        self, reader_client: TestClient
-    ) -> None:
+    def test_delete_schedule_requires_execute_scope(self, reader_client: TestClient) -> None:
         """Deleting schedule should require workflows:execute scope."""
         resp = reader_client.delete("/v1/workflows/schedules/fake-job-id")
         assert resp.status_code == 403

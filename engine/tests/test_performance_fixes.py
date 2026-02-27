@@ -68,9 +68,7 @@ class TestEmbeddingProvider:
         """embed_batch() should send ONE POST to /api/embed with list input."""
         provider = self._make_provider()
 
-        mock_resp = _mock_response(
-            {"embeddings": [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]}
-        )
+        mock_resp = _mock_response({"embeddings": [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]})
         mock = _mock_client()
         mock.post.return_value = mock_resp
         provider._client = mock
@@ -179,9 +177,7 @@ class TestOllamaProviderPooling:
 
         result = await provider._post("/api/chat", {"model": "test"})
 
-        mock.post.assert_awaited_once_with(
-            "http://test:11434/api/chat", json={"model": "test"}
-        )
+        mock.post.assert_awaited_once_with("http://test:11434/api/chat", json={"model": "test"})
         assert result == {"result": "ok"}
 
     @pytest.mark.asyncio
@@ -218,9 +214,7 @@ class TestOllamaProviderPooling:
 
         mock_success = _mock_response({"ok": True})
         mock = _mock_client()
-        mock.post = AsyncMock(
-            side_effect=[httpx.ConnectError("connection refused"), mock_success]
-        )
+        mock.post = AsyncMock(side_effect=[httpx.ConnectError("connection refused"), mock_success])
         provider._client = mock
 
         with patch("agent33.llm.ollama.asyncio.sleep", new_callable=AsyncMock):
@@ -254,10 +248,12 @@ class TestOpenAIProviderPooling:
         """_post() should use self._client instead of creating a new client."""
         provider = self._make_provider()
 
-        mock_resp = _mock_response({
-            "choices": [{"message": {"content": "hi"}}],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 2},
-        })
+        mock_resp = _mock_response(
+            {
+                "choices": [{"message": {"content": "hi"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+            }
+        )
         mock = _mock_client()
         mock.post.return_value = mock_resp
         provider._client = mock
@@ -308,9 +304,7 @@ class TestOpenAIProviderPooling:
 
         mock_success = _mock_response({"ok": True})
         mock = _mock_client()
-        mock.post = AsyncMock(
-            side_effect=[httpx.ConnectError("connection refused"), mock_success]
-        )
+        mock.post = AsyncMock(side_effect=[httpx.ConnectError("connection refused"), mock_success])
         provider._client = mock
 
         with patch("agent33.llm.openai.asyncio.sleep", new_callable=AsyncMock):
@@ -344,12 +338,14 @@ class TestJinaEmbeddingProviderPooling:
         """embed_batch() should use self._client."""
         provider = self._make_provider()
 
-        mock_resp = _mock_response({
-            "data": [
-                {"index": 0, "embedding": [0.1, 0.2]},
-                {"index": 1, "embedding": [0.3, 0.4]},
-            ]
-        })
+        mock_resp = _mock_response(
+            {
+                "data": [
+                    {"index": 0, "embedding": [0.1, 0.2]},
+                    {"index": 1, "embedding": [0.3, 0.4]},
+                ]
+            }
+        )
         mock = _mock_client()
         mock.post.return_value = mock_resp
         provider._client = mock
@@ -377,9 +373,7 @@ class TestJinaEmbeddingProviderPooling:
         """embed() should delegate to embed_batch() for a single text."""
         provider = self._make_provider()
 
-        mock_resp = _mock_response({
-            "data": [{"index": 0, "embedding": [0.5, 0.6]}]
-        })
+        mock_resp = _mock_response({"data": [{"index": 0, "embedding": [0.5, 0.6]}]})
         mock = _mock_client()
         mock.post.return_value = mock_resp
         provider._client = mock
@@ -396,13 +390,15 @@ class TestJinaEmbeddingProviderPooling:
         provider = self._make_provider()
 
         # Return in reverse index order to verify sorting
-        mock_resp = _mock_response({
-            "data": [
-                {"index": 2, "embedding": [0.5, 0.6]},
-                {"index": 0, "embedding": [0.1, 0.2]},
-                {"index": 1, "embedding": [0.3, 0.4]},
-            ]
-        })
+        mock_resp = _mock_response(
+            {
+                "data": [
+                    {"index": 2, "embedding": [0.5, 0.6]},
+                    {"index": 0, "embedding": [0.1, 0.2]},
+                    {"index": 1, "embedding": [0.3, 0.4]},
+                ]
+            }
+        )
         mock = _mock_client()
         mock.post.return_value = mock_resp
         provider._client = mock

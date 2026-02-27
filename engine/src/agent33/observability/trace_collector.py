@@ -226,8 +226,6 @@ class TraceCollector:
         if trace_id is not None:
             results = [f for f in results if f.trace_id == trace_id]
         if category is not None:
-            results = [
-                f for f in results if f.classification.category == category
-            ]
+            results = [f for f in results if f.classification.category == category]
         results.sort(key=lambda f: f.occurred_at, reverse=True)
         return results[:limit]

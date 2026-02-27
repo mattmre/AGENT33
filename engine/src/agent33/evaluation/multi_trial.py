@@ -219,9 +219,7 @@ class MultiTrialExecutor:
         """Execute multiple trials for a single configuration."""
         trials: list[TrialResult] = []
         for i in range(1, num_trials + 1):
-            trial = await self.execute_trial(
-                task_id, agent, model, skills_enabled, i
-            )
+            trial = await self.execute_trial(task_id, agent, model, skills_enabled, i)
             trials.append(trial)
         return MultiTrialResult(
             task_id=task_id,

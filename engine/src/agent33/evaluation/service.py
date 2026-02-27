@@ -109,9 +109,7 @@ class EvaluationService:
 
     def list_runs(self, limit: int = 50) -> list[EvaluationRun]:
         """List evaluation runs, most recent first."""
-        runs = sorted(
-            self._runs.values(), key=lambda r: r.started_at, reverse=True
-        )
+        runs = sorted(self._runs.values(), key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
 
     def submit_results(
@@ -143,17 +141,13 @@ class EvaluationService:
         metric_values = {m.metric_id: m.value for m in run.metrics}
 
         # Check gate
-        run.gate_report = self._enforcer.check_gate(
-            run.gate, metric_values, task_results
-        )
+        run.gate_report = self._enforcer.check_gate(run.gate, metric_values, task_results)
 
         # Detect regressions against latest baseline
         baseline = self.get_latest_baseline()
         if baseline is not None:
             thresholds = self._build_threshold_map(run.gate)
-            regressions = self._detector.detect(
-                baseline, run.metrics, task_results, thresholds
-            )
+            regressions = self._detector.detect(baseline, run.metrics, task_results, thresholds)
             self._recorder.record_many(regressions)
             run.regressions = regressions
 
@@ -208,18 +202,14 @@ class EvaluationService:
 
     def list_baselines(self, limit: int = 20) -> list[BaselineSnapshot]:
         """List baselines, most recent first."""
-        baselines = sorted(
-            self._baselines.values(), key=lambda b: b.created_at, reverse=True
-        )
+        baselines = sorted(self._baselines.values(), key=lambda b: b.created_at, reverse=True)
         return baselines[:limit]
 
     # ------------------------------------------------------------------
     # Multi-trial experiments
     # ------------------------------------------------------------------
 
-    async def start_multi_trial_run(
-        self, config: ExperimentConfig
-    ) -> MultiTrialRun:
+    async def start_multi_trial_run(self, config: ExperimentConfig) -> MultiTrialRun:
         """Create and execute a multi-trial experiment.
 
         Runs the full (task x agent x model x skills_mode) matrix and

@@ -178,9 +178,7 @@ class TraceRecord(BaseModel):
     ) -> None:
         """Mark the trace as completed and compute duration."""
         self.completed_at = datetime.now(UTC)
-        self.duration_ms = int(
-            (self.completed_at - self.started_at).total_seconds() * 1000
-        )
+        self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
         self.outcome.status = status
         if failure_code:
             self.outcome.failure_code = failure_code

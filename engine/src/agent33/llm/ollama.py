@@ -61,9 +61,7 @@ class OllamaProvider:
         operation = f"POST {path}"
 
         async def _perform_post() -> dict[str, Any]:
-            response = await self._client.post(
-                f"{self._base_url}{path}", json=payload
-            )
+            response = await self._client.post(f"{self._base_url}{path}", json=payload)
             response.raise_for_status()
             return response.json()  # type: ignore[no-any-return]
 
@@ -85,7 +83,7 @@ class OllamaProvider:
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
-                    delay = _BACKOFF_BASE * (2 ** attempt)
+                    delay = _BACKOFF_BASE * (2**attempt)
                     logger.warning(
                         "ollama request failed (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1,
@@ -98,9 +96,7 @@ class OllamaProvider:
                 if self._boundary_executor is not None:
                     raise map_connector_exception(exc, connector, operation) from exc
                 raise
-        failure = RuntimeError(
-            f"Ollama request to {path} failed after {_MAX_ATTEMPTS} attempts"
-        )
+        failure = RuntimeError(f"Ollama request to {path} failed after {_MAX_ATTEMPTS} attempts")
         if self._boundary_executor is not None and last_exc is not None:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
@@ -132,7 +128,7 @@ class OllamaProvider:
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
-                    delay = _BACKOFF_BASE * (2 ** attempt)
+                    delay = _BACKOFF_BASE * (2**attempt)
                     logger.warning(
                         "ollama GET failed (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1,
@@ -145,9 +141,7 @@ class OllamaProvider:
                 if self._boundary_executor is not None:
                     raise map_connector_exception(exc, connector, operation) from exc
                 raise
-        failure = RuntimeError(
-            f"Ollama GET {path} failed after {_MAX_ATTEMPTS} attempts"
-        )
+        failure = RuntimeError(f"Ollama GET {path} failed after {_MAX_ATTEMPTS} attempts")
         if self._boundary_executor is not None and last_exc is not None:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
@@ -224,8 +218,7 @@ class OllamaProvider:
             # Wrap raw function defs in OpenAI-style tool objects for
             # consistency with the OpenAI provider format.
             payload["tools"] = [
-                t if "type" in t else {"type": "function", "function": t}
-                for t in tools
+                t if "type" in t else {"type": "function", "function": t} for t in tools
             ]
 
         data = await self._post("/api/chat", payload)

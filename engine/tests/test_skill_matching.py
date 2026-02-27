@@ -174,10 +174,7 @@ class TestSkillBM25:
 
     def test_top_k_limit_is_respected(self) -> None:
         bm25 = _SkillBM25()
-        skills = [
-            _make_skill(f"skill-{i}", f"deploy variant {i}", ["deploy"])
-            for i in range(10)
-        ]
+        skills = [_make_skill(f"skill-{i}", f"deploy variant {i}", ["deploy"]) for i in range(10)]
         bm25.index(skills)
 
         results = bm25.query("deploy", top_k=3)
@@ -233,7 +230,7 @@ class TestParseJsonArray:
         assert result == ["1", "2", "3"]
 
     def test_code_fence_without_json_label(self) -> None:
-        text = "```\n[\"foo\", \"bar\"]\n```"
+        text = '```\n["foo", "bar"]\n```'
         result = SkillMatcher._parse_json_array(text)
         assert result == ["foo", "bar"]
 
@@ -270,7 +267,7 @@ class TestParseStrictResponse:
 
     def test_object_embedded_in_text(self) -> None:
         text = (
-            'After analysis, here is my assessment:\n'
+            "After analysis, here is my assessment:\n"
             '{"keep": ["deploy"], "reject": [{"name": "test", "reason": "irrelevant"}]}\n'
             "That's my recommendation."
         )
@@ -312,9 +309,7 @@ class TestSkillMatchResult:
         assert result.rejected[0]["reason"] == "leaks answer"
 
     def test_stage_counts_stored(self) -> None:
-        result = SkillMatchResult(
-            skills=[], stage1_count=10, stage2_count=6, stage4_count=3
-        )
+        result = SkillMatchResult(skills=[], stage1_count=10, stage2_count=6, stage4_count=3)
         assert result.stage1_count == 10
         assert result.stage2_count == 6
         assert result.stage4_count == 3
@@ -400,12 +395,15 @@ class TestSkillMatcher:
         ]
         registry = _make_registry(*skills)
         # Stage 2 returns two, stage 4 keeps one
-        router = _make_router(side_effect=[
-            _llm_response('["deploy-a", "deploy-b"]'),
-            _llm_response(
-                '{"keep": ["deploy-a"], "reject": [{"name": "deploy-b", "reason": "irrelevant"}]}'
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["deploy-a", "deploy-b"]'),
+                _llm_response(
+                    '{"keep": ["deploy-a"], "reject":'
+                    ' [{"name": "deploy-b", "reason": "irrelevant"}]}'
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -431,10 +429,12 @@ class TestSkillMatcher:
         registry = _make_registry(*skills)
         # Stage 2: keep deploy and scale
         # Stage 4: keep both
-        router = _make_router(side_effect=[
-            _llm_response('["kubernetes-deploy", "kubernetes-scale"]'),
-            _llm_response('{"keep": ["kubernetes-deploy", "kubernetes-scale"], "reject": []}'),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["kubernetes-deploy", "kubernetes-scale"]'),
+                _llm_response('{"keep": ["kubernetes-deploy", "kubernetes-scale"], "reject": []}'),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy kubernetes")
@@ -452,12 +452,14 @@ class TestSkillMatcher:
         ]
         registry = _make_registry(*skills)
         # Stage 2 fails, stage 4 succeeds
-        router = _make_router(side_effect=[
-            RuntimeError("LLM service unavailable"),
-            _llm_response(
-                '{"keep": ["deploy-a", "deploy-b", "deploy-c", "deploy-d"], "reject": []}'
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                RuntimeError("LLM service unavailable"),
+                _llm_response(
+                    '{"keep": ["deploy-a", "deploy-b", "deploy-c", "deploy-d"], "reject": []}'
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -477,12 +479,14 @@ class TestSkillMatcher:
         registry = _make_registry(*skills)
         # Stage 2 returns empty array -> fallback keeps all
         # Stage 4 keeps all
-        router = _make_router(side_effect=[
-            _llm_response("[]"),
-            _llm_response(
-                '{"keep": ["deploy-a", "deploy-b", "deploy-c", "deploy-d"], "reject": []}'
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response("[]"),
+                _llm_response(
+                    '{"keep": ["deploy-a", "deploy-b", "deploy-c", "deploy-d"], "reject": []}'
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -521,18 +525,20 @@ class TestSkillMatcher:
         registry = _make_registry(*skills)
         # Stage 2: keep all four
         # Stage 4: keep deploy and guide, reject leaker and cooking
-        router = _make_router(side_effect=[
-            _llm_response(
-                '["kubernetes-deploy", "answer-leaker", "helpful-guide", "irrelevant-cooking"]'
-            ),
-            _llm_response(
-                '{"keep": ["kubernetes-deploy", "helpful-guide"], '
-                '"reject": ['
-                '{"name": "answer-leaker", "reason": "leaks answer"}, '
-                '{"name": "irrelevant-cooking", "reason": "not relevant"}'
-                "]}"
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response(
+                    '["kubernetes-deploy", "answer-leaker", "helpful-guide", "irrelevant-cooking"]'
+                ),
+                _llm_response(
+                    '{"keep": ["kubernetes-deploy", "helpful-guide"], '
+                    '"reject": ['
+                    '{"name": "answer-leaker", "reason": "leaks answer"}, '
+                    '{"name": "irrelevant-cooking", "reason": "not relevant"}'
+                    "]}"
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -553,16 +559,18 @@ class TestSkillMatcher:
             _make_skill("filler-b", "Filler skill B", ["test"]),
         ]
         registry = _make_registry(*skills)
-        router = _make_router(side_effect=[
-            _llm_response('["leaker", "helper", "filler-a", "filler-b"]'),
-            _llm_response(
-                '{"keep": ["helper"], "reject": ['
-                '{"name": "leaker", "reason": "leaks the expected answer"},'
-                '{"name": "filler-a", "reason": "irrelevant"},'
-                '{"name": "filler-b", "reason": "irrelevant"}'
-                "]}"
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["leaker", "helper", "filler-a", "filler-b"]'),
+                _llm_response(
+                    '{"keep": ["helper"], "reject": ['
+                    '{"name": "leaker", "reason": "leaks the expected answer"},'
+                    '{"name": "filler-a", "reason": "irrelevant"},'
+                    '{"name": "filler-b", "reason": "irrelevant"}'
+                    "]}"
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("test problem")
@@ -580,10 +588,12 @@ class TestSkillMatcher:
         ]
         registry = _make_registry(*skills)
         # Stage 2 succeeds, stage 4 fails
-        router = _make_router(side_effect=[
-            _llm_response('["deploy-a", "deploy-b"]'),
-            RuntimeError("LLM timeout"),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["deploy-a", "deploy-b"]'),
+                RuntimeError("LLM timeout"),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -602,10 +612,12 @@ class TestSkillMatcher:
             _make_skill("deploy-d", "Deploy delta version", ["deploy"]),
         ]
         registry = _make_registry(*skills)
-        router = _make_router(side_effect=[
-            _llm_response('["deploy-a", "deploy-b"]'),
-            _llm_response('{"keep": [], "reject": []}'),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["deploy-a", "deploy-b"]'),
+                _llm_response('{"keep": [], "reject": []}'),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("deploy")
@@ -675,35 +687,59 @@ class TestSkillMatcher:
     async def test_full_pipeline_end_to_end(self) -> None:
         """Exercise the full pipeline with multiple skills filtered at each stage."""
         skills = [
-            _make_skill("data-analysis", "Analyze datasets with pandas", ["data", "python"],
-                        instructions="Use pandas DataFrame for analysis"),
-            _make_skill("data-viz", "Visualize data with matplotlib", ["data", "python"],
-                        instructions="Use matplotlib.pyplot for charts"),
-            _make_skill("data-cleaning", "Clean and preprocess data", ["data", "python"],
-                        instructions="Handle missing values and outliers"),
-            _make_skill("web-scraping", "Scrape websites for data", ["web", "scraping"],
-                        instructions="Use requests and BeautifulSoup"),
-            _make_skill("kubernetes-deploy", "Deploy to K8s", ["devops"],
-                        instructions="kubectl apply workflow"),
-            _make_skill("data-export", "Export data to various formats", ["data", "export"],
-                        instructions="The expected output is exactly [1,2,3,4,5]"),
+            _make_skill(
+                "data-analysis",
+                "Analyze datasets with pandas",
+                ["data", "python"],
+                instructions="Use pandas DataFrame for analysis",
+            ),
+            _make_skill(
+                "data-viz",
+                "Visualize data with matplotlib",
+                ["data", "python"],
+                instructions="Use matplotlib.pyplot for charts",
+            ),
+            _make_skill(
+                "data-cleaning",
+                "Clean and preprocess data",
+                ["data", "python"],
+                instructions="Handle missing values and outliers",
+            ),
+            _make_skill(
+                "web-scraping",
+                "Scrape websites for data",
+                ["web", "scraping"],
+                instructions="Use requests and BeautifulSoup",
+            ),
+            _make_skill(
+                "kubernetes-deploy",
+                "Deploy to K8s",
+                ["devops"],
+                instructions="kubectl apply workflow",
+            ),
+            _make_skill(
+                "data-export",
+                "Export data to various formats",
+                ["data", "export"],
+                instructions="The expected output is exactly [1,2,3,4,5]",
+            ),
         ]
         registry = _make_registry(*skills)
 
         # Stage 2: keep data-related skills (drop k8s, web)
         # Stage 4: keep analysis and viz, reject cleaning (irrelevant for task)
         #          and export (leaks answer)
-        router = _make_router(side_effect=[
-            _llm_response(
-                '["data-analysis", "data-viz", "data-cleaning", "data-export"]'
-            ),
-            _llm_response(
-                '{"keep": ["data-analysis", "data-viz"], "reject": ['
-                '{"name": "data-cleaning", "reason": "not needed for visualization task"}, '
-                '{"name": "data-export", "reason": "leaks expected output"}'
-                "]}"
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["data-analysis", "data-viz", "data-cleaning", "data-export"]'),
+                _llm_response(
+                    '{"keep": ["data-analysis", "data-viz"], "reject": ['
+                    '{"name": "data-cleaning", "reason": "not needed for visualization task"}, '
+                    '{"name": "data-export", "reason": "leaks expected output"}'
+                    "]}"
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3, top_k=10)
 
         result = await matcher.match("analyze data and create visualization")
@@ -732,13 +768,13 @@ class TestSkillMatcher:
             _make_skill("skill-d", "Skill delta", ["test"]),
         ]
         registry = _make_registry(*skills)
-        router = _make_router(side_effect=[
-            _llm_response('["skill-a"]'),
-            _llm_response('{"keep": ["skill-a"], "reject": []}'),
-        ])
-        matcher = SkillMatcher(
-            registry, router, model="gpt-4o", temperature=0.3, skip_llm_below=3
+        router = _make_router(
+            side_effect=[
+                _llm_response('["skill-a"]'),
+                _llm_response('{"keep": ["skill-a"], "reject": []}'),
+            ]
         )
+        matcher = SkillMatcher(registry, router, model="gpt-4o", temperature=0.3, skip_llm_below=3)
 
         await matcher.match("test skill")
 
@@ -758,10 +794,12 @@ class TestSkillMatcher:
             _make_skill("deploy-delta", "Deploy delta service", ["deploy"]),
         ]
         registry = _make_registry(*skills)
-        router = _make_router(side_effect=[
-            _llm_response('["deploy-alpha"]'),
-            _llm_response('{"keep": ["deploy-alpha"], "reject": []}'),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response('["deploy-alpha"]'),
+                _llm_response('{"keep": ["deploy-alpha"], "reject": []}'),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         await matcher.match("deploy service")
@@ -782,8 +820,7 @@ class TestSkillMatcher:
         """Deprecated skills are excluded by BM25 and never reach LLM stages."""
         skills = [
             _make_skill("active-deploy", "Deploy apps", ["deploy"]),
-            _make_skill("old-deploy", "Legacy deploy", ["deploy"],
-                        status=SkillStatus.DEPRECATED),
+            _make_skill("old-deploy", "Legacy deploy", ["deploy"], status=SkillStatus.DEPRECATED),
         ]
         registry = _make_registry(*skills)
         router = _make_router()
@@ -804,12 +841,14 @@ class TestSkillMatcher:
             _make_skill("skill-d", "Skill delta version", ["test"]),
         ]
         registry = _make_registry(*skills)
-        router = _make_router(side_effect=[
-            _llm_response("I'm not sure which skills to keep, let me think..."),
-            _llm_response(
-                '{"keep": ["skill-a", "skill-b", "skill-c", "skill-d"], "reject": []}'
-            ),
-        ])
+        router = _make_router(
+            side_effect=[
+                _llm_response("I'm not sure which skills to keep, let me think..."),
+                _llm_response(
+                    '{"keep": ["skill-a", "skill-b", "skill-c", "skill-d"], "reject": []}'
+                ),
+            ]
+        )
         matcher = SkillMatcher(registry, router, skip_llm_below=3)
 
         result = await matcher.match("test skill")

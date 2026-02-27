@@ -38,9 +38,7 @@ class Alert:
     metric: str
     current_value: float
     threshold: float
-    triggered_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    triggered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class AlertManager:

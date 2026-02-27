@@ -109,9 +109,7 @@ class ExperimentRunner:
 
         return impacts
 
-    def generate_comparison_matrix(
-        self, run: MultiTrialRun
-    ) -> dict[str, Any]:
+    def generate_comparison_matrix(self, run: MultiTrialRun) -> dict[str, Any]:
         """Generate a comparison matrix of results across dimensions.
 
         Returns a nested dict keyed by ``agent/model`` -> ``task_id``

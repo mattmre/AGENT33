@@ -141,9 +141,7 @@ class TelegramAdapter:
             )
             latency = (time.monotonic() - start) * 1000
             if resp.status_code == 200 and resp.json().get("ok"):
-                poll_alive = (
-                    self._poll_task is not None and not self._poll_task.done()
-                )
+                poll_alive = self._poll_task is not None and not self._poll_task.done()
                 return ChannelHealthResult(
                     platform="telegram",
                     status="ok" if self._running and poll_alive else "degraded",
@@ -180,6 +178,7 @@ class TelegramAdapter:
         operation = "poll_updates"
         while self._running:
             try:
+
                 async def _perform_poll(
                     _request: object,
                     *,

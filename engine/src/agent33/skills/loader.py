@@ -85,9 +85,7 @@ def load_from_directory(path: Path) -> SkillDefinition:
                 skill = load_from_yaml(yaml_path)
                 break
         else:
-            raise FileNotFoundError(
-                f"No SKILL.md or skill.yaml found in {path}"
-            )
+            raise FileNotFoundError(f"No SKILL.md or skill.yaml found in {path}")
 
     # Discover conventional artifact directories
     scripts = path / "scripts"

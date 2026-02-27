@@ -50,23 +50,23 @@ async def health() -> dict[str, Any]:
         import asyncpg
 
         conn = await asyncpg.connect(
-            settings.database_url.replace("+asyncpg", "").replace(
-                "postgresql", "postgres"
-            )
+            settings.database_url.replace("+asyncpg", "").replace("postgresql", "postgres")
         )
         await conn.execute("SELECT 1")
         await conn.close()
         checks["postgres"] = "ok"
     except Exception:
         checks["postgres"] = "unavailable"
-        
+
     # External Integrations
     if settings.openai_api_key.get_secret_value():
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 r = await client.get(
                     "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"}
+                    headers={
+                        "Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"
+                    },
                 )
                 checks["openai"] = "ok" if r.status_code == 200 else "degraded"
         except Exception:
@@ -79,7 +79,7 @@ async def health() -> dict[str, Any]:
             async with httpx.AsyncClient(timeout=3) as client:
                 r = await client.get(
                     "https://api.elevenlabs.io/v1/models",
-                    headers={"xi-api-key": settings.elevenlabs_api_key.get_secret_value()}
+                    headers={"xi-api-key": settings.elevenlabs_api_key.get_secret_value()},
                 )
                 checks["elevenlabs"] = "ok" if r.status_code == 200 else "degraded"
         except Exception:
@@ -89,7 +89,7 @@ async def health() -> dict[str, Any]:
 
     if settings.jina_api_key.get_secret_value():
         # Jina reader uses a simple ping since /models isn't universally standard
-         checks["jina"] = "configured"
+        checks["jina"] = "configured"
     else:
         checks["jina"] = "unconfigured"
 

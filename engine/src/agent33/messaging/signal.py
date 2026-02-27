@@ -14,6 +14,7 @@ from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
+
 class SignalAdapter:
     """MessagingAdapter implementation for Signal via signal-cli REST API."""
 

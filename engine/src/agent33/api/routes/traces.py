@@ -92,9 +92,7 @@ def _get_tenant_id(request: Request) -> str:
 
 
 @router.post("/", status_code=201, dependencies=[require_scope("tools:execute")])
-async def start_trace(
-    body: StartTraceRequest, request: Request
-) -> dict[str, Any]:
+async def start_trace(body: StartTraceRequest, request: Request) -> dict[str, Any]:
     """Start a new trace."""
     tenant_id = _get_tenant_id(request)
     trace = _collector.start_trace(
@@ -148,9 +146,7 @@ async def get_trace(trace_id: str) -> dict[str, Any]:
     return trace.model_dump(mode="json")
 
 
-@router.post(
-    "/{trace_id}/actions", dependencies=[require_scope("tools:execute")]
-)
+@router.post("/{trace_id}/actions", dependencies=[require_scope("tools:execute")])
 async def add_action(trace_id: str, body: AddActionRequest) -> dict[str, Any]:
     """Add an action to a trace step."""
     try:
@@ -170,12 +166,8 @@ async def add_action(trace_id: str, body: AddActionRequest) -> dict[str, Any]:
     return {"action_id": action.action_id, "status": action.status.value}
 
 
-@router.post(
-    "/{trace_id}/complete", dependencies=[require_scope("tools:execute")]
-)
-async def complete_trace(
-    trace_id: str, body: CompleteTraceRequest
-) -> dict[str, Any]:
+@router.post("/{trace_id}/complete", dependencies=[require_scope("tools:execute")])
+async def complete_trace(trace_id: str, body: CompleteTraceRequest) -> dict[str, Any]:
     """Mark a trace as completed."""
     try:
         trace = _collector.complete_trace(
@@ -203,9 +195,7 @@ async def complete_trace(
     status_code=201,
     dependencies=[require_scope("tools:execute")],
 )
-async def record_failure(
-    trace_id: str, body: RecordFailureRequest
-) -> dict[str, Any]:
+async def record_failure(trace_id: str, body: RecordFailureRequest) -> dict[str, Any]:
     """Record a failure against a trace."""
     failure = _collector.record_failure(
         trace_id=trace_id,

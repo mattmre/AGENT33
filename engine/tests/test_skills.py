@@ -337,12 +337,8 @@ class TestSkillRegistry:
         from agent33.skills.registry import SkillRegistry
 
         registry = SkillRegistry()
-        registry.register(
-            SkillDefinition(name="deploy", description="Deploy workloads")
-        )
-        registry.register(
-            SkillDefinition(name="review", description="Code review")
-        )
+        registry.register(SkillDefinition(name="deploy", description="Deploy workloads"))
+        registry.register(SkillDefinition(name="review", description="Code review"))
         results = registry.search("deploy")
         assert len(results) == 1
         assert results[0].name == "deploy"
@@ -351,9 +347,7 @@ class TestSkillRegistry:
         from agent33.skills.registry import SkillRegistry
 
         registry = SkillRegistry()
-        registry.register(
-            SkillDefinition(name="skill-a", tags=["kubernetes"])
-        )
+        registry.register(SkillDefinition(name="skill-a", tags=["kubernetes"]))
         results = registry.search("kubernetes")
         assert len(results) == 1
 
@@ -416,9 +410,7 @@ class TestProgressiveDisclosure:
         from agent33.skills.registry import SkillRegistry
 
         registry = SkillRegistry()
-        registry.register(
-            SkillDefinition(name="test", description="A test skill")
-        )
+        registry.register(SkillDefinition(name="test", description="A test skill"))
         meta = registry.get_metadata_only("test")
         assert meta is not None
         assert meta["name"] == "test"
@@ -456,9 +448,7 @@ class TestProgressiveDisclosure:
         # Create a skill with a resource file
         scripts_dir = tmp_path / "scripts"
         scripts_dir.mkdir()
-        (scripts_dir / "check.py").write_text(
-            "print('hello')", encoding="utf-8"
-        )
+        (scripts_dir / "check.py").write_text("print('hello')", encoding="utf-8")
 
         registry = SkillRegistry()
         registry.register(
@@ -478,9 +468,7 @@ class TestProgressiveDisclosure:
         (tmp_path.parent / "secret.txt").write_text("secret", encoding="utf-8")
 
         registry = SkillRegistry()
-        registry.register(
-            SkillDefinition(name="test", base_path=tmp_path)
-        )
+        registry.register(SkillDefinition(name="test", base_path=tmp_path))
         content = registry.get_resource("test", "../secret.txt")
         assert content is None
 
@@ -488,9 +476,7 @@ class TestProgressiveDisclosure:
         from agent33.skills.registry import SkillRegistry
 
         registry = SkillRegistry()
-        registry.register(
-            SkillDefinition(name="test", base_path=tmp_path)
-        )
+        registry.register(SkillDefinition(name="test", base_path=tmp_path))
         assert registry.get_resource("test", "nonexistent.txt") is None
 
     def test_l2_missing_skill(self) -> None:
@@ -518,10 +504,12 @@ class TestSkillInjector:
         return SkillInjector(registry)
 
     def test_metadata_block(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(name="deploy", description="Deploy workloads"),
-            SkillDefinition(name="review", description="Code review"),
-        ])
+        injector = self._make_injector(
+            [
+                SkillDefinition(name="deploy", description="Deploy workloads"),
+                SkillDefinition(name="review", description="Code review"),
+            ]
+        )
         block = injector.build_skill_metadata_block(["deploy", "review"])
         assert "# Available Skills" in block
         assert "deploy: Deploy workloads" in block
@@ -538,15 +526,17 @@ class TestSkillInjector:
         assert "(none)" in block
 
     def test_instructions_block(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(
-                name="deploy",
-                instructions="# Deploy Guide\nStep 1: ...",
-                allowed_tools=["shell", "file_ops"],
-                approval_required_for=["kubectl apply"],
-                autonomy_level="supervised",
-            ),
-        ])
+        injector = self._make_injector(
+            [
+                SkillDefinition(
+                    name="deploy",
+                    instructions="# Deploy Guide\nStep 1: ...",
+                    allowed_tools=["shell", "file_ops"],
+                    approval_required_for=["kubectl apply"],
+                    autonomy_level="supervised",
+                ),
+            ]
+        )
         block = injector.build_skill_instructions_block("deploy")
         assert "# Active Skill: deploy" in block
         assert "## Governance" in block
@@ -561,12 +551,14 @@ class TestSkillInjector:
         assert "not found" in block
 
     def test_instructions_block_no_governance(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(
-                name="simple",
-                instructions="Just do it.",
-            ),
-        ])
+        injector = self._make_injector(
+            [
+                SkillDefinition(
+                    name="simple",
+                    instructions="Just do it.",
+                ),
+            ]
+        )
         block = injector.build_skill_instructions_block("simple")
         assert "## Governance" not in block
         assert "Just do it." in block
@@ -609,37 +601,41 @@ class TestToolContextResolution:
         assert sorted(result.command_allowlist) == ["cat", "ls"]
 
     def test_skill_narrows_allowlist(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(
-                name="restricted",
-                allowed_tools=["shell", "file_ops"],
-            ),
-        ])
+        injector = self._make_injector(
+            [
+                SkillDefinition(
+                    name="restricted",
+                    allowed_tools=["shell", "file_ops"],
+                ),
+            ]
+        )
         base = self._make_context(command_allowlist=["shell", "file_ops", "browser"])
         result = injector.resolve_tool_context(["restricted"], base)
         assert set(result.command_allowlist) == {"file_ops", "shell"}
 
     def test_skill_blocks_tools(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(
-                name="safe",
-                allowed_tools=["shell", "file_ops"],
-                disallowed_tools=["shell"],
-            ),
-        ])
+        injector = self._make_injector(
+            [
+                SkillDefinition(
+                    name="safe",
+                    allowed_tools=["shell", "file_ops"],
+                    disallowed_tools=["shell"],
+                ),
+            ]
+        )
         base = self._make_context(command_allowlist=["shell", "file_ops", "browser"])
         result = injector.resolve_tool_context(["safe"], base)
         assert "shell" not in result.command_allowlist
         assert "file_ops" in result.command_allowlist
 
     def test_multiple_skills_intersect(self) -> None:
-        injector = self._make_injector([
-            SkillDefinition(name="a", allowed_tools=["shell", "file_ops", "browser"]),
-            SkillDefinition(name="b", allowed_tools=["file_ops", "web_fetch"]),
-        ])
-        base = self._make_context(
-            command_allowlist=["shell", "file_ops", "browser", "web_fetch"]
+        injector = self._make_injector(
+            [
+                SkillDefinition(name="a", allowed_tools=["shell", "file_ops", "browser"]),
+                SkillDefinition(name="b", allowed_tools=["file_ops", "web_fetch"]),
+            ]
         )
+        base = self._make_context(command_allowlist=["shell", "file_ops", "browser", "web_fetch"])
         result = injector.resolve_tool_context(["a", "b"], base)
         # Intersection of a ∩ b ∩ base = {file_ops}
         assert result.command_allowlist == ["file_ops"]

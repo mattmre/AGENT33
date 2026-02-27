@@ -54,8 +54,7 @@ class RuntimeEnforcer:
 
         # If read patterns exist, enforce them
         if self._budget.files.read and not any(
-            fnmatch.fnmatch(normalized, p.replace("\\", "/"))
-            for p in self._budget.files.read
+            fnmatch.fnmatch(normalized, p.replace("\\", "/")) for p in self._budget.files.read
         ):
             self._context.add_violation(f"File read not in allowlist: {path}")
             return EnforcementResult.BLOCKED
@@ -76,8 +75,7 @@ class RuntimeEnforcer:
                 return EnforcementResult.BLOCKED
 
         if self._budget.files.write and not any(
-            fnmatch.fnmatch(normalized, p.replace("\\", "/"))
-            for p in self._budget.files.write
+            fnmatch.fnmatch(normalized, p.replace("\\", "/")) for p in self._budget.files.write
         ):
             self._context.add_violation(f"File write not in allowlist: {path}")
             return EnforcementResult.BLOCKED
@@ -117,15 +115,13 @@ class RuntimeEnforcer:
                 if perm.command == cmd_name:
                     # Check args pattern
                     if perm.args_pattern:
-                        args = command[len(cmd_name):].strip()
+                        args = command[len(cmd_name) :].strip()
                         if not re.match(perm.args_pattern, args):
                             continue
                     allowed = True
                     break
             if not allowed:
-                self._context.add_violation(
-                    f"Command not in allowlist: {cmd_name}"
-                )
+                self._context.add_violation(f"Command not in allowlist: {cmd_name}")
                 return EnforcementResult.BLOCKED
 
         self._context.record_tool_call()
@@ -151,13 +147,10 @@ class RuntimeEnforcer:
 
         # Allowed domains (if list exists)
         if self._budget.network.allowed_domains and not any(
-            domain_lower == d.lower()
-            or domain_lower.endswith(f".{d.lower()}")
+            domain_lower == d.lower() or domain_lower.endswith(f".{d.lower()}")
             for d in self._budget.network.allowed_domains
         ):
-            self._context.add_violation(
-                f"Domain not in allowlist: {domain}"
-            )
+            self._context.add_violation(f"Domain not in allowlist: {domain}")
             return EnforcementResult.BLOCKED
 
         self._context.record_network_request()
@@ -204,10 +197,7 @@ class RuntimeEnforcer:
 
     def _check_file_limit(self) -> EnforcementResult:
         """EF-07: Check files modified limit."""
-        if (
-            self._context.files_modified
-            > self._budget.limits.max_files_modified
-        ):
+        if self._context.files_modified > self._budget.limits.max_files_modified:
             self._context.mark_stopped("SC-07: Max files modified exceeded")
             self._escalate("Max files modified exceeded", "orchestrator")
             return EnforcementResult.BLOCKED
@@ -215,10 +205,7 @@ class RuntimeEnforcer:
 
     def _check_line_limit(self) -> EnforcementResult:
         """EF-08: Check lines changed limit."""
-        if (
-            self._context.lines_changed
-            > self._budget.limits.max_lines_changed
-        ):
+        if self._context.lines_changed > self._budget.limits.max_lines_changed:
             self._context.mark_stopped("SC-08: Max lines changed exceeded")
             self._escalate("Max lines changed exceeded", "orchestrator")
             return EnforcementResult.BLOCKED
@@ -248,12 +235,9 @@ class RuntimeEnforcer:
         for sc in self._budget.stop_conditions:
             # Auto-trigger resource-based stop conditions
             desc = sc.description.lower()
-            iter_exceeded = (
-                self._context.iterations >= self._budget.limits.max_iterations
-            )
+            iter_exceeded = self._context.iterations >= self._budget.limits.max_iterations
             dur_exceeded = (
-                self._context.elapsed_minutes()
-                >= self._budget.limits.max_duration_minutes
+                self._context.elapsed_minutes() >= self._budget.limits.max_duration_minutes
             )
             if "iteration" in desc and iter_exceeded:
                 triggered.append(sc.description)

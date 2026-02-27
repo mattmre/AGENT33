@@ -95,7 +95,7 @@ class OpenAIProvider:
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
-                    delay = _BACKOFF_BASE * (2 ** attempt)
+                    delay = _BACKOFF_BASE * (2**attempt)
                     logger.warning(
                         "openai request failed (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1,
@@ -109,9 +109,7 @@ class OpenAIProvider:
                     mapped = map_connector_exception(exc, connector, operation)
                     raise mapped from exc
                 raise
-        failure = RuntimeError(
-            f"OpenAI request to {path} failed after {_MAX_ATTEMPTS} attempts"
-        )
+        failure = RuntimeError(f"OpenAI request to {path} failed after {_MAX_ATTEMPTS} attempts")
         if self._boundary_executor is not None and last_exc is not None:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
@@ -146,7 +144,7 @@ class OpenAIProvider:
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < _MAX_ATTEMPTS - 1:
-                    delay = _BACKOFF_BASE * (2 ** attempt)
+                    delay = _BACKOFF_BASE * (2**attempt)
                     logger.warning(
                         "openai GET failed (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1,
@@ -160,9 +158,7 @@ class OpenAIProvider:
                     mapped = map_connector_exception(exc, connector, operation)
                     raise mapped from exc
                 raise
-        failure = RuntimeError(
-            f"OpenAI GET {path} failed after {_MAX_ATTEMPTS} attempts"
-        )
+        failure = RuntimeError(f"OpenAI GET {path} failed after {_MAX_ATTEMPTS} attempts")
         if self._boundary_executor is not None and last_exc is not None:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
@@ -230,9 +226,7 @@ class OpenAIProvider:
             payload["max_tokens"] = max_tokens
         if tools is not None:
             # Wrap each tool dict in the OpenAI function tool format
-            payload["tools"] = [
-                {"type": "function", "function": tool_def} for tool_def in tools
-            ]
+            payload["tools"] = [{"type": "function", "function": tool_def} for tool_def in tools]
 
         data = await self._post("/chat/completions", payload)
 

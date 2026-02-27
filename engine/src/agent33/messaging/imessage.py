@@ -14,6 +14,7 @@ from agent33.messaging.models import ChannelHealthResult, Message
 
 logger = logging.getLogger(__name__)
 
+
 class IMessageAdapter:
     """MessagingAdapter implementation for iMessage via Mac Bridge."""
 

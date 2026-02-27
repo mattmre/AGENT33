@@ -23,6 +23,7 @@ from agent33.tools.registry_entry import (
 # Helpers
 # ------------------------------------------------------------------
 
+
 class _StubTool:
     """Minimal concrete tool for testing."""
 
@@ -58,6 +59,7 @@ def _make_entry(
 # ------------------------------------------------------------------
 # ToolRegistryEntry model tests
 # ------------------------------------------------------------------
+
 
 class TestToolRegistryEntry:
     def test_minimal_creation(self) -> None:
@@ -133,6 +135,7 @@ class TestToolProvenance:
 # ToolRegistry – Phase 12 methods
 # ------------------------------------------------------------------
 
+
 class TestRegisterWithEntry:
     def test_stores_tool_and_entry(self) -> None:
         reg = ToolRegistry()
@@ -207,6 +210,7 @@ class TestSetStatus:
 # load_definitions
 # ------------------------------------------------------------------
 
+
 class TestLoadDefinitions:
     def test_loads_yaml_files(self, tmp_path: Path) -> None:
         (tmp_path / "tool_a.yml").write_text(
@@ -277,6 +281,7 @@ class TestLoadDefinitions:
 # ------------------------------------------------------------------
 # Backward compatibility – existing API unchanged
 # ------------------------------------------------------------------
+
 
 class TestBackwardCompatibility:
     def test_register_without_entry(self) -> None:

@@ -45,8 +45,7 @@ class SessionSummarizer:
         from agent33.llm.base import ChatMessage
 
         obs_text = "\n".join(
-            f"[{o.event_type}] {o.agent_name}: {o.content[:500]}"
-            for o in observations
+            f"[{o.event_type}] {o.agent_name}: {o.content[:500]}" for o in observations
         )
         prompt = _SUMMARIZE_PROMPT.format(observations=obs_text)
 

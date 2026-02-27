@@ -254,7 +254,7 @@ class TestSkillsBenchSmoke:
 
     def test_golden_task_executions(self) -> None:
         """Simulate execution of 3-5 golden tasks for SkillsBench integration.
-        
+
         Tests:
         - Ability to slice and execute the first 3 golden tasks.
         - Proper accumulation of MultiTrialResult.
@@ -297,7 +297,6 @@ class TestSkillsBenchSmoke:
 
         elapsed = time.perf_counter() - start
         assert elapsed < 0.2, f"Golden task simulation took {elapsed:.3f}s, expected <200ms"
-
 
 
 def test_write_ctrf_helper() -> None:

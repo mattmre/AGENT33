@@ -173,4 +173,3 @@ async def imessage_webhook(request: Request) -> dict[str, str]:
     payload = await request.json()
     adapter.enqueue_message(payload)
     return {"status": "ok"}
-

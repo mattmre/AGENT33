@@ -61,22 +61,16 @@ class RegressionDetector:
         regressions: list[RegressionRecord] = []
 
         # RI-01: Previously passing task now fails
-        regressions.extend(
-            self._detect_task_regressions(baseline.task_results, current_results)
-        )
+        regressions.extend(self._detect_task_regressions(baseline.task_results, current_results))
 
         # RI-02: Metric drops below threshold
         if thresholds:
             regressions.extend(
-                self._detect_threshold_breaches(
-                    baseline.metrics, current_metrics, thresholds
-                )
+                self._detect_threshold_breaches(baseline.metrics, current_metrics, thresholds)
             )
 
         # RI-04: Time-to-green increases significantly
-        regressions.extend(
-            self._detect_ttg_increase(baseline.metrics, current_metrics)
-        )
+        regressions.extend(self._detect_ttg_increase(baseline.metrics, current_metrics))
 
         for reg in regressions:
             logger.info(
@@ -164,9 +158,7 @@ class RegressionDetector:
         baseline_ttg = next(
             (m.value for m in baseline_metrics if m.metric_id == MetricId.M_02), 0.0
         )
-        current_ttg = next(
-            (m.value for m in current_metrics if m.metric_id == MetricId.M_02), 0.0
-        )
+        current_ttg = next((m.value for m in current_metrics if m.metric_id == MetricId.M_02), 0.0)
 
         if baseline_ttg > 0 and current_ttg > baseline_ttg * TTG_INCREASE_FACTOR:
             return [

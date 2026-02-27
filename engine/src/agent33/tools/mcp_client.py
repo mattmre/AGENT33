@@ -148,7 +148,9 @@ class MCPClientManager:
 
         try:
             # We assume asyncio environment
-            read_stream, write_stream = await stack.enter_async_context(stdio_client(server_params))
+            read_stream, write_stream = await stack.enter_async_context(
+                stdio_client(server_params)
+            )
             session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
             await session.initialize()
             self._sessions.append(session)

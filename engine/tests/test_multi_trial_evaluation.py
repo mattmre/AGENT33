@@ -84,9 +84,7 @@ class TestTrialResult:
         t_none = TrialResult(trial_number=1, score=0, duration_ms=10)
         assert t_none.error_message is None
 
-        t_err = TrialResult(
-            trial_number=1, score=0, duration_ms=10, error_message="timeout"
-        )
+        t_err = TrialResult(trial_number=1, score=0, duration_ms=10, error_message="timeout")
         assert t_err.error_message == "timeout"
 
     def test_tokens_used_default(self):
@@ -108,14 +106,16 @@ class TestMultiTrialResult:
 
     def _make_trials(self, scores: list[int]) -> list[TrialResult]:
         return [
-            TrialResult(trial_number=i + 1, score=s, duration_ms=10)
-            for i, s in enumerate(scores)
+            TrialResult(trial_number=i + 1, score=s, duration_ms=10) for i, s in enumerate(scores)
         ]
 
     def test_pass_rate_all_pass(self):
         """5/5 passing trials yields pass_rate = 1.0."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=self._make_trials([1, 1, 1, 1, 1]),
         )
         assert r.pass_rate == 1.0
@@ -123,7 +123,10 @@ class TestMultiTrialResult:
     def test_pass_rate_all_fail(self):
         """0/5 passing trials yields pass_rate = 0.0."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=False,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=False,
             trials=self._make_trials([0, 0, 0, 0, 0]),
         )
         assert r.pass_rate == 0.0
@@ -131,7 +134,10 @@ class TestMultiTrialResult:
     def test_pass_rate_partial(self):
         """3/5 passing trials yields pass_rate = 0.6."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=self._make_trials([1, 0, 1, 0, 1]),
         )
         assert r.pass_rate == pytest.approx(0.6)
@@ -139,7 +145,10 @@ class TestMultiTrialResult:
     def test_pass_rate_empty(self):
         """Empty trials yields pass_rate = 0.0."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=[],
         )
         assert r.pass_rate == 0.0
@@ -147,7 +156,10 @@ class TestMultiTrialResult:
     def test_variance_all_same(self):
         """All-pass or all-fail should have 0 variance."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=self._make_trials([1, 1, 1, 1, 1]),
         )
         assert r.variance == 0.0
@@ -155,7 +167,10 @@ class TestMultiTrialResult:
     def test_variance_mixed(self):
         """3/5 pass rate => variance = 0.6*0.4 = 0.24."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=self._make_trials([1, 0, 1, 0, 1]),
         )
         # pass_rate = 0.6, each pass: (1-0.6)^2=0.16, each fail: (0-0.6)^2=0.36
@@ -165,15 +180,21 @@ class TestMultiTrialResult:
     def test_std_dev_is_sqrt_of_variance(self):
         """std_dev should be the square root of variance."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=self._make_trials([1, 0, 1, 0, 1]),
         )
-        assert r.std_dev == pytest.approx(r.variance ** 0.5)
+        assert r.std_dev == pytest.approx(r.variance**0.5)
 
     def test_variance_empty(self):
         """Empty trials yields variance = 0.0."""
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=[],
         )
         assert r.variance == 0.0
@@ -182,7 +203,10 @@ class TestMultiTrialResult:
         """total_duration_ms is correctly set from input."""
         trials = self._make_trials([1, 0])
         r = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=trials,
             total_duration_ms=20,
         )
@@ -258,9 +282,7 @@ class TestMultiTrialExecutor:
         """Mixed success/failure should produce correct pass_rate."""
         call_count = 0
 
-        async def alternating(
-            task_id: str, agent: str, model: str, skills: bool
-        ) -> bool:
+        async def alternating(task_id: str, agent: str, model: str, skills: bool) -> bool:
             nonlocal call_count
             call_count += 1
             return call_count % 2 == 1  # True on odd calls
@@ -275,6 +297,7 @@ class TestMultiTrialExecutor:
 
     async def test_token_tracking(self):
         """total_tokens is the sum of tokens_used across trials."""
+
         async def fn(t: str, a: str, m: str, s: bool) -> bool:
             return True
 
@@ -286,7 +309,10 @@ class TestMultiTrialExecutor:
     def test_compute_skills_impact(self):
         """compute_skills_impact correctly computes the delta."""
         with_skills = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=True,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=True,
             trials=[
                 TrialResult(trial_number=1, score=1, duration_ms=10),
                 TrialResult(trial_number=2, score=1, duration_ms=10),
@@ -294,7 +320,10 @@ class TestMultiTrialExecutor:
             ],
         )
         without_skills = MultiTrialResult(
-            task_id="T1", agent="a", model="m", skills_enabled=False,
+            task_id="T1",
+            agent="a",
+            model="m",
+            skills_enabled=False,
             trials=[
                 TrialResult(trial_number=1, score=0, duration_ms=10),
                 TrialResult(trial_number=2, score=1, duration_ms=10),
@@ -319,7 +348,9 @@ class TestSkillsImpact:
     def test_positive_impact(self):
         """Skills help: positive skills_impact."""
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=0.8,
             pass_rate_without_skills=0.4,
         )
@@ -328,7 +359,9 @@ class TestSkillsImpact:
     def test_negative_impact(self):
         """Skills hurt: negative skills_impact."""
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=0.3,
             pass_rate_without_skills=0.7,
         )
@@ -337,7 +370,9 @@ class TestSkillsImpact:
     def test_zero_impact(self):
         """No difference: skills_impact = 0."""
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=0.5,
             pass_rate_without_skills=0.5,
         )
@@ -346,7 +381,9 @@ class TestSkillsImpact:
     def test_confidence_high_for_small_impact(self):
         """Confidence is higher when impact is near zero."""
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=0.5,
             pass_rate_without_skills=0.5,
         )
@@ -355,7 +392,9 @@ class TestSkillsImpact:
     def test_confidence_lower_for_large_impact(self):
         """Confidence decreases as absolute impact grows."""
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=1.0,
             pass_rate_without_skills=0.0,
         )
@@ -367,7 +406,9 @@ class TestSkillsImpact:
         # In practice the impact range is -1..1, so confidence range is 0.9..1.0
         # But the heuristic uses abs(impact)*0.1 clamped to [0,1]
         si = SkillsImpact(
-            task_id="T1", agent="a", model="m",
+            task_id="T1",
+            agent="a",
+            model="m",
             pass_rate_with_skills=0.8,
             pass_rate_without_skills=0.2,
         )
@@ -386,13 +427,12 @@ class TestCTRFGenerator:
         """Create a run with known results for testing."""
         now = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a"], models=["m"],
+            tasks=["T1"],
+            agents=["a"],
+            models=["m"],
             trials_per_combination=5,
         )
-        trials_pass = [
-            TrialResult(trial_number=i, score=1, duration_ms=100)
-            for i in range(1, 6)
-        ]
+        trials_pass = [TrialResult(trial_number=i, score=1, duration_ms=100) for i in range(1, 6)]
         trials_mixed = [
             TrialResult(trial_number=1, score=1, duration_ms=100),
             TrialResult(trial_number=2, score=0, duration_ms=100),
@@ -405,13 +445,19 @@ class TestCTRFGenerator:
             config=config,
             results=[
                 MultiTrialResult(
-                    task_id="T1", agent="a", model="m",
-                    skills_enabled=True, trials=trials_pass,
+                    task_id="T1",
+                    agent="a",
+                    model="m",
+                    skills_enabled=True,
+                    trials=trials_pass,
                     total_duration_ms=500,
                 ),
                 MultiTrialResult(
-                    task_id="T1", agent="a", model="m",
-                    skills_enabled=False, trials=trials_mixed,
+                    task_id="T1",
+                    agent="a",
+                    model="m",
+                    skills_enabled=False,
+                    trials=trials_mixed,
                     total_duration_ms=500,
                 ),
             ],
@@ -628,7 +674,9 @@ class TestExperimentRunner:
         runner = ExperimentRunner(executor)
 
         config = ExperimentConfig(
-            tasks=[], agents=[], models=[],
+            tasks=[],
+            agents=[],
+            models=[],
             trials_per_combination=5,
         )
         run = await runner.run_experiment(config)
@@ -665,7 +713,9 @@ class TestExperimentRunner:
         runner = ExperimentRunner(executor)
 
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a1"], models=["m1"],
+            tasks=["T1"],
+            agents=["a1"],
+            models=["m1"],
             trials_per_combination=2,
         )
         # The executor handles trial errors, so this should complete
@@ -678,12 +728,17 @@ class TestExperimentRunner:
 
     async def test_skills_impact_only_when_both_modes(self):
         """No skills impact when only one skills_mode is tested."""
-        impacts = ExperimentRunner.compute_skills_impacts([
-            MultiTrialResult(
-                task_id="T1", agent="a", model="m", skills_enabled=True,
-                trials=[TrialResult(trial_number=1, score=1, duration_ms=10)],
-            ),
-        ])
+        impacts = ExperimentRunner.compute_skills_impacts(
+            [
+                MultiTrialResult(
+                    task_id="T1",
+                    agent="a",
+                    model="m",
+                    skills_enabled=True,
+                    trials=[TrialResult(trial_number=1, score=1, duration_ms=10)],
+                ),
+            ]
+        )
         assert len(impacts) == 0
 
 
@@ -707,7 +762,9 @@ class TestExperimentConfig:
         """trials_per_combination must be >= 1."""
         with pytest.raises(ValidationError):
             ExperimentConfig(
-                tasks=["T1"], agents=["a"], models=["m"],
+                tasks=["T1"],
+                agents=["a"],
+                models=["m"],
                 trials_per_combination=0,
             )
 
@@ -715,7 +772,9 @@ class TestExperimentConfig:
         """trials_per_combination must be <= 100."""
         with pytest.raises(ValidationError):
             ExperimentConfig(
-                tasks=["T1"], agents=["a"], models=["m"],
+                tasks=["T1"],
+                agents=["a"],
+                models=["m"],
                 trials_per_combination=101,
             )
 
@@ -750,7 +809,9 @@ class TestEvaluationServiceMultiTrial:
         """start_multi_trial_run stores the run, get retrieves it."""
         svc = EvaluationService()
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a"], models=["m"],
+            tasks=["T1"],
+            agents=["a"],
+            models=["m"],
             trials_per_combination=1,
             skills_modes=[True],
         )
@@ -771,7 +832,9 @@ class TestEvaluationServiceMultiTrial:
         """list_multi_trial_runs returns all stored runs."""
         svc = EvaluationService()
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a"], models=["m"],
+            tasks=["T1"],
+            agents=["a"],
+            models=["m"],
             trials_per_combination=1,
             skills_modes=[True],
         )
@@ -788,7 +851,9 @@ class TestEvaluationServiceMultiTrial:
         """export_ctrf returns a valid CTRF report dict."""
         svc = EvaluationService()
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a"], models=["m"],
+            tasks=["T1"],
+            agents=["a"],
+            models=["m"],
             trials_per_combination=2,
             skills_modes=[True],
         )
@@ -814,7 +879,9 @@ class TestEvaluationServiceMultiTrial:
 
         # Create a multi-trial run
         config = ExperimentConfig(
-            tasks=["T1"], agents=["a"], models=["m"],
+            tasks=["T1"],
+            agents=["a"],
+            models=["m"],
             trials_per_combination=1,
             skills_modes=[True],
         )

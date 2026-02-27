@@ -20,8 +20,8 @@ from agent33.execution.models import (
 logger = structlog.get_logger()
 
 # Output capture limits (bytes).
-_STDOUT_LIMIT = 1_048_576   # 1 MB
-_STDERR_LIMIT = 262_144     # 256 KB
+_STDOUT_LIMIT = 1_048_576  # 1 MB
+_STDERR_LIMIT = 262_144  # 256 KB
 
 
 class CLIAdapter(BaseAdapter):
@@ -37,8 +37,7 @@ class CLIAdapter(BaseAdapter):
         super().__init__(definition)
         if definition.cli is None:
             raise ValueError(
-                f"CLIAdapter requires a 'cli' interface on adapter "
-                f"'{definition.adapter_id}'"
+                f"CLIAdapter requires a 'cli' interface on adapter '{definition.adapter_id}'"
             )
 
     async def execute(self, contract: ExecutionContract) -> ExecutionResult:
@@ -146,11 +145,7 @@ class CLIAdapter(BaseAdapter):
 
         # On Windows, cmd.exe doesn't raise FileNotFoundError — detect via
         # stderr message and normalise to exit code 127 per spec.
-        if (
-            sys.platform == "win32"
-            and exit_code != 0
-            and "is not recognized" in stderr
-        ):
+        if sys.platform == "win32" and exit_code != 0 and "is not recognized" in stderr:
             exit_code = 127
 
         elapsed = (time.monotonic() - start) * 1000

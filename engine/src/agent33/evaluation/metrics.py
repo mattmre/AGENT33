@@ -52,9 +52,7 @@ class MetricsCalculator:
         avg = sum(durations) / len(durations)
         return MetricValue(metric_id=MetricId.M_02, value=round(avg, 2), unit="ms")
 
-    def rework_rate(
-        self, results: list[TaskRunResult], rework_count: int = 0
-    ) -> MetricValue:
+    def rework_rate(self, results: list[TaskRunResult], rework_count: int = 0) -> MetricValue:
         """M-03: Percentage of tasks requiring rework."""
         if not results:
             return MetricValue(metric_id=MetricId.M_03, value=0.0, unit="%")

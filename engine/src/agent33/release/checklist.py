@@ -64,9 +64,7 @@ class ChecklistEvaluator:
             if not check.required:
                 continue
             if check.status not in (CheckStatus.PASS, CheckStatus.NA):
-                failures.append(
-                    f"{check.check_id} ({check.name}): {check.status.value}"
-                )
+                failures.append(f"{check.check_id} ({check.name}): {check.status.value}")
         return len(failures) == 0, failures
 
     def update_check(

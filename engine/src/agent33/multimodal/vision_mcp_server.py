@@ -1,8 +1,8 @@
 """MCP server exposing complex Vision-Language Model (VLM) capabilities.
 
-This standalone server allows AGENT-33 (or any MCP client) to offload heavy 
+This standalone server allows AGENT-33 (or any MCP client) to offload heavy
 image processing, UI extraction, and object segmentation to specialized VLMs
-like Claude 3.5 Sonnet or a robust local vision model without polluting 
+like Claude 3.5 Sonnet or a robust local vision model without polluting
 the main agent's LLM context window.
 """
 
@@ -25,29 +25,48 @@ try:
         return [
             types.Tool(
                 name="analyze_image",
-                description="Process a base64 encoded image to find specific objects, extract OCR text, or describe the scene.",
+                description=(
+                    "Process a base64 encoded image to find specific"
+                    " objects, extract OCR text, or describe the scene."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "image_base64": {"type": "string", "description": "Base64 encoded string of the image."},
-                        "prompt": {"type": "string", "description": "Specific instruction for the VLM (e.g. 'Extract all text' or 'Find the coordinates of the login button')."}
+                        "image_base64": {
+                            "type": "string",
+                            "description": "Base64 encoded string of the image.",
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": (
+                                "Specific instruction for the VLM"
+                                " (e.g. 'Extract all text' or"
+                                " 'Find the login button coords')."
+                            ),
+                        },
                     },
-                    "required": ["image_base64", "prompt"]
-                }
+                    "required": ["image_base64", "prompt"],
+                },
             )
         ]
 
     @vision_server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
         if name == "analyze_image":
-            image_b64 = arguments.get("image_base64")
-            prompt = arguments.get("prompt")
+            _image_b64 = arguments.get("image_base64")
+            _prompt = arguments.get("prompt")
 
-            # In a production environment, this parses the base64, passes it to the VLM via its native API
+            # In a production environment, this parses the base64,
+            # passes it to the VLM via its native API
             # For Anthropic: client.messages.create(..., content=[{"type": "image", ...}])
 
             logger.info("Vision MCP received image analysis request.")
-            return [types.TextContent(type="text", text="Mock Vision Result: Found 3 UI elements. Text extracted: 'Submit'.")]
+            return [
+                types.TextContent(
+                    type="text",
+                    text="Mock Vision Result: Found 3 UI elements. Text extracted: 'Submit'.",
+                )
+            ]
 
         raise ValueError(f"Unknown tool: {name}")
 

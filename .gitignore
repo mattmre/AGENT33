@@ -31,3 +31,32 @@ env/
 nul
 Thumbs.db
 .DS_Store
+
+# PR review and diff artifacts (session working files)
+pr*_review.md
+pr*_diff.txt
+pr*_full_diff.txt
+pr*_code_diff*.txt
+pr*_files.txt
+pr*_view.txt
+pr*_engine.txt
+pr*_frontend.txt
+pr_diff.txt
+pr_list.json
+filtered_diff.txt
+review.md
+review_comment*.md
+review_pr*.md
+
+# Session diff-processing scripts (ad-hoc tooling)
+filter_diff.py
+filter_pr*.py
+split_diff*.py
+strip_diff.py
+
+# Git worktrees (local checkout directories)
+worktrees/
+
+# Additional test/coverage output
+test-results/
+smoke-results/

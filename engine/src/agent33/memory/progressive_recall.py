@@ -85,11 +85,13 @@ class ProgressiveRecall:
                 content = r.text
                 token_est = max(50, len(content.split()))
 
-            recall_results.append(RecallResult(
-                level=level,
-                content=content,
-                citations=citation,
-                token_estimate=token_est,
-            ))
+            recall_results.append(
+                RecallResult(
+                    level=level,
+                    content=content,
+                    citations=citation,
+                    token_estimate=token_est,
+                )
+            )
 
         return recall_results

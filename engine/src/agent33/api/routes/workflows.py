@@ -276,9 +276,7 @@ async def get_workflow_history(name: str) -> list[WorkflowHistoryEntry]:
 
 
 @router.post("/{name}/execute", dependencies=[require_scope("workflows:execute")])
-async def execute_workflow(
-    name: str, request: WorkflowExecuteRequest
-) -> dict[str, Any]:
+async def execute_workflow(name: str, request: WorkflowExecuteRequest) -> dict[str, Any]:
     """Execute a registered workflow."""
     workflow = _registry.get(name)
     if workflow is None:
@@ -294,9 +292,7 @@ async def execute_workflow(
 
     # Handle repeat/autonomous execution
     if request.repeat_count or request.autonomous:
-        return await _execute_repeated_or_autonomous(
-            workflow, name, request
-        )
+        return await _execute_repeated_or_autonomous(workflow, name, request)
 
     # Standard single execution (backward compatible)
     return await _execute_single(workflow, name, request, trigger_type="manual")
@@ -326,32 +322,36 @@ async def _execute_single(
     except Exception as exc:
         logger.error("workflow_execution_failed", name=name, error=str(exc))
         # Record failure in history
-        _execution_history.append({
-            "workflow_name": name,
-            "trigger_type": trigger_type,
-            "status": "failed",
-            "duration_ms": (time.monotonic() - start_monotonic) * 1000,
-            "timestamp": start_ts,
-            "error": str(exc),
-            "job_id": job_id,
-            "step_statuses": None,
-        })
+        _execution_history.append(
+            {
+                "workflow_name": name,
+                "trigger_type": trigger_type,
+                "status": "failed",
+                "duration_ms": (time.monotonic() - start_monotonic) * 1000,
+                "timestamp": start_ts,
+                "error": str(exc),
+                "job_id": job_id,
+                "step_statuses": None,
+            }
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Extract step statuses from result
     step_statuses = {sr.step_id: sr.status for sr in result.step_results}
 
     # Record success in history
-    _execution_history.append({
-        "workflow_name": name,
-        "trigger_type": trigger_type,
-        "status": result.status.value,
-        "duration_ms": result.duration_ms,
-        "timestamp": start_ts,
-        "error": error,
-        "job_id": job_id,
-        "step_statuses": step_statuses,
-    })
+    _execution_history.append(
+        {
+            "workflow_name": name,
+            "trigger_type": trigger_type,
+            "status": result.status.value,
+            "duration_ms": result.duration_ms,
+            "timestamp": start_ts,
+            "error": error,
+            "job_id": job_id,
+            "step_statuses": step_statuses,
+        }
+    )
 
     logger.info(
         "workflow_executed",

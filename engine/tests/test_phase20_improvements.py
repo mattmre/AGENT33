@@ -138,9 +138,7 @@ class TestModels:
         snap = MetricsSnapshot(
             period="2026-Q1",
             metrics=[
-                ImprovementMetric(
-                    metric_id="IM-01", name="Cycle time", current=24.5
-                ),
+                ImprovementMetric(metric_id="IM-01", name="Cycle time", current=24.5),
             ],
         )
         assert snap.snapshot_id.startswith("MSN-")
@@ -329,12 +327,8 @@ class TestService:
         assert fetched.content.title == "Test"
 
     def test_list_intakes_filter_status(self, service: ImprovementService):
-        service.submit_intake(
-            ResearchIntake(content=IntakeContent(title="A"))
-        )
-        service.submit_intake(
-            ResearchIntake(content=IntakeContent(title="B"))
-        )
+        service.submit_intake(ResearchIntake(content=IntakeContent(title="A")))
+        service.submit_intake(ResearchIntake(content=IntakeContent(title="B")))
         result = service.list_intakes(status=IntakeStatus.SUBMITTED)
         assert len(result) == 2
         result = service.list_intakes(status=IntakeStatus.ACCEPTED)
@@ -343,15 +337,11 @@ class TestService:
     def test_list_intakes_filter_type(self, service: ImprovementService):
         i1 = ResearchIntake(
             content=IntakeContent(title="A"),
-            classification=IntakeClassification(
-                research_type=ResearchType.EXTERNAL
-            ),
+            classification=IntakeClassification(research_type=ResearchType.EXTERNAL),
         )
         i2 = ResearchIntake(
             content=IntakeContent(title="B"),
-            classification=IntakeClassification(
-                research_type=ResearchType.INTERNAL
-            ),
+            classification=IntakeClassification(research_type=ResearchType.INTERNAL),
         )
         service.submit_intake(i1)
         service.submit_intake(i2)
@@ -390,22 +380,16 @@ class TestService:
         assert result.disposition.status == IntakeStatus.TRACKED
 
     def test_intake_invalid_transition(self, service: ImprovementService):
-        intake = service.submit_intake(
-            ResearchIntake(content=IntakeContent(title="Invalid"))
-        )
+        intake = service.submit_intake(ResearchIntake(content=IntakeContent(title="Invalid")))
         with pytest.raises(ValueError, match="Cannot transition"):
-            service.transition_intake(
-                intake.intake_id, IntakeStatus.ACCEPTED
-            )
+            service.transition_intake(intake.intake_id, IntakeStatus.ACCEPTED)
 
     def test_intake_not_found(self, service: ImprovementService):
         with pytest.raises(ValueError, match="not found"):
             service.transition_intake("nonexistent", IntakeStatus.TRIAGED)
 
     def test_intake_deferred_can_retriage(self, service: ImprovementService):
-        intake = service.submit_intake(
-            ResearchIntake(content=IntakeContent(title="Defer"))
-        )
+        intake = service.submit_intake(ResearchIntake(content=IntakeContent(title="Defer")))
         iid = intake.intake_id
         service.transition_intake(iid, IntakeStatus.TRIAGED)
         service.transition_intake(iid, IntakeStatus.ANALYZING)
@@ -458,18 +442,14 @@ class TestService:
         assert result.actions[0].status == LessonActionStatus.COMPLETED
         assert result.actions[1].status == LessonActionStatus.PENDING
 
-    def test_complete_lesson_action_out_of_range(
-        self, service: ImprovementService
-    ):
+    def test_complete_lesson_action_out_of_range(self, service: ImprovementService):
         lesson = service.record_lesson(LessonLearned())
         with pytest.raises(ValueError, match="out of range"):
             service.complete_lesson_action(lesson.lesson_id, 0)
 
     def test_verify_lesson(self, service: ImprovementService):
         lesson = service.record_lesson(LessonLearned())
-        result = service.verify_lesson(
-            lesson.lesson_id, evidence="PR #42"
-        )
+        result = service.verify_lesson(lesson.lesson_id, evidence="PR #42")
         assert result.implemented is True
         assert result.verified_at is not None
         assert result.evidence == "PR #42"
@@ -477,9 +457,7 @@ class TestService:
     # ----- Checklists ------------------------------------------------------
 
     def test_create_checklist(self, service: ImprovementService):
-        cl = service.create_checklist(
-            ChecklistPeriod.PER_RELEASE, "v1.0.0"
-        )
+        cl = service.create_checklist(ChecklistPeriod.PER_RELEASE, "v1.0.0")
         assert len(cl.items) == 5
         fetched = service.get_checklist(cl.checklist_id)
         assert fetched is not None
@@ -490,18 +468,12 @@ class TestService:
         assert len(service.list_checklists()) == 2
         assert len(service.list_checklists(ChecklistPeriod.MONTHLY)) == 1
 
-    def test_complete_checklist_item_via_service(
-        self, service: ImprovementService
-    ):
+    def test_complete_checklist_item_via_service(self, service: ImprovementService):
         cl = service.create_checklist(ChecklistPeriod.PER_RELEASE)
-        result = service.complete_checklist_item(
-            cl.checklist_id, "CI-01", "Done"
-        )
+        result = service.complete_checklist_item(cl.checklist_id, "CI-01", "Done")
         assert result.items[0].completed is True
 
-    def test_evaluate_checklist_via_service(
-        self, service: ImprovementService
-    ):
+    def test_evaluate_checklist_via_service(self, service: ImprovementService):
         cl = service.create_checklist(ChecklistPeriod.PER_RELEASE)
         ok, incomplete = service.evaluate_checklist(cl.checklist_id)
         assert ok is False
@@ -516,9 +488,7 @@ class TestService:
 
     def test_save_and_list_snapshots(self, service: ImprovementService):
         for i in range(3):
-            service.save_metrics_snapshot(
-                MetricsSnapshot(period=f"P{i}")
-            )
+            service.save_metrics_snapshot(MetricsSnapshot(period=f"P{i}"))
         result = service.list_metrics_snapshots(2)
         assert len(result) == 2
 
@@ -614,15 +584,11 @@ class TestImprovementAPI:
             "/v1/improvements/intakes",
             json={"title": "A"},
         )
-        resp = client.get(
-            "/v1/improvements/intakes", params={"status": "submitted"}
-        )
+        resp = client.get("/v1/improvements/intakes", params={"status": "submitted"})
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
-        resp = client.get(
-            "/v1/improvements/intakes", params={"status": "accepted"}
-        )
+        resp = client.get("/v1/improvements/intakes", params={"status": "accepted"})
         assert len(resp.json()) == 0
 
     def test_get_intake(self, client: TestClient):
@@ -761,9 +727,7 @@ class TestImprovementAPI:
             json={"period": "per_release"},
         )
         cl_id = resp.json()["checklist_id"]
-        resp = client.get(
-            f"/v1/improvements/checklists/{cl_id}/evaluate"
-        )
+        resp = client.get(f"/v1/improvements/checklists/{cl_id}/evaluate")
         assert resp.status_code == 200
         assert resp.json()["complete"] is False
         assert len(resp.json()["incomplete"]) == 5
@@ -808,9 +772,7 @@ class TestImprovementAPI:
                 "/v1/improvements/metrics/snapshot",
                 json={"period": f"P{i}"},
             )
-        resp = client.get(
-            "/v1/improvements/metrics/history", params={"limit": 2}
-        )
+        resp = client.get("/v1/improvements/metrics/history", params={"limit": 2})
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 

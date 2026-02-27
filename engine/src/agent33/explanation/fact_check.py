@@ -92,4 +92,3 @@ def _validate_file_exists(explanation: ExplanationMetadata, claim: ExplanationCl
 
     claim.status = FactCheckStatus.FLAGGED
     claim.message = "File does not exist"
-
