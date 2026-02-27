@@ -8,12 +8,13 @@ import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
 import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ChatInterface } from "./features/chat/ChatInterface";
+import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
-type AppTab = "chat" | "voice" | "setup" | "advanced";
+type AppTab = "chat" | "voice" | "setup" | "operations" | "advanced";
 
 interface ActivityItem {
   id: string;
@@ -28,6 +29,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "chat", label: "💬 Chat Central" },
   { id: "voice", label: "🎙️ Voice Call" },
   { id: "setup", label: "🔌 Integrations" },
+  { id: "operations", label: "Operations Hub" },
   { id: "advanced", label: "⚙️ Advanced Settings" }
 ];
 
@@ -173,6 +175,13 @@ export default function App(): JSX.Element {
                 onApiKeyChange={setApiKey}
               />
             </div>
+          </div>
+        )}
+
+        {/* Operations Hub -> Unified lifecycle view with pause/resume/cancel controls */}
+        {activeTab === "operations" && (
+          <div className="consumer-operations-layout">
+            <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
 
