@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     skillsbench_skill_matcher_skip_llm_below: int = 3
     skillsbench_context_manager_enabled: bool = True
 
+    # Skill Packs
+    pack_definitions_dir: str = "packs"
+    pack_auto_enable: bool = False
+    pack_max_size_mb: int = 50
+    pack_checksums_required: bool = False
+
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
