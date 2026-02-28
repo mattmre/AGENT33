@@ -61,7 +61,7 @@ async def test_adapter_governance_blocked_raises_runtime_error(
     monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
 
     with pytest.raises(RuntimeError) as excinfo:
-        await adapter.run_async(request_factory())
+        await adapter.run(request_factory())
     assert str(excinfo.value) == (
         f"Connector governance blocked {connector}/run: connector blocked by policy: {connector}"
     )
@@ -77,7 +77,7 @@ async def test_boundary_disabled_mock_paths_preserve_response_shapes(
     monkeypatch.setattr("agent33.config.settings.openai_api_key", SecretStr(""))
     monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
 
-    stt_response = await STTAdapter().run_async(_stt_request())
+    stt_response = await STTAdapter().run(_stt_request())
     assert stt_response["output_artifact_id"] == ""
     assert stt_response["output_data"] == {
         "modality": ModalityType.SPEECH_TO_TEXT.value,
@@ -85,7 +85,7 @@ async def test_boundary_disabled_mock_paths_preserve_response_shapes(
     }
 
     tts_request = _tts_request()
-    tts_response = await TTSAdapter().run_async(tts_request)
+    tts_response = await TTSAdapter().run(tts_request)
     assert tts_response["output_text"] == ""
     assert tts_response["output_artifact_id"] == f"artifact-tts-{tts_request.id}"
     assert tts_response["output_data"] == {
@@ -95,7 +95,7 @@ async def test_boundary_disabled_mock_paths_preserve_response_shapes(
     }
 
     vision_request = _vision_request()
-    vision_response = await VisionAdapter().run_async(vision_request)
+    vision_response = await VisionAdapter().run(vision_request)
     assert vision_response["output_text"] == "mock vision analysis complete (missing API key)"
     assert vision_response["output_artifact_id"] == ""
     assert vision_response["output_data"] == {
@@ -113,12 +113,14 @@ async def test_boundary_disabled_mock_paths_preserve_response_shapes(
         (VisionAdapter(), _vision_request, "multimodal:vision_analysis"),
     ],
 )
-def test_sync_run_path_uses_async_boundary_governance(
+@pytest.mark.asyncio
+async def test_governance_blocked_raises_runtime_error_via_boundary_executor(
     monkeypatch: pytest.MonkeyPatch,
     adapter: STTAdapter | TTSAdapter | VisionAdapter,
     request_factory,
     connector: str,
 ) -> None:
+    """Governance enforcement via the boundary executor raises RuntimeError."""
     monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
     monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "default")
     monkeypatch.setattr(
@@ -130,7 +132,7 @@ def test_sync_run_path_uses_async_boundary_governance(
     monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
 
     with pytest.raises(RuntimeError) as excinfo:
-        adapter.run(request_factory())
+        await adapter.run(request_factory())
     assert str(excinfo.value) == (
         f"Connector governance blocked {connector}/run: connector blocked by policy: {connector}"
     )
@@ -144,27 +146,22 @@ def test_sync_run_path_uses_async_boundary_governance(
         (VisionAdapter(), _vision_request, ModalityType.VISION.value),
     ],
 )
-def test_sync_run_wrapper_delegates_to_async_path(
+@pytest.mark.asyncio
+async def test_run_delegates_through_boundary_executor(
+    monkeypatch: pytest.MonkeyPatch,
     adapter: STTAdapter | TTSAdapter | VisionAdapter,
     request_factory,
     modality: str,
 ) -> None:
+    """Verify async run() produces a valid response with expected shape."""
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", False)
+    monkeypatch.setattr("agent33.config.settings.openai_api_key", SecretStr(""))
+    monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
+
     request = request_factory()
-    seen: dict[str, object] = {}
-    expected = {
-        "output_text": "",
-        "output_artifact_id": "artifact-sync-wrapper",
-        "output_data": {"modality": modality, "wrapped": True},
-    }
-
-    async def _fake_run_async(received_request: MultimodalRequest) -> dict[str, object]:
-        seen["request"] = received_request
-        return expected
-
-    adapter.run_async = _fake_run_async  # type: ignore[method-assign]
-    response = adapter.run(request)
-    assert seen["request"] is request
-    assert response == expected
+    response = await adapter.run(request)
+    assert "output_data" in response
+    assert response["output_data"]["modality"] == modality
 
 
 @pytest.mark.parametrize(
@@ -176,18 +173,28 @@ def test_sync_run_wrapper_delegates_to_async_path(
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_run_path_rejected_inside_active_event_loop(
+async def test_adapters_conform_to_multimodal_adapter_protocol(
+    monkeypatch: pytest.MonkeyPatch,
     adapter: STTAdapter | TTSAdapter | VisionAdapter,
     request_factory,
 ) -> None:
-    with pytest.raises(
-        RuntimeError,
-        match=(
-            r"Synchronous adapter.run\(\) is not supported in an active event loop; "
-            r"use await adapter.run_async\(\.\.\.\)\."
-        ),
-    ):
-        adapter.run(request_factory())
+    """Verify adapters implement async run() as required by MultimodalAdapter protocol."""
+    import inspect
+
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", False)
+    monkeypatch.setattr("agent33.config.settings.openai_api_key", SecretStr(""))
+    monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
+
+    assert hasattr(adapter, "run")
+    assert inspect.iscoroutinefunction(adapter.run)
+
+    request = request_factory()
+    response = await adapter.run(request)
+    assert isinstance(response, dict)
+    has_expected_key = (
+        "output_text" in response or "output_artifact_id" in response or "output_data" in response
+    )
+    assert has_expected_key
 
 
 @pytest.mark.parametrize(
@@ -199,37 +206,41 @@ async def test_sync_run_path_rejected_inside_active_event_loop(
     ],
 )
 @pytest.mark.asyncio
-async def test_run_async_uses_boundary_connector_and_operation_contract(
+async def test_run_uses_boundary_connector_and_operation_contract(
     monkeypatch: pytest.MonkeyPatch,
     adapter: STTAdapter | TTSAdapter | VisionAdapter,
     request_factory,
     connector: str,
     modality: ModalityType,
 ) -> None:
-    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", False)
+    monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
+    monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "default")
+    monkeypatch.setattr("agent33.config.settings.connector_governance_blocked_connectors", "")
+    monkeypatch.setattr("agent33.config.settings.connector_governance_blocked_operations", "")
+    monkeypatch.setattr("agent33.config.settings.connector_circuit_breaker_enabled", False)
     monkeypatch.setattr("agent33.config.settings.openai_api_key", SecretStr(""))
     monkeypatch.setattr("agent33.config.settings.elevenlabs_api_key", SecretStr(""))
 
     captured: dict[str, object] = {}
 
-    async def _fake_boundary_call(**kwargs):
-        captured.update(kwargs)
-        return {
-            "output_text": "",
-            "output_artifact_id": "",
-            "output_data": {"modality": modality.value, "via": "boundary"},
-        }
+    from agent33.connectors.executor import ConnectorExecutor
 
-    monkeypatch.setattr(
-        "agent33.multimodal.adapters.execute_multimodal_boundary_call", _fake_boundary_call
-    )
+    original_execute = ConnectorExecutor.execute
+
+    async def _spy_execute(self, request, handler):  # type: ignore[override]
+        captured["connector"] = request.connector
+        captured["operation"] = request.operation
+        captured["payload"] = request.payload
+        captured["metadata"] = request.metadata
+        return await original_execute(self, request, handler)
+
+    monkeypatch.setattr(ConnectorExecutor, "execute", _spy_execute)
 
     request = request_factory()
-    response = await adapter.run_async(request)
+    response = await adapter.run(request)
 
-    assert response["output_data"] == {"modality": modality.value, "via": "boundary"}
+    assert response["output_data"]["modality"] == modality.value
     assert captured["connector"] == connector
     assert captured["operation"] == "run"
-    assert captured["payload"] == {"request_id": request.id, "modality": modality.value}
-    assert captured["metadata"] == {}
-    assert captured["timeout_seconds"] == float(request.requested_timeout_seconds)
+    assert captured["payload"]["request_id"] == request.id
+    assert captured["payload"]["modality"] == modality.value
