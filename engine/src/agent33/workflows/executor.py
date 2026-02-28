@@ -71,10 +71,17 @@ class WorkflowExecutor:
     Handles conditionals, retries, timeouts, and state passing between steps.
     """
 
-    def __init__(self, definition: WorkflowDefinition) -> None:
+    def __init__(
+        self,
+        definition: WorkflowDefinition,
+        hook_registry: Any | None = None,
+        tenant_id: str = "",
+    ) -> None:
         self._definition = definition
         self._evaluator = ExpressionEvaluator()
         self._steps: dict[str, WorkflowStep] = {s.id: s for s in definition.steps}
+        self._hook_registry = hook_registry
+        self._tenant_id = tenant_id
 
     async def execute(self, inputs: dict[str, Any] | None = None) -> WorkflowResult:
         """Execute the workflow with the given inputs.
@@ -219,6 +226,32 @@ class WorkflowExecutor:
         # Resolve inputs
         resolved_inputs = self._evaluator.resolve_inputs(step.inputs, state)
 
+        # --- Hook: workflow.step.pre ---
+        if self._hook_registry is not None:
+            from agent33.hooks.models import HookEventType, WorkflowHookContext
+
+            pre_runner = self._hook_registry.get_chain_runner(
+                HookEventType.WORKFLOW_STEP_PRE, self._tenant_id
+            )
+            wf_hook_ctx = WorkflowHookContext(
+                event_type=HookEventType.WORKFLOW_STEP_PRE,
+                tenant_id=self._tenant_id,
+                metadata={},
+                workflow_name=self._definition.name,
+                step_id=step.id,
+                step_action=step.action.value,
+                inputs=resolved_inputs,
+                state=dict(state),
+            )
+            wf_hook_ctx = await pre_runner.run(wf_hook_ctx)
+            if wf_hook_ctx.abort:
+                return StepResult(
+                    step_id=step.id,
+                    status="failed",
+                    error=f"Hook aborted: {wf_hook_ctx.abort_reason}",
+                )
+            resolved_inputs = wf_hook_ctx.inputs
+
         max_attempts = step.retry.max_attempts
         delay = step.retry.delay_seconds
         last_error: str | None = None
@@ -233,12 +266,35 @@ class WorkflowExecutor:
                     outputs = await coro
 
                 elapsed = (time.monotonic() - start) * 1000
-                return StepResult(
+                step_result = StepResult(
                     step_id=step.id,
                     status="success",
                     outputs=outputs,
                     duration_ms=round(elapsed, 2),
                 )
+
+                # --- Hook: workflow.step.post ---
+                if self._hook_registry is not None:
+                    from agent33.hooks.models import HookEventType, WorkflowHookContext
+
+                    post_runner = self._hook_registry.get_chain_runner(
+                        HookEventType.WORKFLOW_STEP_POST, self._tenant_id
+                    )
+                    wf_hook_ctx = WorkflowHookContext(
+                        event_type=HookEventType.WORKFLOW_STEP_POST,
+                        tenant_id=self._tenant_id,
+                        metadata={},
+                        workflow_name=self._definition.name,
+                        step_id=step.id,
+                        step_action=step.action.value,
+                        inputs=resolved_inputs,
+                        state=dict(state),
+                        result=step_result,
+                        duration_ms=step_result.duration_ms,
+                    )
+                    await post_runner.run(wf_hook_ctx)
+
+                return step_result
 
             except TimeoutError:
                 last_error = f"Step timed out after {step.timeout_seconds}s"

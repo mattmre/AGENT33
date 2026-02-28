@@ -25,6 +25,7 @@ from agent33.api.routes import (
     evaluations,
     explanations,
     health,
+    hooks,
     improvements,
     mcp,
     memory_search,
@@ -41,6 +42,7 @@ from agent33.api.routes import (
     workflows,
 )
 from agent33.config import settings
+from agent33.hooks.middleware import HookMiddleware
 from agent33.memory.long_term import LongTermMemory
 from agent33.messaging.bus import NATSMessageBus
 from agent33.security.middleware import AuthMiddleware
@@ -309,6 +311,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
 
+    # -- Hook registry -----------------------------------------------------
+    hook_registry = None
+    if settings.hooks_enabled:
+        from agent33.hooks.registry import HookRegistry
+
+        hook_registry = HookRegistry(max_per_event=settings.hooks_max_per_event)
+        hook_registry.discover_builtins()
+        app.state.hook_registry = hook_registry
+        logger.info("hook_registry_initialized", hook_count=hook_registry.count())
+
     # -- Agent-workflow bridge (with subsystem injection) -------------------
     _register_agent_runtime_bridge(
         model_router,
@@ -318,6 +330,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         progressive_recall=progressive_recall,
         effort_router=getattr(agents, "_effort_router", None),
         routing_metrics_emitter=getattr(agents, "_record_effort_routing_metrics", None),
+        hook_registry=hook_registry,
     )
     logger.info("agent_workflow_bridge_registered")
 
@@ -412,6 +425,7 @@ def _register_agent_runtime_bridge(
     progressive_recall: Any = None,
     effort_router: Any = None,
     routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
+    hook_registry: Any = None,
 ) -> None:
     """Create a bridge so workflow invoke-agent steps can run AgentRuntime.
 
@@ -462,6 +476,7 @@ def _register_agent_runtime_bridge(
             progressive_recall=progressive_recall,
             effort_router=effort_router,
             routing_metrics_emitter=routing_metrics_emitter,
+            hook_registry=hook_registry,
         )
         result = await runtime.invoke(inputs)
         return result.output
@@ -499,7 +514,9 @@ app = FastAPI(
 )
 
 # -- Middleware (order matters: last added = first executed) --------------------
-
+# Execution order: CORS -> Auth -> SizeLimit -> HookMiddleware -> Router
+# HookMiddleware added first so it runs last (after auth resolves tenant_id)
+app.add_middleware(HookMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(AuthMiddleware)
 
@@ -538,3 +555,4 @@ app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
 app.include_router(reasoning.router)
+app.include_router(hooks.router)
