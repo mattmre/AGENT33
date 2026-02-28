@@ -28,6 +28,9 @@ SCOPES: set[str] = {
     "multimodal:execute",
     "outcomes:read",
     "outcomes:write",
+    "hooks:read",
+    "hooks:manage",
+    "hooks:admin",
 }
 
 

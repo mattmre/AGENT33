@@ -111,6 +111,8 @@ class ToolLoop:
         session_id: str = "",
         context_manager: ContextManager | None = None,
         leakage_detector: Callable[[str], bool] | None = None,
+        hook_registry: Any | None = None,
+        tenant_id: str = "",
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -123,6 +125,8 @@ class ToolLoop:
         self._session_id = session_id
         self._context_manager = context_manager
         self._leakage_detector = leakage_detector
+        self._hook_registry = hook_registry
+        self._tenant_id = tenant_id
 
     # ------------------------------------------------------------------
     # Public API
@@ -513,6 +517,31 @@ class ToolLoop:
                     results.append(result)
                     return results  # Stop processing further calls
 
+            # --- Hook: tool.execute.pre ---
+            if self._hook_registry is not None:
+                from agent33.hooks.models import HookEventType, ToolHookContext
+
+                pre_runner = self._hook_registry.get_chain_runner(
+                    HookEventType.TOOL_EXECUTE_PRE, self._tenant_id
+                )
+                tool_hook_ctx = ToolHookContext(
+                    event_type=HookEventType.TOOL_EXECUTE_PRE,
+                    tenant_id=self._tenant_id,
+                    metadata={},
+                    tool_name=tool_name,
+                    arguments=parsed_args,
+                    tool_context=self._tool_context,
+                )
+                tool_hook_ctx = await pre_runner.run(tool_hook_ctx)
+                if tool_hook_ctx.abort:
+                    result = ToolResult.fail(
+                        f"Hook aborted: {tool_hook_ctx.abort_reason}"
+                    )
+                    results.append(result)
+                    continue
+                # Allow hooks to modify arguments
+                parsed_args = tool_hook_ctx.arguments
+
             # --- Execute tool ---
             context = self._tool_context or self._default_context()
             try:
@@ -528,6 +557,24 @@ class ToolLoop:
                 )
                 state.consecutive_errors += 1
                 result = ToolResult.fail(f"Tool '{tool_name}' raised: {exc}")
+
+            # --- Hook: tool.execute.post ---
+            if self._hook_registry is not None:
+                from agent33.hooks.models import HookEventType, ToolHookContext
+
+                post_runner = self._hook_registry.get_chain_runner(
+                    HookEventType.TOOL_EXECUTE_POST, self._tenant_id
+                )
+                tool_hook_ctx = ToolHookContext(
+                    event_type=HookEventType.TOOL_EXECUTE_POST,
+                    tenant_id=self._tenant_id,
+                    metadata={},
+                    tool_name=tool_name,
+                    arguments=parsed_args,
+                    tool_context=self._tool_context,
+                    result=result,
+                )
+                tool_hook_ctx = await post_runner.run(tool_hook_ctx)
 
             # --- Governance audit ---
             if self._tool_governance is not None:

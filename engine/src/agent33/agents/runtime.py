@@ -236,6 +236,7 @@ class AgentRuntime:
         routing_metrics_emitter: Callable[[dict[str, Any] | None], None] | None = None,
         tenant_id: str = "",
         domain: str = "",
+        hook_registry: Any | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -260,6 +261,7 @@ class AgentRuntime:
         self._runtime_enforcer = runtime_enforcer
         self._context_manager = context_manager
         self._reasoning_protocol = reasoning_protocol
+        self._hook_registry = hook_registry
 
     @property
     def definition(self) -> AgentDefinition:
@@ -355,6 +357,31 @@ class AgentRuntime:
             if param.required and name not in inputs:
                 raise ValueError(f"Missing required input: {name}")
 
+        # --- Hook: agent.invoke.pre ---
+        if self._hook_registry is not None:
+            from agent33.hooks.models import AgentHookContext, HookEventType
+            from agent33.hooks.protocol import HookAbortError
+
+            pre_runner = self._hook_registry.get_chain_runner(
+                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
+            )
+            hook_ctx = AgentHookContext(
+                event_type=HookEventType.AGENT_INVOKE_PRE,
+                tenant_id=self._tenant_id,
+                metadata={},
+                agent_name=self._definition.name,
+                agent_definition=self._definition,
+                inputs=inputs,
+                system_prompt=system_prompt,
+                model=self._model,
+            )
+            hook_ctx = await pre_runner.run(hook_ctx)
+            if hook_ctx.abort:
+                raise HookAbortError(hook_ctx.abort_reason)
+            # Allow hooks to modify inputs and system prompt
+            inputs = hook_ctx.inputs
+            system_prompt = hook_ctx.system_prompt
+
         user_content = json.dumps(inputs, indent=2)
 
         messages = [
@@ -402,6 +429,25 @@ class AgentRuntime:
             routing_decision=self._routing_decision_metadata,
         )
         self._emit_routing_metrics()
+
+        # --- Hook: agent.invoke.post ---
+        if self._hook_registry is not None:
+            from agent33.hooks.models import AgentHookContext, HookEventType
+
+            post_runner = self._hook_registry.get_chain_runner(
+                HookEventType.AGENT_INVOKE_POST, self._tenant_id
+            )
+            hook_ctx = AgentHookContext(
+                event_type=HookEventType.AGENT_INVOKE_POST,
+                tenant_id=self._tenant_id,
+                metadata={},
+                agent_name=self._definition.name,
+                agent_definition=self._definition,
+                inputs=inputs,
+                result=result,
+            )
+            await post_runner.run(hook_ctx)
+            # Post hooks cannot modify the result (immutable AgentResult)
 
         # Record observation if capture is available
         if self._observation_capture is not None:
@@ -584,6 +630,30 @@ class AgentRuntime:
             if param.required and name not in inputs:
                 raise ValueError(f"Missing required input: {name}")
 
+        # --- Hook: agent.invoke.pre (iterative) ---
+        if self._hook_registry is not None:
+            from agent33.hooks.models import AgentHookContext, HookEventType
+            from agent33.hooks.protocol import HookAbortError
+
+            pre_runner = self._hook_registry.get_chain_runner(
+                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
+            )
+            hook_ctx = AgentHookContext(
+                event_type=HookEventType.AGENT_INVOKE_PRE,
+                tenant_id=self._tenant_id,
+                metadata={},
+                agent_name=self._definition.name,
+                agent_definition=self._definition,
+                inputs=inputs,
+                system_prompt=system_prompt,
+                model=routed_model,
+            )
+            hook_ctx = await pre_runner.run(hook_ctx)
+            if hook_ctx.abort:
+                raise HookAbortError(hook_ctx.abort_reason)
+            inputs = hook_ctx.inputs
+            system_prompt = hook_ctx.system_prompt
+
         user_content = json.dumps(inputs, indent=2)
         messages = [
             ChatMessage(role="system", content=system_prompt),
@@ -624,6 +694,24 @@ class AgentRuntime:
             routing_decision=self._routing_decision_metadata,
         )
         self._emit_routing_metrics()
+
+        # --- Hook: agent.invoke.post (iterative) ---
+        if self._hook_registry is not None:
+            from agent33.hooks.models import AgentHookContext, HookEventType
+
+            post_runner = self._hook_registry.get_chain_runner(
+                HookEventType.AGENT_INVOKE_POST, self._tenant_id
+            )
+            hook_ctx = AgentHookContext(
+                event_type=HookEventType.AGENT_INVOKE_POST,
+                tenant_id=self._tenant_id,
+                metadata={},
+                agent_name=self._definition.name,
+                agent_definition=self._definition,
+                inputs=inputs,
+                result=result,
+            )
+            await post_runner.run(hook_ctx)
 
         # Record observation for completed iterative invocation
         if self._observation_capture is not None:
