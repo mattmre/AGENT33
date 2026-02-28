@@ -141,6 +141,10 @@ class Settings(BaseSettings):
     observability_effort_export_path: str = "var/effort_routing_events.jsonl"
     observability_effort_export_fail_closed: bool = False
 
+    # Plugins (Phase 32.8 — Plugin SDK)
+    plugin_definitions_dir: str = "plugins"
+    plugin_auto_enable: bool = True  # Auto-enable plugins after loading
+
     # Skills
     skill_definitions_dir: str = "skills"
     skill_max_instructions_chars: int = 16000

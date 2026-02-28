@@ -31,6 +31,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    plugins as plugins_routes,
     reasoning,
     releases,
     reviews,
@@ -309,6 +310,65 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
 
+    # -- Plugin registry (Phase 32.8 — Plugin SDK) -------------------------
+    from agent33.plugins.capabilities import CapabilityGrant
+    from agent33.plugins.context import PluginContext
+    from agent33.plugins.registry import PluginRegistry
+    from agent33.plugins.scoped import (
+        ReadOnlySettingsProxy,
+        ScopedSkillRegistry,
+        ScopedToolRegistry,
+    )
+
+    plugin_registry = PluginRegistry()
+    plugins_dir = Path(settings.plugin_definitions_dir)
+
+    def _plugin_context_factory(manifest: Any, plugin_dir: Path) -> PluginContext:
+        """Build a scoped context for a plugin."""
+        grants = CapabilityGrant(
+            manifest_permissions=[p.value for p in manifest.permissions],
+        )
+        return PluginContext(
+            plugin_name=manifest.name,
+            plugin_dir=plugin_dir,
+            granted_permissions=grants.effective_permissions,
+            skill_registry=ScopedSkillRegistry(skill_registry, grants),
+            tool_registry=ScopedToolRegistry(tool_registry, grants),
+            agent_registry=agent_registry,
+            hook_registry=getattr(app.state, "hook_registry", None),
+            plugin_config={},
+            settings_reader=(
+                ReadOnlySettingsProxy(settings)
+                if grants.check("config:read")
+                else None
+            ),
+        )
+
+    app.state.plugin_context_factory = _plugin_context_factory
+
+    if plugins_dir.is_dir():
+        plugin_count = plugin_registry.discover(plugins_dir)
+        logger.info("plugin_registry_discovered", count=plugin_count, path=str(plugins_dir))
+        if plugin_count > 0:
+            loaded = await plugin_registry.load_all(_plugin_context_factory)
+            logger.info("plugin_registry_loaded", loaded=loaded)
+            if settings.plugin_auto_enable:
+                for manifest in plugin_registry.list_all():
+                    state = plugin_registry.get_state(manifest.name)
+                    if state and state.value == "loaded":
+                        try:
+                            await plugin_registry.enable(manifest.name)
+                        except Exception:
+                            logger.warning(
+                                "plugin_auto_enable_failed",
+                                plugin=manifest.name,
+                                exc_info=True,
+                            )
+    else:
+        logger.debug("plugin_definitions_dir_not_found", path=str(plugins_dir))
+
+    app.state.plugin_registry = plugin_registry
+
     # -- Agent-workflow bridge (with subsystem injection) -------------------
     _register_agent_runtime_bridge(
         model_router,
@@ -368,6 +428,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Shutdown ----------------------------------------------------------
     logger.info("agent33_stopping")
+
+    # Unload all plugins in reverse dependency order
+    _plugin_reg: Any = getattr(app.state, "plugin_registry", None)
+    if _plugin_reg is not None:
+        try:
+            await _plugin_reg.unload_all()
+            logger.info("plugin_registry_unloaded")
+        except Exception:
+            logger.warning("plugin_registry_unload_failed", exc_info=True)
 
     _training_store: Any = getattr(app.state, "training_store", None)
     if _training_store is not None:
@@ -537,4 +606,5 @@ app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
+app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
