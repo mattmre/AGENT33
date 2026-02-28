@@ -200,6 +200,17 @@ class Settings(BaseSettings):
     improvement_learning_file_corruption_behavior: str = "reset"  # reset | raise
     improvement_learning_db_corruption_behavior: str = "reset"  # reset | raise
 
+    # Skill Packs (Phase 33)
+    pack_definitions_dir: str = "packs"
+    pack_auto_enable: bool = False  # auto-enable discovered packs for all tenants
+    pack_max_size_mb: int = 50
+    pack_checksums_required: bool = False  # True for production
+
+    # Comparative evaluation (AWM Tier 2 group-relative scoring)
+    comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates
+    comparative_min_population_size: int = 2  # min agents for round-robin
+    comparative_confidence_level: float = 0.95  # stat. significance threshold
+
     @field_validator(
         "improvement_learning_file_corruption_behavior",
         "improvement_learning_db_corruption_behavior",

@@ -20,6 +20,7 @@ from agent33.api.routes import (
     auth,
     autonomy,
     chat,
+    comparative,
     component_security,
     dashboard,
     evaluations,
@@ -31,6 +32,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    packs,
     reasoning,
     releases,
     reviews,
@@ -309,6 +311,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
 
+    # -- Pack registry (Phase 33) ------------------------------------------
+    from agent33.packs.registry import PackRegistry
+
+    pack_registry = PackRegistry(
+        packs_dir=Path(settings.pack_definitions_dir),
+        skill_registry=skill_registry,
+    )
+    packs_dir = Path(settings.pack_definitions_dir)
+    if packs_dir.is_dir():
+        pack_count = pack_registry.discover()
+        logger.info("pack_registry_loaded", count=pack_count, path=str(packs_dir))
+    app.state.pack_registry = pack_registry
+
     # -- Agent-workflow bridge (with subsystem injection) -------------------
     _register_agent_runtime_bridge(
         model_router,
@@ -351,6 +366,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.session_summarizer_class = SessionSummarizer
     except Exception:
         logger.debug("memory_subsystem_init_skipped", exc_info=True)
+
+    # --- Comparative evaluation (AWM Tier 2 group-relative scoring) ---
+    from agent33.evaluation.comparative.service import ComparativeEvaluationService
+
+    comparative_service = ComparativeEvaluationService(
+        elo_k_factor=settings.comparative_elo_k_factor,
+        min_population_size=settings.comparative_min_population_size,
+        confidence_level=settings.comparative_confidence_level,
+    )
+    app.state.comparative_service = comparative_service
+    comparative.set_comparative_service(comparative_service)
+    logger.info("comparative_evaluation_initialized")
 
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
@@ -538,3 +565,5 @@ app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
 app.include_router(reasoning.router)
+app.include_router(comparative.router)
+app.include_router(packs.router)
