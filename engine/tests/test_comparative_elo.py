@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from agent33.evaluation.comparative.elo import (
     DEFAULT_K_FACTOR,
     DEFAULT_RATING,

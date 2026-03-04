@@ -34,7 +34,6 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
-    packs,
     reasoning,
     releases,
     reviews,
@@ -654,4 +653,3 @@ app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)
-app.include_router(hooks.router)

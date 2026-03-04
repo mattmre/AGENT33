@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent33.evaluation.comparative.models import (
-    AgentProfile,
     AgentScore,
     ComparisonOutcome,
     ComparisonResult,
@@ -24,9 +23,7 @@ class TestAgentScore:
         assert score.timestamp is not None
 
     def test_create_with_task_id(self) -> None:
-        score = AgentScore(
-            agent_name="agent-b", metric_name="M-02", value=42.5, task_id="GT-01"
-        )
+        score = AgentScore(agent_name="agent-b", metric_name="M-02", value=42.5, task_id="GT-01")
         assert score.task_id == "GT-01"
 
 

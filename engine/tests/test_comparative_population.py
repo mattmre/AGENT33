@@ -22,9 +22,7 @@ class TestAddScore:
     def test_bounded_retention(self) -> None:
         tracker = PopulationTracker(max_scores_per_agent_metric=3)
         for i in range(10):
-            tracker.add_score(
-                AgentScore(agent_name="a", metric_name="M-01", value=float(i))
-            )
+            tracker.add_score(AgentScore(agent_name="a", metric_name="M-01", value=float(i)))
         # Only last 3 should be retained
         scores = tracker._scores["M-01"]["a"]
         assert len(scores) == 3

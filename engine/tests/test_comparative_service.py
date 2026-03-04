@@ -23,9 +23,7 @@ def _populate(svc: ComparativeEvaluationService) -> None:
 class TestRecordScores:
     def test_records_and_creates_ratings(self) -> None:
         svc = ComparativeEvaluationService()
-        svc.record_scores(
-            [AgentScore(agent_name="a", metric_name="M-01", value=80.0)]
-        )
+        svc.record_scores([AgentScore(agent_name="a", metric_name="M-01", value=80.0)])
         assert svc.population_tracker.population_size == 1
         assert svc.get_elo_rating("a") is not None
 
