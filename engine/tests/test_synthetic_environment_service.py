@@ -44,8 +44,7 @@ def test_generate_bundle_builds_requested_variants() -> None:
     assert environment.tasks
     assert environment.verification_queries
     assert any(
-        "CREATE TABLE workflow_context" in statement
-        for statement in environment.initial_state_sql
+        "CREATE TABLE workflow_context" in statement for statement in environment.initial_state_sql
     )
 
 
