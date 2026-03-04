@@ -27,7 +27,9 @@ try:
     import mcp.types as types
     from mcp.server import Server
 
-    mcp_server = Server("agent33-core")
+    # Keep the optional MCP SDK behind an Any-typed boundary so strict mode
+    # only enforces our route surface, not the SDK's untyped decorators.
+    mcp_server: Any = Server("agent33-core")
 
     @mcp_server.list_tools()  # type: ignore[untyped-decorator]
     async def list_tools() -> list[types.Tool]:
