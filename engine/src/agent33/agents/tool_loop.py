@@ -534,9 +534,7 @@ class ToolLoop:
                 )
                 tool_hook_ctx = await pre_runner.run(tool_hook_ctx)
                 if tool_hook_ctx.abort:
-                    result = ToolResult.fail(
-                        f"Hook aborted: {tool_hook_ctx.abort_reason}"
-                    )
+                    result = ToolResult.fail(f"Hook aborted: {tool_hook_ctx.abort_reason}")
                     results.append(result)
                     continue
                 # Allow hooks to modify arguments

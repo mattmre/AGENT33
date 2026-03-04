@@ -72,9 +72,7 @@ class HookRegistry:
             if len(self._hooks[et]) < before:
                 removed = True
         # Also remove the definition if present
-        to_remove = [
-            hid for hid, d in self._definitions.items() if d.name == hook_name
-        ]
+        to_remove = [hid for hid, d in self._definitions.items() if d.name == hook_name]
         for hid in to_remove:
             del self._definitions[hid]
         if removed:

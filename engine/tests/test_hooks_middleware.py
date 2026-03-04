@@ -28,12 +28,14 @@ class RequestTrackingHook(BaseHook):
         self.calls: list[dict] = []
 
     async def execute(self, context, call_next):
-        self.calls.append({
-            "event_type": context.event_type,
-            "method": getattr(context, "method", ""),
-            "path": getattr(context, "path", ""),
-            "tenant_id": context.tenant_id,
-        })
+        self.calls.append(
+            {
+                "event_type": context.event_type,
+                "method": getattr(context, "method", ""),
+                "path": getattr(context, "path", ""),
+                "tenant_id": context.tenant_id,
+            }
+        )
         return await call_next(context)
 
 
@@ -86,7 +88,6 @@ def _make_test_app(registry: HookRegistry | None = None) -> FastAPI:
 
 
 class TestHookMiddlewareNoOp:
-
     def test_no_registry_passthrough(self) -> None:
         """Without hook_registry on app.state, middleware is a no-op."""
         app = _make_test_app(registry=None)
@@ -97,7 +98,6 @@ class TestHookMiddlewareNoOp:
 
 
 class TestHookMiddlewarePreHooks:
-
     def test_pre_hook_fires_on_request(self) -> None:
         registry = HookRegistry()
         pre_tracker = RequestTrackingHook("request.pre")
@@ -123,7 +123,6 @@ class TestHookMiddlewarePreHooks:
 
 
 class TestHookMiddlewarePostHooks:
-
     def test_post_hook_fires_after_response(self) -> None:
         registry = HookRegistry()
         post_tracker = RequestTrackingHook("request.post")
@@ -149,7 +148,6 @@ class TestHookMiddlewarePostHooks:
 
 
 class TestHookMiddlewarePreAndPost:
-
     def test_both_pre_and_post_fire(self) -> None:
         registry = HookRegistry()
         pre_tracker = RequestTrackingHook("request.pre")

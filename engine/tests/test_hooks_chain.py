@@ -70,7 +70,6 @@ class SlowHook(BaseHook):
 
 
 class TestHookChainRunner:
-
     @pytest.fixture()
     def ctx(self) -> HookContext:
         return HookContext(event_type="test", tenant_id="t1", metadata={})
@@ -210,8 +209,11 @@ class TestHookChainRunner:
         """Verify correct behavior with many hooks in sequence."""
         hooks = [
             MetadataHook(
-                name=f"h{i}", key=f"k{i}", value=str(i),
-                event_type="test", priority=i * 10,
+                name=f"h{i}",
+                key=f"k{i}",
+                value=str(i),
+                event_type="test",
+                priority=i * 10,
             )
             for i in range(10)
         ]
@@ -234,7 +236,6 @@ class TestHookChainRunner:
 
 
 class TestConcurrentHookChainRunner:
-
     @pytest.fixture()
     def ctx(self) -> HookContext:
         return HookContext(event_type="test", tenant_id="t1", metadata={})

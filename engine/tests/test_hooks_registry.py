@@ -52,7 +52,6 @@ def _make_definition(
 
 
 class TestRegistration:
-
     def test_register_hook(self) -> None:
         reg = HookRegistry()
         hook = _make_hook(name="h1")
@@ -110,7 +109,6 @@ class TestRegistration:
 
 
 class TestRetrieval:
-
     def test_get_hooks_empty(self) -> None:
         reg = HookRegistry()
         assert reg.get_hooks("agent.invoke.pre") == []
@@ -161,7 +159,6 @@ class TestRetrieval:
 
 
 class TestChainRunner:
-
     def test_get_chain_runner(self) -> None:
         reg = HookRegistry()
         h1 = _make_hook(name="h1")
@@ -171,7 +168,6 @@ class TestChainRunner:
 
 
 class TestDefinitionCRUD:
-
     def test_list_definitions_empty(self) -> None:
         reg = HookRegistry()
         assert reg.list_definitions() == []
@@ -235,7 +231,6 @@ class TestDefinitionCRUD:
 
 
 class TestDiscovery:
-
     def test_discover_builtins(self) -> None:
         reg = HookRegistry()
         count = reg.discover_builtins()
@@ -248,6 +243,7 @@ class TestDiscovery:
         cls = reg.resolve_handler("agent33.hooks.builtins.MetricsHook")
         assert cls is not None
         from agent33.hooks.builtins import MetricsHook
+
         assert cls is MetricsHook
 
     def test_resolve_handler_invalid(self) -> None:
@@ -260,7 +256,6 @@ class TestDiscovery:
 
 
 class TestIntrospection:
-
     def test_count_empty(self) -> None:
         reg = HookRegistry()
         assert reg.count() == 0

@@ -30,12 +30,8 @@ class HookMiddleware(BaseHTTPMiddleware):
     If not present, the middleware is a no-op pass-through.
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
-        hook_registry: HookRegistry | None = getattr(
-            request.app.state, "hook_registry", None
-        )
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        hook_registry: HookRegistry | None = getattr(request.app.state, "hook_registry", None)
         if hook_registry is None:
             return await call_next(request)
 
@@ -48,9 +44,7 @@ class HookMiddleware(BaseHTTPMiddleware):
         # --- Request PRE hooks ---
         pre_hooks = hook_registry.get_hooks(HookEventType.REQUEST_PRE, tenant_id)
         if pre_hooks:
-            pre_runner = hook_registry.get_chain_runner(
-                HookEventType.REQUEST_PRE, tenant_id
-            )
+            pre_runner = hook_registry.get_chain_runner(HookEventType.REQUEST_PRE, tenant_id)
             # Build pre-hook context with available request data
             headers_dict: dict[str, str] = {}
             for key, value in request.headers.items():
@@ -82,9 +76,7 @@ class HookMiddleware(BaseHTTPMiddleware):
         # --- Request POST hooks ---
         post_hooks = hook_registry.get_hooks(HookEventType.REQUEST_POST, tenant_id)
         if post_hooks:
-            post_runner = hook_registry.get_chain_runner(
-                HookEventType.REQUEST_POST, tenant_id
-            )
+            post_runner = hook_registry.get_chain_runner(HookEventType.REQUEST_POST, tenant_id)
             duration_ms = (time.monotonic() - start) * 1000
             response_headers: dict[str, str] = {}
             for key, value in response.headers.items():

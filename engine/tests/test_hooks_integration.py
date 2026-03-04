@@ -57,7 +57,6 @@ class PostResultCapture(BaseHook):
 
 
 class TestAgentRuntimeHooks:
-
     async def test_invoke_with_pre_hook_modifies_inputs(self) -> None:
         """Pre-hook can modify agent inputs before LLM call."""
         from agent33.agents.runtime import AgentRuntime  # noqa: F811
@@ -88,6 +87,7 @@ class TestAgentRuntimeHooks:
         call_args = router.complete.call_args
         user_msg = call_args.args[0][1]  # second message is user
         import json
+
         user_inputs = json.loads(user_msg.content)
         assert user_inputs.get("injected_by_hook") is True
 
@@ -166,7 +166,6 @@ class TestAgentRuntimeHooks:
 
 
 class TestToolLoopHooks:
-
     async def test_tool_pre_hook_modifies_arguments(self) -> None:
         """Pre-tool hook can modify arguments before tool execution."""
         from agent33.hooks.models import ToolHookContext
@@ -229,7 +228,6 @@ class TestToolLoopHooks:
 
 
 class TestWorkflowHooks:
-
     async def test_workflow_step_pre_hook(self) -> None:
         """Pre-step hook can modify resolved inputs."""
         registry = HookRegistry()
@@ -287,7 +285,6 @@ class TestWorkflowHooks:
 
 
 class TestMultiTenantIsolation:
-
     async def test_tenant_hooks_isolated(self) -> None:
         """Tenant-specific hooks only fire for their tenant."""
         registry = HookRegistry()
@@ -340,7 +337,10 @@ def _mock_definition() -> MagicMock:
     defn.capabilities = []
     defn.spec_capabilities = []
     defn.governance = MagicMock(
-        scope="", commands="", network="", approval_required=[],
+        scope="",
+        commands="",
+        network="",
+        approval_required=[],
         tool_policies={},
     )
     defn.autonomy_level = MagicMock(value="full")

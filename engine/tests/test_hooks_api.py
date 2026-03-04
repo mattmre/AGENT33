@@ -59,15 +59,12 @@ def client(registry: HookRegistry) -> TestClient:
 
 
 class TestListHooks:
-
     def test_list_empty(self, client: TestClient) -> None:
         resp = client.get("/v1/hooks/")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_list_with_hooks(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_list_with_hooks(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(
             name="test-hook",
             event_type="agent.invoke.pre",
@@ -88,18 +85,20 @@ class TestListHooks:
         assert data[0]["name"] == "test-hook"
         assert data[0]["hook_id"] == "h1"
 
-    def test_list_filter_by_event_type(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_list_filter_by_event_type(self, client: TestClient, registry: HookRegistry) -> None:
         h1 = BaseHook(name="h1", event_type="agent.invoke.pre", priority=100)
         d1 = HookDefinition(
-            hook_id="d1", name="h1",
-            event_type=HookEventType.AGENT_INVOKE_PRE, handler_ref="test.H",
+            hook_id="d1",
+            name="h1",
+            event_type=HookEventType.AGENT_INVOKE_PRE,
+            handler_ref="test.H",
         )
         h2 = BaseHook(name="h2", event_type="tool.execute.pre", priority=100)
         d2 = HookDefinition(
-            hook_id="d2", name="h2",
-            event_type=HookEventType.TOOL_EXECUTE_PRE, handler_ref="test.H",
+            hook_id="d2",
+            name="h2",
+            event_type=HookEventType.TOOL_EXECUTE_PRE,
+            handler_ref="test.H",
         )
         registry.register(h1, d1)
         registry.register(h2, d2)
@@ -112,15 +111,14 @@ class TestListHooks:
 
 
 class TestGetHook:
-
-    def test_get_existing(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_get_existing(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(name="get-me", event_type="agent.invoke.pre", priority=50)
         defn = HookDefinition(
-            hook_id="get1", name="get-me",
+            hook_id="get1",
+            name="get-me",
             event_type=HookEventType.AGENT_INVOKE_PRE,
-            handler_ref="test.H", priority=50,
+            handler_ref="test.H",
+            priority=50,
         )
         registry.register(hook, defn)
 
@@ -136,13 +134,11 @@ class TestGetHook:
 
 
 class TestUpdateHook:
-
-    def test_update_description(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_update_description(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(name="upd", event_type="agent.invoke.pre", priority=100)
         defn = HookDefinition(
-            hook_id="upd1", name="upd",
+            hook_id="upd1",
+            name="upd",
             event_type=HookEventType.AGENT_INVOKE_PRE,
             handler_ref="test.H",
         )
@@ -163,13 +159,11 @@ class TestUpdateHook:
 
 
 class TestDeleteHook:
-
-    def test_delete_existing(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_delete_existing(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(name="del", event_type="agent.invoke.pre", priority=100)
         defn = HookDefinition(
-            hook_id="del1", name="del",
+            hook_id="del1",
+            name="del",
             event_type=HookEventType.AGENT_INVOKE_PRE,
             handler_ref="test.H",
         )
@@ -189,13 +183,11 @@ class TestDeleteHook:
 
 
 class TestToggleHook:
-
-    def test_toggle_disable(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_toggle_disable(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(name="tog", event_type="agent.invoke.pre", priority=100)
         defn = HookDefinition(
-            hook_id="tog1", name="tog",
+            hook_id="tog1",
+            name="tog",
             event_type=HookEventType.AGENT_INVOKE_PRE,
             handler_ref="test.H",
         )
@@ -211,16 +203,13 @@ class TestToggleHook:
 
 
 class TestHookStats:
-
     def test_stats_empty(self, client: TestClient) -> None:
         resp = client.get("/v1/hooks/stats")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_hooks"] == 0
 
-    def test_stats_with_hooks(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_stats_with_hooks(self, client: TestClient, registry: HookRegistry) -> None:
         h1 = BaseHook(name="s1", event_type="agent.invoke.pre", priority=100)
         h2 = BaseHook(name="s2", event_type="agent.invoke.pre", priority=200)
         registry.register(h1)
@@ -234,10 +223,7 @@ class TestHookStats:
 
 
 class TestTestHook:
-
-    def test_dry_run_existing(
-        self, client: TestClient, registry: HookRegistry
-    ) -> None:
+    def test_dry_run_existing(self, client: TestClient, registry: HookRegistry) -> None:
         hook = BaseHook(
             name="dryrun",
             event_type="agent.invoke.pre",

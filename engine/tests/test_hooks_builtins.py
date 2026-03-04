@@ -13,7 +13,6 @@ from agent33.hooks.models import AgentHookContext, HookContext, RequestHookConte
 
 
 class TestMetricsHook:
-
     @pytest.fixture()
     def hook(self) -> MetricsHook:
         h = MetricsHook()
@@ -74,7 +73,6 @@ class TestMetricsHook:
 
 
 class TestAuditLogHook:
-
     @pytest.fixture()
     def hook(self) -> AuditLogHook:
         h = AuditLogHook()
@@ -144,7 +142,6 @@ class TestAuditLogHook:
 
 
 class TestGetBuiltinHooks:
-
     def test_returns_correct_count(self) -> None:
         builtins = get_builtin_hooks()
         # 8 event types * 2 hooks (metrics + audit) = 16

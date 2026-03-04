@@ -51,9 +51,7 @@ class MetricsHook(BaseHook):
 
         event = context.event_type
         self._call_counts[event] = self._call_counts.get(event, 0) + 1
-        self._total_duration_ms[event] = (
-            self._total_duration_ms.get(event, 0.0) + duration
-        )
+        self._total_duration_ms[event] = self._total_duration_ms.get(event, 0.0) + duration
 
         result.metadata.setdefault("hook_metrics", {})
         result.metadata["hook_metrics"][event] = {
