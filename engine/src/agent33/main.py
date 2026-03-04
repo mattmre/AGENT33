@@ -21,6 +21,7 @@ from agent33.api.routes import (
     autonomy,
     benchmarks,
     chat,
+    comparative,
     component_security,
     dashboard,
     evaluations,
@@ -439,6 +440,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.debug("memory_subsystem_init_skipped", exc_info=True)
 
+    # --- Comparative evaluation (AWM Tier 2 group-relative scoring) ---
+    from agent33.evaluation.comparative.service import ComparativeEvaluationService
+
+    comparative_service = ComparativeEvaluationService(
+        elo_k_factor=settings.comparative_elo_k_factor,
+        min_population_size=settings.comparative_min_population_size,
+        confidence_level=settings.comparative_confidence_level,
+    )
+    app.state.comparative_service = comparative_service
+    comparative.set_comparative_service(comparative_service)
+    logger.info("comparative_evaluation_initialized")
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -640,3 +653,4 @@ app.include_router(packs.router)
 app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
+app.include_router(comparative.router)
