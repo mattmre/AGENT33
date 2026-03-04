@@ -71,9 +71,7 @@ async def list_plugins(request: Request) -> list[PluginSummary]:
     summaries: list[PluginSummary] = []
     for manifest in registry.list_all():
         state = registry.get_state(manifest.name)
-        summaries.append(
-            _manifest_to_summary(manifest, state.value if state else "unknown")
-        )
+        summaries.append(_manifest_to_summary(manifest, state.value if state else "unknown"))
     return summaries
 
 
@@ -85,17 +83,12 @@ async def list_plugins(request: Request) -> list[PluginSummary]:
 async def search_plugins(request: Request, q: str = "") -> PluginSearchResponse:
     """Search plugins by query string."""
     registry = _get_plugin_registry(request)
-    if not q:
-        manifests = registry.list_all()
-    else:
-        manifests = registry.search(q)
+    manifests = registry.list_all() if not q else registry.search(q)
 
     summaries: list[PluginSummary] = []
     for manifest in manifests:
         state = registry.get_state(manifest.name)
-        summaries.append(
-            _manifest_to_summary(manifest, state.value if state else "unknown")
-        )
+        summaries.append(_manifest_to_summary(manifest, state.value if state else "unknown"))
 
     return PluginSearchResponse(
         query=q,
@@ -357,9 +350,7 @@ async def discover_plugins(request: Request) -> PluginDiscoverResponse:
     # Get plugin directory from settings
     from agent33.config import settings
 
-    plugin_dir = Path(
-        getattr(settings, "plugin_definitions_dir", "plugins")
-    )
+    plugin_dir = Path(getattr(settings, "plugin_definitions_dir", "plugins"))
 
     discovered = registry.discover(plugin_dir)
     return PluginDiscoverResponse(

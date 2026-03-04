@@ -32,7 +32,6 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
-    plugins as plugins_routes,
     reasoning,
     releases,
     reviews,
@@ -41,6 +40,9 @@ from agent33.api.routes import (
     visualizations,
     webhooks,
     workflows,
+)
+from agent33.api.routes import (
+    plugins as plugins_routes,
 )
 from agent33.config import settings
 from agent33.hooks.middleware import HookMiddleware
@@ -350,9 +352,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             hook_registry=getattr(app.state, "hook_registry", None),
             plugin_config={},
             settings_reader=(
-                ReadOnlySettingsProxy(settings)
-                if grants.check("config:read")
-                else None
+                ReadOnlySettingsProxy(settings) if grants.check("config:read") else None
             ),
         )
 
