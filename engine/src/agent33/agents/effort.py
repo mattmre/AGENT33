@@ -40,6 +40,9 @@ class EffortRoutingDecision:
     domain: str | None = None
     policy_key: str | None = None
     heuristic_confidence: float | None = None
+    heuristic_score: int | None = None
+    heuristic_low_threshold: int | None = None
+    heuristic_high_threshold: int | None = None
     heuristic_reasons: tuple[str, ...] = ()
 
 
@@ -49,6 +52,9 @@ class EffortHeuristicDecision:
 
     effort: AgentEffort
     confidence: float
+    score: int
+    low_threshold: int
+    high_threshold: int
     reasons: tuple[str, ...]
 
 
@@ -71,6 +77,12 @@ class AgentEffortRouter:
         domain_policies: dict[str, AgentEffort | str] | None = None,
         tenant_domain_policies: dict[str, AgentEffort | str] | None = None,
         cost_per_1k_tokens: float = 0.0,
+        heuristic_low_score_threshold: int = 1,
+        heuristic_high_score_threshold: int = 4,
+        heuristic_medium_payload_chars: int = 800,
+        heuristic_large_payload_chars: int = 2000,
+        heuristic_many_input_fields_threshold: int = 10,
+        heuristic_high_iteration_threshold: int = 15,
     ) -> None:
         self._enabled = enabled
         self._heuristic_enabled = heuristic_enabled
@@ -86,6 +98,21 @@ class AgentEffortRouter:
             AgentEffort.HIGH: high_token_multiplier,
         }
         self._cost_per_1k_tokens = max(0.0, cost_per_1k_tokens)
+        self._heuristic_low_score_threshold = max(0, heuristic_low_score_threshold)
+        self._heuristic_high_score_threshold = max(
+            self._heuristic_low_score_threshold + 1,
+            heuristic_high_score_threshold,
+        )
+        self._heuristic_medium_payload_chars = max(1, heuristic_medium_payload_chars)
+        self._heuristic_large_payload_chars = max(
+            self._heuristic_medium_payload_chars + 1,
+            heuristic_large_payload_chars,
+        )
+        self._heuristic_many_input_fields_threshold = max(
+            1,
+            heuristic_many_input_fields_threshold,
+        )
+        self._heuristic_high_iteration_threshold = max(1, heuristic_high_iteration_threshold)
         self._tenant_policies = self._coerce_policy_map(tenant_policies or {})
         self._domain_policies = self._coerce_policy_map(domain_policies or {}, lower_keys=True)
         self._tenant_domain_policies = self._coerce_policy_map(
@@ -164,6 +191,9 @@ class AgentEffortRouter:
             return EffortHeuristicDecision(
                 effort=AgentEffort.LOW,
                 confidence=0.8,
+                score=0,
+                low_threshold=self._heuristic_low_score_threshold,
+                high_threshold=self._heuristic_high_score_threshold,
                 reasons=("empty_or_missing_inputs",),
             )
 
@@ -178,16 +208,19 @@ class AgentEffortRouter:
         if iterative:
             score += 2
             reasons.append("iterative_mode")
-        if max_iterations is not None and max_iterations >= 15:
+        if (
+            max_iterations is not None
+            and max_iterations >= self._heuristic_high_iteration_threshold
+        ):
             score += 1
             reasons.append("high_iteration_budget")
-        if payload_len >= 2000:
+        if payload_len >= self._heuristic_large_payload_chars:
             score += 2
             reasons.append("large_payload")
-        elif payload_len >= 800:
+        elif payload_len >= self._heuristic_medium_payload_chars:
             score += 1
             reasons.append("medium_payload")
-        if top_level_keys >= 10:
+        if top_level_keys >= self._heuristic_many_input_fields_threshold:
             score += 1
             reasons.append("many_input_fields")
         if any(
@@ -204,10 +237,10 @@ class AgentEffortRouter:
             score += 1
             reasons.append("complex_task_keywords")
 
-        if score >= 4:
+        if score >= self._heuristic_high_score_threshold:
             effort = AgentEffort.HIGH
             confidence = 0.8
-        elif score <= 1:
+        elif score <= self._heuristic_low_score_threshold:
             effort = AgentEffort.LOW
             confidence = 0.72
         else:
@@ -216,6 +249,9 @@ class AgentEffortRouter:
         return EffortHeuristicDecision(
             effort=effort,
             confidence=confidence,
+            score=score,
+            low_threshold=self._heuristic_low_score_threshold,
+            high_threshold=self._heuristic_high_score_threshold,
             reasons=tuple(reasons) if reasons else ("balanced_request",),
         )
 
@@ -286,6 +322,15 @@ class AgentEffortRouter:
                 heuristic_confidence=(
                     heuristic_decision.confidence if heuristic_decision is not None else None
                 ),
+                heuristic_score=(
+                    heuristic_decision.score if heuristic_decision is not None else None
+                ),
+                heuristic_low_threshold=(
+                    heuristic_decision.low_threshold if heuristic_decision is not None else None
+                ),
+                heuristic_high_threshold=(
+                    heuristic_decision.high_threshold if heuristic_decision is not None else None
+                ),
                 heuristic_reasons=(
                     heuristic_decision.reasons if heuristic_decision is not None else ()
                 ),
@@ -311,5 +356,12 @@ class AgentEffortRouter:
             domain=normalized_domain or None,
             policy_key=policy_key,
             heuristic_confidence=heuristic_decision.confidence if heuristic_decision else None,
+            heuristic_score=heuristic_decision.score if heuristic_decision else None,
+            heuristic_low_threshold=(
+                heuristic_decision.low_threshold if heuristic_decision else None
+            ),
+            heuristic_high_threshold=(
+                heuristic_decision.high_threshold if heuristic_decision else None
+            ),
             heuristic_reasons=heuristic_decision.reasons if heuristic_decision else (),
         )
