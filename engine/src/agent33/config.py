@@ -202,6 +202,9 @@ class Settings(BaseSettings):
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
+    synthetic_env_workflow_dir: str = "workflow-definitions"
+    synthetic_env_tool_dir: str = "tool-definitions"
+    synthetic_env_bundle_retention: int = 100
 
     # Continuous improvement learning signals (Phase 31)
     improvement_learning_enabled: bool = False

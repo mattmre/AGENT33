@@ -38,6 +38,7 @@ from agent33.api.routes import (
     reasoning,
     releases,
     reviews,
+    synthetic_envs,
     traces,
     training,
     visualizations,
@@ -452,6 +453,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     comparative.set_comparative_service(comparative_service)
     logger.info("comparative_evaluation_initialized")
 
+    # --- Synthetic environment generation (AWM Tier 2 A5) ---
+    from agent33.evaluation.synthetic_envs.service import SyntheticEnvironmentService
+
+    synthetic_environment_service = SyntheticEnvironmentService(
+        workflow_dir=Path(settings.synthetic_env_workflow_dir),
+        tool_dir=Path(settings.synthetic_env_tool_dir),
+        max_saved_bundles=settings.synthetic_env_bundle_retention,
+    )
+    app.state.synthetic_environment_service = synthetic_environment_service
+    synthetic_envs.set_synthetic_environment_service(synthetic_environment_service)
+    logger.info(
+        "synthetic_environment_service_initialized",
+        workflow_count=len(synthetic_environment_service.list_workflows()),
+    )
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -654,3 +670,4 @@ app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)
+app.include_router(synthetic_envs.router)
