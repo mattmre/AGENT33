@@ -233,7 +233,18 @@ class TestProductionSecrets:
     def test_production_mode_rejects_default_secrets(self) -> None:
         from agent33.config import Settings
 
-        s = Settings(environment="production")
+        with pytest.raises(SystemExit, match="jwt_secret must be changed"):
+            Settings(environment="production")
+
+    def test_production_mode_rejects_other_default_secrets(self) -> None:
+        from agent33.config import Settings
+
+        s = Settings(
+            environment="production",
+            jwt_secret="my-real-jwt-secret-67890",
+            auth_bootstrap_enabled=False,
+            auth_bootstrap_admin_password="boot-secret-12345",
+        )
         with pytest.raises(RuntimeError, match="FATAL"):
             s.check_production_secrets()
 
