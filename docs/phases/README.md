@@ -32,7 +32,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 27 | Spacebot-Inspired Website Operations and Improvement Cycles | Product/Multi-User Agent UX | `PHASE-27-SPACEBOT-INSPIRED-WEBSITE-OPERATIONS-AND-IMPROVEMENT-CYCLES.md` |
 | 28 | Enterprise Security Scanning Integration | Security/Product Safety | `PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md` |
 | 29 | Reasoning Protocol & ISC | Intelligence/Runtime | See `PHASE-29-33-WORKFLOW-PLAN.md` (merged: PR #55, #57) |
-| 30 | Strategic User Outcome Improvement Loops | Adaptive Execution | See `PHASE-29-33-WORKFLOW-PLAN.md` (Stage 1 backend merged; Stage 2 UI recovered; live API wiring pending) |
+| 30 | Strategic User Outcome Improvement Loops | Adaptive Execution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core routing work merged; remaining work is refinement/verification) |
 | 31 | Continuous Learning & Signal Capture | Intelligence/Memory | See `PHASE-29-33-WORKFLOW-PLAN.md` (persistence/quality work still in progress) |
 | 32 | Middleware Chain, MCP Connectors & Circuit Breakers | Extensibility/Integration | See `PHASE-29-33-WORKFLOW-PLAN.md` (kickoff merged; H01/H02 implemented in open PRs `#98` and `#100`) |
 | 33 | Skill Packs & Distribution | Ecosystem/Distribution | See `PHASE-29-33-WORKFLOW-PLAN.md` (implemented in open PR `#103`; not yet on `main`) |

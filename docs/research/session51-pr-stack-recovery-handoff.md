@@ -44,7 +44,7 @@ This note captures the operational findings from the 2026-03-04 recovery pass ov
 
 ## Remaining Development Phases After the Stack
 
-- **Phase 30**: Backend stage is merged; frontend recovery exists; live API binding still pending.
+- **Phase 30**: Core routing work is merged; remaining work is refinement/verification rather than frontend API binding.
 - **Phase 31**: Persistence and learning-signal quality work still remain.
 - **Phase 32**: H01/H02 are implemented in open PRs but not yet on `main`.
 - **Phase 33**: Implemented in open PR `#103`; not yet on `main`.
@@ -55,5 +55,4 @@ This note captures the operational findings from the 2026-03-04 recovery pass ov
 1. Merge the repaired PR stack in order.
 2. Close `I03` unless the repository is ready to fund a broad test-file rename campaign.
 3. Research and architect A5 synthetic environment generation.
-4. Wire the recovered Operations Hub and Outcomes Dashboard frontends to live APIs.
-5. Finish Phase 31 persistence and signal-quality hardening.
+4. Finish Phase 31 persistence and signal-quality hardening.

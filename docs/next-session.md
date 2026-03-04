@@ -52,12 +52,8 @@ Recommended order:
 ### Priority 2: AWM Tier 2 A5
 - Synthetic environment generation is still deferred and needs a fresh research/architecture pass before implementation.
 
-### Priority 3: Frontend live wiring
-- Wire the recovered Operations Hub frontend to live backend APIs.
-- Wire the recovered Outcomes Dashboard frontend to live backend APIs.
-
-### Priority 4: Remaining late-phase development
-- **Phase 30**: Stage 1 backend is merged; Stage 2 UI recovery is merged; live API binding still pending.
+### Priority 3: Remaining late-phase development
+- **Phase 30**: Core adaptive-routing work is on `main`; remaining work is refinement/verification, not frontend API wiring.
 - **Phase 31**: Signal capture exists, but persistence/quality hardening remains unfinished.
 - **Phase 32**: Kickoff is on `main`; H01/H02 are implemented in open PRs `#98` and `#100`.
 - **Phase 33**: Implemented in open PR `#103`; not yet on `main`.
