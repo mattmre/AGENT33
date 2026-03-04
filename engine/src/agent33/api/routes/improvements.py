@@ -33,7 +33,7 @@ from agent33.improvement.persistence import (
     migrate_file_learning_state_to_db,
     should_migrate_file_learning_state_to_db,
 )
-from agent33.improvement.service import ImprovementService
+from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 
@@ -77,7 +77,16 @@ def _build_improvement_service() -> ImprovementService:
             "Unsupported improvement learning persistence backend: "
             f"{settings.improvement_learning_persistence_backend}"
         )
-    return ImprovementService(learning_store=store)
+    return ImprovementService(
+        learning_store=store,
+        persistence_policy=LearningPersistencePolicy(
+            dedupe_window_minutes=settings.improvement_learning_dedupe_window_minutes,
+            retention_days=settings.improvement_learning_retention_days,
+            max_signals=settings.improvement_learning_max_signals,
+            max_generated_intakes=settings.improvement_learning_max_generated_intakes,
+            auto_intake_min_quality=settings.improvement_learning_auto_intake_min_quality,
+        ),
+    )
 
 
 _service = _build_improvement_service()

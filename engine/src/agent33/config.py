@@ -219,6 +219,11 @@ class Settings(BaseSettings):
     )
     improvement_learning_file_corruption_behavior: str = "reset"  # reset | raise
     improvement_learning_db_corruption_behavior: str = "reset"  # reset | raise
+    improvement_learning_dedupe_window_minutes: int = 30
+    improvement_learning_retention_days: int = 180
+    improvement_learning_max_signals: int = 5000
+    improvement_learning_max_generated_intakes: int = 1000
+    improvement_learning_auto_intake_min_quality: float = 0.45
 
     # Comparative evaluation (AWM Tier 2 group-relative scoring)
     comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates
@@ -235,6 +240,27 @@ class Settings(BaseSettings):
         if normalized not in {"reset", "raise"}:
             raise ValueError("corruption behavior must be one of: reset, raise")
         return normalized
+
+    @field_validator(
+        "improvement_learning_dedupe_window_minutes",
+        "improvement_learning_retention_days",
+        "improvement_learning_max_signals",
+        "improvement_learning_max_generated_intakes",
+    )
+    @classmethod
+    def _validate_learning_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("learning persistence settings must be non-negative")
+        return value
+
+    @field_validator("improvement_learning_auto_intake_min_quality")
+    @classmethod
+    def _validate_learning_quality_threshold(cls, value: float) -> float:
+        if value < 0.0 or value > 1.0:
+            raise ValueError(
+                "improvement_learning_auto_intake_min_quality must be between 0.0 and 1.0"
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate_jwt_secret_not_default(self) -> Settings:

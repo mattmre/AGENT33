@@ -135,6 +135,9 @@ class LearningSignal(BaseModel):
     quality_label: str = "low"
     quality_reasons: list[str] = Field(default_factory=list)
     enrichment: dict[str, str] = Field(default_factory=dict)
+    occurrence_count: int = 1
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
     intake_generated: bool = False
     related_intake_id: str | None = None
 

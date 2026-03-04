@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from agent33.improvement.checklists import ChecklistEvaluator, build_checklist
@@ -57,10 +58,26 @@ _INTAKE_TRANSITIONS: dict[IntakeStatus, set[IntakeStatus]] = {
 }
 
 
+@dataclass(slots=True)
+class LearningPersistencePolicy:
+    """Persistence and intake quality policy for learning signals."""
+
+    dedupe_window_minutes: int = 0
+    retention_days: int | None = None
+    max_signals: int | None = None
+    max_generated_intakes: int | None = None
+    auto_intake_min_quality: float = 0.0
+
+
 class ImprovementService:
     """In-memory service for continuous improvement operations."""
 
-    def __init__(self, learning_store: LearningSignalStore | None = None) -> None:
+    def __init__(
+        self,
+        learning_store: LearningSignalStore | None = None,
+        *,
+        persistence_policy: LearningPersistencePolicy | None = None,
+    ) -> None:
         self._intakes: dict[str, ResearchIntake] = {}
         self._lessons: dict[str, LessonLearned] = {}
         self._checklists: dict[str, ImprovementChecklist] = {}
@@ -68,6 +85,9 @@ class ImprovementService:
         self._learning_signals: dict[str, LearningSignal] = {}
         self._learning_signal_intake_map: dict[str, str] = {}
         self._learning_store = learning_store or InMemoryLearningSignalStore()
+        self._persistence_policy = persistence_policy or LearningPersistencePolicy()
+        if not 0.0 <= self._persistence_policy.auto_intake_min_quality <= 1.0:
+            raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
         self._load_learning_state()
         self._metrics_tracker = MetricsTracker()
         self._checklist_evaluator = ChecklistEvaluator()
@@ -306,6 +326,21 @@ class ImprovementService:
     def record_learning_signal(self, signal: LearningSignal) -> LearningSignal:
         """Record a learning signal."""
         enrich_learning_signal(signal)
+        signal.first_seen_at = signal.recorded_at
+        signal.last_seen_at = signal.recorded_at
+        duplicate = self._find_recent_duplicate(signal)
+        if duplicate is not None:
+            self._merge_duplicate_signal(duplicate, signal)
+            self._persist_learning_state()
+            logger.info(
+                "learning_signal_deduplicated",
+                extra={
+                    "signal_id": duplicate.signal_id,
+                    "occurrence_count": duplicate.occurrence_count,
+                },
+            )
+            return duplicate
+
         self._learning_signals[signal.signal_id] = signal
         self._persist_learning_state()
         logger.info(
@@ -434,6 +469,8 @@ class ImprovementService:
         for signal in candidates:
             if _SEVERITY_RANK[signal.severity] < _SEVERITY_RANK[min_severity]:
                 continue
+            if signal.quality_score < self._persistence_policy.auto_intake_min_quality:
+                continue
             if signal.signal_id in self._learning_signal_intake_map:
                 continue
 
@@ -489,18 +526,121 @@ class ImprovementService:
 
     def _load_learning_state(self) -> None:
         state = self._learning_store.load()
+        for signal in state.signals:
+            if signal.first_seen_at is None:
+                signal.first_seen_at = signal.recorded_at
+            if signal.last_seen_at is None:
+                signal.last_seen_at = signal.recorded_at
         self._learning_signals = {signal.signal_id: signal for signal in state.signals}
         self._learning_signal_intake_map = dict(state.signal_intake_map)
         for intake in state.generated_intakes:
             self._intakes[intake.intake_id] = intake
 
-    def _persist_learning_state(self) -> None:
+    @staticmethod
+    def _normalize_signal_field(value: str) -> str:
+        return " ".join(value.strip().lower().split())
+
+    def _signal_fingerprint(self, signal: LearningSignal) -> tuple[str, ...]:
+        return (
+            signal.tenant_id,
+            signal.signal_type.value,
+            self._normalize_signal_field(signal.summary),
+            self._normalize_signal_field(signal.source),
+        )
+
+    def _find_recent_duplicate(self, signal: LearningSignal) -> LearningSignal | None:
+        window_minutes = self._persistence_policy.dedupe_window_minutes
+        if window_minutes <= 0:
+            return None
+        threshold = signal.recorded_at - timedelta(minutes=window_minutes)
+        candidate_fingerprint = self._signal_fingerprint(signal)
+        matches = [
+            existing
+            for existing in self._learning_signals.values()
+            if existing.recorded_at >= threshold
+            and self._signal_fingerprint(existing) == candidate_fingerprint
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda existing: existing.recorded_at)
+
+    def _merge_duplicate_signal(self, target: LearningSignal, incoming: LearningSignal) -> None:
+        target.occurrence_count += 1
+        target.last_seen_at = max(target.last_seen_at or target.recorded_at, incoming.recorded_at)
+
+        if _SEVERITY_RANK[incoming.severity] > _SEVERITY_RANK[target.severity]:
+            target.severity = incoming.severity
+        if len(incoming.details) > len(target.details):
+            target.details = incoming.details
+        if incoming.source and not target.source:
+            target.source = incoming.source
+
+        # Merge contextual hints without discarding existing keys.
+        for key, value in incoming.context.items():
+            if key not in target.context:
+                target.context[key] = value
+        enrich_learning_signal(target)
+
+    def _prune_learning_state(self) -> tuple[list[LearningSignal], list[ResearchIntake]]:
+        signals = list(self._learning_signals.values())
+        retention_days = self._persistence_policy.retention_days
+        if retention_days is not None and retention_days > 0:
+            cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+            signals = [signal for signal in signals if signal.recorded_at >= cutoff]
+
+        signals.sort(key=lambda signal: (signal.recorded_at, signal.signal_id), reverse=True)
+        max_signals = self._persistence_policy.max_signals
+        if max_signals is not None and max_signals >= 0:
+            signals = signals[:max_signals]
+        kept_signal_ids = {signal.signal_id for signal in signals}
+
+        self._learning_signals = {
+            signal_id: signal
+            for signal_id, signal in self._learning_signals.items()
+            if signal_id in kept_signal_ids
+        }
+        self._learning_signal_intake_map = {
+            signal_id: intake_id
+            for signal_id, intake_id in self._learning_signal_intake_map.items()
+            if signal_id in kept_signal_ids
+        }
+
         generated_intakes = [
             intake
             for intake in self._intakes.values()
             if intake.generated_from_signal_id is not None
+            and intake.generated_from_signal_id in kept_signal_ids
         ]
-        signals = sorted(self._learning_signals.values(), key=lambda signal: signal.signal_id)
+        generated_intakes.sort(
+            key=lambda intake: (intake.submitted_at, intake.intake_id),
+            reverse=True,
+        )
+        max_generated_intakes = self._persistence_policy.max_generated_intakes
+        if max_generated_intakes is not None and max_generated_intakes >= 0:
+            generated_intakes = generated_intakes[:max_generated_intakes]
+
+        kept_intake_ids = {intake.intake_id for intake in generated_intakes}
+        self._intakes = {
+            intake_id: intake
+            for intake_id, intake in self._intakes.items()
+            if intake.generated_from_signal_id is None or intake_id in kept_intake_ids
+        }
+        self._learning_signal_intake_map = {
+            signal_id: intake_id
+            for signal_id, intake_id in self._learning_signal_intake_map.items()
+            if intake_id in kept_intake_ids
+        }
+        for signal in self._learning_signals.values():
+            related = signal.related_intake_id
+            if related is not None and related not in kept_intake_ids:
+                signal.related_intake_id = None
+                signal.intake_generated = False
+
+        return signals, generated_intakes
+
+    def _persist_learning_state(self) -> None:
+        signals, generated_intakes = self._prune_learning_state()
+        signals.sort(key=lambda signal: signal.signal_id)
         generated_intakes.sort(key=lambda intake: intake.intake_id)
         self._learning_store.save(
             LearningPersistenceState(
