@@ -8,7 +8,7 @@ Last updated: 2026-03-04T23:59:59Z
 - **Latest session**: Session 51 (`docs/sessions/session-51-2026-03-04.md`)
 - **Prior implementation burst**: Session 50 (`docs/sessions/session-50-2026-02-27.md`)
 - **Validation posture**: Representative branch-local validation is green across the repaired stack, but the PRs still need to be merged in order and rerun in GitHub after each landing.
-- **ARCH-AEP tracker**: 28/29 closed, 0 in-progress, 1 open (`I03`). `A5` synthetic environments remain deferred follow-up work, but not as a separate open tracker row.
+- **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open. `A5` synthetic environments remain deferred follow-up work, but not as a separate open tracker row.
 
 ## Session 51 Repairs
 
@@ -46,13 +46,10 @@ Recommended order:
 9. **PR #104** — blocking Ruff
 10. **PR #105** — Session 50/51 docs and handoff updates
 
-### Priority 1: Close `I03`
-- Recommendation remains to close `AEP-20260227-I03` as won't-fix unless there is a strong policy reason to rename the existing composite test files.
-
-### Priority 2: AWM Tier 2 A5
+### Priority 1: AWM Tier 2 A5
 - Synthetic environment generation is still deferred and needs a fresh research/architecture pass before implementation.
 
-### Priority 3: Remaining late-phase development
+### Priority 2: Remaining late-phase development
 - **Phase 30**: Core adaptive-routing work is on `main`; remaining work is refinement/verification, not frontend API wiring.
 - **Phase 31**: Signal capture exists, but persistence/quality hardening remains unfinished.
 - **Phase 32**: Kickoff is on `main`; H01/H02 are implemented in open PRs `#98` and `#100`.

@@ -53,6 +53,5 @@ This note captures the operational findings from the 2026-03-04 recovery pass ov
 ## Recommended Next Session Focus
 
 1. Merge the repaired PR stack in order.
-2. Close `I03` unless the repository is ready to fund a broad test-file rename campaign.
-3. Research and architect A5 synthetic environment generation.
-4. Finish Phase 31 persistence and signal-quality hardening.
+2. Research and architect A5 synthetic environment generation.
+3. Finish Phase 31 persistence and signal-quality hardening.
