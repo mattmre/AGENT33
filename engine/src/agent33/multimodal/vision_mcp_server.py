@@ -18,7 +18,9 @@ try:
     import mcp.types as types
     from mcp.server import Server
 
-    vision_server = Server("vision-mcp-service")
+    # The optional MCP SDK exposes untyped decorators, so keep the server
+    # handle at the integration boundary instead of leaking those types.
+    vision_server: Any = Server("vision-mcp-service")
 
     @vision_server.list_tools()  # type: ignore[untyped-decorator]
     async def list_tools() -> list[types.Tool]:
