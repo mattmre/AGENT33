@@ -34,6 +34,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    packs,
     reasoning,
     releases,
     reviews,
