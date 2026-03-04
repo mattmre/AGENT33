@@ -46,6 +46,125 @@ def _text_response(
 
 
 class TestAgentEffortRouter:
+    @pytest.mark.parametrize(
+        (
+            "resolve_kwargs",
+            "expected_effort",
+            "expected_source",
+            "expected_model",
+            "expected_tokens",
+        ),
+        [
+            (
+                {
+                    "effort": AgentEffort.HIGH,
+                    "tenant_id": "tenant-a",
+                    "domain": "finance",
+                    "inputs": {"task": "brief"},
+                },
+                AgentEffort.HIGH,
+                EffortSelectionSource.REQUEST,
+                "high-model",
+                180,
+            ),
+            (
+                {
+                    "effort": None,
+                    "tenant_id": "tenant-a",
+                    "domain": "finance",
+                    "inputs": {"task": "brief"},
+                },
+                AgentEffort.HIGH,
+                EffortSelectionSource.POLICY,
+                "high-model",
+                180,
+            ),
+            (
+                {
+                    "effort": None,
+                    "tenant_id": "tenant-z",
+                    "domain": "ops",
+                    "inputs": {"task": "brief"},
+                },
+                AgentEffort.LOW,
+                EffortSelectionSource.HEURISTIC,
+                "low-model",
+                90,
+            ),
+            (
+                {
+                    "effort": None,
+                    "tenant_id": "tenant-z",
+                    "domain": "ops",
+                    "inputs": {
+                        "task": (
+                            "Analyze architecture tradeoffs for routing strategy and "
+                            + ("context " * 180)
+                        )
+                    },
+                },
+                AgentEffort.MEDIUM,
+                EffortSelectionSource.HEURISTIC,
+                "medium-model",
+                120,
+            ),
+            (
+                {
+                    "effort": None,
+                    "tenant_id": "tenant-z",
+                    "domain": "ops",
+                    "inputs": {"task": "security review " + ("details " * 500)},
+                    "iterative": True,
+                    "max_iterations": 20,
+                },
+                AgentEffort.HIGH,
+                EffortSelectionSource.HEURISTIC,
+                "high-model",
+                180,
+            ),
+        ],
+    )
+    def test_acceptance_matrix_routing_outcomes(
+        self,
+        resolve_kwargs: dict[str, object],
+        expected_effort: AgentEffort,
+        expected_source: EffortSelectionSource,
+        expected_model: str,
+        expected_tokens: int,
+    ) -> None:
+        router = AgentEffortRouter(
+            enabled=True,
+            default_effort=AgentEffort.MEDIUM,
+            low_model="low-model",
+            medium_model="medium-model",
+            high_model="high-model",
+            low_token_multiplier=0.75,
+            medium_token_multiplier=1.0,
+            high_token_multiplier=1.5,
+            heuristic_enabled=True,
+            tenant_domain_policies={"tenant-a|finance": "high"},
+        )
+
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback-model",
+            max_tokens=120,
+            **resolve_kwargs,
+        )
+
+        assert decision.effort == expected_effort
+        assert decision.effort_source == expected_source
+        assert decision.model == expected_model
+        assert decision.max_tokens == expected_tokens
+        assert decision.estimated_token_budget == expected_tokens
+
+        if decision.effort_source == EffortSelectionSource.HEURISTIC:
+            assert decision.heuristic_confidence is not None
+            assert decision.heuristic_reasons
+        else:
+            assert decision.heuristic_confidence is None
+            assert decision.heuristic_reasons == ()
+
     def test_resolve_uses_default_effort_model_and_multiplier(self) -> None:
         router = AgentEffortRouter(
             enabled=True,
@@ -263,6 +382,47 @@ class TestAgentEffortRouter:
 
 
 class TestAgentRuntimeEffortRouting:
+    async def test_invoke_acceptance_matrix_includes_heuristic_metadata(self) -> None:
+        definition = _make_definition(max_tokens=120)
+        model_router = MagicMock()
+
+        async def _complete(*_args, **kwargs):
+            return _text_response(model=str(kwargs["model"]))
+
+        model_router.complete = AsyncMock(side_effect=_complete)
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            low_model="low-model",
+            medium_model="medium-model",
+            high_model="high-model",
+            low_token_multiplier=0.75,
+            medium_token_multiplier=1.0,
+            high_token_multiplier=1.5,
+            heuristic_enabled=True,
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=None,
+            effort_router=effort_router,
+        )
+
+        result = await runtime.invoke(
+            {
+                "task": (
+                    "Analyze architecture tradeoffs for routing strategy and "
+                    + ("context " * 180)
+                )
+            }
+        )
+
+        assert result.model == "medium-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.MEDIUM.value
+        assert result.routing_decision["effort_source"] == EffortSelectionSource.HEURISTIC.value
+        assert result.routing_decision["heuristic_reasons"]
+        assert result.routing_decision["routed_max_tokens"] == 120
+
     async def test_invoke_uses_routed_model_and_max_tokens(self) -> None:
         definition = _make_definition(max_tokens=100)
         model_router = MagicMock()
