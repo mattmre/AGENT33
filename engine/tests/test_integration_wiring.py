@@ -125,6 +125,16 @@ class TestSecurityMiddleware:
         assert "text/html" in resp.headers.get("content-type", "")
         assert "AGENT-33 Dashboard" in resp.text
 
+    def test_benchmarks_router_is_mounted(self, patched_app):
+        """Benchmarks router should be reachable through the main app."""
+        _app, client, _ = patched_app
+        resp = client.get(
+            "/v1/benchmarks/skillsbench/runs",
+            headers={"Authorization": "Bearer " + _make_test_token()},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
 
 class TestLifespanState:
     """Verify that lifespan populates app.state with expected attributes."""

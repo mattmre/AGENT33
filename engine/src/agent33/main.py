@@ -19,6 +19,7 @@ from agent33.api.routes import (
     agents,
     auth,
     autonomy,
+    benchmarks,
     chat,
     component_security,
     dashboard,
@@ -628,6 +629,7 @@ app.include_router(autonomy.router)
 app.include_router(releases.router)
 app.include_router(improvements.router)
 app.include_router(training.router)
+app.include_router(benchmarks.router)
 app.include_router(component_security.router)
 app.include_router(outcomes.router)
 app.include_router(multimodal.router)
