@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -48,7 +48,7 @@ def _get_registry(request: Request) -> AgentRegistry:
 # ---------------------------------------------------------------------------
 
 
-class CheckType(str, Enum):
+class CheckType(StrEnum):
     CONTAINS = "contains"
     REGEX = "regex"
     RANGE = "range"

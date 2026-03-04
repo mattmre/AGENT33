@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class NextAction(str, Enum):
+class NextAction(StrEnum):
     """FSM actions that determine phase transitions."""
 
     CONTINUE = "continue"
@@ -40,7 +40,7 @@ class NextAction(str, Enum):
     RESET = "reset"
 
 
-class ReasoningPhase(str, Enum):
+class ReasoningPhase(StrEnum):
     """The five phases of the reasoning protocol."""
 
     OBSERVE = "observe"

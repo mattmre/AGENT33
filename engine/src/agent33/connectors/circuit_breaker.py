@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     """Current state of a circuit breaker."""
 
     CLOSED = "closed"

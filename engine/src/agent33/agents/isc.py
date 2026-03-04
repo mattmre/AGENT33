@@ -13,7 +13,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class GuardrailResult:
     criterion_name: str = ""
 
 
-class CompositeOperator(str, Enum):
+class CompositeOperator(StrEnum):
     """Boolean operators for combining criteria."""
 
     AND = "and"

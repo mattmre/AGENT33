@@ -116,7 +116,9 @@ async def whatsapp_verify(
         raise HTTPException(status_code=503, detail="WhatsApp adapter not configured")
 
     result: str | None = adapter.verify_webhook_challenge(
-        hub_mode, hub_verify_token, hub_challenge,
+        hub_mode,
+        hub_verify_token,
+        hub_challenge,
     )
     if result is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed")

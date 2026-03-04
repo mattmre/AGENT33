@@ -475,9 +475,7 @@ def _register_agent_runtime_bridge(
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose Content-Length exceeds the configured limit."""
 
-    async def dispatch(
-        self, request: Request, call_next: Callable[[Request], Any]
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > settings.max_request_size_bytes:
             return Response(
