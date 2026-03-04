@@ -15,7 +15,7 @@ All engine commands run from `engine/`:
 
 ```bash
 # Tests
-python -m pytest tests/ -q                          # full suite (~973 tests)
+python -m pytest tests/ -q                          # full suite
 python -m pytest tests/test_execution_executor.py -q  # single test file
 python -m pytest tests/ -k "test_name" -q           # single test by name
 python -m pytest tests/ -x -q                       # stop on first failure
@@ -24,7 +24,7 @@ python -m pytest tests/ -x -q                       # stop on first failure
 python -m ruff check src/ tests/                    # lint (0 errors expected)
 python -m ruff check --fix src/ tests/              # auto-fix
 python -m ruff format src/ tests/                   # format
-mypy src/                                           # type check (strict)
+python -m mypy src --config-file pyproject.toml     # type check (strict)
 
 # Docker (from engine/)
 docker compose up -d                                # start all services
@@ -101,7 +101,7 @@ AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBen
 
 ## Development Phases
 
-Phase plans live in `docs/phases/`. All 21 phases are complete. See `docs/phases/README.md` for the index and `docs/next-session.md` for current priorities.
+Phase plans live in `docs/phases/`. The original core phases (01-21) are complete, but later roadmap phases remain mixed across merged work and open PRs. See `docs/phases/README.md` for the canonical index and `docs/next-session.md` for the current merge queue and remaining late-phase work.
 
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
