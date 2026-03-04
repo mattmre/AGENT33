@@ -48,7 +48,9 @@ class CheckpointManager:
         url = database_url or settings.database_url
         self._engine = create_async_engine(url, echo=False)
         self._session_factory = sessionmaker(
-            self._engine, class_=AsyncSession, expire_on_commit=False  # type: ignore[call-overload]
+            self._engine,
+            class_=AsyncSession,
+            expire_on_commit=False,  # type: ignore[call-overload]
         )
 
     async def initialize(self) -> None:

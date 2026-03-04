@@ -103,9 +103,7 @@ class AirLLMProvider:
         elif self._compression == "8bit":
             kwargs["compression"] = "8bit"
 
-        model = AirLLMAutoModel.from_pretrained(
-            self._model_path, **kwargs
-        )
+        model = AirLLMAutoModel.from_pretrained(self._model_path, **kwargs)
         tokenizer = AutoTokenizer.from_pretrained(self._model_path)
         return model, tokenizer
 

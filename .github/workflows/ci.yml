@@ -148,7 +148,8 @@ jobs:
           AGENT33_SMOKE_CTRF_PATH: test-results/ctrf-smoke-report.json
         run: |
           pytest tests/benchmarks/test_skills_smoke.py -v \
-            --tb=short
+            --tb=short \
+            --no-cov
 
       - name: Upload benchmark artifacts
         if: always()
