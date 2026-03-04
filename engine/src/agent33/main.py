@@ -32,6 +32,7 @@ from agent33.api.routes import (
     multimodal,
     operations_hub,
     outcomes,
+    packs,
     reasoning,
     releases,
     reviews,
@@ -313,6 +314,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     skill_injector = SkillInjector(skill_registry)
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
+
+    # -- Pack registry (optional) ------------------------------------------
+    from agent33.packs.registry import PackRegistry
+
+    packs_dir = Path(settings.pack_definitions_dir)
+    pack_registry = PackRegistry(packs_dir=packs_dir, skill_registry=skill_registry)
+    if packs_dir.is_dir():
+        pack_count = pack_registry.discover()
+        logger.info("pack_registry_loaded", count=pack_count, path=str(packs_dir))
+    else:
+        logger.debug("pack_definitions_dir_not_found", path=str(packs_dir))
+    app.state.pack_registry = pack_registry
 
     # -- Hook registry -----------------------------------------------------
     hook_registry = None
@@ -620,6 +633,8 @@ app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(mcp.router)
+app.include_router(plugins_routes.router)
+app.include_router(packs.router)
 app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
