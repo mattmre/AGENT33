@@ -101,7 +101,7 @@ AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBen
 
 ## Development Phases
 
-Phase plans live in `docs/phases/`. The original core phases (01-21) are complete, but later roadmap phases remain mixed across merged work and open PRs. See `docs/phases/README.md` for the canonical index and `docs/next-session.md` for the current merge queue and remaining late-phase work.
+Phase plans live in `docs/phases/`. The original core phases (01-21) are complete and the recent Session 50/51 stack is now merged on `main` (including Phases 32/33 core work plus Phase 31 persistence/quality hardening and A5 synthetic environments). Remaining work is primarily late-phase refinement/verification/hardening; see `docs/phases/README.md` for canonical status and `docs/next-session.md` for the active priority queue.
 
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
@@ -193,6 +193,8 @@ written. Do not present "X new tests" as evidence of completeness.
 - **GitHub Actions OIDC:** When testing Action workflows on PRs that require `id-token: write` permissions (such as `anthropics/claude-code-action`), be aware they often fail authentication on forks or PR branches due to missing `ACTIONS_ID_TOKEN_REQUEST_URL` context. If the job is auxiliary (like a PR reviewer bot), add `continue-on-error: true` so it does not block the primary CI/CD pipeline from going green.
 - **Stash Cleanliness:** Using `git stash` across multiple `worktrees` or multi-repo projects can accidentally capture deep untracked files (like Node modules or temporary script outputs). Always run `git diff --name-only` on stash pops to verify what was applied before committing.
 - **Async Test Refactoring:** When converting service methods (like `execute_request`) from synchronous to `async`, tests that call these methods directly (rather than via `TestClient`) must also be converted to `async def` (and decorated with `@pytest.mark.asyncio` if auto-mode isn't enabled). A missing `await` will manifest as `RuntimeWarning: coroutine was never awaited` and `AttributeError` on the return value.
+- **Windows Worktree Cleanup:** `git worktree remove --force` can fail on Windows when orphaned reserved-name files (for example `nul`) exist in a worktree path. If that happens, remove with long-path `cmd /c rd /s /q "\\?\<absolute-path>"` and then re-run `git worktree list` to confirm cleanup.
+- **Handoff Drift After Merge Waves:** `docs/next-session.md` can become stale quickly during rapid PR merge waves; refresh it immediately after final merges so priority queues and phase status reflect `main`, not pre-merge branch state.
 
 Add these to your existing pre-commit checklist:
 
