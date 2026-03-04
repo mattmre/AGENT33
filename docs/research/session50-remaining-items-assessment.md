@@ -4,13 +4,17 @@
 **Scope**: All deferred Tier 3 ARCH-AEP items, remaining priority work, and gap analyses
 **Auditor**: Claude Opus 4.6 (Session 50 research)
 
+> Historical note (2026-03-04): this document captures the pre-implementation
+> Session 50 assessment. Session 50 later closed `H01`-`H05` and `I02` via PRs
+> `#97`-`#104`; `I03` remains open and `A5` remains deferred follow-up work.
+
 ---
 
 ## 1. Deferred Tier 3 ARCH-AEP Items
 
 ### Summary
 
-The ARCH-AEP tracker (`docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md`) shows 24/29 items closed, with 5 items remaining open. All 5 are Tier 3 feature development items plus 2 CI infrastructure items.
+At the start of Session 50, the ARCH-AEP tracker (`docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md`) showed 24/29 items closed, with 5 items remaining open. All 5 were Tier 3 feature development items plus 2 CI infrastructure items.
 
 | Finding ID | Title | Status | Effort | Category |
 |---|---|---|---|---|
