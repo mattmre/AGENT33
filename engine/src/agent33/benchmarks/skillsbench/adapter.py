@@ -168,6 +168,16 @@ class SkillsBenchAdapter:
                 "loaded_skills": loaded_skill_names,
             }
 
+            original_active_skills: list[str] | None = None
+            if loaded_skill_names:
+                runtime_any = self._agent_runtime
+                active_skills = getattr(runtime_any, "_active_skills", None)
+                if isinstance(active_skills, list):
+                    original_active_skills = list(active_skills)
+                    runtime_any._active_skills = list(
+                        dict.fromkeys([*active_skills, *loaded_skill_names])
+                    )
+
             try:
                 result = await self._agent_runtime.invoke_iterative(inputs=inputs)
                 tokens_used = result.tokens_used
@@ -183,6 +193,9 @@ class SkillsBenchAdapter:
                     tokens_used=tokens_used,
                     metadata={**trial_metadata, "error": str(exc), "reason": "agent_error"},
                 )
+            finally:
+                if original_active_skills is not None:
+                    runtime_any._active_skills = original_active_skills
 
             # 4. Run pytest binary reward
             pytest_result = await self._pytest_runner.evaluate(

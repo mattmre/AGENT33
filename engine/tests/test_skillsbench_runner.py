@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import TYPE_CHECKING
 
 import pytest
 
 from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner, PytestResult
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -41,9 +43,7 @@ class TestPytestResult:
 
     def test_frozen(self) -> None:
         """PytestResult is a frozen dataclass -- attributes cannot be set."""
-        result = PytestResult(
-            passed=True, returncode=0, stdout="", stderr="", duration_ms=0.0
-        )
+        result = PytestResult(passed=True, returncode=0, stdout="", stderr="", duration_ms=0.0)
         with pytest.raises(AttributeError):
             result.passed = False  # type: ignore[misc]
 
@@ -145,9 +145,7 @@ class TestPytestBinaryRewardRunnerEvaluate:
         """Test that a long-running pytest is killed after timeout."""
         test_file = tmp_path / "test_slow.py"
         test_file.write_text(
-            "import time\n"
-            "def test_slow():\n"
-            "    time.sleep(60)\n",
+            "import time\ndef test_slow():\n    time.sleep(60)\n",
             encoding="utf-8",
         )
         runner = PytestBinaryRewardRunner(timeout_seconds=1.0)

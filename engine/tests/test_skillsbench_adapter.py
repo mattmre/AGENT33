@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -12,14 +12,11 @@ from agent33.benchmarks.skillsbench.adapter import SkillsBenchAdapter
 from agent33.benchmarks.skillsbench.config import SkillsBenchConfig
 from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunStatus,
-    TaskFilter,
     TrialOutcome,
 )
 from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner, PytestResult
 from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTask, SkillsBenchTaskLoader
-from agent33.evaluation.service import TrialEvaluationOutcome
 from agent33.skills.registry import SkillRegistry
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -145,9 +142,7 @@ class TestSkillsBenchAdapterEvaluate:
 
     @pytest.mark.asyncio
     async def test_task_not_found_returns_failure(self) -> None:
-        adapter = _make_adapter(
-            task_raises=FileNotFoundError("Task directory not found")
-        )
+        adapter = _make_adapter(task_raises=FileNotFoundError("Task directory not found"))
         outcome = await adapter.evaluate(
             task_id="nonexistent/task",
             agent="code-worker",
@@ -175,9 +170,7 @@ class TestSkillsBenchAdapterEvaluate:
 
     @pytest.mark.asyncio
     async def test_agent_error_returns_failure(self) -> None:
-        adapter = _make_adapter(
-            agent_raises=RuntimeError("LLM connection failed")
-        )
+        adapter = _make_adapter(agent_raises=RuntimeError("LLM connection failed"))
         outcome = await adapter.evaluate(
             task_id="math/addition",
             agent="code-worker",
@@ -192,7 +185,9 @@ class TestSkillsBenchAdapterEvaluate:
     @pytest.mark.asyncio
     async def test_metadata_contains_agent_stats(self) -> None:
         result = _make_iterative_result(
-            tokens_used=500, iterations=7, tool_calls_made=15,
+            tokens_used=500,
+            iterations=7,
+            tool_calls_made=15,
             termination_reason="task_complete",
         )
         adapter = _make_adapter(agent_result=result, pytest_passed=True)

@@ -9,7 +9,6 @@ import pytest
 from agent33.benchmarks.skillsbench.models import TaskFilter
 from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTask, SkillsBenchTaskLoader
 
-
 # ---------------------------------------------------------------------------
 # Helpers to build task directory structures on disk
 # ---------------------------------------------------------------------------
@@ -73,31 +72,46 @@ class TestSkillsBenchTask:
 
     def test_inequality(self) -> None:
         task_a = SkillsBenchTask(
-            task_id="math/add", category="math", instruction="",
-            skills_dir=None, tests_path=Path("/x"),
+            task_id="math/add",
+            category="math",
+            instruction="",
+            skills_dir=None,
+            tests_path=Path("/x"),
         )
         task_b = SkillsBenchTask(
-            task_id="math/subtract", category="math", instruction="",
-            skills_dir=None, tests_path=Path("/x"),
+            task_id="math/subtract",
+            category="math",
+            instruction="",
+            skills_dir=None,
+            tests_path=Path("/x"),
         )
         assert task_a != task_b
 
     def test_hash_consistency(self) -> None:
         task = SkillsBenchTask(
-            task_id="science/chem", category="science", instruction="",
-            skills_dir=None, tests_path=Path("/x"),
+            task_id="science/chem",
+            category="science",
+            instruction="",
+            skills_dir=None,
+            tests_path=Path("/x"),
         )
         # Same task_id should produce the same hash
         task2 = SkillsBenchTask(
-            task_id="science/chem", category="science", instruction="other",
-            skills_dir=None, tests_path=Path("/y"),
+            task_id="science/chem",
+            category="science",
+            instruction="other",
+            skills_dir=None,
+            tests_path=Path("/y"),
         )
         assert hash(task) == hash(task2)
 
     def test_repr(self) -> None:
         task = SkillsBenchTask(
-            task_id="cat/name", category="cat", instruction="",
-            skills_dir=None, tests_path=Path("/x"),
+            task_id="cat/name",
+            category="cat",
+            instruction="",
+            skills_dir=None,
+            tests_path=Path("/x"),
         )
         r = repr(task)
         assert "cat/name" in r

@@ -11,15 +11,21 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from agent33.agents.runtime import AgentRuntime
+from agent33.benchmarks.skillsbench.adapter import SkillsBenchAdapter
+from agent33.benchmarks.skillsbench.config import SkillsBenchConfig
 from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunResult,
     BenchmarkRunStatus,
     TaskFilter,
 )
+from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner
 from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTaskLoader
+from agent33.security.permissions import _get_token_payload, require_scope
+from agent33.tools.base import ToolContext
 
 logger = structlog.get_logger()
 
@@ -38,6 +44,63 @@ def _store_run(run: BenchmarkRunResult) -> None:
     if len(_run_order) > _MAX_STORED_RUNS:
         oldest = _run_order.pop(0)
         _runs.pop(oldest, None)
+
+
+def _get_state_dependency(request: Request, name: str) -> Any:
+    """Fetch a required app.state dependency or raise a 503."""
+    dependency = getattr(request.app.state, name, None)
+    if dependency is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Application dependency not initialized: {name}",
+        )
+    return dependency
+
+
+def _build_skillsbench_adapter(
+    request: Request,
+    config: SkillsBenchConfig,
+) -> SkillsBenchAdapter:
+    """Construct a fully wired SkillsBench adapter for the current app state."""
+    agent_registry = _get_state_dependency(request, "agent_registry")
+    model_router = _get_state_dependency(request, "model_router")
+    skill_registry = _get_state_dependency(request, "skill_registry")
+    tool_registry = _get_state_dependency(request, "tool_registry")
+
+    definition = agent_registry.get(config.agent_name)
+    if definition is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent definition not found: {config.agent_name}",
+        )
+
+    token_payload = _get_token_payload(request)
+    tool_context = ToolContext(
+        user_scopes=token_payload.scopes,
+        tool_policies=definition.governance.tool_policies,
+    )
+
+    runtime = AgentRuntime(
+        definition=definition,
+        router=model_router,
+        model=config.model,
+        skill_injector=getattr(request.app.state, "skill_injector", None),
+        active_skills=list(definition.skills),
+        progressive_recall=getattr(request.app.state, "progressive_recall", None),
+        tool_registry=tool_registry,
+        tool_governance=getattr(request.app.state, "tool_governance", None),
+        tool_context=tool_context,
+        tenant_id=token_payload.tenant_id or "",
+    )
+
+    return SkillsBenchAdapter(
+        task_loader=SkillsBenchTaskLoader(config.skillsbench_root),
+        pytest_runner=PytestBinaryRewardRunner(
+            timeout_seconds=config.pytest_timeout_seconds,
+        ),
+        skill_registry=skill_registry,
+        agent_runtime=runtime,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +168,11 @@ class RunSummaryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/skillsbench/tasks", response_model=ListTasksResponse)
+@router.post(
+    "/skillsbench/tasks",
+    response_model=ListTasksResponse,
+    dependencies=[require_scope("workflows:read")],
+)
 async def list_skillsbench_tasks(
     request: ListTasksRequest,
 ) -> dict[str, Any]:
@@ -142,7 +209,53 @@ async def list_skillsbench_tasks(
     }
 
 
-@router.get("/skillsbench/runs", response_model=list[RunSummaryResponse])
+@router.post(
+    "/skillsbench/runs",
+    response_model=RunSummaryResponse,
+    status_code=201,
+    dependencies=[require_scope("tools:execute")],
+)
+async def run_skillsbench_benchmark(
+    request: Request,
+    body: RunBenchmarkRequest,
+) -> dict[str, Any]:
+    """Execute a SkillsBench benchmark run and retain its results in-memory."""
+    root = Path(body.skillsbench_root)
+    if not root.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"SkillsBench root directory not found: {root}",
+        )
+
+    config = SkillsBenchConfig(
+        skillsbench_root=root,
+        agent_name=body.agent_name,
+        model=body.model,
+        trials_per_task=body.trials_per_task,
+        skills_enabled=body.skills_enabled,
+        pytest_timeout_seconds=body.pytest_timeout_seconds,
+        task_filter=body.task_filter,
+    )
+    adapter = _build_skillsbench_adapter(request, config)
+    run = await adapter.run_benchmark(config)
+    _store_run(run)
+
+    return {
+        "run_id": run.run_id,
+        "status": run.status,
+        "total_tasks": run.total_tasks,
+        "total_trials": run.total_trials,
+        "passed_trials": run.passed_trials,
+        "pass_rate": run.pass_rate,
+        "total_duration_ms": run.total_duration_ms,
+    }
+
+
+@router.get(
+    "/skillsbench/runs",
+    response_model=list[RunSummaryResponse],
+    dependencies=[require_scope("workflows:read")],
+)
 async def list_benchmark_runs(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
@@ -168,7 +281,10 @@ async def list_benchmark_runs(
     return result
 
 
-@router.get("/skillsbench/runs/{run_id}")
+@router.get(
+    "/skillsbench/runs/{run_id}",
+    dependencies=[require_scope("workflows:read")],
+)
 async def get_benchmark_run(run_id: str) -> dict[str, Any]:
     """Get detailed results for a specific benchmark run."""
     run = _runs.get(run_id)

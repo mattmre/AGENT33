@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunResult,
@@ -11,7 +12,6 @@ from agent33.benchmarks.skillsbench.models import (
     TrialOutcome,
     TrialRecord,
 )
-
 
 # ---------------------------------------------------------------------------
 # TrialOutcome enum
@@ -53,21 +53,15 @@ class TestTrialRecord:
         assert record.skills_enabled is False
 
     def test_passed_property_true(self) -> None:
-        record = TrialRecord(
-            task_id="x/y", trial_number=1, outcome=TrialOutcome.PASSED
-        )
+        record = TrialRecord(task_id="x/y", trial_number=1, outcome=TrialOutcome.PASSED)
         assert record.passed is True
 
     def test_passed_property_false_on_failure(self) -> None:
-        record = TrialRecord(
-            task_id="x/y", trial_number=1, outcome=TrialOutcome.FAILED
-        )
+        record = TrialRecord(task_id="x/y", trial_number=1, outcome=TrialOutcome.FAILED)
         assert record.passed is False
 
     def test_passed_property_false_on_error(self) -> None:
-        record = TrialRecord(
-            task_id="x/y", trial_number=1, outcome=TrialOutcome.ERROR
-        )
+        record = TrialRecord(task_id="x/y", trial_number=1, outcome=TrialOutcome.ERROR)
         assert record.passed is False
 
     def test_full_fields(self) -> None:
@@ -99,16 +93,12 @@ class TestTrialRecord:
         assert record.metadata["custom_key"] == "value"
 
     def test_trial_number_must_be_positive(self) -> None:
-        with pytest.raises(Exception):
-            TrialRecord(
-                task_id="x/y", trial_number=0, outcome=TrialOutcome.PASSED
-            )
+        with pytest.raises(ValidationError):
+            TrialRecord(task_id="x/y", trial_number=0, outcome=TrialOutcome.PASSED)
 
     def test_tokens_used_cannot_be_negative(self) -> None:
-        with pytest.raises(Exception):
-            TrialRecord(
-                task_id="x/y", trial_number=1, outcome=TrialOutcome.PASSED, tokens_used=-1
-            )
+        with pytest.raises(ValidationError):
+            TrialRecord(task_id="x/y", trial_number=1, outcome=TrialOutcome.PASSED, tokens_used=-1)
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +128,7 @@ class TestTaskFilter:
         assert len(f.task_ids) == 2
 
     def test_max_tasks_must_be_non_negative(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             TaskFilter(max_tasks=-1)
 
 
@@ -166,20 +156,32 @@ class TestBenchmarkRunResult:
     def test_compute_aggregates_with_trials(self) -> None:
         trials = [
             TrialRecord(
-                task_id="math/add", trial_number=1, outcome=TrialOutcome.PASSED,
-                tokens_used=100, duration_ms=50.0,
+                task_id="math/add",
+                trial_number=1,
+                outcome=TrialOutcome.PASSED,
+                tokens_used=100,
+                duration_ms=50.0,
             ),
             TrialRecord(
-                task_id="math/add", trial_number=2, outcome=TrialOutcome.FAILED,
-                tokens_used=200, duration_ms=75.0,
+                task_id="math/add",
+                trial_number=2,
+                outcome=TrialOutcome.FAILED,
+                tokens_used=200,
+                duration_ms=75.0,
             ),
             TrialRecord(
-                task_id="science/chem", trial_number=1, outcome=TrialOutcome.PASSED,
-                tokens_used=150, duration_ms=60.0,
+                task_id="science/chem",
+                trial_number=1,
+                outcome=TrialOutcome.PASSED,
+                tokens_used=150,
+                duration_ms=60.0,
             ),
             TrialRecord(
-                task_id="science/chem", trial_number=2, outcome=TrialOutcome.ERROR,
-                tokens_used=50, duration_ms=10.0,
+                task_id="science/chem",
+                trial_number=2,
+                outcome=TrialOutcome.ERROR,
+                tokens_used=50,
+                duration_ms=10.0,
             ),
         ]
         result = BenchmarkRunResult(trials=trials)
@@ -197,7 +199,9 @@ class TestBenchmarkRunResult:
     def test_compute_aggregates_all_passed(self) -> None:
         trials = [
             TrialRecord(
-                task_id="a/b", trial_number=i, outcome=TrialOutcome.PASSED,
+                task_id="a/b",
+                trial_number=i,
+                outcome=TrialOutcome.PASSED,
             )
             for i in range(1, 6)
         ]
@@ -209,7 +213,9 @@ class TestBenchmarkRunResult:
     def test_compute_aggregates_all_failed(self) -> None:
         trials = [
             TrialRecord(
-                task_id="a/b", trial_number=i, outcome=TrialOutcome.FAILED,
+                task_id="a/b",
+                trial_number=i,
+                outcome=TrialOutcome.FAILED,
             )
             for i in range(1, 4)
         ]
