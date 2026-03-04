@@ -24,7 +24,7 @@ from agent33.improvement.persistence import (
     migrate_file_learning_state_to_db,
     restore_learning_state,
 )
-from agent33.improvement.service import ImprovementService
+from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -57,6 +57,11 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(settings, "improvement_learning_file_corruption_behavior", "reset")
     monkeypatch.setattr(settings, "improvement_learning_db_corruption_behavior", "reset")
+    monkeypatch.setattr(settings, "improvement_learning_dedupe_window_minutes", 0)
+    monkeypatch.setattr(settings, "improvement_learning_retention_days", 180)
+    monkeypatch.setattr(settings, "improvement_learning_max_signals", 5000)
+    monkeypatch.setattr(settings, "improvement_learning_max_generated_intakes", 1000)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_quality", 0.0)
     _reset_service()
     monkeypatch.setattr(settings, "improvement_learning_enabled", False)
     monkeypatch.setattr(settings, "improvement_learning_summary_default_limit", 50)
@@ -74,6 +79,16 @@ def test_settings_reject_invalid_learning_corruption_behavior() -> None:
         Settings(improvement_learning_file_corruption_behavior="invalid")
     with pytest.raises(ValidationError, match="corruption behavior must be one of"):
         Settings(improvement_learning_db_corruption_behavior="invalid")
+
+
+def test_settings_reject_invalid_learning_quality_threshold() -> None:
+    from agent33.config import Settings
+
+    with pytest.raises(
+        ValidationError,
+        match="improvement_learning_auto_intake_min_quality must be between 0.0 and 1.0",
+    ):
+        Settings(improvement_learning_auto_intake_min_quality=1.1)
 
 
 def test_service_roundtrip_and_summary_counts(service: ImprovementService):
@@ -393,6 +408,145 @@ def test_auto_intake_priority_uses_quality_score(service: ImprovementService):
     assert created[0].automated_quality_score is not None
 
 
+def test_auto_intake_respects_min_quality_threshold() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(auto_intake_min_quality=0.6)
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Short",
+        )
+    )
+    high_quality_signal = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Detailed recurring bug in release pipeline after dependency bump",
+            details="Observed in two regions with canary and stable lanes.",
+            source="ci",
+            context={"region": "us-east", "release": "2026.02"},
+        )
+    )
+
+    created = service.generate_intakes_from_learning_signals(
+        min_severity=LearningSignalSeverity.HIGH,
+        max_items=5,
+    )
+    assert len(created) == 1
+    assert created[0].generated_from_signal_id == high_quality_signal.signal_id
+
+
+def test_dedupe_window_merges_duplicate_learning_signals() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(dedupe_window_minutes=60)
+    )
+    now = datetime.now(UTC)
+    first = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Release pipeline regression",
+            source="ci",
+            tenant_id="tenant-a",
+            details="first observation",
+            context={"job": "smoke"},
+            recorded_at=now - timedelta(minutes=10),
+        )
+    )
+    second = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.CRITICAL,
+            summary="  release  pipeline regression  ",
+            source="CI",
+            tenant_id="tenant-a",
+            details="second observation has richer details",
+            context={"region": "us-east"},
+            recorded_at=now,
+        )
+    )
+
+    assert first.signal_id == second.signal_id
+    assert second.occurrence_count == 2
+    assert second.severity == LearningSignalSeverity.CRITICAL
+    assert second.last_seen_at == now
+    assert second.context["job"] == "smoke"
+    assert second.context["region"] == "us-east"
+    assert len(service.list_learning_signals(limit=10)) == 1
+
+
+def test_persistence_policy_prunes_signal_and_intake_history() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(
+            max_signals=1,
+            max_generated_intakes=1,
+        )
+    )
+    old_signal = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="older signal",
+            source="ci",
+            recorded_at=datetime.now(UTC) - timedelta(days=2),
+        )
+    )
+    service.generate_intakes_from_learning_signals(max_items=1)
+
+    new_signal = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.INCIDENT,
+            severity=LearningSignalSeverity.CRITICAL,
+            summary="newer signal",
+            source="pagerduty",
+            recorded_at=datetime.now(UTC),
+        )
+    )
+    service.generate_intakes_from_learning_signals(max_items=1)
+
+    signals = service.list_learning_signals(limit=10)
+    assert len(signals) == 1
+    assert signals[0].signal_id == new_signal.signal_id
+    assert signals[0].signal_id != old_signal.signal_id
+
+    generated_intakes = [
+        intake for intake in service.list_intakes() if intake.generated_from_signal_id is not None
+    ]
+    assert len(generated_intakes) == 1
+    assert generated_intakes[0].generated_from_signal_id == new_signal.signal_id
+
+
+def test_retention_days_prunes_expired_signals() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(
+            retention_days=7,
+            max_signals=10,
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="expired signal",
+            recorded_at=datetime.now(UTC) - timedelta(days=21),
+        )
+    )
+    fresh = service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="fresh signal",
+            recorded_at=datetime.now(UTC) - timedelta(days=1),
+        )
+    )
+
+    signals = service.list_learning_signals(limit=10)
+    assert len(signals) == 1
+    assert signals[0].signal_id == fresh.signal_id
+
+
 def test_idempotent_intake_generation(service: ImprovementService):
     signal = service.record_learning_signal(
         LearningSignal(
@@ -498,6 +652,52 @@ def test_summary_generate_intakes_respects_auto_intake_flag(
     )
     assert second.status_code == 200
     assert second.json()["generated_intakes"] == []
+
+
+def test_summary_generate_intakes_respects_quality_threshold_setting(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 5)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_quality", 0.6)
+    _reset_service()
+
+    client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "bug",
+            "severity": "high",
+            "summary": "short",
+        },
+    )
+    low_quality = client.get(
+        "/v1/improvements/learning/summary",
+        params={"generate_intakes": "true"},
+    )
+    assert low_quality.status_code == 200
+    assert low_quality.json()["generated_intakes"] == []
+
+    client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "bug",
+            "severity": "high",
+            "summary": "Detailed recurring bug in release pipeline after dependency bump",
+            "details": "Observed in two regions with canary and stable lanes.",
+            "source": "ci",
+            "context": {"region": "us-east", "release": "2026.02"},
+        },
+    )
+    high_quality = client.get(
+        "/v1/improvements/learning/summary",
+        params={"generate_intakes": "true"},
+    )
+    assert high_quality.status_code == 200
+    assert len(high_quality.json()["generated_intakes"]) == 1
 
 
 def test_summary_is_tenant_scoped_in_route(client: TestClient, monkeypatch: pytest.MonkeyPatch):
