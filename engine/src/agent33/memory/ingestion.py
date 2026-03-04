@@ -425,7 +425,7 @@ class DocumentExtractor:
             import io
 
             import pytesseract
-            from PIL import Image  # type: ignore[import-not-found]
+            from PIL import Image
 
             image = Image.open(io.BytesIO(image_bytes))
             text: str = pytesseract.image_to_string(image)
