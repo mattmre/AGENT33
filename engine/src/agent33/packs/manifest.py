@@ -114,9 +114,7 @@ class PackManifest(BaseModel):
     @classmethod
     def _validate_version(cls, value: str) -> str:
         if not _SEMVER_RE.match(value):
-            raise ValueError(
-                f"Pack version '{value}' must be valid semver (MAJOR.MINOR.PATCH)"
-            )
+            raise ValueError(f"Pack version '{value}' must be valid semver (MAJOR.MINOR.PATCH)")
         return value
 
     @field_validator("schema_version")

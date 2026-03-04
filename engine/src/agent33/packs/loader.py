@@ -170,8 +170,7 @@ def validate_pack_directory(pack_dir: Path) -> list[str]:
 
         if not skill_path.exists():
             errors.append(
-                f"Skill path not found: '{skill_entry.path}' "
-                f"for skill '{skill_entry.name}'"
+                f"Skill path not found: '{skill_entry.path}' for skill '{skill_entry.name}'"
             )
 
     return errors

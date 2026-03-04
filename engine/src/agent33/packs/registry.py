@@ -118,8 +118,7 @@ class PackRegistry:
         skills, errors = load_pack_skills(pack_dir, manifest)
         if errors:
             raise ValueError(
-                f"Failed to load required skills for pack '{manifest.name}': "
-                + "; ".join(errors)
+                f"Failed to load required skills for pack '{manifest.name}': " + "; ".join(errors)
             )
 
         # Register skills in SkillRegistry
@@ -150,9 +149,7 @@ class PackRegistry:
 
         return installed
 
-    def _register_pack_skills(
-        self, pack_name: str, skills: list[SkillDefinition]
-    ) -> list[str]:
+    def _register_pack_skills(self, pack_name: str, skills: list[SkillDefinition]) -> list[str]:
         """Register loaded skills in the SkillRegistry.
 
         Skills are registered with qualified name ``pack_name/skill_name``
@@ -184,11 +181,11 @@ class PackRegistry:
         for skill_entry in pack.skills:
             existing = self._skill_registry.get(skill_entry.name)
             if existing is not None and existing.base_path and pack.pack_dir:
-                    try:
-                        existing.base_path.resolve().relative_to(pack.pack_dir.resolve())
-                        self._skill_registry.remove(skill_entry.name)
-                    except ValueError:
-                        pass  # Skill belongs to a different source
+                try:
+                    existing.base_path.resolve().relative_to(pack.pack_dir.resolve())
+                    self._skill_registry.remove(skill_entry.name)
+                except ValueError:
+                    pass  # Skill belongs to a different source
 
     # ------------------------------------------------------------------
     # Installation
@@ -279,9 +276,7 @@ class PackRegistry:
         # Check for dependents
         dependents = self._find_dependents(name)
         if dependents:
-            raise ValueError(
-                f"Cannot uninstall '{name}': required by {', '.join(dependents)}"
-            )
+            raise ValueError(f"Cannot uninstall '{name}': required by {', '.join(dependents)}")
 
         # Remove skills from SkillRegistry
         self._unregister_pack_skills(pack)
@@ -350,11 +345,7 @@ class PackRegistry:
     def list_enabled(self, tenant_id: str) -> list[InstalledPack]:
         """List all packs enabled for a tenant."""
         enabled_names = self._enabled.get(tenant_id, set())
-        return [
-            self._installed[name]
-            for name in sorted(enabled_names)
-            if name in self._installed
-        ]
+        return [self._installed[name] for name in sorted(enabled_names) if name in self._installed]
 
     # ------------------------------------------------------------------
     # Query
@@ -419,9 +410,7 @@ class PackRegistry:
             return InstallResult(
                 success=False,
                 pack_name=name,
-                errors=[
-                    f"Pack name mismatch: expected '{name}' but found '{new_pack.name}'"
-                ],
+                errors=[f"Pack name mismatch: expected '{name}' but found '{new_pack.name}'"],
             )
 
         if target_version and new_pack.version != target_version:

@@ -32,9 +32,7 @@ def _write_pack(
     pack_dir = base / name
     pack_dir.mkdir(parents=True, exist_ok=True)
 
-    skills_yaml = "\n".join(
-        f"  - name: {s}\n    path: skills/{s}" for s in skill_names
-    )
+    skills_yaml = "\n".join(f"  - name: {s}\n    path: skills/{s}" for s in skill_names)
 
     yaml_content = (
         f'name: "{name}"\n'
@@ -204,14 +202,18 @@ class TestVersionResolutionIntegration:
 
     def test_compatible_range_resolution(self) -> None:
         """Resolve a real-world-ish dependency graph."""
-        resolver = DependencyResolver({
-            "utils": ["1.0.0", "1.1.0", "1.2.0", "2.0.0"],
-            "helpers": ["1.0.0", "1.1.0"],
-        })
-        result = resolver.resolve([
-            ("utils", "^1.0.0"),
-            ("helpers", ">=1.0.0, <2.0.0"),
-        ])
+        resolver = DependencyResolver(
+            {
+                "utils": ["1.0.0", "1.1.0", "1.2.0", "2.0.0"],
+                "helpers": ["1.0.0", "1.1.0"],
+            }
+        )
+        result = resolver.resolve(
+            [
+                ("utils", "^1.0.0"),
+                ("helpers", ">=1.0.0, <2.0.0"),
+            ]
+        )
         assert result.success
         assert result.resolved is not None
         assert result.resolved["utils"] == "1.2.0"

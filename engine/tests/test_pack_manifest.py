@@ -73,32 +73,47 @@ class TestPackManifest:
         """Pack names must be lowercase letters, digits, and hyphens."""
         # Valid names
         PackManifest(
-            name="a", version="1.0.0", description="x", author="a",
+            name="a",
+            version="1.0.0",
+            description="x",
+            author="a",
             skills=[PackSkillEntry(name="s", path="s")],
         )
         PackManifest(
-            name="my-pack-123", version="1.0.0", description="x", author="a",
+            name="my-pack-123",
+            version="1.0.0",
+            description="x",
+            author="a",
             skills=[PackSkillEntry(name="s", path="s")],
         )
 
         # Invalid: uppercase
         with pytest.raises(ValueError, match="must be lowercase"):
             PackManifest(
-                name="MyPack", version="1.0.0", description="x", author="a",
+                name="MyPack",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
         # Invalid: starts with hyphen
         with pytest.raises(ValueError, match="must be lowercase"):
             PackManifest(
-                name="-bad", version="1.0.0", description="x", author="a",
+                name="-bad",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
         # Invalid: contains underscore
         with pytest.raises(ValueError, match="must be lowercase"):
             PackManifest(
-                name="my_pack", version="1.0.0", description="x", author="a",
+                name="my_pack",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
@@ -106,20 +121,29 @@ class TestPackManifest:
         """Version must be MAJOR.MINOR.PATCH format."""
         # Valid
         PackManifest(
-            name="ok", version="0.0.1", description="x", author="a",
+            name="ok",
+            version="0.0.1",
+            description="x",
+            author="a",
             skills=[PackSkillEntry(name="s", path="s")],
         )
 
         # Invalid: not semver
         with pytest.raises(ValueError, match="must be valid semver"):
             PackManifest(
-                name="bad", version="1.0", description="x", author="a",
+                name="bad",
+                version="1.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
         with pytest.raises(ValueError, match="must be valid semver"):
             PackManifest(
-                name="bad", version="v1.0.0", description="x", author="a",
+                name="bad",
+                version="v1.0.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
@@ -127,7 +151,10 @@ class TestPackManifest:
         """Only schema_version '1' is supported."""
         with pytest.raises(ValueError, match="Unsupported schema_version"):
             PackManifest(
-                name="bad", version="1.0.0", description="x", author="a",
+                name="bad",
+                version="1.0.0",
+                description="x",
+                author="a",
                 schema_version="2",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
@@ -136,7 +163,10 @@ class TestPackManifest:
         """At least one skill is required."""
         with pytest.raises(ValueError):
             PackManifest(
-                name="bad", version="1.0.0", description="x", author="a",
+                name="bad",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[],
             )
 
@@ -144,7 +174,10 @@ class TestPackManifest:
         """Skill names within a pack must be unique."""
         with pytest.raises(ValueError, match="Duplicate skill name"):
             PackManifest(
-                name="bad", version="1.0.0", description="x", author="a",
+                name="bad",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[
                     PackSkillEntry(name="same", path="a"),
                     PackSkillEntry(name="same", path="b"),
@@ -154,14 +187,18 @@ class TestPackManifest:
     def test_missing_required_field_name(self) -> None:
         with pytest.raises(ValueError):
             PackManifest(  # type: ignore[call-arg]
-                version="1.0.0", description="x", author="a",
+                version="1.0.0",
+                description="x",
+                author="a",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
     def test_missing_required_field_author(self) -> None:
         with pytest.raises(ValueError):
             PackManifest(  # type: ignore[call-arg]
-                name="ok", version="1.0.0", description="x",
+                name="ok",
+                version="1.0.0",
+                description="x",
                 skills=[PackSkillEntry(name="s", path="s")],
             )
 
@@ -169,7 +206,8 @@ class TestPackManifest:
         """Description is capped at 500 characters."""
         with pytest.raises(ValueError):
             PackManifest(
-                name="ok", version="1.0.0",
+                name="ok",
+                version="1.0.0",
                 description="x" * 501,
                 author="a",
                 skills=[PackSkillEntry(name="s", path="s")],

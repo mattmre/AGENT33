@@ -235,9 +235,7 @@ class DependencyResolver:
                     ConflictDetail(
                         package=name,
                         required_by=constraints_by_name.get(name, {}),
-                        available_versions=[
-                            str(v) for v in self._available.get(name, [])
-                        ],
+                        available_versions=[str(v) for v in self._available.get(name, [])],
                         reason=f"Circular dependency detected: {requirer} -> {name}",
                     )
                 )
@@ -260,9 +258,7 @@ class DependencyResolver:
                     ConflictDetail(
                         package=name,
                         required_by=constraints_by_name[name],
-                        available_versions=[
-                            str(v) for v in self._available.get(name, [])
-                        ],
+                        available_versions=[str(v) for v in self._available.get(name, [])],
                         reason=(
                             f"Version conflict: already resolved to {resolved[name]} "
                             f"but {requirer} requires {constraint_str}"

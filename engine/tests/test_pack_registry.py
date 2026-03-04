@@ -34,9 +34,7 @@ def _write_pack(
     pack_dir = base / name
     pack_dir.mkdir(parents=True, exist_ok=True)
 
-    skills_yaml = "\n".join(
-        f"  - name: {s}\n    path: skills/{s}" for s in skill_names
-    )
+    skills_yaml = "\n".join(f"  - name: {s}\n    path: skills/{s}" for s in skill_names)
     deps_section = f"\ndependencies:\n{dependencies}" if dependencies else ""
 
     yaml_content = (

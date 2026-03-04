@@ -65,7 +65,9 @@ def _create_test_app(pack_registry: PackRegistry | None = None) -> FastAPI:
             user = MagicMock()
             user.tenant_id = "test-tenant"
             user.scopes = [
-                "agents:read", "agents:write", "admin",
+                "agents:read",
+                "agents:write",
+                "admin",
             ]
             request.state.user = user
             return await call_next(request)

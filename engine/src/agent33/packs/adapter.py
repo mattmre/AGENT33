@@ -73,18 +73,14 @@ class SkillsBenchAdapter(SkillFormatAdapter):
             skills.append(skill)
         elif path.is_dir() and (path / "SKILL.md").is_file():
             # Single skill directory
-            skill = self._adapt_skill(
-                load_from_skillmd(path / "SKILL.md"), path
-            )
+            skill = self._adapt_skill(load_from_skillmd(path / "SKILL.md"), path)
             skills.append(skill)
         elif path.is_dir():
             # Directory of skill subdirectories
             for entry in sorted(path.iterdir()):
                 if entry.is_dir() and (entry / "SKILL.md").is_file():
                     try:
-                        skill = self._adapt_skill(
-                            load_from_skillmd(entry / "SKILL.md"), entry
-                        )
+                        skill = self._adapt_skill(load_from_skillmd(entry / "SKILL.md"), entry)
                         skills.append(skill)
                     except Exception:
                         logger.warning(
@@ -107,9 +103,7 @@ class SkillsBenchAdapter(SkillFormatAdapter):
         assets_dir = skill_dir / "assets"
         if assets_dir.is_dir():
             asset_files = [
-                str(f.relative_to(skill_dir))
-                for f in sorted(assets_dir.rglob("*"))
-                if f.is_file()
+                str(f.relative_to(skill_dir)) for f in sorted(assets_dir.rglob("*")) if f.is_file()
             ]
             existing_refs = list(skill.references)
             existing_refs.extend(asset_files)
@@ -168,15 +162,11 @@ class MCPToolAdapter(SkillFormatAdapter):
                     if skill:
                         skills.append(skill)
             except Exception:
-                logger.warning(
-                    "mcp_tool_load_failed", path=str(fpath), exc_info=True
-                )
+                logger.warning("mcp_tool_load_failed", path=str(fpath), exc_info=True)
 
         return skills
 
-    def _convert_tool(
-        self, tool_def: dict[str, Any], source_path: Path
-    ) -> SkillDefinition | None:
+    def _convert_tool(self, tool_def: dict[str, Any], source_path: Path) -> SkillDefinition | None:
         """Convert a single MCP tool definition to a SkillDefinition."""
         name = tool_def.get("name")
         if not name:
@@ -198,9 +188,7 @@ class MCPToolAdapter(SkillFormatAdapter):
                 for param_name, param_info in props.items():
                     param_desc = param_info.get("description", "")
                     param_type = param_info.get("type", "any")
-                    instructions_parts.append(
-                        f"- **{param_name}** ({param_type}): {param_desc}"
-                    )
+                    instructions_parts.append(f"- **{param_name}** ({param_type}): {param_desc}")
 
         return SkillDefinition(
             name=name,

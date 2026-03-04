@@ -155,14 +155,18 @@ class TestDependencyResolver:
         assert result.resolved["utils"] == "1.0.0"
 
     def test_multiple_dependencies(self) -> None:
-        resolver = DependencyResolver({
-            "utils": ["1.0.0", "1.1.0"],
-            "helpers": ["2.0.0", "2.1.0"],
-        })
-        result = resolver.resolve([
-            ("utils", "^1.0.0"),
-            ("helpers", "^2.0.0"),
-        ])
+        resolver = DependencyResolver(
+            {
+                "utils": ["1.0.0", "1.1.0"],
+                "helpers": ["2.0.0", "2.1.0"],
+            }
+        )
+        result = resolver.resolve(
+            [
+                ("utils", "^1.0.0"),
+                ("helpers", "^2.0.0"),
+            ]
+        )
         assert result.success
         assert result.resolved is not None
         assert result.resolved["utils"] == "1.1.0"
@@ -186,14 +190,18 @@ class TestDependencyResolver:
     def test_version_incompatibility_conflict(self) -> None:
         """Two requirements for the same pack with incompatible constraints."""
         resolver = DependencyResolver({"utils": ["1.0.0", "2.0.0"]})
-        result = resolver.resolve([
-            ("utils", "^1.0.0"),
-            ("utils", "^2.0.0"),
-        ])
+        result = resolver.resolve(
+            [
+                ("utils", "^1.0.0"),
+                ("utils", "^2.0.0"),
+            ]
+        )
         # First resolves to 1.0.0, second wants ^2.0.0 -> conflict
         assert not result.success
-        assert any("conflict" in c.reason.lower() or "Version conflict" in c.reason
-                    for c in result.conflicts)
+        assert any(
+            "conflict" in c.reason.lower() or "Version conflict" in c.reason
+            for c in result.conflicts
+        )
 
     def test_add_available_after_init(self) -> None:
         resolver = DependencyResolver()
