@@ -397,6 +397,8 @@ async def invoke_agent(
         inputs=body.inputs,
     )
 
+    hook_registry = getattr(request.app.state, "hook_registry", None)
+
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
@@ -409,6 +411,7 @@ async def invoke_agent(
         progressive_recall=progressive_recall,
         tenant_id=tenant_id,
         domain=domain,
+        hook_registry=hook_registry,
     )
 
     try:
@@ -417,6 +420,11 @@ async def invoke_agent(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        # Handle HookAbortError without hard import dependency
+        if type(exc).__name__ == "HookAbortError":
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise
 
     _record_effort_routing_metrics(result.routing_decision)
 
@@ -514,6 +522,8 @@ async def invoke_agent_iterative(
             summarize_model=selected_model,
         )
 
+    hook_registry = getattr(request.app.state, "hook_registry", None)
+
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
@@ -530,6 +540,7 @@ async def invoke_agent_iterative(
         context_manager=context_manager,
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
+        hook_registry=hook_registry,
     )
 
     try:

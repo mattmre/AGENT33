@@ -163,6 +163,16 @@ class Settings(BaseSettings):
     connector_circuit_recovery_seconds: float = 30.0
     connector_circuit_half_open_successes: int = 1
 
+    # Hook framework
+    hooks_enabled: bool = True
+    hooks_definitions_dir: str = "hook-definitions"
+    hooks_default_timeout_ms: float = 200.0
+    hooks_chain_timeout_ms: float = 500.0
+    hooks_fail_open_default: bool = True
+    hooks_max_per_event: int = 20
+    hooks_execution_log_enabled: bool = True
+    hooks_execution_log_retention_hours: int = 24
+
     # Environment
     environment: str = "development"
 
