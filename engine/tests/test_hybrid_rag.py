@@ -751,6 +751,51 @@ class TestRAGPipeline:
         assert result.sources[0].metadata["session_id"] == "s1"
         assert result.sources[0].metadata["agent_name"] == "coder"
 
+    @pytest.mark.asyncio
+    async def test_query_with_diagnostics_vector_pipeline(self) -> None:
+        mock_embedder = AsyncMock()
+        mock_embedder.embed.return_value = [0.2] * 1536
+        mock_memory = AsyncMock()
+        mock_memory.search.return_value = [
+            SearchResult(text="Vector source", score=0.9, metadata={}),
+        ]
+
+        pipeline = RAGPipeline(
+            embedding_provider=mock_embedder,
+            long_term_memory=mock_memory,
+            similarity_threshold=0.3,
+        )
+        outcome = await pipeline.query_with_diagnostics("vector question")
+        assert outcome.result.sources[0].retrieval_method == "vector"
+        assert outcome.diagnostics.retrieval_method == "vector"
+        stage_names = [stage.stage for stage in outcome.diagnostics.stages]
+        assert stage_names == [
+            "vector-search",
+            "threshold-filter",
+            "source-map",
+            "prompt-assembly",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_query_with_diagnostics_hybrid_pipeline(self) -> None:
+        mock_embedder = AsyncMock()
+        mock_memory = AsyncMock()
+        mock_hybrid = AsyncMock()
+        mock_hybrid.search.return_value = [
+            HybridResult(text="Hybrid source", score=0.5, metadata={}),
+        ]
+
+        pipeline = RAGPipeline(
+            embedding_provider=mock_embedder,
+            long_term_memory=mock_memory,
+            hybrid_searcher=mock_hybrid,
+        )
+        outcome = await pipeline.query_with_diagnostics("hybrid question")
+        assert outcome.result.sources[0].retrieval_method == "hybrid"
+        assert outcome.diagnostics.retrieval_method == "hybrid"
+        stage_names = [stage.stage for stage in outcome.diagnostics.stages]
+        assert stage_names == ["hybrid-search", "source-map", "prompt-assembly"]
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Config Tests
