@@ -505,6 +505,102 @@ def test_auto_intake_respects_min_quality_threshold() -> None:
     assert created[0].generated_from_signal_id == high_quality_signal.signal_id
 
 
+def test_calibration_report_recommends_thresholds_from_windowed_sample() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(
+            max_signals=120,
+            auto_intake_min_quality=0.45,
+        )
+    )
+    now = datetime.now(UTC)
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.FEEDBACK,
+            severity=LearningSignalSeverity.MEDIUM,
+            tenant_id="tenant-a",
+            summary="short",
+            recorded_at=now - timedelta(days=1),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-a",
+            summary="Detailed recurring bug in release pipeline after dependency bump",
+            details="Observed in two regions with canary and stable lanes.",
+            source="ci",
+            context={"region": "us-east", "release": "2026.02"},
+            recorded_at=now - timedelta(days=2),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.INCIDENT,
+            severity=LearningSignalSeverity.CRITICAL,
+            tenant_id="tenant-a",
+            summary="Critical production outage with cascading dependency failures",
+            details=(
+                "API layer timed out, queue depth spiked, and worker retries exhausted "
+                "across multiple availability zones."
+            ),
+            source="pagerduty",
+            context={"region": "us-east", "service": "gateway", "cluster": "prod-1"},
+            recorded_at=now - timedelta(days=3),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-a",
+            summary="outside window signal",
+            recorded_at=now - timedelta(days=45),
+        )
+    )
+
+    report = service.calibrate_learning_thresholds(
+        window_days=14,
+        target_auto_intakes_per_window=2,
+        tenant_id="tenant-a",
+    )
+    assert report.sample_signals == 3
+    assert report.sample_occurrences >= report.sample_signals
+    assert 0.0 <= report.observed_average_quality_score <= 1.0
+    assert report.recommended_auto_intake_max_items == 2
+    assert report.recommended_auto_intake_min_severity in {"medium", "high"}
+    assert 0.0 <= report.recommended_auto_intake_min_quality <= 1.0
+    assert 30 <= report.recommended_retention_days <= 365
+    assert report.policy_snapshot["auto_intake_min_quality"] == 0.45
+    assert report.rationale
+
+
+def test_calibrate_zero_signals_returns_conservative_defaults() -> None:
+    """When no signals exist in the window, conservative defaults are returned."""
+    policy = LearningPersistencePolicy(auto_intake_min_quality=0.6)
+    service = ImprovementService(persistence_policy=policy)
+
+    report = service.calibrate_learning_thresholds(
+        window_days=7,
+        target_auto_intakes_per_window=5,
+    )
+    assert report.sample_signals == 0
+    assert report.sample_occurrences == 0
+    assert report.observed_average_quality_score == 0.0
+    assert report.observed_quality_p75 == 0.0
+    assert report.observed_quality_p90 == 0.0
+    assert report.observed_high_or_critical_ratio == 0.0
+    assert report.recommended_auto_intake_min_quality == 0.6
+    assert report.recommended_auto_intake_max_items == 1
+    assert report.recommended_auto_intake_min_severity == "high"
+    assert report.rationale == [
+        "No signals in the selected window; returning conservative defaults.",
+    ]
+    assert report.policy_snapshot["auto_intake_min_quality"] == 0.6
+    assert report.policy_snapshot["max_signals"] is None
+    assert report.policy_snapshot["retention_days"] is None
+
+
 def test_dedupe_window_merges_duplicate_learning_signals() -> None:
     service = ImprovementService(
         persistence_policy=LearningPersistencePolicy(dedupe_window_minutes=60)
@@ -877,6 +973,79 @@ def test_trends_route_rejects_invalid_window_days(
     )
     assert response.status_code == 400
     assert "window_days must be at least 1" in response.json()["detail"]
+
+
+def test_calibration_route_returns_report(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 2)
+    now = datetime.now(UTC)
+
+    from agent33.api.routes.improvements import get_improvement_service
+
+    service = get_improvement_service()
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-1",
+            summary="Detailed recurring bug in release pipeline after dependency bump",
+            details="Observed in two regions with canary and stable lanes.",
+            source="ci",
+            context={"region": "us-east", "release": "2026.02"},
+            recorded_at=now - timedelta(days=2),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.INCIDENT,
+            severity=LearningSignalSeverity.CRITICAL,
+            tenant_id="tenant-1",
+            summary="Critical outage in production gateway",
+            details="Queue saturation and repeated retries observed.",
+            source="pagerduty",
+            context={"service": "gateway"},
+            recorded_at=now - timedelta(days=1),
+        )
+    )
+
+    response = client.get(
+        "/v1/improvements/learning/calibration",
+        params={"window_days": 14, "tenant_id": "tenant-1"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tenant_id"] == "tenant-1"
+    assert payload["window_days"] == 14
+    assert payload["target_auto_intakes_per_window"] == 2
+    assert payload["sample_signals"] == 2
+    assert payload["recommended_auto_intake_max_items"] == 2
+    assert 0.0 <= payload["recommended_auto_intake_min_quality"] <= 1.0
+
+
+def test_calibration_route_rejects_invalid_window_days(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    response = client.get(
+        "/v1/improvements/learning/calibration",
+        params={"window_days": 0},
+    )
+    assert response.status_code == 400
+    assert "window_days must be at least 1" in response.json()["detail"]
+
+
+def test_calibration_route_rejects_invalid_target_items(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    response = client.get(
+        "/v1/improvements/learning/calibration",
+        params={"target_auto_intakes_per_window": 0},
+    )
+    assert response.status_code == 400
+    assert "target_auto_intakes_per_window must be at least 1" in response.json()["detail"]
 
 
 def test_routes_support_sqlite_backend_with_file_migration(

@@ -19,6 +19,7 @@ from agent33.improvement.models import (
     LearningSignalSeverity,
     LearningSignalType,
     LearningSummary,
+    LearningThresholdCalibration,
     LearningTrendCategory,
     LearningTrendDimension,
     LearningTrendDirection,
@@ -536,6 +537,126 @@ class ImprovementService:
             total_current_occurrences=total_current_occurrences,
             total_previous_occurrences=total_previous_occurrences,
             categories=categories,
+        )
+
+    @staticmethod
+    def _percentile(values: list[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        sorted_values = sorted(values)
+        if percentile <= 0:
+            return sorted_values[0]
+        if percentile >= 1:
+            return sorted_values[-1]
+        index = int(round((len(sorted_values) - 1) * percentile))
+        return sorted_values[index]
+
+    def calibrate_learning_thresholds(
+        self,
+        *,
+        window_days: int = 30,
+        target_auto_intakes_per_window: int = 3,
+        tenant_id: str | None = None,
+    ) -> LearningThresholdCalibration:
+        """Calibrate retention and auto-intake thresholds from observed signals."""
+        if window_days < 1:
+            raise ValueError("window_days must be at least 1")
+        if target_auto_intakes_per_window < 1:
+            raise ValueError("target_auto_intakes_per_window must be at least 1")
+
+        now = datetime.now(UTC)
+        window_start_at = now - timedelta(days=window_days)
+        sample = [
+            signal
+            for signal in self.list_learning_signals(limit=None, tenant_id=tenant_id)
+            if signal.recorded_at >= window_start_at
+        ]
+
+        qualities = sorted((signal.quality_score for signal in sample), reverse=True)
+        sample_signals = len(sample)
+        sample_occurrences = sum(max(1, signal.occurrence_count) for signal in sample)
+        daily_occurrence_rate = sample_occurrences / float(window_days)
+        average_quality = (
+            round(sum(qualities) / sample_signals, 3) if sample_signals > 0 else 0.0
+        )
+        quality_p75 = round(self._percentile(qualities, 0.75), 3)
+        quality_p90 = round(self._percentile(qualities, 0.90), 3)
+        high_or_critical = sum(
+            1
+            for signal in sample
+            if signal.severity in {LearningSignalSeverity.HIGH, LearningSignalSeverity.CRITICAL}
+        )
+        high_or_critical_ratio = (
+            round(high_or_critical / sample_signals, 3) if sample_signals > 0 else 0.0
+        )
+
+        if sample_signals == 0:
+            recommended_quality = round(self._persistence_policy.auto_intake_min_quality, 3)
+            recommended_max_items = min(target_auto_intakes_per_window, 1)
+            recommended_severity = LearningSignalSeverity.HIGH.value
+            rationale = [
+                "No signals in the selected window; returning conservative defaults.",
+            ]
+        else:
+            target_index = min(target_auto_intakes_per_window, len(qualities)) - 1
+            recommended_quality = round(qualities[target_index], 3)
+            recommended_max_items = min(target_auto_intakes_per_window, sample_signals)
+            recommended_severity = (
+                LearningSignalSeverity.HIGH.value
+                if high_or_critical_ratio >= 0.4
+                else LearningSignalSeverity.MEDIUM.value
+            )
+            rationale = [
+                "Quality threshold targets the top-N signals in the selected window.",
+                "Severity threshold adapts to observed high/critical share.",
+            ]
+
+        capacity = (
+            self._persistence_policy.max_signals
+            if self._persistence_policy.max_signals is not None
+            and self._persistence_policy.max_signals > 0
+            else 5000
+        )
+        safe_daily_rate = daily_occurrence_rate if daily_occurrence_rate > 0.0 else 1.0
+        recommended_retention_days = int(round(capacity / safe_daily_rate))
+        recommended_retention_days = max(30, min(365, recommended_retention_days))
+
+        return LearningThresholdCalibration(
+            tenant_id=tenant_id,
+            window_days=window_days,
+            target_auto_intakes_per_window=target_auto_intakes_per_window,
+            sample_signals=sample_signals,
+            sample_occurrences=sample_occurrences,
+            observed_daily_occurrence_rate=round(daily_occurrence_rate, 3),
+            observed_average_quality_score=average_quality,
+            observed_quality_p75=quality_p75,
+            observed_quality_p90=quality_p90,
+            observed_high_or_critical_ratio=high_or_critical_ratio,
+            recommended_auto_intake_min_quality=recommended_quality,
+            recommended_auto_intake_min_severity=recommended_severity,
+            recommended_auto_intake_max_items=recommended_max_items,
+            recommended_retention_days=recommended_retention_days,
+            policy_snapshot={
+                "auto_intake_min_quality": round(
+                    self._persistence_policy.auto_intake_min_quality, 3
+                ),
+                "max_signals": (
+                    self._persistence_policy.max_signals
+                    if self._persistence_policy.max_signals is not None
+                    else 0
+                ),
+                "retention_days": (
+                    self._persistence_policy.retention_days
+                    if self._persistence_policy.retention_days is not None
+                    else 0
+                ),
+                "auto_intake_max_items": (
+                    self._persistence_policy.max_generated_intakes
+                    if self._persistence_policy.max_generated_intakes is not None
+                    else 0
+                ),
+            },
+            rationale=rationale,
         )
 
     def generate_intakes_from_learning_signals(

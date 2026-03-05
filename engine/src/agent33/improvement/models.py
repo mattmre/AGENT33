@@ -205,6 +205,28 @@ class LearningTrendReport(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class LearningThresholdCalibration(BaseModel):
+    """Calibration report for retention and auto-intake tuning."""
+
+    tenant_id: str | None = None
+    window_days: int = 30
+    target_auto_intakes_per_window: int = 3
+    sample_signals: int = 0
+    sample_occurrences: int = 0
+    observed_daily_occurrence_rate: float = 0.0
+    observed_average_quality_score: float = 0.0
+    observed_quality_p75: float = 0.0
+    observed_quality_p90: float = 0.0
+    observed_high_or_critical_ratio: float = 0.0
+    recommended_auto_intake_min_quality: float = 0.0
+    recommended_auto_intake_min_severity: str = "high"
+    recommended_auto_intake_max_items: int = 0
+    recommended_retention_days: int = 180
+    policy_snapshot: dict[str, float | int | str] = Field(default_factory=dict)
+    rationale: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 # ---------------------------------------------------------------------------
 # Research Intake models
 # ---------------------------------------------------------------------------
