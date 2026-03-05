@@ -1,59 +1,65 @@
 # Next Session Briefing
 
-Last updated: 2026-03-05T18:00:00Z
+Last updated: 2026-03-05T23:00:00Z
 
 ## Current State
 
-- **Merge status**: All Session 53/54 PRs (`#111`–`#121`) merged to `main` as of Session 55.
+- **Merge status**: All Session 55 PRs (`#111`–`#130`) merged to `main`. Phase 2 completed all 9 outstanding development phases.
 - **Open PRs**: None.
 - **Latest session**: Session 55 (`docs/sessions/session-55-2026-03-05.md`).
 - **Validation posture**:
   - Ruff check: clean (0 errors)
   - Ruff format: clean (414 files)
-  - Pytest: 2628 passed, 2 pre-existing failures (`TestProductionSecrets`)
+  - Pytest: 2722 passed, 2 pre-existing failures (`TestProductionSecrets`)
+  - Frontend (vitest): 76 tests pass
 - **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open.
 - **Pre-existing issue**: `test_production_mode_rejects_default_secrets` and `test_production_mode_rejects_other_default_secrets` fail — `Settings.validate_production_secrets` needs fix.
 
 ## Session 55 Highlights
 
-- Reviewed all 11 open PRs, addressed 27 review comments (including 5 security-critical fixes).
+### Phase 1 — PR Review & Merge
+- Reviewed all 11 open PRs (#111–#121), addressed 27 review comments (including 5 security-critical fixes).
 - Applied security fixes: multi-tenant IDOR on tool approvals (#120), reviewed_by spoof prevention (#120), RAG prompt injection sanitization (#121), broad exception narrowing (#118).
 - Resolved 8 merge conflicts across wave-based rebasing.
 - Merged all PRs in 4 dependency-safe waves with interim test runs.
-- Final confidence gate: 2628 tests passed, 0 regressions.
 
-## Top 15 Priority Items / Phases
+### Phase 2 — Development Phase Completion
+- Researched all 10 remaining development phases (22, 25–28, 30–33, 35).
+- Phase 22 confirmed already complete; 9 phases implemented across 3 waves.
+- 9 PRs created and merged (#122–#130): ~5,600 lines added across 48 files.
+- 163 new tests added; final confidence gate: 2722 passed, 0 regressions.
+- Created 11 research documents, 2 new workflow templates.
+- All development phases now have refinement PRs merged.
 
-1. **Fix `TestProductionSecrets`**: `Settings.validate_production_secrets` validator doesn't raise on default jwt_secret in production mode.
-2. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
-3. **SkillsBench expansion**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
-4. **Phase 32 hardening**: Enforce tenant/permission boundaries for hook/plugin registration and execution.
-5. **Phase 33 hardening**: Add pack trust/provenance, signing, and stricter distribution controls.
-6. **Phase 22 continuation**: Unify frontend access paths for newly merged backend feature surfaces.
-7. **Phase 25 continuation**: Wire visual explainer coverage into comparative + synthetic environment flows.
-8. **Phase 26 continuation**: Complete decision/review pages for new evaluation artifacts.
-9. **Phase 27 continuation**: Expand operations-cycle UX and multi-user agent workflows.
-10. **Phase 28 continuation**: Broaden enterprise security scanning coverage for new surfaces.
-11. **Phase 31 follow-up**: Validate trend and calibration defaults against production-like traces.
-12. **Phase 30 follow-up**: Extend acceptance matrix with additional API-level policy fixtures.
-13. **A5 follow-up**: Add corruption handling / backup strategy for bundle persistence file.
-14. **Orchestration state follow-up**: Add state-store rotation/compaction and cross-service restore integration tests.
-15. **HITL follow-up**: Add approval expiry, escalation timeouts, and audit trail for governed tool decisions.
+## Top Priorities
+
+1. **Phase 25 Stage 3**: Real-time WebSocket integration for workflow status updates; SSE fallback for status graph.
+2. **Phase 26 Stage 3**: Improvement-cycle wizard UI; interactive plan-review/diff-review approval flows.
+3. **Phase 27 Stage 3**: `improvement-cycle` workflow template wiring into frontend; multi-step wizard UX.
+4. **Phase 28 — LLMGuard/Garak adapter completion**: Current stubs need real adapter integration for enterprise security scanning.
+5. **Frontend render/interaction tests**: Need `@testing-library/react` for component-level testing (current tests are unit/logic only).
+6. **Phase 25/26 documentation & walkthroughs**: User-facing docs for visual explainer and decision/review pages.
+7. **Phase 22 validation**: Already complete on `main` but may need integration verification against new Phase 25–27 surfaces.
+8. **SkillsBench integration**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
+9. **Fix `TestProductionSecrets`**: `Settings.validate_production_secrets` validator doesn't raise on default jwt_secret in production mode.
+10. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
 
 ## Remaining Phases of Development
 
-| Phase | Status on `main` | Remaining work |
+All 10 development phases now have refinement PRs merged. Remaining work is Stage 3 (advanced features):
+
+| Phase | Status on `main` | Remaining Stage 3 work |
 | --- | --- | --- |
-| 22 | Partially implemented | UI platform/access-layer completion and consolidation |
-| 25 | Partially implemented | Visual explainer integration depth and coverage |
-| 26 | Partially implemented | Decision/review page completion and wiring |
-| 27 | Partially implemented | Website operations and improvement cycle expansion |
-| 28 | Partially implemented | Security scanning integration breadth and enforcement |
-| 30 | Fully merged (calibration + acceptance matrix) | API-level policy fixture expansion |
-| 31 | Fully merged (trends + calibration + persistence) | Production trace tuning |
-| 32 | H01/H02 merged | Additional hardening and operationalization remain |
-| 33 | Core skill-pack implementation merged | Ecosystem/distribution hardening remains |
-| 35 | Core + regression convergence merged | Ongoing regression protection and follow-on tuning |
+| 22 | ✅ Complete | Validation against new Phase 25–27 surfaces |
+| 25 | Refinement merged (PR #128) | Real-time WebSocket; SSE status graph integration |
+| 26 | Refinement merged (PR #129) | Interactive approval flows; improvement-cycle wizard |
+| 27 | Refinement merged (PR #130) | Workflow template wiring; multi-step wizard UX |
+| 28 | Refinement merged (PR #127) | LLMGuard/Garak real adapters (currently stubs) |
+| 30 | Refinement merged (PR #122) | Production trace tuning |
+| 31 | Refinement merged (PR #123) | Production-scale backup/restore validation |
+| 32 | Refinement merged (PR #124) | Operationalization; cross-service tenant verification |
+| 33 | Refinement merged (PR #125) | Ecosystem distribution; marketplace integration |
+| 35 | Refinement merged (PR #126) | Voice daemon full implementation; policy tuning |
 
 ## Startup Checklist
 
@@ -67,6 +73,9 @@ python -m ruff check src tests
 python -m ruff format --check src tests
 python -m mypy src --config-file pyproject.toml
 python -m pytest tests/ -q
+
+cd ../frontend
+npx vitest run
 ```
 
 ## Key Paths
@@ -76,6 +85,15 @@ python -m pytest tests/ -q
 | Session 55 log | `docs/sessions/session-55-2026-03-05.md` |
 | Session 54 log | `docs/sessions/session-54-2026-03-05.md` |
 | Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
+| Phase 25 research | `docs/research/session55-phase25-status-graph-design.md` |
+| Phase 26 research | `docs/research/session55-phase26-html-preview-design.md` |
+| Phase 27 research | `docs/research/session55-phase27-hub-alignment.md` |
+| Phase 28 research | `docs/research/session55-phase28-persistence-architecture.md` |
+| Phase 30 research | `docs/research/session55-phase30-api-policy-fixtures.md` |
+| Phase 31 research | `docs/research/session55-phase31-production-tuning.md` |
+| Phase 32 research | `docs/research/session55-phase32-connector-boundary-audit.md` |
+| Phase 33 research | `docs/research/session55-phase33-provenance-architecture.md` |
+| Phase 35 research | `docs/research/session55-phase35-policy-calibration.md` |
 | Phase 30 acceptance research | `docs/research/session53-phase30-outcome-acceptance.md` |
 | Phase 31 trend research | `docs/research/session53-phase31-trend-analytics.md` |
 | Phase 31 calibration research | `docs/research/session53-phase31-threshold-tuning.md` |
