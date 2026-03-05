@@ -638,21 +638,9 @@ class ImprovementService:
                 "auto_intake_min_quality": round(
                     self._persistence_policy.auto_intake_min_quality, 3
                 ),
-                "max_signals": (
-                    self._persistence_policy.max_signals
-                    if self._persistence_policy.max_signals is not None
-                    else 0
-                ),
-                "retention_days": (
-                    self._persistence_policy.retention_days
-                    if self._persistence_policy.retention_days is not None
-                    else 0
-                ),
-                "auto_intake_max_items": (
-                    self._persistence_policy.max_generated_intakes
-                    if self._persistence_policy.max_generated_intakes is not None
-                    else 0
-                ),
+                "max_signals": self._persistence_policy.max_signals,
+                "retention_days": self._persistence_policy.retention_days,
+                "auto_intake_max_items": self._persistence_policy.max_generated_intakes,
             },
             rationale=rationale,
         )

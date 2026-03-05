@@ -222,7 +222,7 @@ class LearningThresholdCalibration(BaseModel):
     recommended_auto_intake_min_severity: str = "high"
     recommended_auto_intake_max_items: int = 0
     recommended_retention_days: int = 180
-    policy_snapshot: dict[str, float | int | str] = Field(default_factory=dict)
+    policy_snapshot: dict[str, float | int | str | None] = Field(default_factory=dict)
     rationale: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

@@ -590,12 +590,14 @@ def test_calibrate_zero_signals_returns_conservative_defaults() -> None:
     assert report.observed_quality_p75 == 0.0
     assert report.observed_quality_p90 == 0.0
     assert report.observed_high_or_critical_ratio == 0.0
+    # Conservative defaults: use current policy quality, cap items to 1, high severity
     assert report.recommended_auto_intake_min_quality == 0.6
     assert report.recommended_auto_intake_max_items == 1
     assert report.recommended_auto_intake_min_severity == "high"
     assert report.rationale == [
         "No signals in the selected window; returning conservative defaults.",
     ]
+    # Policy snapshot uses None for unconfigured values
     assert report.policy_snapshot["auto_intake_min_quality"] == 0.6
     assert report.policy_snapshot["max_signals"] is None
     assert report.policy_snapshot["retention_days"] is None
