@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from agent33.release.models import (
     RollbackRecord,
     RollbackStatus,
     RollbackType,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +41,40 @@ _DECISION_MATRIX: dict[tuple[str, str], tuple[RollbackType, str]] = {
 class RollbackManager:
     """Track and manage rollbacks."""
 
-    def __init__(self) -> None:
+    def __init__(self, on_change: Callable[[], None] | None = None) -> None:
         self._records: dict[str, RollbackRecord] = {}
+        self._on_change = on_change
+
+    def _mark_changed(self) -> None:
+        if self._on_change is not None:
+            self._on_change()
+
+    # ------------------------------------------------------------------
+    # State snapshot / restore (used by durable persistence)
+    # ------------------------------------------------------------------
+
+    def snapshot_state(self) -> dict[str, dict[str, object]]:
+        """Return a serializable snapshot of internal state."""
+        return {
+            "records": {
+                rollback_id: record.model_dump(mode="json")
+                for rollback_id, record in self._records.items()
+            },
+        }
+
+    def restore_state(self, data: dict[str, object]) -> None:
+        """Restore internal state from a previously captured snapshot."""
+        from pydantic import ValidationError
+
+        records_payload = data.get("records", {})
+        if isinstance(records_payload, dict):
+            for rollback_id, record_data in records_payload.items():
+                if not isinstance(rollback_id, str):
+                    continue
+                try:
+                    self._records[rollback_id] = RollbackRecord.model_validate(record_data)
+                except ValidationError:
+                    logger.warning("rollback_restore_failed id=%s", rollback_id)
 
     def recommend(self, severity: str, impact: str) -> tuple[RollbackType, str]:
         """Get recommended rollback type and approval level.
@@ -70,6 +106,7 @@ class RollbackManager:
             initiated_by=initiated_by,
         )
         self._records[record.rollback_id] = record
+        self._mark_changed()
         logger.info(
             "rollback_created id=%s release=%s type=%s",
             record.rollback_id,
@@ -85,6 +122,7 @@ class RollbackManager:
             return None
         record.approved_by = approved_by
         record.status = RollbackStatus.IN_PROGRESS
+        self._mark_changed()
         return record
 
     def complete_step(self, rollback_id: str, step_description: str) -> RollbackRecord | None:
@@ -93,6 +131,7 @@ class RollbackManager:
         if record is None:
             return None
         record.steps_completed.append(step_description)
+        self._mark_changed()
         return record
 
     def complete(self, rollback_id: str) -> RollbackRecord | None:
@@ -102,6 +141,7 @@ class RollbackManager:
             return None
         record.status = RollbackStatus.COMPLETED
         record.completed_at = datetime.now(UTC)
+        self._mark_changed()
         logger.info("rollback_completed id=%s", rollback_id)
         return record
 
@@ -112,6 +152,7 @@ class RollbackManager:
             return None
         record.status = RollbackStatus.FAILED
         record.errors.append(error)
+        self._mark_changed()
         return record
 
     def get(self, rollback_id: str) -> RollbackRecord | None:

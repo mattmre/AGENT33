@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 from agent33.component_security.models import (
     FindingsSummary,
@@ -21,6 +24,9 @@ from agent33.release.models import (
 from agent33.release.rollback import RollbackManager
 from agent33.release.security_gate import evaluate_security_gate
 from agent33.release.sync import SyncEngine
+
+if TYPE_CHECKING:
+    from agent33.services.orchestration_state import OrchestrationStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +73,52 @@ class InvalidReleaseTransitionError(Exception):
 class ReleaseService:
     """Full release lifecycle orchestration."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_store: OrchestrationStateStore | None = None) -> None:
+        self._state_store = state_store
         self._releases: dict[str, Release] = {}
         self._evaluator = ChecklistEvaluator()
-        self._sync = SyncEngine()
-        self._rollback = RollbackManager()
+        self._sync = SyncEngine(on_change=self._persist_state)
+        self._rollback = RollbackManager(on_change=self._persist_state)
+        self._load_state()
+
+    def _persist_state(self) -> None:
+        if self._state_store is None:
+            return
+        self._state_store.write_namespace(
+            "release",
+            {
+                "releases": {
+                    release_id: release.model_dump(mode="json")
+                    for release_id, release in self._releases.items()
+                },
+                "sync_rules": self._sync.snapshot_state().get("rules", {}),
+                "sync_executions": self._sync.snapshot_state().get("executions", {}),
+                "rollback_records": self._rollback.snapshot_state().get("records", {}),
+            },
+        )
+
+    def _load_state(self) -> None:
+        if self._state_store is None:
+            return
+        payload = self._state_store.read_namespace("release")
+
+        releases_payload = payload.get("releases", {})
+        if isinstance(releases_payload, dict):
+            for release_id, release_data in releases_payload.items():
+                if not isinstance(release_id, str):
+                    continue
+                try:
+                    self._releases[release_id] = Release.model_validate(release_data)
+                except ValidationError:
+                    logger.warning("release_restore_failed id=%s", release_id)
+
+        self._sync.restore_state(
+            {
+                "rules": payload.get("sync_rules", {}),
+                "executions": payload.get("sync_executions", {}),
+            }
+        )
+        self._rollback.restore_state({"records": payload.get("rollback_records", {})})
 
     @property
     def sync_engine(self) -> SyncEngine:
@@ -105,6 +152,7 @@ class ReleaseService:
             version,
             release_type.value,
         )
+        self._persist_state()
         return release
 
     def get_release(self, release_id: str) -> Release:
@@ -139,6 +187,7 @@ class ReleaseService:
             release_id,
             to_status.value,
         )
+        self._persist_state()
         return release
 
     def freeze(self, release_id: str) -> Release:
@@ -168,6 +217,7 @@ class ReleaseService:
         from datetime import UTC, datetime
 
         release.released_at = datetime.now(UTC)
+        self._persist_state()
         return release
 
     def mark_failed(self, release_id: str) -> Release:
@@ -186,6 +236,7 @@ class ReleaseService:
     ) -> Release:
         release = self.get_release(release_id)
         self._evaluator.update_check(release.evidence.checklist, check_id, status, message)
+        self._persist_state()
         return release
 
     def evaluate_checklist(self, release_id: str) -> tuple[bool, list[str]]:
@@ -213,6 +264,7 @@ class ReleaseService:
             check_status,
             result.message,
         )
+        self._persist_state()
         return result
 
     # ------------------------------------------------------------------
@@ -248,4 +300,5 @@ class ReleaseService:
         )
         if release.status == ReleaseStatus.RELEASED:
             self.transition(release_id, ReleaseStatus.ROLLED_BACK)
+        self._persist_state()
         return release

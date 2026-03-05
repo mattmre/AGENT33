@@ -579,6 +579,90 @@ class TestImprovementAPI:
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
+    def test_submit_competitive_repo_intakes_batch(self, client: TestClient):
+        resp = client.post(
+            "/v1/improvements/intakes/competitive/repos",
+            json={
+                "records": [
+                    {
+                        "rank": 1,
+                        "full_name": "org/alpha",
+                        "url": "https://github.com/org/alpha",
+                        "stars": 12345,
+                        "source_query": "agent framework",
+                    },
+                    {
+                        "rank": 2,
+                        "full_name": "org/beta",
+                        "url": "https://github.com/org/beta",
+                        "stars": 9876,
+                        "source_query": "agent framework",
+                    },
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["created_intakes"]) == 2
+        assert data["created_intakes"][0]["classification"]["research_type"] == "competitive"
+        assert data["created_intakes"][1]["content"]["source"] == "https://github.com/org/beta"
+
+    def test_score_and_prioritize_feature_candidates(self, client: TestClient):
+        resp = client.post(
+            "/v1/improvements/feature-candidates/score",
+            json={
+                "top_n": 2,
+                "candidates": [
+                    {
+                        "feature_name": "Feature A",
+                        "impact_score": 8,
+                        "feasibility_score": 8,
+                        "risk_score": 3,
+                    },
+                    {
+                        "feature_name": "Feature B",
+                        "impact_score": 6,
+                        "feasibility_score": 7,
+                        "risk_score": 8,
+                    },
+                    {
+                        "feature_name": "Feature C",
+                        "impact_score": 9,
+                        "feasibility_score": 9,
+                        "risk_score": 2,
+                    },
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["scored"]) == 3
+        assert len(data["prioritized"]) == 2
+        assert data["prioritized"][0]["feature_name"] == "Feature C"
+
+    def test_submit_competitive_repo_intakes_invalid_rank(self, client: TestClient):
+        resp = client.post(
+            "/v1/improvements/intakes/competitive/repos",
+            json={
+                "records": [
+                    {
+                        "rank": 0,
+                        "full_name": "org/alpha",
+                        "url": "https://github.com/org/alpha",
+                        "stars": 12345,
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_score_feature_candidates_invalid_top_n(self, client: TestClient):
+        resp = client.post(
+            "/v1/improvements/feature-candidates/score",
+            json={"top_n": 0, "candidates": []},
+        )
+        assert resp.status_code == 422
+
     def test_list_intakes_filter_status(self, client: TestClient):
         client.post(
             "/v1/improvements/intakes",

@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 from agent33.autonomy.enforcement import RuntimeEnforcer
 from agent33.autonomy.models import (
     AutonomyBudget,
     BudgetState,
+    EnforcementResult,
     EscalationRecord,
+    EscalationUrgency,
     PreflightReport,
 )
 from agent33.autonomy.preflight import PreflightChecker
+
+if TYPE_CHECKING:
+    from agent33.services.orchestration_state import OrchestrationStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +59,84 @@ class InvalidStateTransitionError(Exception):
         super().__init__(f"Invalid transition: {from_state.value} → {to_state.value}")
 
 
+class EnforcerNotFoundError(Exception):
+    """Raised when an enforcer is not found for a budget."""
+
+
 class AutonomyService:
     """Budget CRUD, lifecycle management, and enforcement orchestration."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_store: OrchestrationStateStore | None = None) -> None:
+        self._state_store = state_store
         self._budgets: dict[str, AutonomyBudget] = {}
         self._enforcers: dict[str, RuntimeEnforcer] = {}
         self._escalations: dict[str, EscalationRecord] = {}
         self._checker = PreflightChecker()
+        self._load_state()
+
+    def _persist_state(self) -> None:
+        if self._state_store is None:
+            return
+        self._state_store.write_namespace(
+            "autonomy",
+            {
+                "budgets": {
+                    budget_id: budget.model_dump(mode="json")
+                    for budget_id, budget in self._budgets.items()
+                },
+                "enforcers": {
+                    budget_id: enforcer.snapshot_state()
+                    for budget_id, enforcer in self._enforcers.items()
+                },
+                "escalations": {
+                    escalation_id: escalation.model_dump(mode="json")
+                    for escalation_id, escalation in self._escalations.items()
+                },
+            },
+        )
+
+    def _load_state(self) -> None:
+        if self._state_store is None:
+            return
+        payload = self._state_store.read_namespace("autonomy")
+        budgets_payload = payload.get("budgets", {})
+        if isinstance(budgets_payload, dict):
+            for budget_id, budget_data in budgets_payload.items():
+                if not isinstance(budget_id, str):
+                    continue
+                try:
+                    self._budgets[budget_id] = AutonomyBudget.model_validate(budget_data)
+                except ValidationError:
+                    logger.warning("autonomy_budget_restore_failed id=%s", budget_id)
+
+        escalations_payload = payload.get("escalations", {})
+        if isinstance(escalations_payload, dict):
+            for escalation_id, escalation_data in escalations_payload.items():
+                if not isinstance(escalation_id, str):
+                    continue
+                try:
+                    self._escalations[escalation_id] = EscalationRecord.model_validate(
+                        escalation_data
+                    )
+                except ValidationError:
+                    logger.warning("autonomy_escalation_restore_failed id=%s", escalation_id)
+
+        enforcers_payload = payload.get("enforcers", {})
+        if isinstance(enforcers_payload, dict):
+            for budget_id, enforcer_data in enforcers_payload.items():
+                budget = self._budgets.get(budget_id)
+                if budget is None or not isinstance(enforcer_data, dict):
+                    continue
+                enforcer = RuntimeEnforcer(budget)
+                try:
+                    enforcer.restore_state(
+                        context=enforcer_data.get("context"),
+                        escalations=enforcer_data.get("escalations"),
+                    )
+                except ValidationError:
+                    logger.warning("autonomy_enforcer_restore_failed budget_id=%s", budget_id)
+                    continue
+                self._enforcers[budget_id] = enforcer
 
     # ------------------------------------------------------------------
     # Budget CRUD
@@ -79,6 +157,7 @@ class AutonomyService:
             task_id,
             agent_id,
         )
+        self._persist_state()
         return budget
 
     def get_budget(self, budget_id: str) -> AutonomyBudget:
@@ -112,6 +191,8 @@ class AutonomyService:
         if budget.state not in (BudgetState.DRAFT, BudgetState.REJECTED):
             raise InvalidStateTransitionError(budget.state, BudgetState.DRAFT)
         del self._budgets[budget_id]
+        self._enforcers.pop(budget_id, None)
+        self._persist_state()
 
     # ------------------------------------------------------------------
     # Lifecycle transitions
@@ -135,6 +216,7 @@ class AutonomyService:
             budget_id,
             to_state.value,
         )
+        self._persist_state()
         return budget
 
     def activate(self, budget_id: str, approved_by: str = "") -> AutonomyBudget:
@@ -169,11 +251,63 @@ class AutonomyService:
             raise InvalidStateTransitionError(budget.state, BudgetState.ACTIVE)
         enforcer = RuntimeEnforcer(budget)
         self._enforcers[budget_id] = enforcer
+        self._persist_state()
         return enforcer
 
     def get_enforcer(self, budget_id: str) -> RuntimeEnforcer | None:
         """Get the runtime enforcer for a budget."""
         return self._enforcers.get(budget_id)
+
+    def enforce_file(
+        self, budget_id: str, path: str, mode: str = "read", lines: int = 0
+    ) -> EnforcementResult:
+        """Run an enforcer file check and persist resulting mutable state."""
+        enforcer = self.get_enforcer(budget_id)
+        if enforcer is None:
+            raise EnforcerNotFoundError(f"No enforcer for budget: {budget_id}")
+        if mode == "write":
+            result = enforcer.check_file_write(path, lines=lines)
+        else:
+            result = enforcer.check_file_read(path)
+        self._persist_state()
+        return result
+
+    def enforce_command(self, budget_id: str, command: str) -> EnforcementResult:
+        """Run an enforcer command check and persist resulting mutable state."""
+        enforcer = self.get_enforcer(budget_id)
+        if enforcer is None:
+            raise EnforcerNotFoundError(f"No enforcer for budget: {budget_id}")
+        result = enforcer.check_command(command)
+        self._persist_state()
+        return result
+
+    def enforce_network(self, budget_id: str, domain: str) -> EnforcementResult:
+        """Run an enforcer network check and persist resulting mutable state."""
+        enforcer = self.get_enforcer(budget_id)
+        if enforcer is None:
+            raise EnforcerNotFoundError(f"No enforcer for budget: {budget_id}")
+        result = enforcer.check_network(domain)
+        self._persist_state()
+        return result
+
+    def trigger_escalation(
+        self,
+        budget_id: str,
+        description: str,
+        target: str = "",
+        urgency: EscalationUrgency = EscalationUrgency.NORMAL,
+    ) -> EscalationRecord:
+        """Trigger escalation on a budget's enforcer and persist state."""
+        enforcer = self.get_enforcer(budget_id)
+        if enforcer is None:
+            raise EnforcerNotFoundError(f"No enforcer for budget: {budget_id}")
+        record = enforcer.trigger_escalation(
+            description=description,
+            target=target,
+            urgency=urgency,
+        )
+        self._persist_state()
+        return record
 
     # ------------------------------------------------------------------
     # Escalations
@@ -206,10 +340,12 @@ class AutonomyService:
             for esc in enforcer.escalations:
                 if esc.escalation_id == escalation_id:
                     esc.acknowledged = True
+                    self._persist_state()
                     return True
         found_esc = self._escalations.get(escalation_id)
         if found_esc:
             found_esc.acknowledged = True
+            self._persist_state()
             return True
         return False
 
@@ -219,9 +355,11 @@ class AutonomyService:
             for esc in enforcer.escalations:
                 if esc.escalation_id == escalation_id:
                     esc.resolved = True
+                    self._persist_state()
                     return True
         found_esc = self._escalations.get(escalation_id)
         if found_esc:
             found_esc.resolved = True
+            self._persist_state()
             return True
         return False
