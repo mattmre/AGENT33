@@ -94,8 +94,6 @@ def test_bundle_fetch_survives_service_restart_with_persistence(tmp_path: Path) 
             persistence_path=persistence_path,
         )
     )
-    fetch_response = client.get(
-        f"/v1/evaluation/synthetic-environments/bundles/{bundle_id}"
-    )
+    fetch_response = client.get(f"/v1/evaluation/synthetic-environments/bundles/{bundle_id}")
     assert fetch_response.status_code == 200
     assert fetch_response.json()["bundle_id"] == bundle_id
