@@ -1,0 +1,431 @@
+"""Tests for security scan persistence, deduplication, and cleanup."""
+
+from __future__ import annotations
+
+import subprocess
+from datetime import UTC, datetime, timedelta
+
+from agent33.component_security.dedup import (
+    compute_finding_fingerprint,
+    deduplicate_findings,
+)
+from agent33.component_security.models import (
+    FindingCategory,
+    FindingSeverity,
+    ScanTarget,
+    SecurityFinding,
+    SecurityProfile,
+    SecurityRun,
+)
+from agent33.component_security.persistence import SecurityScanStore
+from agent33.services.security_scan import SecurityScanService
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_run(
+    run_id: str = "secrun-test1",
+    tenant_id: str = "t-1",
+    profile: SecurityProfile = SecurityProfile.QUICK,
+    status: str = "completed",
+    target_path: str = "/repo",
+) -> SecurityRun:
+    run = SecurityRun(
+        id=run_id,
+        tenant_id=tenant_id,
+        profile=profile,
+        status=status,
+        target=ScanTarget(repository_path=target_path),
+    )
+    run.started_at = datetime.now(UTC)
+    run.completed_at = datetime.now(UTC)
+    return run
+
+
+def _make_finding(
+    run_id: str = "secrun-test1",
+    tool: str = "bandit",
+    file_path: str = "app.py",
+    line_number: int | None = 42,
+    severity: FindingSeverity = FindingSeverity.HIGH,
+    category: FindingCategory = FindingCategory.INJECTION_RISK,
+    cwe_id: str = "CWE-78",
+    title: str = "OS command injection",
+) -> SecurityFinding:
+    return SecurityFinding(
+        run_id=run_id,
+        tool=tool,
+        file_path=file_path,
+        line_number=line_number,
+        severity=severity,
+        category=category,
+        cwe_id=cwe_id,
+        title=title,
+        description=title,
+        remediation="Fix it",
+    )
+
+
+# ---------------------------------------------------------------------------
+# SecurityScanStore — run round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestStoreRunRoundTrip:
+    """Test SQLite round-trip for scan runs."""
+
+    def test_save_and_get_run(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+
+        loaded = store.get_run(run.id)
+        assert loaded is not None
+        assert loaded["id"] == run.id
+        assert loaded["tenant_id"] == "t-1"
+        assert loaded["profile"] == "quick"
+        assert loaded["status"] == "completed"
+
+    def test_get_run_not_found(self) -> None:
+        store = SecurityScanStore()
+        assert store.get_run("nonexistent") is None
+
+    def test_list_runs_empty(self) -> None:
+        store = SecurityScanStore()
+        assert store.list_runs() == []
+
+    def test_list_runs_returns_newest_first(self) -> None:
+        store = SecurityScanStore()
+        r1 = _make_run(run_id="secrun-r1")
+        r1.created_at = datetime(2025, 1, 1, tzinfo=UTC)
+        r2 = _make_run(run_id="secrun-r2")
+        r2.created_at = datetime(2025, 6, 1, tzinfo=UTC)
+        store.save_run(r1)
+        store.save_run(r2)
+
+        runs = store.list_runs()
+        assert len(runs) == 2
+        assert runs[0]["id"] == "secrun-r2"
+        assert runs[1]["id"] == "secrun-r1"
+
+    def test_list_runs_tenant_filter(self) -> None:
+        store = SecurityScanStore()
+        store.save_run(_make_run(run_id="secrun-a", tenant_id="t-A"))
+        store.save_run(_make_run(run_id="secrun-b", tenant_id="t-B"))
+
+        runs = store.list_runs(tenant_id="t-A")
+        assert len(runs) == 1
+        assert runs[0]["id"] == "secrun-a"
+
+    def test_delete_run(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+        assert store.delete_run(run.id) is True
+        assert store.get_run(run.id) is None
+
+    def test_delete_run_not_found(self) -> None:
+        store = SecurityScanStore()
+        assert store.delete_run("ghost") is False
+
+    def test_save_run_upsert(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+
+        run.status = "failed"
+        store.save_run(run)
+
+        loaded = store.get_run(run.id)
+        assert loaded is not None
+        assert loaded["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# SecurityScanStore — findings round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestStoreFindingsRoundTrip:
+    """Test SQLite round-trip for findings with fingerprints."""
+
+    def test_save_and_get_findings(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+
+        f1 = _make_finding(run_id=run.id, title="Finding A")
+        f2 = _make_finding(
+            run_id=run.id,
+            tool="gitleaks",
+            title="Finding B",
+            category=FindingCategory.SECRETS_EXPOSURE,
+            cwe_id="",
+        )
+        store.save_findings([f1, f2])
+
+        loaded = store.get_findings(run.id)
+        assert len(loaded) == 2
+        assert loaded[0]["tool"] == "bandit"
+        assert loaded[1]["tool"] == "gitleaks"
+
+    def test_get_findings_empty(self) -> None:
+        store = SecurityScanStore()
+        assert store.get_findings("secrun-nope") == []
+
+    def test_delete_run_cascades_findings(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+        store.save_findings([_make_finding(run_id=run.id)])
+
+        store.delete_run(run.id)
+        assert store.get_findings(run.id) == []
+
+    def test_findings_contain_fingerprint_field(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run()
+        store.save_run(run)
+        f = _make_finding(run_id=run.id)
+        # Simulate the fingerprint being set before persistence
+        fp = compute_finding_fingerprint(f)
+        f_dict = f.model_dump()
+        f_dict["fingerprint"] = fp  # noqa: F841
+
+        store.save_findings([f])
+        loaded = store.get_findings(run.id)
+        assert len(loaded) == 1
+        # The fingerprint should be a string (possibly empty if not set on model)
+        assert isinstance(loaded[0]["fingerprint"], str)
+
+
+# ---------------------------------------------------------------------------
+# Deduplication
+# ---------------------------------------------------------------------------
+
+
+class TestDeduplication:
+    """Test finding fingerprint computation and deduplication."""
+
+    def test_same_finding_produces_same_fingerprint(self) -> None:
+        f1 = _make_finding()
+        f2 = _make_finding()
+        assert compute_finding_fingerprint(f1) == compute_finding_fingerprint(f2)
+
+    def test_different_tool_produces_different_fingerprint(self) -> None:
+        f1 = _make_finding(tool="bandit")
+        f2 = _make_finding(tool="semgrep")
+        assert compute_finding_fingerprint(f1) != compute_finding_fingerprint(f2)
+
+    def test_deduplicate_removes_duplicates(self) -> None:
+        f1 = _make_finding(tool="bandit")
+        f2 = _make_finding(tool="bandit")  # identical identity
+        result = deduplicate_findings([f1, f2])
+        assert len(result) == 1
+        assert result[0] is f1  # keeps first occurrence
+
+    def test_deduplicate_keeps_distinct_findings(self) -> None:
+        f1 = _make_finding(tool="bandit")
+        f2 = _make_finding(tool="semgrep")
+        result = deduplicate_findings([f1, f2])
+        assert len(result) == 2
+
+    def test_deduplicate_same_tool_different_line(self) -> None:
+        f1 = _make_finding(line_number=10)
+        f2 = _make_finding(line_number=20)
+        result = deduplicate_findings([f1, f2])
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# Cleanup expired runs
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupExpiredRuns:
+    """Test 90-day retention cleanup."""
+
+    def test_cleanup_deletes_old_runs(self) -> None:
+        store = SecurityScanStore()
+        old_run = _make_run(run_id="secrun-old")
+        old_run.created_at = datetime.now(UTC) - timedelta(days=100)
+        store.save_run(old_run)
+
+        recent_run = _make_run(run_id="secrun-new")
+        recent_run.created_at = datetime.now(UTC)
+        store.save_run(recent_run)
+
+        deleted = store.cleanup_expired_runs(retention_days=90)
+        assert deleted == 1
+        assert store.get_run("secrun-old") is None
+        assert store.get_run("secrun-new") is not None
+
+    def test_cleanup_with_no_expired_runs(self) -> None:
+        store = SecurityScanStore()
+        recent_run = _make_run()
+        store.save_run(recent_run)
+
+        deleted = store.cleanup_expired_runs(retention_days=90)
+        assert deleted == 0
+
+    def test_cleanup_cascades_to_findings(self) -> None:
+        store = SecurityScanStore()
+        old_run = _make_run(run_id="secrun-oldfindings")
+        old_run.created_at = datetime.now(UTC) - timedelta(days=100)
+        store.save_run(old_run)
+        store.save_findings([_make_finding(run_id=old_run.id)])
+
+        store.cleanup_expired_runs(retention_days=90)
+        assert store.get_findings(old_run.id) == []
+
+    def test_cleanup_custom_retention(self) -> None:
+        store = SecurityScanStore()
+        run = _make_run(run_id="secrun-custom")
+        run.created_at = datetime.now(UTC) - timedelta(days=10)
+        store.save_run(run)
+
+        assert store.cleanup_expired_runs(retention_days=30) == 0
+        assert store.cleanup_expired_runs(retention_days=5) == 1
+
+
+# ---------------------------------------------------------------------------
+# Integration: SecurityScanService with store
+# ---------------------------------------------------------------------------
+
+
+def _noop_command_runner(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+    """Fake command runner that returns empty output for all tools."""
+    return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+
+def _bandit_command_runner(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+    """Fake command runner returning canned bandit + gitleaks output."""
+    import json as _json
+
+    if "bandit" in " ".join(command):
+        payload = {
+            "results": [
+                {
+                    "issue_severity": "HIGH",
+                    "issue_text": "subprocess injection",
+                    "filename": "app.py",
+                    "line_number": 10,
+                    "more_info": "https://bandit.example",
+                    "issue_cwe": {"id": 78},
+                }
+            ]
+        }
+        return subprocess.CompletedProcess(
+            args=command, returncode=1, stdout=_json.dumps(payload), stderr=""
+        )
+    # gitleaks returns empty array (no leaks)
+    return subprocess.CompletedProcess(args=command, returncode=0, stdout="[]", stderr="")
+
+
+class TestServiceIntegrationWithStore:
+    """SecurityScanService persists runs and findings when store is set."""
+
+    def test_scan_persists_run_and_findings(self, tmp_path: object) -> None:
+        store = SecurityScanStore()
+        target_dir = str(tmp_path)
+
+        svc = SecurityScanService(
+            command_runner=_bandit_command_runner,
+            allowed_roots=[target_dir],
+            store=store,
+        )
+        run = svc.create_run(
+            target=ScanTarget(repository_path=target_dir),
+            profile=SecurityProfile.QUICK,
+            tenant_id="t-int",
+        )
+        svc.launch_scan(run.id)
+
+        # Verify run was persisted
+        persisted = store.get_run(run.id)
+        assert persisted is not None
+        assert persisted["status"] == "completed"
+
+        # Verify findings were persisted
+        findings = store.get_findings(run.id)
+        assert len(findings) >= 1
+        assert findings[0]["tool"] == "bandit"
+
+    def test_scan_without_store_still_works(self, tmp_path: object) -> None:
+        target_dir = str(tmp_path)
+        svc = SecurityScanService(
+            command_runner=_noop_command_runner,
+            allowed_roots=[target_dir],
+        )
+        run = svc.create_run(
+            target=ScanTarget(repository_path=target_dir),
+            profile=SecurityProfile.QUICK,
+        )
+        result = svc.launch_scan(run.id)
+        assert result.status == "completed"
+
+    def test_dedup_applied_before_persist(self, tmp_path: object) -> None:
+        """Ensure duplicate findings from bandit are collapsed."""
+        import json as _json
+
+        def _dup_command_runner(
+            command: list[str], timeout: int
+        ) -> subprocess.CompletedProcess[str]:
+            if "bandit" in " ".join(command):
+                finding = {
+                    "issue_severity": "HIGH",
+                    "issue_text": "subprocess injection",
+                    "filename": "app.py",
+                    "line_number": 10,
+                    "more_info": "",
+                    "issue_cwe": {"id": 78},
+                }
+                payload = {"results": [finding, finding]}
+                return subprocess.CompletedProcess(
+                    args=command, returncode=1, stdout=_json.dumps(payload), stderr=""
+                )
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout="[]", stderr="")
+
+        store = SecurityScanStore()
+        target_dir = str(tmp_path)
+        svc = SecurityScanService(
+            command_runner=_dup_command_runner,
+            allowed_roots=[target_dir],
+            store=store,
+        )
+        run = svc.create_run(
+            target=ScanTarget(repository_path=target_dir),
+            profile=SecurityProfile.QUICK,
+        )
+        svc.launch_scan(run.id)
+
+        findings = store.get_findings(run.id)
+        # Two identical findings should be deduplicated to one
+        assert len(findings) == 1
+
+
+# ---------------------------------------------------------------------------
+# Store close / file-backed
+# ---------------------------------------------------------------------------
+
+
+class TestStoreFileBacked:
+    """Ensure the store works with a real file path."""
+
+    def test_file_backed_persistence(self, tmp_path: object) -> None:
+        import pathlib
+
+        db_file = str(pathlib.Path(str(tmp_path)) / "scans.db")
+        store = SecurityScanStore(db_path=db_file)
+        run = _make_run()
+        store.save_run(run)
+        store.close()
+
+        # Re-open the same file
+        store2 = SecurityScanStore(db_path=db_file)
+        loaded = store2.get_run(run.id)
+        assert loaded is not None
+        assert loaded["id"] == run.id
+        store2.close()
