@@ -19,7 +19,7 @@ except ImportError:
     AirLLMAutoModel = None
 
 try:
-    from transformers import AutoTokenizer as _AutoTokenizer  # type: ignore[import-not-found]
+    from transformers import AutoTokenizer as _AutoTokenizer
 
     AutoTokenizer: Any = _AutoTokenizer
 except ImportError:

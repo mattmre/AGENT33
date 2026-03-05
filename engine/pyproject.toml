@@ -170,5 +170,11 @@ module = [
     "yaml.*",
     "jsonschema",
     "jsonschema.*",
+    "playwright",
+    "playwright.*",
+    "transformers",
+    "transformers.*",
+    "PIL",
+    "PIL.*",
 ]
 ignore_missing_imports = true
