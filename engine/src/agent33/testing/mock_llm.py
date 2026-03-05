@@ -45,7 +45,7 @@ class MockLLMProvider:
         user_content = ""
         for msg in reversed(messages):
             if msg.role == "user":
-                user_content = msg.content
+                user_content = msg.text_content
                 break
 
         response_text = self._response_map.get(user_content, user_content)

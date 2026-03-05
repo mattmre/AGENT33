@@ -43,15 +43,58 @@ class LLMResponse:
         return self.tool_calls is not None and len(self.tool_calls) > 0
 
 
+# ---------------------------------------------------------------------------
+# Multimodal content blocks
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class TextBlock:
+    """Text content block."""
+
+    text: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ImageBlock:
+    """Image content block."""
+
+    url: str | None = None
+    base64_data: str | None = None
+    media_type: str = "image/png"
+    detail: str = "auto"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AudioBlock:
+    """Audio content block."""
+
+    url: str | None = None
+    base64_data: str | None = None
+    media_type: str = "audio/wav"
+
+
+ContentPart = TextBlock | ImageBlock | AudioBlock
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class ChatMessage:
     """A single message in a conversation."""
 
     role: str
-    content: str
+    content: str | list[ContentPart]
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str = ""
     name: str = ""
+
+    @property
+    def text_content(self) -> str:
+        """Extract text content, regardless of whether content is str or list."""
+        if isinstance(self.content, str):
+            return self.content
+        return " ".join(
+            block.text for block in self.content if isinstance(block, TextBlock)
+        )
 
 
 @runtime_checkable

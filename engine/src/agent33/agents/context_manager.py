@@ -58,7 +58,7 @@ def estimate_message_tokens(
     """
     total = 0
     for msg in messages:
-        total += estimate_tokens(msg.content, chars_per_token) + 4
+        total += estimate_tokens(msg.text_content, chars_per_token) + 4
     return total
 
 
@@ -178,7 +178,7 @@ class ContextManager:
 
     def _estimate_messages(self, messages: list[ChatMessage]) -> int:
         """Estimate total tokens for *messages* using the configured counter."""
-        msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        msg_dicts = [{"role": m.role, "content": m.text_content} for m in messages]
         return self._token_counter.count_messages(msg_dicts)
 
     # ------------------------------------------------------------------
@@ -252,7 +252,7 @@ class ContextManager:
             logger.debug(
                 "Unwinding message: role=%s, tokens~%d",
                 removed.role,
-                self._token_counter.count(removed.content),
+                self._token_counter.count(removed.text_content),
             )
 
         final_messages = system_msgs + non_system
@@ -338,7 +338,7 @@ class ContextManager:
             return self._fallback_summary(messages)
 
         conversation_text = "\n".join(
-            f"[{msg.role}]: {msg.content[:_MAX_MESSAGE_PREVIEW_CHARS]}" for msg in messages
+            f"[{msg.role}]: {msg.text_content[:_MAX_MESSAGE_PREVIEW_CHARS]}" for msg in messages
         )
 
         try:
@@ -364,7 +364,7 @@ class ContextManager:
         """Create a basic summary without LLM when router is unavailable."""
         lines = [f"Prior conversation ({len(messages)} messages):"]
         for msg in messages[:_MAX_FALLBACK_PREVIEW_MESSAGES]:
-            preview = msg.content[:_MAX_FALLBACK_PREVIEW_CHARS].replace("\n", " ")
+            preview = msg.text_content[:_MAX_FALLBACK_PREVIEW_CHARS].replace("\n", " ")
             lines.append(f"- [{msg.role}] {preview}...")
         if len(messages) > _MAX_FALLBACK_PREVIEW_MESSAGES:
             lines.append(

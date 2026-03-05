@@ -44,7 +44,7 @@ class _CannedProvider:
         user_content = ""
         for msg in reversed(messages):
             if msg.role == "user":
-                user_content = msg.content
+                user_content = msg.text_content
                 break
 
         response_text = self._responses.get(user_content, json.dumps({"result": user_content}))
