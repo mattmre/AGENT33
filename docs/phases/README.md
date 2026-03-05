@@ -38,11 +38,21 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 33 | Skill Packs & Distribution | Ecosystem/Distribution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core implementation merged via PR `#103`; ecosystem hardening follow-ups remain) |
 | 35 | Multimodal Async-Governance Convergence | Runtime/Governance | No plan file (core merged in PR `#85`; regression convergence merged in PR `#99`) |
 
+| 36 | Text-Based Tool Call Parsing | Runtime/LLM | `qwen-adoption-phases.md` (merged: PR #133) |
+| 37 | Multimodal Content Blocks | Runtime/LLM | `qwen-adoption-phases.md` (merged: PR #135) |
+| 38 | Streaming Agent Loop | Runtime/UX | `qwen-adoption-phases.md` (merged: PR #137) |
+| 39 | LLM Query Expansion for RAG | Memory/RAG | `qwen-adoption-phases.md` (merged: PR #134) |
+| 40 | Agent Archetypes | Runtime/DX | `qwen-adoption-phases.md` (merged: PR #136) |
+| 41 | GroupChat Workflow Action | Orchestration | `qwen-adoption-phases.md` (merged: PR #138) |
+| 42 | Stateful Code Execution (Jupyter) | Runtime/Execution | `qwen-adoption-phases.md` (merged: PR #139) |
+| 43 | Complete MCP Server | Interoperability | `qwen-adoption-phases.md` (merged: PR #140) |
+
 ## Workflow Plans
 - `PHASE-03-08-WORKFLOW-PLAN.md` (phase sequencing, task mapping, review gates)
 - `PHASE-11-20-WORKFLOW-PLAN.md` (extended sequencing and task mapping)
 - `PHASE-21-24-WORKFLOW-PLAN.md` (post-core product/access sequencing)
 - `PHASE-29-33-WORKFLOW-PLAN.md` (agent intelligence + extensibility sequencing)
+- `qwen-adoption-phases.md` (Qwen-Agent competitive adaptation — Phases 36-43)
 
 ## Notes
 - Generic templates live in `core/phases/` and serve as structural examples.
