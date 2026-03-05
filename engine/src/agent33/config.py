@@ -133,6 +133,12 @@ class Settings(BaseSettings):
         ""  # JSON object: {"tenant-id|domain": "low|medium|high"}
     )
     agent_effort_cost_per_1k_tokens: float = 0.0
+    agent_effort_heuristic_low_score_threshold: int = 1
+    agent_effort_heuristic_high_score_threshold: int = 4
+    agent_effort_heuristic_medium_payload_chars: int = 800
+    agent_effort_heuristic_large_payload_chars: int = 2000
+    agent_effort_heuristic_many_input_fields_threshold: int = 10
+    agent_effort_heuristic_high_iteration_threshold: int = 15
     observability_effort_alerts_enabled: bool = True
     observability_effort_alert_high_effort_count_threshold: int = 25
     observability_effort_alert_high_cost_usd_threshold: float = 5.0
@@ -255,6 +261,38 @@ class Settings(BaseSettings):
         if value < 0:
             raise ValueError("learning persistence settings must be non-negative")
         return value
+
+    @field_validator(
+        "agent_effort_heuristic_low_score_threshold",
+        "agent_effort_heuristic_high_score_threshold",
+        "agent_effort_heuristic_medium_payload_chars",
+        "agent_effort_heuristic_large_payload_chars",
+        "agent_effort_heuristic_many_input_fields_threshold",
+        "agent_effort_heuristic_high_iteration_threshold",
+    )
+    @classmethod
+    def _validate_phase30_heuristic_thresholds(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("agent effort heuristic settings must be non-negative")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_phase30_heuristic_threshold_order(self) -> Settings:
+        if self.agent_effort_heuristic_high_score_threshold <= (
+            self.agent_effort_heuristic_low_score_threshold
+        ):
+            raise ValueError(
+                "agent_effort_heuristic_high_score_threshold must be greater than "
+                "agent_effort_heuristic_low_score_threshold"
+            )
+        if self.agent_effort_heuristic_large_payload_chars <= (
+            self.agent_effort_heuristic_medium_payload_chars
+        ):
+            raise ValueError(
+                "agent_effort_heuristic_large_payload_chars must be greater than "
+                "agent_effort_heuristic_medium_payload_chars"
+            )
+        return self
 
     @field_validator("improvement_learning_auto_intake_min_quality")
     @classmethod

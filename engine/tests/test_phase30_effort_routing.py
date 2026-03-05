@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from pydantic import ValidationError
+
 from agent33.agents.definition import (
     AgentConstraints,
     AgentDefinition,
@@ -13,6 +16,7 @@ from agent33.agents.definition import (
 from agent33.agents.effort import AgentEffort, AgentEffortRouter, EffortSelectionSource
 from agent33.agents.runtime import AgentRuntime
 from agent33.agents.tool_loop import ToolLoopConfig
+from agent33.config import Settings
 from agent33.llm.base import LLMResponse
 from agent33.observability.alerts import AlertManager
 from agent33.observability.metrics import MetricsCollector
@@ -207,6 +211,56 @@ class TestAgentEffortRouter:
         assert decision.estimated_cost is not None
         assert decision.estimated_cost > 0.0
 
+    def test_heuristic_score_thresholds_are_configurable(self) -> None:
+        payload = {"task": "analyze architecture tradeoffs"}
+        baseline = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+        ).resolve(
+            requested_model=None,
+            default_model="fallback-model",
+            max_tokens=100,
+            inputs=payload,
+        )
+        assert baseline.effort == AgentEffort.LOW
+        assert baseline.heuristic_score == 1
+        assert baseline.heuristic_low_threshold == 1
+        assert baseline.heuristic_high_threshold == 4
+
+        tuned = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_low_score_threshold=0,
+            heuristic_high_score_threshold=1,
+        ).resolve(
+            requested_model=None,
+            default_model="fallback-model",
+            max_tokens=100,
+            inputs=payload,
+        )
+        assert tuned.effort == AgentEffort.HIGH
+        assert tuned.heuristic_score == 1
+        assert tuned.heuristic_low_threshold == 0
+        assert tuned.heuristic_high_threshold == 1
+
+    def test_payload_thresholds_are_configurable(self) -> None:
+        decision = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_low_score_threshold=0,
+            heuristic_high_score_threshold=2,
+            heuristic_medium_payload_chars=20,
+            heuristic_large_payload_chars=30,
+        ).resolve(
+            requested_model=None,
+            default_model="fallback-model",
+            max_tokens=100,
+            inputs={"task": "x" * 40},
+        )
+        assert decision.effort == AgentEffort.HIGH
+        assert decision.heuristic_score == 2
+        assert "large_payload" in decision.heuristic_reasons
+
 
 class TestAgentRuntimeEffortRouting:
     async def test_invoke_uses_routed_model_and_max_tokens(self) -> None:
@@ -289,6 +343,30 @@ class TestAgentRuntimeEffortRouting:
         assert call_kwargs["max_tokens"] == 180
         assert result.routing_decision is not None
         assert result.routing_decision["estimated_token_budget"] == 180
+
+    async def test_invoke_includes_heuristic_calibration_metadata(self) -> None:
+        definition = _make_definition(max_tokens=100)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="heuristic-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_low_score_threshold=0,
+            heuristic_high_score_threshold=1,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=None,
+            effort_router=effort_router,
+        )
+        result = await runtime.invoke({"task": "analyze architecture tradeoffs"})
+
+        assert result.routing_decision is not None
+        assert result.routing_decision["heuristic_score"] == 1
+        assert result.routing_decision["heuristic_low_threshold"] == 0
+        assert result.routing_decision["heuristic_high_threshold"] == 1
 
 
 class TestEffortRoutingObservabilityAPI:
@@ -428,3 +506,25 @@ class TestEffortAlertManager:
         triggered = alerts.check_all()
         assert len(triggered) == 1
         assert triggered[0].rule_name == "max_cost"
+
+
+class TestEffortConfigValidation:
+    def test_score_threshold_order_is_validated(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="agent_effort_heuristic_high_score_threshold must be greater than",
+        ):
+            Settings(
+                agent_effort_heuristic_low_score_threshold=2,
+                agent_effort_heuristic_high_score_threshold=2,
+            )
+
+    def test_payload_threshold_order_is_validated(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="agent_effort_heuristic_large_payload_chars must be greater than",
+        ):
+            Settings(
+                agent_effort_heuristic_medium_payload_chars=1000,
+                agent_effort_heuristic_large_payload_chars=1000,
+            )

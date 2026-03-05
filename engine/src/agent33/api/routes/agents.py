@@ -145,6 +145,14 @@ _effort_router = AgentEffortRouter(
     domain_policies=_parse_effort_policy(settings.agent_effort_policy_domain),
     tenant_domain_policies=_parse_effort_policy(settings.agent_effort_policy_tenant_domain),
     cost_per_1k_tokens=settings.agent_effort_cost_per_1k_tokens,
+    heuristic_low_score_threshold=settings.agent_effort_heuristic_low_score_threshold,
+    heuristic_high_score_threshold=settings.agent_effort_heuristic_high_score_threshold,
+    heuristic_medium_payload_chars=settings.agent_effort_heuristic_medium_payload_chars,
+    heuristic_large_payload_chars=settings.agent_effort_heuristic_large_payload_chars,
+    heuristic_many_input_fields_threshold=(
+        settings.agent_effort_heuristic_many_input_fields_threshold
+    ),
+    heuristic_high_iteration_threshold=settings.agent_effort_heuristic_high_iteration_threshold,
 )
 _metrics = MetricsCollector()
 _effort_exporter: EffortTelemetryExporter = NoopEffortTelemetryExporter()
