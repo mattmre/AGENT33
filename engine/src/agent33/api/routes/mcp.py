@@ -1,106 +1,114 @@
-"""Model Context Protocol (MCP) external server exposure.
-
-This router allows external agents (like OpenClaw or an official Claude desktop app)
-to connect to AGENT-33 and utilize its operations hub, ledger state, or skill tools natively
-over SSE (Server-Sent Events) via the standard MCP server protocol.
-"""
+"""MCP (Model Context Protocol) server endpoints."""
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
 
+from fastapi import APIRouter, HTTPException, Request
+from starlette.responses import StreamingResponse
+
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/mcp", tags=["mcp-server"])
 
-# Initialize the MCP Server abstraction
-# using the standard `mcp` python SDK
+# Module-level service references, wired during lifespan.
+_bridge: Any = None
+_mcp_server: Any = None
 
-try:
-    import mcp.types as types
-    from mcp.server import Server
 
-    # Keep the optional MCP SDK behind an Any-typed boundary so strict mode
-    # only enforces our route surface, not the SDK's untyped decorators.
-    mcp_server: Any = Server("agent33-core")
-
-    @mcp_server.list_tools()  # type: ignore[untyped-decorator]
-    async def list_tools() -> list[types.Tool]:
-        return [
-            types.Tool(
-                name="get_agent33_status",
-                description="Get the operational status of AGENT-33.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
-            ),
-            types.Tool(
-                name="retrieve_context_ledger",
-                description="Fetch the active Context Ledger from executing sub-agents.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {"session_id": {"type": "string"}},
-                    "required": ["session_id"],
-                },
-            ),
-        ]
-
-    @mcp_server.call_tool()  # type: ignore[untyped-decorator]
-    async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
-        if name == "get_agent33_status":
-            return [
-                types.TextContent(
-                    type="text", text="AGENT-33 is operational and awaiting handoff."
-                )
-            ]
-        elif name == "retrieve_context_ledger":
-            session = arguments.get("session_id", "unknown")
-            return [
-                types.TextContent(
-                    type="text", text=f"Ledger for {session} not found (Prototype boundary)."
-                )
-            ]
-        raise ValueError(f"Unknown tool: {name}")
-
-except ImportError:
-    mcp_server = None
-    logger.warning("mcp SDK not found. MCP Server will not be operational.")
-
-# Note: In a complete implementation, we would map SseServerTransport to these endpoints
-# using the starlette/fastapi adaptors provided by the MCP sdk.
+def set_mcp_services(bridge: Any, server: Any) -> None:
+    """Wire MCP services from lifespan."""
+    global _bridge, _mcp_server  # noqa: PLW0603
+    _bridge = bridge
+    _mcp_server = server
 
 
 @router.get("/sse")
 async def mcp_sse(request: Request) -> StreamingResponse:
-    """Establish an MCP connection over Server-Sent Events."""
-    if not mcp_server:
-        raise HTTPException(status_code=501, detail="MCP SDK not installed")
+    """SSE endpoint for MCP protocol.
 
-    # Example placeholder: SseServerTransport mapping goes here
-    # transport = SseServerTransport("/v1/mcp/messages")
-    # request.app.state.mcp_transport = transport
-    # return StreamingResponse(transport.handle_sse(), media_type="text/event-stream")
+    When the MCP SDK is available and configured, this provides
+    the SSE transport. Otherwise returns a stub stream.
+    """
+    if _mcp_server is None:
+        # Stub: emit endpoint info and close
+        async def stub_stream() -> AsyncGenerator[str, None]:
+            yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
+            yield "event: status\ndata: MCP SDK not installed\n\n"
 
-    async def mock_stream() -> AsyncGenerator[str, None]:
-        yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
+        return StreamingResponse(
+            stub_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
 
-    return StreamingResponse(mock_stream(), media_type="text/event-stream")
+    # Real SSE transport (when MCP SDK is available)
+    try:
+        from mcp.server.sse import SseServerTransport
+
+        transport = SseServerTransport("/v1/mcp/messages")
+        # Store transport for message endpoint
+        request.app.state.mcp_transport = transport
+
+        async def sse_stream() -> AsyncGenerator[str, None]:
+            async with transport.connect_sse(
+                request.scope,
+                request.receive,
+                request._send,  # type: ignore[attr-defined]
+            ) as (read_stream, write_stream):
+                await _mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    _mcp_server.create_initialization_options(),
+                )
+
+        return StreamingResponse(
+            sse_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+    except ImportError:
+        raise HTTPException(501, "MCP SDK not installed") from None
+    except Exception as exc:
+        logger.error("MCP SSE error: %s", exc)
+        raise HTTPException(500, f"MCP SSE error: {exc}") from exc
 
 
 @router.post("/messages")
-async def mcp_messages(request: Request) -> dict[str, str]:
-    """Receive JSON-RPC messages from connected MCP clients."""
-    if not mcp_server:
-        raise HTTPException(status_code=501, detail="MCP SDK not installed")
+async def mcp_messages(request: Request) -> dict[str, Any]:
+    """Handle MCP protocol messages."""
+    transport = getattr(request.app.state, "mcp_transport", None)
+    if transport is None:
+        return {"status": "accepted", "note": "MCP transport not initialized"}
 
-    # Example placeholder: Route body to SseServerTransport
-    # await request.app.state.mcp_transport.handle_post_message(...)
-    return {"status": "accepted"}
+    try:
+        body = await request.body()
+        await transport.handle_post_message(
+            request.scope,
+            request.receive,
+            request._send,  # type: ignore[attr-defined]
+            body,
+        )
+        return {"status": "processed"}
+    except Exception as exc:
+        logger.error("MCP message error: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@router.get("/status")
+async def mcp_status() -> dict[str, Any]:
+    """MCP server status."""
+    if _bridge is None:
+        return {
+            "available": False,
+            "mcp_sdk_installed": _mcp_server is not None,
+        }
+    return {
+        "available": True,
+        "mcp_sdk_installed": _mcp_server is not None,
+        **_bridge.get_system_status(),
+    }
