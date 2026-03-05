@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from agent33.agents.capabilities import get_catalog_by_category
 from agent33.agents.definition import (
@@ -572,6 +576,95 @@ async def invoke_agent_iterative(
         tools_used=result.tools_used,
         termination_reason=result.termination_reason,
         routing=result.routing_decision,
+    )
+
+
+@router.post(
+    "/{name}/invoke-iterative/stream",
+    dependencies=[require_scope("agents:invoke")],
+)
+async def invoke_agent_iterative_stream(
+    name: str,
+    body: InvokeIterativeRequest,
+    request: Request,
+    registry: AgentRegistry = Depends(get_registry),  # noqa: B008
+) -> StreamingResponse:
+    """Stream agent iterative execution via SSE."""
+    import asyncio
+    import time
+
+    definition = registry.get(name)
+    if definition is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    scan = scan_inputs_recursive(body.inputs)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input rejected: {', '.join(scan.threats)}",
+        )
+
+    # Pull subsystems from app state
+    model_router = getattr(request.app.state, "model_router", None)
+    if model_router is None:
+        raise HTTPException(status_code=503, detail="Model router not initialized")
+
+    tool_registry = getattr(request.app.state, "tool_registry", None)
+    if tool_registry is None:
+        raise HTTPException(status_code=503, detail="Tool registry not initialized")
+
+    tool_governance = getattr(request.app.state, "tool_governance", None)
+    effort_router = getattr(request.app.state, "effort_router", _effort_router)
+    skill_injector = getattr(request.app.state, "skill_injector", None)
+    progressive_recall = getattr(request.app.state, "progressive_recall", None)
+    observation_capture = getattr(request.app.state, "observation_capture", None)
+    context_manager = getattr(request.app.state, "context_manager", None)
+
+    from agent33.agents.tool_loop import ToolLoopConfig
+
+    loop_config = ToolLoopConfig(
+        max_iterations=body.max_iterations,
+        max_tool_calls_per_iteration=body.max_tool_calls_per_iteration,
+        enable_double_confirmation=body.enable_double_confirmation,
+        loop_detection_threshold=body.loop_detection_threshold,
+    )
+
+    runtime = AgentRuntime(
+        definition=definition,
+        router=model_router,
+        model=body.model,
+        temperature=body.temperature,
+        effort=body.effort,
+        effort_router=effort_router,
+        skill_injector=skill_injector,
+        progressive_recall=progressive_recall,
+        tool_registry=tool_registry,
+        tool_governance=tool_governance,
+        observation_capture=observation_capture,
+        context_manager=context_manager,
+    )
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            async for event in runtime.invoke_iterative_stream(body.inputs, config=loop_config):
+                if await request.is_disconnected():
+                    break
+                yield event.to_sse()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            error_payload = {
+                "event_type": "error",
+                "iteration": 0,
+                "timestamp": time.time(),
+                "data": {"error": str(exc), "phase": "endpoint"},
+            }
+            yield f"data: {json.dumps(error_payload)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
 

@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from agent33.llm.base import LLMStreamChunk
 
 import httpx
 
@@ -269,3 +275,49 @@ class OllamaProvider:
         data = await self._get("/api/tags")
         models: list[dict[str, Any]] = data.get("models", [])
         return [m["name"] for m in models if "name" in m]
+
+    async def stream_complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        """Stream completion chunks via NDJSON."""
+        from agent33.llm.base import LLMStreamChunk
+
+        resolved_model = model or self._default_model
+        body: dict[str, Any] = {
+            "model": resolved_model,
+            "messages": [self._serialize_message(m) for m in messages],
+            "stream": True,
+            "options": {"temperature": temperature},
+        }
+        if max_tokens is not None:
+            body["options"]["num_predict"] = max_tokens
+
+        async with self._client.stream(
+            "POST",
+            f"{self._base_url}/api/chat",
+            json=body,
+            timeout=self._timeout,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                msg = data.get("message", {})
+                yield LLMStreamChunk(
+                    delta_content=msg.get("content", "") or "",
+                    finish_reason="stop" if data.get("done") else None,
+                    model=data.get("model", resolved_model),
+                    prompt_tokens=data.get("prompt_eval_count", 0),
+                    completion_tokens=data.get("eval_count", 0),
+                )
