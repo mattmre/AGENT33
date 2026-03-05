@@ -1,59 +1,44 @@
 # Next Session Briefing
 
-Last updated: 2026-03-05T14:45:00Z
+Last updated: 2026-03-05T18:00:00Z
 
 ## Current State
 
-- **Merge status**: `main` remains aligned with Session 52 closure and docs refresh (`#110` merged).
-- **Open PRs**: `#111`, `#112`, `#113`, `#114`, `#115`, `#116` (plus Session 54 ingestion slices to open).
-- **Latest session**: Session 54 (`docs/sessions/session-54-2026-03-05.md`).
-- **Prior session**: Session 53 (`docs/sessions/session-53-2026-03-05.md`).
+- **Merge status**: All Session 53/54 PRs (`#111`–`#121`) merged to `main` as of Session 55.
+- **Open PRs**: None.
+- **Latest session**: Session 55 (`docs/sessions/session-55-2026-03-05.md`).
 - **Validation posture**:
-  - `#111` and `#112` have completed green checks.
-  - `#113` to `#116` were updated for `ruff format` parity; CI reruns are in progress.
+  - Ruff check: clean (0 errors)
+  - Ruff format: clean (414 files)
+  - Pytest: 2628 passed, 2 pre-existing failures (`TestProductionSecrets`)
 - **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open.
+- **Pre-existing issue**: `test_production_mode_rejects_default_secrets` and `test_production_mode_rejects_other_default_secrets` fail — `Settings.validate_production_secrets` needs fix.
 
-## Session 54 Highlights
+## Session 55 Highlights
 
-- Executed five-phase ingestion plan bootstrap for agent-orchestration repo intake.
-- Added implementation primitives:
-  - `POST /v1/improvements/intakes/competitive/repos`
-  - `POST /v1/improvements/feature-candidates/score`
-  - `engine/src/agent33/improvement/repo_ingestion.py`
-- Added research and architecture artifacts:
-  - `docs/research/session54-agent-orchestration-top30-landscape-2026-03-05.md`
-  - `docs/research/session54-agent-orchestration-capability-gap-matrix-2026-03-05.md`
-  - `docs/research/session54-agent-orchestration-priority-deltas-architecture-2026-03-05.md`
-
-## Session 53 Highlights
-
-- Implemented and opened Phase 30/31/A5 priority slices as separate PRs:
-  - `#113` Phase 30 outcome-focused acceptance matrix
-  - `#114` Phase 31 dedupe-aware trend analytics/reporting
-  - `#115` Phase 31 threshold calibration report
-  - `#116` A5 synthetic bundle durable persistence
-- Preserved previous Session 53 PRs:
-  - `#111` confidence-gate typing stabilization
-  - `#112` Phase 30 threshold calibration
-- Added dedicated research notes in `docs/research/` for each implemented slice.
+- Reviewed all 11 open PRs, addressed 27 review comments (including 5 security-critical fixes).
+- Applied security fixes: multi-tenant IDOR on tool approvals (#120), reviewed_by spoof prevention (#120), RAG prompt injection sanitization (#121), broad exception narrowing (#118).
+- Resolved 8 merge conflicts across wave-based rebasing.
+- Merged all PRs in 4 dependency-safe waves with interim test runs.
+- Final confidence gate: 2628 tests passed, 0 regressions.
 
 ## Top 15 Priority Items / Phases
 
-1. Complete CI/review and merge Session 53 PR stack in safe order: `#111` -> `#112` -> `#113` -> `#114` -> `#115` -> `#116`.
-2. Run full `main` confidence gate (`ruff check`, `ruff format --check`, `mypy`, full `pytest`) after PR stack lands.
-3. A5/A6 integration: execute comparative scoring against persisted synthetic bundles.
-4. SkillsBench expansion: promote richer benchmark reporting and result artifacts beyond smoke runs.
-5. Phase 32 hardening: enforce tenant/permission boundaries for hook/plugin registration and execution.
-6. Phase 33 hardening: add pack trust/provenance, signing, and stricter distribution controls.
-7. Phase 22 continuation: unify frontend access paths for newly merged backend feature surfaces.
-8. Phase 25 continuation: wire visual explainer coverage into comparative + synthetic environment flows.
-9. Phase 26 continuation: complete decision/review pages for new evaluation artifacts.
-10. Phase 27 continuation: expand operations-cycle UX and multi-user agent workflows.
-11. Phase 28 continuation: broaden enterprise security scanning coverage for new surfaces.
-12. Phase 31 follow-up: validate trend and calibration defaults against production-like traces and tune env settings.
-13. Phase 30 follow-up: extend acceptance matrix with additional API-level policy fixtures.
-14. A5 follow-up: add corruption handling / backup strategy for bundle persistence file.
-15. Update API/docs references for new `/v1/improvements/learning/trends` and `/learning/calibration` surfaces once merged.
+1. **Fix `TestProductionSecrets`**: `Settings.validate_production_secrets` validator doesn't raise on default jwt_secret in production mode.
+2. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
+3. **SkillsBench expansion**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
+4. **Phase 32 hardening**: Enforce tenant/permission boundaries for hook/plugin registration and execution.
+5. **Phase 33 hardening**: Add pack trust/provenance, signing, and stricter distribution controls.
+6. **Phase 22 continuation**: Unify frontend access paths for newly merged backend feature surfaces.
+7. **Phase 25 continuation**: Wire visual explainer coverage into comparative + synthetic environment flows.
+8. **Phase 26 continuation**: Complete decision/review pages for new evaluation artifacts.
+9. **Phase 27 continuation**: Expand operations-cycle UX and multi-user agent workflows.
+10. **Phase 28 continuation**: Broaden enterprise security scanning coverage for new surfaces.
+11. **Phase 31 follow-up**: Validate trend and calibration defaults against production-like traces.
+12. **Phase 30 follow-up**: Extend acceptance matrix with additional API-level policy fixtures.
+13. **A5 follow-up**: Add corruption handling / backup strategy for bundle persistence file.
+14. **Orchestration state follow-up**: Add state-store rotation/compaction and cross-service restore integration tests.
+15. **HITL follow-up**: Add approval expiry, escalation timeouts, and audit trail for governed tool decisions.
 
 ## Remaining Phases of Development
 
@@ -64,8 +49,8 @@ Last updated: 2026-03-05T14:45:00Z
 | 26 | Partially implemented | Decision/review page completion and wiring |
 | 27 | Partially implemented | Website operations and improvement cycle expansion |
 | 28 | Partially implemented | Security scanning integration breadth and enforcement |
-| 30 | Core merged | Refinement/verification PRs open (`#112`, `#113`) |
-| 31 | Core + persistence/quality hardening merged | Analytics/calibration PRs open (`#114`, `#115`) |
+| 30 | Fully merged (calibration + acceptance matrix) | API-level policy fixture expansion |
+| 31 | Fully merged (trends + calibration + persistence) | Production trace tuning |
 | 32 | H01/H02 merged | Additional hardening and operationalization remain |
 | 33 | Core skill-pack implementation merged | Ecosystem/distribution hardening remains |
 | 35 | Core + regression convergence merged | Ongoing regression protection and follow-on tuning |
@@ -88,11 +73,17 @@ python -m pytest tests/ -q
 
 | Purpose | Path |
 | --- | --- |
+| Session 55 log | `docs/sessions/session-55-2026-03-05.md` |
+| Session 54 log | `docs/sessions/session-54-2026-03-05.md` |
 | Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
-| Session 53 Phase 30 acceptance research | PR `#113` (introduces `docs/research/session53-phase30-outcome-acceptance.md`) |
-| Session 53 Phase 31 trend research | PR `#114` (introduces `docs/research/session53-phase31-trend-analytics.md`) |
-| Session 53 Phase 31 calibration research | PR `#115` (introduces `docs/research/session53-phase31-threshold-tuning.md`) |
-| Session 53 A5 persistence research | PR `#116` (introduces `docs/research/session53-a5-bundle-persistence.md`) |
+| Phase 30 acceptance research | `docs/research/session53-phase30-outcome-acceptance.md` |
+| Phase 31 trend research | `docs/research/session53-phase31-trend-analytics.md` |
+| Phase 31 calibration research | `docs/research/session53-phase31-threshold-tuning.md` |
+| A5 persistence research | `docs/research/session53-a5-bundle-persistence.md` |
+| Durable state research | `docs/research/session54-delta-durable-state-architecture-2026-03-05.md` |
+| HITL approvals research | `docs/research/session54-delta-hitl-approvals-architecture-2026-03-05.md` |
+| RAG diagnostics research | `docs/research/session54-delta-modular-retrieval-architecture-2026-03-05.md` |
+| Orchestration landscape | `docs/research/session54-agent-orchestration-top30-landscape-2026-03-05.md` |
 | Session 52 roadmap research | `docs/research/session52-priority-and-phase-roadmap.md` |
 | ARCH-AEP tracker | `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md` |
 | Phase index | `docs/phases/README.md` |
