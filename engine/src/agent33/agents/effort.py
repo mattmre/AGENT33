@@ -1,4 +1,46 @@
-"""Adaptive effort-based model/token routing for agent execution."""
+"""Adaptive effort-based model/token routing for agent execution.
+
+Operational Tuning Guide – Alert Ownership & Threshold Cadence
+==============================================================
+
+The effort router exposes several configurable heuristic thresholds that
+directly affect routing decisions and cost. Teams operating this system
+should follow this tuning cadence:
+
+**Weekly review (Ops / Platform team)**
+  - Check ``effort_routing_estimated_cost_usd`` dashboards for cost drift.
+  - Review ``effort_routing_high_effort_total`` trends; a sustained spike
+    may indicate the heuristic thresholds need tightening.
+  - Validate that alert rules on ``effort_routing_estimated_cost_usd``
+    fire correctly by inspecting ``/v1/dashboard/alerts``.
+
+**Monthly calibration (ML / Platform team)**
+  - Re-evaluate ``heuristic_low_score_threshold`` and
+    ``heuristic_high_score_threshold`` against production request profiles.
+  - Adjust ``heuristic_medium_payload_chars`` and
+    ``heuristic_large_payload_chars`` if average request sizes shift.
+  - Review tenant and domain policy overrides for stale entries.
+  - Run the acceptance matrix test suite
+    (``tests/test_phase30_effort_routing.py::TestAgentEffortRouter``)
+    after any threshold change to confirm routing outcomes.
+
+**Quarterly review (Engineering leadership)**
+  - Assess per-model ``cost_per_1k_tokens`` against provider pricing.
+  - Evaluate whether new effort tiers or model slots are needed.
+  - Archive unused tenant/domain policies.
+
+**Alert ownership**
+  - ``effort_routing_high_effort_total`` – owned by the Platform team.
+  - ``effort_routing_estimated_cost_usd`` – owned by the Platform team;
+    escalation target: Engineering leadership for budget exceptions.
+  - ``effort_routing_export_failures_total`` – owned by the Observability
+    team; indicates telemetry pipeline issues.
+
+All threshold settings are exposed via ``agent33.config.Settings`` and can
+be changed through environment variables without code changes. See
+``docs/research/session53-phase30-threshold-calibration.md`` for the
+design rationale behind configurable thresholds.
+"""
 
 from __future__ import annotations
 

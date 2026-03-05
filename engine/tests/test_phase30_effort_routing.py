@@ -14,7 +14,7 @@ from agent33.agents.definition import (
     AgentRole,
 )
 from agent33.agents.effort import AgentEffort, AgentEffortRouter, EffortSelectionSource
-from agent33.agents.runtime import AgentRuntime
+from agent33.agents.runtime import AgentResult, AgentRuntime
 from agent33.agents.tool_loop import ToolLoopConfig
 from agent33.config import Settings
 from agent33.llm.base import LLMResponse
@@ -665,6 +665,281 @@ class TestEffortAlertManager:
         triggered = alerts.check_all()
         assert len(triggered) == 1
         assert triggered[0].rule_name == "max_cost"
+
+
+class TestEffortAPIRouting:
+    """API-level integration tests that verify effort routing through the invoke endpoint."""
+
+    def _setup_agent(self, name: str = "effort-api-agent") -> None:
+        from agent33.agents.registry import AgentRegistry
+        from agent33.main import app
+
+        definition = _make_definition()
+        definition.name = name
+        app.state.agent_registry = AgentRegistry()
+        app.state.agent_registry.register(definition)
+
+    def test_invoke_with_explicit_effort_routes_through_effort_router(self, client) -> None:
+        """POST /v1/agents/{id}/invoke with effort=high routes via effort router."""
+        self._setup_agent("effort-explicit-agent")
+        mock_result = AgentResult(
+            output={"result": "routed"},
+            raw_response='{"result":"routed"}',
+            tokens_used=30,
+            model="high-model",
+            routing_decision={
+                "effort": "high",
+                "effort_source": "request",
+                "model": "high-model",
+                "routed_max_tokens": 150,
+                "estimated_token_budget": 150,
+                "estimated_cost": 0.0375,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-explicit-agent/invoke",
+                json={"inputs": {"task": "go"}, "effort": "high"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"]["effort"] == "high"
+        assert data["routing"]["effort_source"] == "request"
+
+        # Verify the runtime was constructed with the effort param from the request
+        construct_kwargs = mock_cls.call_args.kwargs
+        assert construct_kwargs["effort"] == AgentEffort.HIGH
+
+    def test_invoke_with_low_effort_routes_correctly(self, client) -> None:
+        """POST /v1/agents/{id}/invoke with effort=low gets low routing."""
+        self._setup_agent("effort-low-agent")
+        mock_result = AgentResult(
+            output={"result": "quick"},
+            raw_response='{"result":"quick"}',
+            tokens_used=10,
+            model="low-model",
+            routing_decision={
+                "effort": "low",
+                "effort_source": "request",
+                "model": "low-model",
+                "routed_max_tokens": 75,
+                "estimated_token_budget": 75,
+                "estimated_cost": None,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-low-agent/invoke",
+                json={"inputs": {"task": "tiny"}, "effort": "low"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"]["effort"] == "low"
+        assert data["routing"]["effort_source"] == "request"
+        construct_kwargs = mock_cls.call_args.kwargs
+        assert construct_kwargs["effort"] == AgentEffort.LOW
+
+    def test_invoke_without_effort_falls_through_to_heuristic(self, client) -> None:
+        """POST /v1/agents/{id}/invoke without effort param uses heuristic routing."""
+        self._setup_agent("effort-heuristic-agent")
+        mock_result = AgentResult(
+            output={"result": "classified"},
+            raw_response='{"result":"classified"}',
+            tokens_used=20,
+            model="medium-model",
+            routing_decision={
+                "effort": "medium",
+                "effort_source": "heuristic",
+                "model": "medium-model",
+                "routed_max_tokens": 100,
+                "estimated_token_budget": 100,
+                "estimated_cost": None,
+                "heuristic_score": 2,
+                "heuristic_reasons": ["medium_payload", "complex_task_keywords"],
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-heuristic-agent/invoke",
+                json={"inputs": {"task": "analyze the architecture"}},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"]["effort_source"] == "heuristic"
+        # Runtime constructed without explicit effort
+        construct_kwargs = mock_cls.call_args.kwargs
+        assert construct_kwargs["effort"] is None
+
+    def test_invoke_tenant_policy_fixture_routes_via_policy(self, client) -> None:
+        """Tenant-level effort policy overrides heuristic at the API layer."""
+        self._setup_agent("effort-tenant-policy-agent")
+        mock_result = AgentResult(
+            output={"result": "policy-driven"},
+            raw_response='{"result":"policy-driven"}',
+            tokens_used=25,
+            model="policy-model",
+            routing_decision={
+                "effort": "high",
+                "effort_source": "policy",
+                "policy_key": "tenant-alpha",
+                "model": "policy-model",
+                "routed_max_tokens": 200,
+                "estimated_token_budget": 200,
+                "estimated_cost": 0.05,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-tenant-policy-agent/invoke",
+                json={"inputs": {"task": "run with policy"}},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"]["effort_source"] == "policy"
+        assert data["routing"]["policy_key"] == "tenant-alpha"
+
+    def test_invoke_domain_policy_fixture_routes_via_domain(self, client) -> None:
+        """Domain-level effort policy surfaces in response routing metadata."""
+        self._setup_agent("effort-domain-policy-agent")
+        mock_result = AgentResult(
+            output={"result": "domain-routed"},
+            raw_response='{"result":"domain-routed"}',
+            tokens_used=30,
+            model="domain-model",
+            routing_decision={
+                "effort": "high",
+                "effort_source": "policy",
+                "policy_key": "security",
+                "model": "domain-model",
+                "routed_max_tokens": 200,
+                "estimated_token_budget": 200,
+                "estimated_cost": 0.05,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-domain-policy-agent/invoke",
+                json={
+                    "inputs": {"task": "security review"},
+                    "domain": "security",
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"]["effort_source"] == "policy"
+        assert data["routing"]["policy_key"] == "security"
+        # Domain is forwarded to the runtime constructor
+        construct_kwargs = mock_cls.call_args.kwargs
+        assert construct_kwargs["domain"] == "security"
+
+    def test_invoke_response_contains_calibration_metadata(self, client) -> None:
+        """Calibration metadata (heuristic thresholds and score) is emitted in response."""
+        self._setup_agent("effort-calibration-agent")
+        mock_result = AgentResult(
+            output={"result": "calibrated"},
+            raw_response='{"result":"calibrated"}',
+            tokens_used=15,
+            model="heuristic-model",
+            routing_decision={
+                "effort": "high",
+                "effort_source": "heuristic",
+                "model": "heuristic-model",
+                "routed_max_tokens": 150,
+                "estimated_token_budget": 150,
+                "estimated_cost": None,
+                "heuristic_score": 5,
+                "heuristic_low_threshold": 1,
+                "heuristic_high_threshold": 4,
+                "heuristic_confidence": 0.8,
+                "heuristic_reasons": [
+                    "iterative_mode",
+                    "large_payload",
+                    "complex_task_keywords",
+                ],
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-calibration-agent/invoke",
+                json={"inputs": {"task": "calibrate"}},
+            )
+
+        assert response.status_code == 200
+        routing = response.json()["routing"]
+        assert "heuristic_score" in routing
+        assert "heuristic_low_threshold" in routing
+        assert "heuristic_high_threshold" in routing
+        assert "heuristic_confidence" in routing
+        assert "heuristic_reasons" in routing
+        assert routing["heuristic_score"] == 5
+        assert routing["heuristic_low_threshold"] == 1
+        assert routing["heuristic_high_threshold"] == 4
+        assert routing["heuristic_confidence"] == 0.8
+        assert isinstance(routing["heuristic_reasons"], list)
+        assert len(routing["heuristic_reasons"]) >= 1
+
+    def test_invoke_with_medium_effort_populates_routing_in_response(self, client) -> None:
+        """Routing dict is always present when effort routing is active."""
+        self._setup_agent("effort-medium-agent")
+        mock_result = AgentResult(
+            output={"result": "ok"},
+            raw_response='{"result":"ok"}',
+            tokens_used=20,
+            model="medium-model",
+            routing_decision={
+                "effort": "medium",
+                "effort_source": "request",
+                "model": "medium-model",
+                "routed_max_tokens": 100,
+                "estimated_token_budget": 100,
+                "estimated_cost": None,
+            },
+        )
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke = AsyncMock(return_value=mock_result)
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-medium-agent/invoke",
+                json={"inputs": {"task": "something"}, "effort": "medium"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["routing"] is not None
+        assert data["routing"]["effort"] == "medium"
+        assert data["routing"]["effort_source"] == "request"
+        assert "estimated_token_budget" in data["routing"]
 
 
 class TestEffortConfigValidation:
