@@ -150,15 +150,21 @@ def test_consume_if_approved_validates_tenant() -> None:
     service.decide(req.approval_id, approved=True, reviewed_by="op")
 
     # Wrong tenant cannot consume
-    assert service.consume_if_approved(
-        req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-b"
-    ) is False
+    assert (
+        service.consume_if_approved(
+            req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-b"
+        )
+        is False
+    )
     assert service.get_request(req.approval_id).status == ApprovalStatus.APPROVED
 
     # Correct tenant can consume
-    assert service.consume_if_approved(
-        req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-a"
-    ) is True
+    assert (
+        service.consume_if_approved(
+            req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-a"
+        )
+        is True
+    )
     assert service.get_request(req.approval_id).status == ApprovalStatus.CONSUMED
 
 
