@@ -104,11 +104,14 @@ class ToolApprovalService:
         *,
         status: ApprovalStatus | None = None,
         requested_by: str | None = None,
+        tenant_id: str = "",
         limit: int = 100,
     ) -> list[ToolApprovalRequest]:
         """List approval requests with optional filters."""
         self._expire_pending()
         items = list(self._requests.values())
+        if tenant_id:
+            items = [item for item in items if item.tenant_id == tenant_id]
         if status is not None:
             items = [item for item in items if item.status == status]
         if requested_by is not None:
@@ -144,18 +147,25 @@ class ToolApprovalService:
         *,
         tool_name: str,
         operation: str = "",
+        tenant_id: str = "",
     ) -> bool:
         """Consume an approved request for a matching governed operation."""
         self._expire_pending()
         req = self._requests.get(approval_id)
         if req is None or req.status != ApprovalStatus.APPROVED:
             return False
+        if tenant_id and req.tenant_id != tenant_id:
+            return False
         if req.tool_name != tool_name:
             return False
         if req.operation and req.operation != operation:
             return False
         req.status = ApprovalStatus.CONSUMED
-        req.review_note = (req.review_note + " ").strip() + "Consumed by governed execution."
+        consumed_note = "Consumed by governed execution."
+        if req.review_note:
+            req.review_note = f"{req.review_note} {consumed_note}"
+        else:
+            req.review_note = consumed_note
         self._persist_state()
         return True
 

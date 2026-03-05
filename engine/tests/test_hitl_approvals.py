@@ -98,12 +98,78 @@ def test_tool_approval_api_list_and_decide(client) -> None:
 
     decision_response = client.post(
         f"/v1/approvals/tools/{request.approval_id}/decision",
-        json={"decision": "approve", "reviewed_by": "ops-user"},
+        json={"decision": "approve"},
     )
     assert decision_response.status_code == 200
-    assert decision_response.json()["status"] == "approved"
+    result = decision_response.json()
+    assert result["status"] == "approved"
+    assert result["reviewed_by"] == "test-user"
 
 
 def test_tool_approval_api_invalid_status_filter_returns_400(client) -> None:
     response = client.get("/v1/approvals/tools", params={"status": "invalid"})
     assert response.status_code == 400
+
+
+def test_tool_approval_api_tenant_isolation() -> None:
+    """Requests created for one tenant are invisible to another tenant's list."""
+    from agent33.api.routes.tool_approvals import get_tool_approval_service
+
+    service = get_tool_approval_service()
+    service.request(
+        reason=ApprovalReason.TOOL_POLICY_ASK,
+        tool_name="file_ops",
+        requested_by="user-a",
+        tenant_id="tenant-a",
+    )
+    service.request(
+        reason=ApprovalReason.TOOL_POLICY_ASK,
+        tool_name="file_ops",
+        requested_by="user-b",
+        tenant_id="tenant-b",
+    )
+
+    tenant_a_items = service.list_requests(tenant_id="tenant-a")
+    assert len(tenant_a_items) == 1
+    assert tenant_a_items[0].tenant_id == "tenant-a"
+
+    tenant_b_items = service.list_requests(tenant_id="tenant-b")
+    assert len(tenant_b_items) == 1
+    assert tenant_b_items[0].tenant_id == "tenant-b"
+
+
+def test_consume_if_approved_validates_tenant() -> None:
+    """Cross-tenant consumption must be blocked."""
+    service = ToolApprovalService()
+    req = service.request(
+        reason=ApprovalReason.TOOL_POLICY_ASK,
+        tool_name="file_ops",
+        operation="write",
+        tenant_id="tenant-a",
+    )
+    service.decide(req.approval_id, approved=True, reviewed_by="op")
+
+    # Wrong tenant cannot consume
+    assert service.consume_if_approved(
+        req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-b"
+    ) is False
+    assert service.get_request(req.approval_id).status == ApprovalStatus.APPROVED
+
+    # Correct tenant can consume
+    assert service.consume_if_approved(
+        req.approval_id, tool_name="file_ops", operation="write", tenant_id="tenant-a"
+    ) is True
+    assert service.get_request(req.approval_id).status == ApprovalStatus.CONSUMED
+
+
+def test_review_note_concatenation() -> None:
+    """Consuming a request with an existing review_note appends correctly."""
+    service = ToolApprovalService()
+    req = service.request(
+        reason=ApprovalReason.TOOL_POLICY_ASK,
+        tool_name="shell",
+    )
+    service.decide(req.approval_id, approved=True, reviewed_by="op", review_note="LGTM")
+    service.consume_if_approved(req.approval_id, tool_name="shell")
+    expected = "LGTM Consumed by governed execution."
+    assert service.get_request(req.approval_id).review_note == expected
