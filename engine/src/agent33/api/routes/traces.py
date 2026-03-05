@@ -22,6 +22,12 @@ router = APIRouter(prefix="/v1/traces", tags=["traces"])
 _collector = TraceCollector()
 
 
+def set_trace_collector(collector: TraceCollector) -> None:
+    """Inject a shared trace collector instance (called from lifespan)."""
+    global _collector  # noqa: PLW0603
+    _collector = collector
+
+
 def get_trace_collector() -> TraceCollector:
     """Return the trace collector singleton (for testing injection)."""
     return _collector

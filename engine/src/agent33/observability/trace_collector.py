@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 from agent33.observability.failure import FailureCategory, FailureRecord, FailureSeverity
 from agent33.observability.trace_models import (
@@ -19,6 +22,9 @@ from agent33.observability.trace_models import (
     TraceStep,
 )
 
+if TYPE_CHECKING:
+    from agent33.services.orchestration_state import OrchestrationStateStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,9 +35,53 @@ class TraceNotFoundError(Exception):
 class TraceCollector:
     """In-memory trace and failure collection service."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_store: OrchestrationStateStore | None = None) -> None:
+        self._state_store = state_store
         self._traces: dict[str, TraceRecord] = {}
         self._failures: dict[str, FailureRecord] = {}
+        self._load_state()
+
+    def _persist_state(self) -> None:
+        if self._state_store is None:
+            return
+        self._state_store.write_namespace(
+            "traces",
+            {
+                "traces": {
+                    trace_id: trace.model_dump(mode="json")
+                    for trace_id, trace in self._traces.items()
+                },
+                "failures": {
+                    failure_id: failure.model_dump(mode="json")
+                    for failure_id, failure in self._failures.items()
+                },
+            },
+        )
+
+    def _load_state(self) -> None:
+        if self._state_store is None:
+            return
+        payload = self._state_store.read_namespace("traces")
+
+        traces_payload = payload.get("traces", {})
+        if isinstance(traces_payload, dict):
+            for trace_id, trace_data in traces_payload.items():
+                if not isinstance(trace_id, str):
+                    continue
+                try:
+                    self._traces[trace_id] = TraceRecord.model_validate(trace_data)
+                except ValidationError:
+                    logger.warning("trace_restore_failed id=%s", trace_id)
+
+        failures_payload = payload.get("failures", {})
+        if isinstance(failures_payload, dict):
+            for failure_id, failure_data in failures_payload.items():
+                if not isinstance(failure_id, str):
+                    continue
+                try:
+                    self._failures[failure_id] = FailureRecord.model_validate(failure_data)
+                except ValidationError:
+                    logger.warning("trace_failure_restore_failed id=%s", failure_id)
 
     # ------------------------------------------------------------------
     # Trace CRUD
@@ -60,6 +110,7 @@ class TraceCollector:
             ),
         )
         self._traces[trace.trace_id] = trace
+        self._persist_state()
         logger.info("trace_started id=%s task=%s agent=%s", trace.trace_id, task_id, agent_id)
         return trace
 
@@ -102,6 +153,7 @@ class TraceCollector:
         trace = self.get_trace(trace_id)
         step = TraceStep(step_id=step_id, started_at=datetime.now(UTC))
         trace.execution.append(step)
+        self._persist_state()
         return step
 
     def add_action(
@@ -133,6 +185,7 @@ class TraceCollector:
             status=status,
         )
         step.actions.append(action)
+        self._persist_state()
         return action
 
     def complete_trace(
@@ -157,6 +210,7 @@ class TraceCollector:
             status.value,
             trace.duration_ms,
         )
+        self._persist_state()
         return trace
 
     # ------------------------------------------------------------------
@@ -206,6 +260,7 @@ class TraceCollector:
             trace_id,
             category.value,
         )
+        self._persist_state()
         return failure
 
     def get_failure(self, failure_id: str) -> FailureRecord:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import re
+from typing import Any
 
 from agent33.autonomy.models import (
     AutonomyBudget,
@@ -37,6 +38,25 @@ class RuntimeEnforcer:
     @property
     def escalations(self) -> list[EscalationRecord]:
         return list(self._escalations)
+
+    def snapshot_state(self) -> dict[str, Any]:
+        """Return JSON-serializable runtime enforcement state."""
+        return {
+            "context": self._context.model_dump(mode="json"),
+            "escalations": [esc.model_dump(mode="json") for esc in self._escalations],
+        }
+
+    def restore_state(
+        self,
+        *,
+        context: dict[str, Any] | None = None,
+        escalations: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Restore runtime context and escalations from persisted payloads."""
+        if context is not None:
+            self._context = EnforcementContext.model_validate(context)
+        if escalations is not None:
+            self._escalations = [EscalationRecord.model_validate(item) for item in escalations]
 
     # ------------------------------------------------------------------
     # EF-01: File read check

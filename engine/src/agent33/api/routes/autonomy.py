@@ -13,6 +13,7 @@ from agent33.autonomy.models import BudgetState, EscalationUrgency
 from agent33.autonomy.service import (
     AutonomyService,
     BudgetNotFoundError,
+    EnforcerNotFoundError,
     InvalidStateTransitionError,
 )
 from agent33.security.permissions import require_scope
@@ -23,6 +24,12 @@ router = APIRouter(prefix="/v1/autonomy", tags=["autonomy"])
 
 # Singleton service
 _service = AutonomyService()
+
+
+def set_autonomy_service(service: AutonomyService) -> None:
+    """Inject a shared autonomy service instance (called from lifespan)."""
+    global _service  # noqa: PLW0603
+    _service = service
 
 
 def get_autonomy_service() -> AutonomyService:
@@ -260,16 +267,18 @@ async def create_enforcer(budget_id: str) -> dict[str, str]:
 )
 async def enforce_file(budget_id: str, body: CheckFileRequest) -> dict[str, Any]:
     """Check file access against budget enforcement rules."""
-    enforcer = _service.get_enforcer(budget_id)
-    if enforcer is None:
+    try:
+        result = _service.enforce_file(
+            budget_id=budget_id,
+            path=body.path,
+            mode=body.mode,
+            lines=body.lines,
+        )
+    except EnforcerNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No enforcer for budget: {budget_id}",
-        )
-    if body.mode == "write":
-        result = enforcer.check_file_write(body.path, lines=body.lines)
-    else:
-        result = enforcer.check_file_read(body.path)
+        ) from None
     return {"result": result.value, "path": body.path, "mode": body.mode}
 
 
@@ -279,13 +288,13 @@ async def enforce_file(budget_id: str, body: CheckFileRequest) -> dict[str, Any]
 )
 async def enforce_command(budget_id: str, body: CheckCommandRequest) -> dict[str, Any]:
     """Check command execution against budget enforcement rules."""
-    enforcer = _service.get_enforcer(budget_id)
-    if enforcer is None:
+    try:
+        result = _service.enforce_command(budget_id=budget_id, command=body.command)
+    except EnforcerNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No enforcer for budget: {budget_id}",
-        )
-    result = enforcer.check_command(body.command)
+        ) from None
     return {"result": result.value, "command": body.command}
 
 
@@ -295,13 +304,13 @@ async def enforce_command(budget_id: str, body: CheckCommandRequest) -> dict[str
 )
 async def enforce_network(budget_id: str, body: CheckNetworkRequest) -> dict[str, Any]:
     """Check network access against budget enforcement rules."""
-    enforcer = _service.get_enforcer(budget_id)
-    if enforcer is None:
+    try:
+        result = _service.enforce_network(budget_id=budget_id, domain=body.domain)
+    except EnforcerNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No enforcer for budget: {budget_id}",
-        )
-    result = enforcer.check_network(body.domain)
+        ) from None
     return {"result": result.value, "domain": body.domain}
 
 
@@ -333,17 +342,18 @@ async def list_escalations(
 )
 async def trigger_escalation(budget_id: str, body: TriggerEscalationRequest) -> dict[str, Any]:
     """Manually trigger an escalation for a budget."""
-    enforcer = _service.get_enforcer(budget_id)
-    if enforcer is None:
+    try:
+        record = _service.trigger_escalation(
+            budget_id=budget_id,
+            description=body.description,
+            target=body.target,
+            urgency=body.urgency,
+        )
+    except EnforcerNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No enforcer for budget: {budget_id}",
-        )
-    record = enforcer.trigger_escalation(
-        description=body.description,
-        target=body.target,
-        urgency=body.urgency,
-    )
+        ) from None
     return {
         "escalation_id": record.escalation_id,
         "target": record.target,
