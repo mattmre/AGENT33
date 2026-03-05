@@ -120,7 +120,7 @@ describe("ExplanationView", () => {
     );
     expect(html).toContain("Fact-check claims");
     expect(html).toContain("metadata_equals");
-    expect(html).toContain("claim-1");
+    expect(html).toContain("verified");
   });
 
   it("omits claims section when claims array is empty", () => {
