@@ -77,10 +77,10 @@ python -m pytest tests/ -q
 | Purpose | Path |
 | --- | --- |
 | Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
-| Session 53 Phase 30 acceptance research | `docs/research/session53-phase30-outcome-acceptance.md` |
-| Session 53 Phase 31 trend research | `docs/research/session53-phase31-trend-analytics.md` |
-| Session 53 Phase 31 calibration research | `docs/research/session53-phase31-threshold-tuning.md` |
-| Session 53 A5 persistence research | `docs/research/session53-a5-bundle-persistence.md` |
+| Session 53 Phase 30 acceptance research | PR `#113` (introduces `docs/research/session53-phase30-outcome-acceptance.md`) |
+| Session 53 Phase 31 trend research | PR `#114` (introduces `docs/research/session53-phase31-trend-analytics.md`) |
+| Session 53 Phase 31 calibration research | PR `#115` (introduces `docs/research/session53-phase31-threshold-tuning.md`) |
+| Session 53 A5 persistence research | PR `#116` (introduces `docs/research/session53-a5-bundle-persistence.md`) |
 | Session 52 roadmap research | `docs/research/session52-priority-and-phase-roadmap.md` |
 | ARCH-AEP tracker | `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md` |
 | Phase index | `docs/phases/README.md` |
