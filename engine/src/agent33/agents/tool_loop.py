@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from agent33.agents.definition import AutonomyLevel
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
+    from agent33.llm.text_tool_parser import TextToolParser
     from agent33.memory.observation import ObservationCapture
     from agent33.tools.base import ToolContext
     from agent33.tools.governance import ToolGovernance
@@ -56,6 +57,7 @@ class ToolLoopConfig:
     error_threshold: int = 3
     enable_double_confirmation: bool = True
     loop_detection_threshold: int = 0  # 0 disables loop detection by default
+    text_tool_parser: TextToolParser | None = None
 
 
 @dataclasses.dataclass(slots=True)
@@ -195,6 +197,12 @@ class ToolLoop:
             state.total_tokens += response.prompt_tokens + response.completion_tokens
             last_raw = response.content
             last_model = response.model
+
+            # --- Text-based tool call parsing (Phase 36) ----------------------
+            if not response.tool_calls and self._config.text_tool_parser:
+                parsed = self._config.text_tool_parser.parse(response.content)
+                if parsed:
+                    response = dataclasses.replace(response, tool_calls=parsed)
 
             # --- Record observation for LLM response --------------------------
             await self._record_observation(
