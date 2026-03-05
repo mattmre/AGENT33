@@ -543,6 +543,22 @@ button:disabled {
   color: #9dc3cf;
 }
 
+/* Workflow Status Node — running pulse */
+.wf-node-running {
+  animation: wf-pulse-border 1.8s ease-in-out infinite;
+}
+
+@keyframes wf-pulse-border {
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
+  }
+
+  50% {
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.65), 0 0 30px rgba(59, 130, 246, 0.25);
+  }
+}
+
 /* ReactFlow overrides */
 .react-flow__node {
   background: linear-gradient(135deg, #1d3746, #2a4f5e);
