@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+import structlog
 from pydantic import BaseModel, Field, ValidationError
 
 from agent33.improvement.models import LearningSignal, ResearchIntake  # noqa: TC001
+
+logger = structlog.get_logger()
 
 
 class LearningPersistenceState(BaseModel):
@@ -161,7 +165,15 @@ class SQLiteLearningSignalStore:
         message = f"Corrupted learning-signal persistence payload in SQLite: {self._path}"
         if self._on_corruption == "raise":
             raise ValueError(message) from exc
-        self._write_corrupt_payload_sidecar(payload)
+        sidecar_path = self._write_corrupt_payload_sidecar(payload)
+        logger.warning(
+            "learning_signal_corruption_detected",
+            corruption_type="payload",
+            original_path=str(self._path),
+            quarantine_path=str(sidecar_path),
+            timestamp=datetime.now(UTC).isoformat(),
+            error=str(exc) if exc is not None else "invalid payload",
+        )
         conn = self._connect()
         database_error: sqlite3.DatabaseError | None = None
         try:
@@ -198,18 +210,27 @@ class SQLiteLearningSignalStore:
         message = f"Corrupted learning-signal SQLite database: {self._path}"
         if self._on_corruption == "raise":
             raise ValueError(message) from exc
-        self._quarantine_corrupted_database_file()
+        quarantine_path = self._quarantine_corrupted_database_file()
+        logger.warning(
+            "learning_signal_corruption_detected",
+            corruption_type="database",
+            original_path=str(self._path),
+            quarantine_path=str(quarantine_path) if quarantine_path else None,
+            timestamp=datetime.now(UTC).isoformat(),
+            error=str(exc),
+        )
         return LearningPersistenceState()
 
-    def _quarantine_corrupted_database_file(self) -> None:
+    def _quarantine_corrupted_database_file(self) -> Path | None:
         if not self._path.exists():
-            return
+            return None
         candidate = Path(f"{self._path}.corrupt")
         suffix = 1
         while candidate.exists():
             candidate = Path(f"{self._path}.corrupt.{suffix}")
             suffix += 1
         self._path.replace(candidate)
+        return candidate
 
 
 def _state_has_data(state: LearningPersistenceState) -> bool:

@@ -1159,3 +1159,184 @@ def test_routes_sqlite_startup_migration_does_not_overwrite_existing_db(
     payload = listed.json()
     assert len(payload) == 1
     assert payload[0]["summary"] == "Keep DB state"
+
+
+def test_backup_endpoint_creates_portable_backup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    backup_path = tmp_path / "operator_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    _reset_service()
+
+    client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "bug",
+            "severity": "high",
+            "summary": "Signal for backup test",
+        },
+    )
+
+    resp = client.post(
+        "/v1/improvements/learning/backup",
+        json={"backup_path": str(backup_path)},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["signal_count"] == 1
+    assert body["intake_count"] == 0
+    assert backup_path.exists()
+
+    backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
+    assert len(backup_data["signals"]) == 1
+    assert backup_data["signals"][0]["summary"] == "Signal for backup test"
+
+
+def test_backup_endpoint_uses_default_path_when_omitted(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    default_backup = tmp_path / "default_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    monkeypatch.setattr(
+        settings,
+        "improvement_learning_persistence_migration_backup_path",
+        str(default_backup),
+    )
+    _reset_service()
+
+    resp = client.post("/v1/improvements/learning/backup", json={})
+    assert resp.status_code == 200
+    assert default_backup.exists()
+
+
+def test_restore_endpoint_recovers_learning_state(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    backup_path = tmp_path / "operator_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    _reset_service()
+
+    # Record a signal and back it up
+    client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "critical",
+            "summary": "Restore test signal",
+            "tenant_id": "tenant-restore",
+        },
+    )
+    client.post(
+        "/v1/improvements/learning/backup",
+        json={"backup_path": str(backup_path)},
+    )
+
+    # Delete persistence file to simulate data loss
+    file_path.unlink()
+    _reset_service()
+
+    listed = client.get(
+        "/v1/improvements/learning/signals",
+        params={"tenant_id": "tenant-restore", "limit": 10},
+    )
+    assert len(listed.json()) == 0
+
+    # Restore from backup
+    resp = client.post(
+        "/v1/improvements/learning/restore",
+        json={"backup_path": str(backup_path)},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["signal_count"] == 1
+    assert body["intake_count"] == 0
+
+    # Verify restored data is accessible
+    listed = client.get(
+        "/v1/improvements/learning/signals",
+        params={"tenant_id": "tenant-restore", "limit": 10},
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["summary"] == "Restore test signal"
+
+
+def test_restore_endpoint_returns_404_for_missing_backup(
+    client: TestClient,
+):
+    resp = client.post(
+        "/v1/improvements/learning/restore",
+        json={"backup_path": "/nonexistent/backup.json"},
+    )
+    assert resp.status_code == 404
+    assert "Backup file not found" in resp.json()["detail"]
+
+
+def test_backup_restore_round_trip_preserves_generated_intakes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    backup_path = tmp_path / "roundtrip_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 5)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    _reset_service()
+
+    client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "high",
+            "summary": "Roundtrip signal",
+        },
+    )
+    client.get(
+        "/v1/improvements/learning/summary",
+        params={"generate_intakes": "true"},
+    )
+
+    backup_resp = client.post(
+        "/v1/improvements/learning/backup",
+        json={"backup_path": str(backup_path)},
+    )
+    assert backup_resp.status_code == 200
+    assert backup_resp.json()["signal_count"] == 1
+    assert backup_resp.json()["intake_count"] == 1
+
+    # Simulate data loss
+    file_path.unlink()
+    _reset_service()
+
+    restore_resp = client.post(
+        "/v1/improvements/learning/restore",
+        json={"backup_path": str(backup_path)},
+    )
+    assert restore_resp.status_code == 200
+    assert restore_resp.json()["signal_count"] == 1
+    assert restore_resp.json()["intake_count"] == 1
