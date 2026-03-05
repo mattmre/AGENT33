@@ -18,9 +18,7 @@ from agent33.release.models import (
     Release,
     ReleaseStatus,
     ReleaseType,
-    RollbackRecord,
     RollbackType,
-    SyncExecution,
     SyncRule,
 )
 from agent33.release.rollback import RollbackManager
@@ -93,18 +91,9 @@ class ReleaseService:
                     release_id: release.model_dump(mode="json")
                     for release_id, release in self._releases.items()
                 },
-                "sync_rules": {
-                    rule_id: rule.model_dump(mode="json")
-                    for rule_id, rule in self._sync._rules.items()  # noqa: SLF001
-                },
-                "sync_executions": {
-                    execution_id: execution.model_dump(mode="json")
-                    for execution_id, execution in self._sync._executions.items()  # noqa: SLF001
-                },
-                "rollback_records": {
-                    rollback_id: record.model_dump(mode="json")
-                    for rollback_id, record in self._rollback._records.items()  # noqa: SLF001
-                },
+                "sync_rules": self._sync.snapshot_state().get("rules", {}),
+                "sync_executions": self._sync.snapshot_state().get("executions", {}),
+                "rollback_records": self._rollback.snapshot_state().get("records", {}),
             },
         )
 
@@ -123,39 +112,15 @@ class ReleaseService:
                 except ValidationError:
                     logger.warning("release_restore_failed id=%s", release_id)
 
-        rules_payload = payload.get("sync_rules", {})
-        if isinstance(rules_payload, dict):
-            for rule_id, rule_data in rules_payload.items():
-                if not isinstance(rule_id, str):
-                    continue
-                try:
-                    self._sync._rules[rule_id] = SyncRule.model_validate(rule_data)  # noqa: SLF001
-                except ValidationError:
-                    logger.warning("sync_rule_restore_failed id=%s", rule_id)
-
-        executions_payload = payload.get("sync_executions", {})
-        if isinstance(executions_payload, dict):
-            for execution_id, execution_data in executions_payload.items():
-                if not isinstance(execution_id, str):
-                    continue
-                try:
-                    self._sync._executions[execution_id] = SyncExecution.model_validate(  # noqa: SLF001
-                        execution_data
-                    )
-                except ValidationError:
-                    logger.warning("sync_execution_restore_failed id=%s", execution_id)
-
-        rollback_payload = payload.get("rollback_records", {})
-        if isinstance(rollback_payload, dict):
-            for rollback_id, rollback_data in rollback_payload.items():
-                if not isinstance(rollback_id, str):
-                    continue
-                try:
-                    self._rollback._records[rollback_id] = RollbackRecord.model_validate(  # noqa: SLF001
-                        rollback_data
-                    )
-                except ValidationError:
-                    logger.warning("rollback_restore_failed id=%s", rollback_id)
+        self._sync.restore_state(
+            {
+                "rules": payload.get("sync_rules", {}),
+                "executions": payload.get("sync_executions", {}),
+            }
+        )
+        self._rollback.restore_state(
+            {"records": payload.get("rollback_records", {})}
+        )
 
     @property
     def sync_engine(self) -> SyncEngine:

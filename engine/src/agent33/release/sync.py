@@ -61,6 +61,47 @@ class SyncEngine:
         return False
 
     # ------------------------------------------------------------------
+    # State snapshot / restore (used by durable persistence)
+    # ------------------------------------------------------------------
+
+    def snapshot_state(self) -> dict[str, dict[str, object]]:
+        """Return a serializable snapshot of internal state."""
+        return {
+            "rules": {
+                rule_id: rule.model_dump(mode="json")
+                for rule_id, rule in self._rules.items()
+            },
+            "executions": {
+                exec_id: execution.model_dump(mode="json")
+                for exec_id, execution in self._executions.items()
+            },
+        }
+
+    def restore_state(self, data: dict[str, object]) -> None:
+        """Restore internal state from a previously captured snapshot."""
+        from pydantic import ValidationError
+
+        rules_payload = data.get("rules", {})
+        if isinstance(rules_payload, dict):
+            for rule_id, rule_data in rules_payload.items():
+                if not isinstance(rule_id, str):
+                    continue
+                try:
+                    self._rules[rule_id] = SyncRule.model_validate(rule_data)
+                except ValidationError:
+                    logger.warning("sync_rule_restore_failed id=%s", rule_id)
+
+        executions_payload = data.get("executions", {})
+        if isinstance(executions_payload, dict):
+            for exec_id, exec_data in executions_payload.items():
+                if not isinstance(exec_id, str):
+                    continue
+                try:
+                    self._executions[exec_id] = SyncExecution.model_validate(exec_data)
+                except ValidationError:
+                    logger.warning("sync_execution_restore_failed id=%s", exec_id)
+
+    # ------------------------------------------------------------------
     # File matching
     # ------------------------------------------------------------------
 
