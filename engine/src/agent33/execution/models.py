@@ -96,6 +96,7 @@ class ExecutionResult(BaseModel):
     duration_ms: float = 0.0
     error: str | None = None
     truncated: bool = False
+    artifacts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +111,7 @@ class AdapterType(StrEnum):
     API = "api"
     SDK = "sdk"
     MCP = "mcp"
+    KERNEL = "kernel"
 
 
 class AdapterStatus(StrEnum):
