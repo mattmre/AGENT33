@@ -76,12 +76,16 @@ class WorkflowExecutor:
         definition: WorkflowDefinition,
         hook_registry: Any | None = None,
         tenant_id: str = "",
+        agent_registry: Any | None = None,
+        model_router: Any | None = None,
     ) -> None:
         self._definition = definition
         self._evaluator = ExpressionEvaluator()
         self._steps: dict[str, WorkflowStep] = {s.id: s for s in definition.steps}
         self._hook_registry = hook_registry
         self._tenant_id = tenant_id
+        self._agent_registry = agent_registry
+        self._model_router = model_router
 
     async def execute(self, inputs: dict[str, Any] | None = None) -> WorkflowResult:
         """Execute the workflow with the given inputs.
@@ -429,6 +433,23 @@ class WorkflowExecutor:
                 inputs=resolved_inputs,
                 dry_run=dry_run,
             )
+
+        if action == StepAction.GROUP_CHAT:
+            if step.group_chat is None:
+                raise ValueError("group_chat config required for GROUP_CHAT action")
+            from agent33.workflows.actions.group_chat import (
+                GroupChatConfig,
+            )
+            from agent33.workflows.actions.group_chat import (
+                execute as gc_execute,
+            )
+
+            gc_config = GroupChatConfig(**step.group_chat)
+            gc_context: dict[str, Any] = {
+                "agent_registry": self._agent_registry,
+                "model_router": self._model_router,
+            }
+            return await gc_execute(gc_config, gc_context)
 
         raise ValueError(f"Unknown action: {action}")
 

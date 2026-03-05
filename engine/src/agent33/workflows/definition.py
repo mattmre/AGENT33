@@ -24,6 +24,7 @@ class StepAction(StrEnum):
     HTTP_REQUEST = "http-request"
     SUB_WORKFLOW = "sub-workflow"
     ROUTE = "route"
+    GROUP_CHAT = "group-chat"
 
 
 class ExecutionMode(StrEnum):
@@ -89,6 +90,8 @@ class WorkflowStep(BaseModel):
     query: str | None = None
     route_candidates: list[str] | None = None
     route_model: str = "llama3.2"
+    # For group-chat action
+    group_chat: dict[str, Any] | None = None
 
     model_config = {"populate_by_name": True}
 
