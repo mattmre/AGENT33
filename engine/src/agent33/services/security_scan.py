@@ -27,6 +27,8 @@ logger = structlog.get_logger()
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from agent33.component_security.persistence import SecurityScanStore
+
 _TERMINAL_STATES = frozenset(
     {
         RunStatus.COMPLETED,
@@ -67,11 +69,13 @@ class SecurityScanService:
         self,
         command_runner: Callable[[list[str], int], subprocess.CompletedProcess[str]] | None = None,
         allowed_roots: list[str] | None = None,
+        store: SecurityScanStore | None = None,
     ) -> None:
         self._runs: dict[str, SecurityRun] = {}
         self._findings: dict[str, list[SecurityFinding]] = {}
         self._command_runner = command_runner or self._run_command
         self._allowed_roots = [Path(root).resolve() for root in (allowed_roots or [])]
+        self._store = store
 
     def create_run(
         self,
@@ -160,6 +164,7 @@ class SecurityScanService:
                 run.metadata.tools_executed = tools_executed
                 run.metadata.tool_warnings = tool_warnings
                 return run
+            findings = self._apply_dedup(findings)
             self._findings[run.id] = findings
             run.findings_count = len(findings)
             run.findings_summary = FindingsSummary.from_findings(findings)
@@ -168,6 +173,7 @@ class SecurityScanService:
             run.status = RunStatus.COMPLETED
             run.touch()
             run.completed_at = run.updated_at
+            self._persist(run, findings)
         except subprocess.TimeoutExpired:
             run.status = RunStatus.TIMEOUT
             run.error_message = "Scan timed out while executing quick profile"
@@ -564,3 +570,24 @@ class SecurityScanService:
         if "inject" in lowered:
             return FindingCategory.INJECTION_RISK
         return FindingCategory.CODE_QUALITY
+
+    # ------------------------------------------------------------------
+    # Persistence & dedup helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_dedup(findings: list[SecurityFinding]) -> list[SecurityFinding]:
+        """Deduplicate findings by fingerprint."""
+        from agent33.component_security.dedup import deduplicate_findings
+
+        return deduplicate_findings(findings)
+
+    def _persist(self, run: SecurityRun, findings: list[SecurityFinding]) -> None:
+        """Persist a completed run and its findings when a store is configured."""
+        if self._store is None:
+            return
+        try:
+            self._store.save_run(run)
+            self._store.save_findings(findings)
+        except Exception:
+            logger.exception("security_scan_persist_failed", run_id=run.id)
