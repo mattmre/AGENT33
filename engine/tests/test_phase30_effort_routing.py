@@ -410,8 +410,7 @@ class TestAgentRuntimeEffortRouting:
         result = await runtime.invoke(
             {
                 "task": (
-                    "Analyze architecture tradeoffs for routing strategy and "
-                    + ("context " * 180)
+                    "Analyze architecture tradeoffs for routing strategy and " + ("context " * 180)
                 )
             }
         )
