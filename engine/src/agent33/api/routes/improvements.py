@@ -34,6 +34,13 @@ from agent33.improvement.persistence import (
     migrate_file_learning_state_to_db,
     should_migrate_file_learning_state_to_db,
 )
+from agent33.improvement.repo_ingestion import (
+    FeatureCandidateInput,
+    RepoHarvestRecord,
+    build_competitive_intake,
+    prioritize_feature_candidates,
+    score_feature_candidate,
+)
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
@@ -189,6 +196,17 @@ class RecordLearningSignalRequest(BaseModel):
     context: dict[str, str] = Field(default_factory=dict)
 
 
+class BatchRepoIntakeRequest(BaseModel):
+    records: list[RepoHarvestRecord] = Field(default_factory=list)
+    submitted_by: str = "repo-harvester"
+    tenant_id: str = "default"
+
+
+class ScoreFeatureCandidatesRequest(BaseModel):
+    candidates: list[FeatureCandidateInput] = Field(default_factory=list)
+    top_n: int = Field(default=10, ge=1, le=100)
+
+
 def _ensure_learning_enabled() -> None:
     if not settings.improvement_learning_enabled:
         raise HTTPException(status_code=404, detail="Not found")
@@ -224,6 +242,37 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
         )
         result = _service.submit_intake(intake)
         return result.model_dump(mode="json")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.post("/intakes/competitive/repos")
+def submit_competitive_repo_intakes(req: BatchRepoIntakeRequest) -> dict[str, Any]:
+    """Submit a batch of competitive intakes derived from repository metadata."""
+    try:
+        created_intakes = []
+        for record in req.records:
+            intake = build_competitive_intake(
+                record,
+                submitted_by=req.submitted_by,
+                tenant_id=req.tenant_id,
+            )
+            created_intakes.append(_service.submit_intake(intake).model_dump(mode="json"))
+        return {"created_intakes": created_intakes}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.post("/feature-candidates/score")
+def score_feature_candidates(req: ScoreFeatureCandidatesRequest) -> dict[str, Any]:
+    """Score and prioritize feature candidates based on weighted heuristics."""
+    try:
+        scored = [score_feature_candidate(candidate) for candidate in req.candidates]
+        prioritized = prioritize_feature_candidates(req.candidates, req.top_n)
+        return {
+            "scored": [candidate.model_dump(mode="json") for candidate in scored],
+            "prioritized": [candidate.model_dump(mode="json") for candidate in prioritized],
+        }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
