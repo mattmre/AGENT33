@@ -435,6 +435,7 @@ class SyntheticEnvironmentService:
             self._bundles = loaded_bundles
             self._bundle_order = normalized_order
             self._trim_to_retention()
+            self._persist_bundles()
         except Exception:
             logger.warning(
                 "synthetic_environment_persistence_load_failed path=%s",
@@ -456,10 +457,20 @@ class SyntheticEnvironmentService:
                 if bundle_id in self._bundles
             ],
         }
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = Path(f"{path}.tmp")
-        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        temp_path.replace(path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = Path(f"{path}.tmp")
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temp_path.replace(path)
+        except OSError:
+            logger.warning(
+                "synthetic_environment_persistence_save_failed path=%s",
+                str(path),
+                exc_info=True,
+            )
 
     def _trim_to_retention(self) -> None:
         while len(self._bundle_order) > self._max_saved_bundles:
