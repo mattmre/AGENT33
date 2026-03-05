@@ -509,6 +509,8 @@ async def invoke_agent_iterative(
     tool_context = ToolContext(
         user_scopes=user_scopes,
         tool_policies=tool_policies,
+        requested_by=token_payload.sub,
+        tenant_id=token_payload.tenant_id or "",
     )
 
     from agent33.agents.tool_loop import ToolLoopConfig

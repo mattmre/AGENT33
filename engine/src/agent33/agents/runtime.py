@@ -567,6 +567,7 @@ class AgentRuntime:
                 agent_name=self._definition.name,
                 session_id=self._session_id,
                 context_manager=self._context_manager,
+                autonomy_level=self._definition.autonomy_level,
             )
 
             task_input = json.dumps(inputs, indent=2)
@@ -676,6 +677,7 @@ class AgentRuntime:
             agent_name=self._definition.name,
             session_id=self._session_id,
             context_manager=self._context_manager,
+            autonomy_level=self._definition.autonomy_level,
         )
 
         loop_result = await loop.run(

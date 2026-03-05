@@ -8,6 +8,7 @@ Rank Fusion for higher-quality retrieval.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -32,6 +33,33 @@ class RAGSource:
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
     retrieval_method: str = "vector"
+
+
+@dataclass
+class RetrievalStageDiagnostic:
+    """Timing/count diagnostics for a single retrieval stage."""
+
+    stage: str
+    duration_ms: int
+    input_count: int = 0
+    output_count: int = 0
+
+
+@dataclass
+class RetrievalDiagnostics:
+    """Execution diagnostics for a modular retrieval pipeline run."""
+
+    retrieval_method: str
+    stages: list[RetrievalStageDiagnostic] = field(default_factory=list)
+    total_duration_ms: int = 0
+
+
+@dataclass
+class RAGQueryWithDiagnostics:
+    """RAG result plus retrieval-stage diagnostics."""
+
+    result: RAGResult
+    diagnostics: RetrievalDiagnostics
 
 
 class RAGPipeline:
@@ -70,21 +98,65 @@ class RAGPipeline:
 
     async def query(self, text: str) -> RAGResult:
         """Embed *text*, search memory, and return augmented context."""
+        outcome = await self.query_with_diagnostics(text)
+        return outcome.result
+
+    async def query_with_diagnostics(self, text: str) -> RAGQueryWithDiagnostics:
+        """Run the modular retrieval pipeline and return stage diagnostics."""
+        total_start = perf_counter()
+        diagnostics = RetrievalDiagnostics(
+            retrieval_method="hybrid" if self._hybrid is not None else "vector",
+        )
         if self._hybrid is not None:
-            return await self._query_hybrid(text)
-        return await self._query_vector(text)
+            result = await self._query_hybrid(text, diagnostics)
+        else:
+            result = await self._query_vector(text, diagnostics)
+        diagnostics.total_duration_ms = int((perf_counter() - total_start) * 1000)
+        return RAGQueryWithDiagnostics(result=result, diagnostics=diagnostics)
 
     # ── Vector-only retrieval ────────────────────────────────────────
 
-    async def _query_vector(self, text: str) -> RAGResult:
+    def _add_stage_diagnostic(
+        self,
+        diagnostics: RetrievalDiagnostics,
+        stage_name: str,
+        start_time: float,
+        input_count: int = 0,
+        output_count: int = 0,
+    ) -> None:
+        """Append a stage diagnostic entry with timing."""
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        diagnostics.stages.append(
+            RetrievalStageDiagnostic(
+                stage=stage_name,
+                duration_ms=duration_ms,
+                input_count=input_count,
+                output_count=output_count,
+            )
+        )
+
+    async def _query_vector(self, text: str, diagnostics: RetrievalDiagnostics) -> RAGResult:
         """Original vector-only retrieval path."""
+        vector_start = perf_counter()
         query_embedding = await self._embedder.embed(text)
         results = await self._memory.search(query_embedding, top_k=self._top_k)
+        self._add_stage_diagnostic(
+            diagnostics, "vector-search", vector_start, output_count=len(results)
+        )
 
+        filter_start = perf_counter()
         relevant = [r for r in results if r.score >= self._threshold]
+        self._add_stage_diagnostic(
+            diagnostics,
+            "threshold-filter",
+            filter_start,
+            input_count=len(results),
+            output_count=len(relevant),
+        )
         if not relevant:
             return RAGResult(augmented_prompt=text, sources=[])
 
+        source_start = perf_counter()
         sources = [
             RAGSource(
                 text=r.text,
@@ -94,21 +166,38 @@ class RAGPipeline:
             )
             for r in relevant
         ]
+        self._add_stage_diagnostic(
+            diagnostics,
+            "source-map",
+            source_start,
+            input_count=len(relevant),
+            output_count=len(sources),
+        )
+        prompt_start = perf_counter()
+        augmented_prompt = self._format_prompt(text, sources)
+        self._add_stage_diagnostic(
+            diagnostics, "prompt-assembly", prompt_start, input_count=len(sources), output_count=1
+        )
         return RAGResult(
-            augmented_prompt=self._format_prompt(text, sources),
+            augmented_prompt=augmented_prompt,
             sources=sources,
         )
 
     # ── Hybrid retrieval ─────────────────────────────────────────────
 
-    async def _query_hybrid(self, text: str) -> RAGResult:
+    async def _query_hybrid(self, text: str, diagnostics: RetrievalDiagnostics) -> RAGResult:
         """Hybrid BM25 + vector retrieval path."""
         assert self._hybrid is not None
+        search_start = perf_counter()
         results = await self._hybrid.search(text, top_k=self._top_k)
+        self._add_stage_diagnostic(
+            diagnostics, "hybrid-search", search_start, output_count=len(results)
+        )
 
         if not results:
             return RAGResult(augmented_prompt=text, sources=[])
 
+        source_start = perf_counter()
         sources = [
             RAGSource(
                 text=r.text,
@@ -118,23 +207,45 @@ class RAGPipeline:
             )
             for r in results
         ]
+        self._add_stage_diagnostic(
+            diagnostics,
+            "source-map",
+            source_start,
+            input_count=len(results),
+            output_count=len(sources),
+        )
+        prompt_start = perf_counter()
+        augmented_prompt = self._format_prompt(text, sources)
+        self._add_stage_diagnostic(
+            diagnostics, "prompt-assembly", prompt_start, input_count=len(sources), output_count=1
+        )
         return RAGResult(
-            augmented_prompt=self._format_prompt(text, sources),
+            augmented_prompt=augmented_prompt,
             sources=sources,
         )
 
     # ── Prompt formatting ────────────────────────────────────────────
 
+    _PROMPT_DELIMITERS = ("---Context---", "---End Context---")
+
+    @staticmethod
+    def _sanitize_for_prompt(text: str) -> str:
+        """Strip prompt delimiter strings to prevent injection attacks."""
+        for delimiter in RAGPipeline._PROMPT_DELIMITERS:
+            text = text.replace(delimiter, "")
+        return text
+
     @staticmethod
     def _format_prompt(question: str, sources: list[RAGSource]) -> str:
         """Build the augmented prompt with context block."""
+        clean_question = RAGPipeline._sanitize_for_prompt(question)
         context_parts: list[str] = []
         for i, src in enumerate(sources, 1):
-            context_parts.append(f"[Source {i}] {src.text}")
+            context_parts.append(f"[Source {i}] {RAGPipeline._sanitize_for_prompt(src.text)}")
 
         context_block = "\n\n".join(context_parts)
         return (
             f"Use the following context to answer the question.\n\n"
             f"---Context---\n{context_block}\n---End Context---\n\n"
-            f"Question: {question}"
+            f"Question: {clean_question}"
         )

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from agent33.agents.context_manager import ContextManager
+    from agent33.agents.definition import AutonomyLevel
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.memory.observation import ObservationCapture
@@ -113,6 +114,7 @@ class ToolLoop:
         leakage_detector: Callable[[str], bool] | None = None,
         hook_registry: Any | None = None,
         tenant_id: str = "",
+        autonomy_level: AutonomyLevel | None = None,
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -127,6 +129,7 @@ class ToolLoop:
         self._leakage_detector = leakage_detector
         self._hook_registry = hook_registry
         self._tenant_id = tenant_id
+        self._autonomy_level = autonomy_level
 
     # ------------------------------------------------------------------
     # Public API
@@ -469,7 +472,10 @@ class ToolLoop:
             if self._tool_governance is not None:
                 gov_context = self._tool_context or self._default_context()
                 allowed = self._tool_governance.pre_execute_check(
-                    tool_name, parsed_args, gov_context
+                    tool_name,
+                    parsed_args,
+                    gov_context,
+                    autonomy_level=self._autonomy_level,
                 )
                 if not allowed:
                     logger.info("Governance denied tool call: %s", tool_name)
