@@ -231,16 +231,24 @@ class TestProductionSecrets:
         assert len(warnings) > 0
 
     def test_production_mode_rejects_default_secrets(self) -> None:
+        from pydantic import SecretStr
+
         from agent33.config import Settings
 
         with pytest.raises(SystemExit, match="jwt_secret must be changed"):
-            Settings(environment="production")
+            Settings(
+                environment="production",
+                jwt_secret=SecretStr("change-me-in-production"),
+            )
 
     def test_production_mode_rejects_other_default_secrets(self) -> None:
+        from pydantic import SecretStr
+
         from agent33.config import Settings
 
         s = Settings(
             environment="production",
+            api_secret_key=SecretStr("change-me-in-production"),
             jwt_secret="my-real-jwt-secret-67890",
             auth_bootstrap_enabled=False,
             auth_bootstrap_admin_password="boot-secret-12345",
