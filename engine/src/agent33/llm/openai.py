@@ -13,7 +13,15 @@ from agent33.connectors.boundary import (
     map_connector_exception,
 )
 from agent33.connectors.models import ConnectorRequest
-from agent33.llm.base import ChatMessage, LLMResponse, ToolCall, ToolCallFunction
+from agent33.llm.base import (
+    AudioBlock,
+    ChatMessage,
+    ImageBlock,
+    LLMResponse,
+    TextBlock,
+    ToolCall,
+    ToolCallFunction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +178,28 @@ class OpenAIProvider:
     @staticmethod
     def _serialize_message(m: ChatMessage) -> dict[str, Any]:
         """Serialize a ChatMessage to OpenAI's message format."""
-        msg: dict[str, Any] = {"role": m.role, "content": m.content}
+        if isinstance(m.content, list):
+            content: Any = []
+            for part in m.content:
+                if isinstance(part, TextBlock):
+                    content.append({"type": "text", "text": part.text})
+                elif isinstance(part, ImageBlock):
+                    if part.base64_data:
+                        url = f"data:{part.media_type};base64,{part.base64_data}"
+                    else:
+                        url = part.url or ""
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": url, "detail": part.detail},
+                    })
+                elif isinstance(part, AudioBlock):
+                    content.append({
+                        "type": "text",
+                        "text": f"[Audio: {part.url or 'embedded'}]",
+                    })
+        else:
+            content = m.content
+        msg: dict[str, Any] = {"role": m.role, "content": content}
         # Include tool_calls on assistant messages when present
         if m.tool_calls:
             msg["tool_calls"] = [

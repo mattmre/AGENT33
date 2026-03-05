@@ -33,7 +33,7 @@ def _format_chat(messages: list[ChatMessage], tokenizer: Any = None) -> str:
     to a simple role-prefixed format.
     """
     if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
-        msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        msg_dicts = [{"role": m.role, "content": m.text_content} for m in messages]
         try:
             result: str = tokenizer.apply_chat_template(
                 msg_dicts, tokenize=False, add_generation_prompt=True
@@ -44,7 +44,7 @@ def _format_chat(messages: list[ChatMessage], tokenizer: Any = None) -> str:
 
     parts: list[str] = []
     for m in messages:
-        parts.append(f"<|{m.role}|>\n{m.content}")
+        parts.append(f"<|{m.role}|>\n{m.text_content}")
     parts.append("<|assistant|>")
     return "\n".join(parts)
 

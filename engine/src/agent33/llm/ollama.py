@@ -13,7 +13,14 @@ from agent33.connectors.boundary import (
     map_connector_exception,
 )
 from agent33.connectors.models import ConnectorRequest
-from agent33.llm.base import ChatMessage, LLMResponse, ToolCall, ToolCallFunction
+from agent33.llm.base import (
+    ChatMessage,
+    ImageBlock,
+    LLMResponse,
+    TextBlock,
+    ToolCall,
+    ToolCallFunction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +160,19 @@ class OllamaProvider:
     @staticmethod
     def _serialize_message(m: ChatMessage) -> dict[str, Any]:
         """Serialize a ChatMessage to Ollama's message format."""
-        msg: dict[str, Any] = {"role": m.role, "content": m.content}
+        if isinstance(m.content, list):
+            text_parts: list[str] = []
+            images: list[str] = []
+            for part in m.content:
+                if isinstance(part, TextBlock):
+                    text_parts.append(part.text)
+                elif isinstance(part, ImageBlock) and part.base64_data:
+                    images.append(part.base64_data)
+            msg: dict[str, Any] = {"role": m.role, "content": " ".join(text_parts)}
+            if images:
+                msg["images"] = images
+        else:
+            msg = {"role": m.role, "content": m.content}
         # Include tool_calls on assistant messages when present
         if m.tool_calls:
             msg["tool_calls"] = [
