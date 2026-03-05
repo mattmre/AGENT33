@@ -116,28 +116,42 @@ class RAGPipeline:
 
     # ── Vector-only retrieval ────────────────────────────────────────
 
+    def _add_stage_diagnostic(
+        self,
+        diagnostics: RetrievalDiagnostics,
+        stage_name: str,
+        start_time: float,
+        input_count: int = 0,
+        output_count: int = 0,
+    ) -> None:
+        """Append a stage diagnostic entry with timing."""
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        diagnostics.stages.append(
+            RetrievalStageDiagnostic(
+                stage=stage_name,
+                duration_ms=duration_ms,
+                input_count=input_count,
+                output_count=output_count,
+            )
+        )
+
     async def _query_vector(self, text: str, diagnostics: RetrievalDiagnostics) -> RAGResult:
         """Original vector-only retrieval path."""
         vector_start = perf_counter()
         query_embedding = await self._embedder.embed(text)
         results = await self._memory.search(query_embedding, top_k=self._top_k)
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="vector-search",
-                duration_ms=int((perf_counter() - vector_start) * 1000),
-                output_count=len(results),
-            )
+        self._add_stage_diagnostic(
+            diagnostics, "vector-search", vector_start, output_count=len(results)
         )
 
         filter_start = perf_counter()
         relevant = [r for r in results if r.score >= self._threshold]
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="threshold-filter",
-                duration_ms=int((perf_counter() - filter_start) * 1000),
-                input_count=len(results),
-                output_count=len(relevant),
-            )
+        self._add_stage_diagnostic(
+            diagnostics,
+            "threshold-filter",
+            filter_start,
+            input_count=len(results),
+            output_count=len(relevant),
         )
         if not relevant:
             return RAGResult(augmented_prompt=text, sources=[])
@@ -152,23 +166,17 @@ class RAGPipeline:
             )
             for r in relevant
         ]
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="source-map",
-                duration_ms=int((perf_counter() - source_start) * 1000),
-                input_count=len(relevant),
-                output_count=len(sources),
-            )
+        self._add_stage_diagnostic(
+            diagnostics,
+            "source-map",
+            source_start,
+            input_count=len(relevant),
+            output_count=len(sources),
         )
         prompt_start = perf_counter()
         augmented_prompt = self._format_prompt(text, sources)
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="prompt-assembly",
-                duration_ms=int((perf_counter() - prompt_start) * 1000),
-                input_count=len(sources),
-                output_count=1,
-            )
+        self._add_stage_diagnostic(
+            diagnostics, "prompt-assembly", prompt_start, input_count=len(sources), output_count=1
         )
         return RAGResult(
             augmented_prompt=augmented_prompt,
@@ -182,12 +190,8 @@ class RAGPipeline:
         assert self._hybrid is not None
         search_start = perf_counter()
         results = await self._hybrid.search(text, top_k=self._top_k)
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="hybrid-search",
-                duration_ms=int((perf_counter() - search_start) * 1000),
-                output_count=len(results),
-            )
+        self._add_stage_diagnostic(
+            diagnostics, "hybrid-search", search_start, output_count=len(results)
         )
 
         if not results:
@@ -203,23 +207,17 @@ class RAGPipeline:
             )
             for r in results
         ]
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="source-map",
-                duration_ms=int((perf_counter() - source_start) * 1000),
-                input_count=len(results),
-                output_count=len(sources),
-            )
+        self._add_stage_diagnostic(
+            diagnostics,
+            "source-map",
+            source_start,
+            input_count=len(results),
+            output_count=len(sources),
         )
         prompt_start = perf_counter()
         augmented_prompt = self._format_prompt(text, sources)
-        diagnostics.stages.append(
-            RetrievalStageDiagnostic(
-                stage="prompt-assembly",
-                duration_ms=int((perf_counter() - prompt_start) * 1000),
-                input_count=len(sources),
-                output_count=1,
-            )
+        self._add_stage_diagnostic(
+            diagnostics, "prompt-assembly", prompt_start, input_count=len(sources), output_count=1
         )
         return RAGResult(
             augmented_prompt=augmented_prompt,
@@ -228,16 +226,26 @@ class RAGPipeline:
 
     # ── Prompt formatting ────────────────────────────────────────────
 
+    _PROMPT_DELIMITERS = ("---Context---", "---End Context---")
+
+    @staticmethod
+    def _sanitize_for_prompt(text: str) -> str:
+        """Strip prompt delimiter strings to prevent injection attacks."""
+        for delimiter in RAGPipeline._PROMPT_DELIMITERS:
+            text = text.replace(delimiter, "")
+        return text
+
     @staticmethod
     def _format_prompt(question: str, sources: list[RAGSource]) -> str:
         """Build the augmented prompt with context block."""
+        clean_question = RAGPipeline._sanitize_for_prompt(question)
         context_parts: list[str] = []
         for i, src in enumerate(sources, 1):
-            context_parts.append(f"[Source {i}] {src.text}")
+            context_parts.append(f"[Source {i}] {RAGPipeline._sanitize_for_prompt(src.text)}")
 
         context_block = "\n\n".join(context_parts)
         return (
             f"Use the following context to answer the question.\n\n"
             f"---Context---\n{context_block}\n---End Context---\n\n"
-            f"Question: {question}"
+            f"Question: {clean_question}"
         )
