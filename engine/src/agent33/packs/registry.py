@@ -24,6 +24,12 @@ from agent33.packs.models import (
     InstallResult,
     PackStatus,
 )
+from agent33.packs.provenance import (
+    PackProvenance,
+    PackTrustPolicy,
+    evaluate_trust,
+    verify_pack,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -47,11 +53,14 @@ class PackRegistry:
         self,
         packs_dir: Path,
         skill_registry: SkillRegistry,
+        *,
+        trust_policy: PackTrustPolicy | None = None,
     ) -> None:
         self._packs_dir = packs_dir
         self._skill_registry = skill_registry
         self._installed: dict[str, InstalledPack] = {}
         self._enabled: dict[str, set[str]] = {}  # tenant_id -> set of enabled pack names
+        self._trust_policy = trust_policy or PackTrustPolicy()
 
     # ------------------------------------------------------------------
     # Discovery & Loading
@@ -191,17 +200,29 @@ class PackRegistry:
     # Installation
     # ------------------------------------------------------------------
 
-    def install(self, source: PackSource) -> InstallResult:
+    def install(
+        self,
+        source: PackSource,
+        *,
+        provenance: PackProvenance | None = None,
+        verification_key: str = "",
+    ) -> InstallResult:
         """Install a pack from a local path.
 
         Steps:
         1. Validate the directory
         2. Parse and validate PACK.yaml
-        3. Verify checksums (if CHECKSUMS.sha256 present)
-        4. Load skills into SkillRegistry
-        5. Register in installed packs
+        3. Verify provenance (if provenance metadata is present)
+        4. Verify checksums (if CHECKSUMS.sha256 present)
+        5. Load skills into SkillRegistry
+        6. Register in installed packs
 
         Marketplace sources are not yet supported.
+
+        Args:
+            source: Pack source descriptor.
+            provenance: Optional provenance metadata for the pack.
+            verification_key: Key used to verify the provenance signature.
         """
         from pathlib import Path as _Path
 
@@ -228,6 +249,25 @@ class PackRegistry:
                 pack_name=source.name or "unknown",
                 errors=validation_errors,
             )
+
+        # --- Provenance / trust check ---
+        trust_decision = evaluate_trust(provenance, self._trust_policy)
+        if not trust_decision.allowed:
+            return InstallResult(
+                success=False,
+                pack_name=source.name or "unknown",
+                errors=[f"Trust policy violation: {trust_decision.reason}"],
+            )
+
+        # If provenance is present and a verification key is provided, verify the signature
+        if provenance is not None and verification_key:
+            manifest = load_pack_manifest(pack_path)
+            if not verify_pack(manifest, provenance, verification_key):
+                return InstallResult(
+                    success=False,
+                    pack_name=manifest.name,
+                    errors=["Provenance signature verification failed"],
+                )
 
         try:
             pack = self.load_pack(pack_path)
