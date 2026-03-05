@@ -17,6 +17,8 @@ class ToolContext:
     domain_allowlist: list[str] = dataclasses.field(default_factory=list)
     working_dir: Path = dataclasses.field(default_factory=Path.cwd)
     tool_policies: dict[str, str] = dataclasses.field(default_factory=dict)
+    requested_by: str = ""
+    tenant_id: str = ""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

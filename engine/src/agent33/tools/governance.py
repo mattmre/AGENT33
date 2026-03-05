@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent33.config import settings
 from agent33.security.permissions import check_permission
+from agent33.tools.approvals import ApprovalReason, ToolApprovalService
 
 if TYPE_CHECKING:
     from agent33.agents.definition import AutonomyLevel
@@ -71,11 +72,16 @@ class ToolGovernance:
     # Tools not listed here default to ``tools:execute``.
     TOOL_SCOPE_MAP: dict[str, str] = {}
 
-    def __init__(self) -> None:
+    def __init__(self, approval_service: ToolApprovalService | None = None) -> None:
         self._rate_limiter = _RateLimiter(
             per_minute=settings.rate_limit_per_minute,
             burst=settings.rate_limit_burst,
         )
+        self._approval_service = approval_service
+
+    def set_approval_service(self, approval_service: ToolApprovalService | None) -> None:
+        """Set or clear the approval service used for ask/supervised policies."""
+        self._approval_service = approval_service
 
     def pre_execute_check(
         self,
@@ -96,6 +102,7 @@ class ToolGovernance:
         6. For web fetch, the domain is in the domain allowlist.
         """
         # --- Tool-specific governance policies ---
+        operation = str(params.get("operation", ""))
         if context.tool_policies:
             policy_result = self._check_tool_policy(tool_name, params, context)
             if policy_result is not None:
@@ -104,8 +111,31 @@ class ToolGovernance:
                     logger.warning("Tool policy denied: tool=%s", tool_name)
                     return False
                 if policy_result == "ask":
+                    if self._try_consume_approval(
+                        params=params,
+                        tool_name=tool_name,
+                        operation=operation,
+                    ):
+                        return True
+                    if self._approval_service is not None:
+                        approval = self._approval_service.request(
+                            reason=ApprovalReason.TOOL_POLICY_ASK,
+                            tool_name=tool_name,
+                            operation=operation,
+                            command=str(params.get("command", "")),
+                            requested_by=context.requested_by,
+                            tenant_id=context.tenant_id,
+                            details="Tool policy requires operator approval.",
+                        )
+                        logger.info(
+                            "Tool policy requires approval: tool=%s approval_id=%s",
+                            tool_name,
+                            approval.approval_id,
+                        )
+                    else:
+                        logger.info("Tool policy requires approval: tool=%s", tool_name)
                     logger.info(
-                        "Tool policy requires approval: tool=%s (blocking for now)",
+                        "Tool policy approval pending: tool=%s (blocking)",
                         tool_name,
                     )
                     return False
@@ -124,16 +154,40 @@ class ToolGovernance:
             if autonomy_level == AutonomyLevel.READ_ONLY and tool_name in _WRITE_TOOLS:
                 logger.warning("Autonomy denied: tool=%s blocked in read-only mode", tool_name)
                 return False
-            if autonomy_level == AutonomyLevel.SUPERVISED and tool_name in _DESTRUCTIVE_PARAMS:
-                op = params.get("operation", "")
-                if op in _DESTRUCTIVE_PARAMS[tool_name]:
-                    logger.info(
-                        "Supervised mode: tool=%s operation=%s requires approval",
-                        tool_name,
-                        op,
+            if (
+                autonomy_level == AutonomyLevel.SUPERVISED
+                and tool_name in _DESTRUCTIVE_PARAMS
+                and operation in _DESTRUCTIVE_PARAMS[tool_name]
+            ):
+                if self._try_consume_approval(
+                    params=params,
+                    tool_name=tool_name,
+                    operation=operation,
+                ):
+                    return True
+                if self._approval_service is not None:
+                    approval = self._approval_service.request(
+                        reason=ApprovalReason.SUPERVISED_DESTRUCTIVE,
+                        tool_name=tool_name,
+                        operation=operation,
+                        command=str(params.get("command", "")),
+                        requested_by=context.requested_by,
+                        tenant_id=context.tenant_id,
+                        details="Supervised autonomy requires operator approval.",
                     )
-                    # For now, supervised mode logs but allows — full approval
-                    # gates are Phase 18 (Autonomy Enforcement).
+                    logger.info(
+                        "Supervised approval required: tool=%s operation=%s approval_id=%s",
+                        tool_name,
+                        operation,
+                        approval.approval_id,
+                    )
+                else:
+                    logger.info(
+                        "Supervised approval required: tool=%s operation=%s",
+                        tool_name,
+                        operation,
+                    )
+                return False
 
         # --- Scope check ---
         required_scope = self.TOOL_SCOPE_MAP.get(tool_name, "tools:execute")
@@ -181,6 +235,21 @@ class ToolGovernance:
                 return False
 
         return True
+
+    def _try_consume_approval(
+        self, params: dict[str, Any], tool_name: str, operation: str
+    ) -> bool:
+        """Consume a matching approved request if an approval token is supplied."""
+        if self._approval_service is None:
+            return False
+        approval_id = params.get("__approval_id")
+        if not isinstance(approval_id, str) or not approval_id:
+            return False
+        return self._approval_service.consume_if_approved(
+            approval_id,
+            tool_name=tool_name,
+            operation=operation,
+        )
 
     def _check_tool_policy(
         self,

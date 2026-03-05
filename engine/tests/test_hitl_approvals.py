@@ -1,0 +1,109 @@
+"""HITL approval lifecycle tests for governed tool execution."""
+
+from __future__ import annotations
+
+import pytest
+
+from agent33.agents.definition import AutonomyLevel
+from agent33.tools.approvals import ApprovalReason, ApprovalStatus, ToolApprovalService
+from agent33.tools.base import ToolContext
+from agent33.tools.governance import ToolGovernance
+
+
+def test_tool_policy_ask_creates_pending_approval() -> None:
+    approvals = ToolApprovalService()
+    governance = ToolGovernance(approval_service=approvals)
+    context = ToolContext(
+        user_scopes=["tools:execute"],
+        tool_policies={"file_ops": "ask"},
+        requested_by="requester-1",
+        tenant_id="tenant-a",
+    )
+
+    allowed = governance.pre_execute_check(
+        "file_ops",
+        {"operation": "write", "path": "src/file.py"},
+        context,
+    )
+
+    assert allowed is False
+    requests = approvals.list_requests()
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.reason == ApprovalReason.TOOL_POLICY_ASK
+    assert request.status == ApprovalStatus.PENDING
+    assert request.requested_by == "requester-1"
+
+
+def test_supervised_destructive_flow_consumes_approved_token() -> None:
+    approvals = ToolApprovalService()
+    governance = ToolGovernance(approval_service=approvals)
+    context = ToolContext(user_scopes=["tools:execute"], requested_by="requester-2")
+
+    allowed = governance.pre_execute_check(
+        "file_ops",
+        {"operation": "write", "path": "src/file.py"},
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert allowed is False
+
+    request = approvals.list_requests()[0]
+    approvals.decide(
+        request.approval_id,
+        approved=True,
+        reviewed_by="operator",
+        review_note="approved for one execution",
+    )
+
+    second_allowed = governance.pre_execute_check(
+        "file_ops",
+        {
+            "operation": "write",
+            "path": "src/file.py",
+            "__approval_id": request.approval_id,
+        },
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert second_allowed is True
+    assert approvals.get_request(request.approval_id).status == ApprovalStatus.CONSUMED
+
+
+@pytest.fixture(autouse=True)
+def reset_tool_approval_route_singleton() -> None:
+    from agent33.api.routes.tool_approvals import _reset_tool_approval_service
+
+    _reset_tool_approval_service()
+    yield
+    _reset_tool_approval_service()
+
+
+def test_tool_approval_api_list_and_decide(client) -> None:
+    from agent33.api.routes.tool_approvals import get_tool_approval_service
+
+    service = get_tool_approval_service()
+    request = service.request(
+        reason=ApprovalReason.TOOL_POLICY_ASK,
+        tool_name="file_ops",
+        operation="write",
+        requested_by="api-user",
+    )
+
+    list_response = client.get("/v1/approvals/tools")
+    assert list_response.status_code == 200
+    listed = list_response.json()
+    assert listed
+    assert listed[0]["approval_id"] == request.approval_id
+
+    decision_response = client.post(
+        f"/v1/approvals/tools/{request.approval_id}/decision",
+        json={"decision": "approve", "reviewed_by": "ops-user"},
+    )
+    assert decision_response.status_code == 200
+    assert decision_response.json()["status"] == "approved"
+
+
+def test_tool_approval_api_invalid_status_filter_returns_400(client) -> None:
+    response = client.get("/v1/approvals/tools", params={"status": "invalid"})
+    assert response.status_code == 400
