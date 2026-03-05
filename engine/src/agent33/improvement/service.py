@@ -576,9 +576,7 @@ class ImprovementService:
         sample_signals = len(sample)
         sample_occurrences = sum(max(1, signal.occurrence_count) for signal in sample)
         daily_occurrence_rate = sample_occurrences / float(window_days)
-        average_quality = (
-            round(sum(qualities) / sample_signals, 3) if sample_signals > 0 else 0.0
-        )
+        average_quality = round(sum(qualities) / sample_signals, 3) if sample_signals > 0 else 0.0
         quality_p75 = round(self._percentile(qualities, 0.75), 3)
         quality_p90 = round(self._percentile(qualities, 0.90), 3)
         high_or_critical = sum(
