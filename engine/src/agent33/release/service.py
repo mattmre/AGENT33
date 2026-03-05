@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 from agent33.component_security.models import (
     FindingsSummary,
@@ -15,12 +18,17 @@ from agent33.release.models import (
     Release,
     ReleaseStatus,
     ReleaseType,
+    RollbackRecord,
     RollbackType,
+    SyncExecution,
     SyncRule,
 )
 from agent33.release.rollback import RollbackManager
 from agent33.release.security_gate import evaluate_security_gate
 from agent33.release.sync import SyncEngine
+
+if TYPE_CHECKING:
+    from agent33.services.orchestration_state import OrchestrationStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +75,87 @@ class InvalidReleaseTransitionError(Exception):
 class ReleaseService:
     """Full release lifecycle orchestration."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_store: OrchestrationStateStore | None = None) -> None:
+        self._state_store = state_store
         self._releases: dict[str, Release] = {}
         self._evaluator = ChecklistEvaluator()
-        self._sync = SyncEngine()
-        self._rollback = RollbackManager()
+        self._sync = SyncEngine(on_change=self._persist_state)
+        self._rollback = RollbackManager(on_change=self._persist_state)
+        self._load_state()
+
+    def _persist_state(self) -> None:
+        if self._state_store is None:
+            return
+        self._state_store.write_namespace(
+            "release",
+            {
+                "releases": {
+                    release_id: release.model_dump(mode="json")
+                    for release_id, release in self._releases.items()
+                },
+                "sync_rules": {
+                    rule_id: rule.model_dump(mode="json")
+                    for rule_id, rule in self._sync._rules.items()  # noqa: SLF001
+                },
+                "sync_executions": {
+                    execution_id: execution.model_dump(mode="json")
+                    for execution_id, execution in self._sync._executions.items()  # noqa: SLF001
+                },
+                "rollback_records": {
+                    rollback_id: record.model_dump(mode="json")
+                    for rollback_id, record in self._rollback._records.items()  # noqa: SLF001
+                },
+            },
+        )
+
+    def _load_state(self) -> None:
+        if self._state_store is None:
+            return
+        payload = self._state_store.read_namespace("release")
+
+        releases_payload = payload.get("releases", {})
+        if isinstance(releases_payload, dict):
+            for release_id, release_data in releases_payload.items():
+                if not isinstance(release_id, str):
+                    continue
+                try:
+                    self._releases[release_id] = Release.model_validate(release_data)
+                except ValidationError:
+                    logger.warning("release_restore_failed id=%s", release_id)
+
+        rules_payload = payload.get("sync_rules", {})
+        if isinstance(rules_payload, dict):
+            for rule_id, rule_data in rules_payload.items():
+                if not isinstance(rule_id, str):
+                    continue
+                try:
+                    self._sync._rules[rule_id] = SyncRule.model_validate(rule_data)  # noqa: SLF001
+                except ValidationError:
+                    logger.warning("sync_rule_restore_failed id=%s", rule_id)
+
+        executions_payload = payload.get("sync_executions", {})
+        if isinstance(executions_payload, dict):
+            for execution_id, execution_data in executions_payload.items():
+                if not isinstance(execution_id, str):
+                    continue
+                try:
+                    self._sync._executions[execution_id] = SyncExecution.model_validate(  # noqa: SLF001
+                        execution_data
+                    )
+                except ValidationError:
+                    logger.warning("sync_execution_restore_failed id=%s", execution_id)
+
+        rollback_payload = payload.get("rollback_records", {})
+        if isinstance(rollback_payload, dict):
+            for rollback_id, rollback_data in rollback_payload.items():
+                if not isinstance(rollback_id, str):
+                    continue
+                try:
+                    self._rollback._records[rollback_id] = RollbackRecord.model_validate(  # noqa: SLF001
+                        rollback_data
+                    )
+                except ValidationError:
+                    logger.warning("rollback_restore_failed id=%s", rollback_id)
 
     @property
     def sync_engine(self) -> SyncEngine:
@@ -105,6 +189,7 @@ class ReleaseService:
             version,
             release_type.value,
         )
+        self._persist_state()
         return release
 
     def get_release(self, release_id: str) -> Release:
@@ -139,6 +224,7 @@ class ReleaseService:
             release_id,
             to_status.value,
         )
+        self._persist_state()
         return release
 
     def freeze(self, release_id: str) -> Release:
@@ -168,6 +254,7 @@ class ReleaseService:
         from datetime import UTC, datetime
 
         release.released_at = datetime.now(UTC)
+        self._persist_state()
         return release
 
     def mark_failed(self, release_id: str) -> Release:
@@ -186,6 +273,7 @@ class ReleaseService:
     ) -> Release:
         release = self.get_release(release_id)
         self._evaluator.update_check(release.evidence.checklist, check_id, status, message)
+        self._persist_state()
         return release
 
     def evaluate_checklist(self, release_id: str) -> tuple[bool, list[str]]:
@@ -213,6 +301,7 @@ class ReleaseService:
             check_status,
             result.message,
         )
+        self._persist_state()
         return result
 
     # ------------------------------------------------------------------
@@ -248,4 +337,5 @@ class ReleaseService:
         )
         if release.status == ReleaseStatus.RELEASED:
             self.transition(release_id, ReleaseStatus.ROLLED_BACK)
+        self._persist_state()
         return release

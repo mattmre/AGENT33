@@ -85,6 +85,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("database_init_failed", error=str(exc))
     app.state.long_term_memory = long_term_memory
 
+    # -- Shared orchestration state -----------------------------------------
+    orchestration_state_store = None
+    if settings.orchestration_state_store_path.strip():
+        from agent33.services.orchestration_state import OrchestrationStateStore
+
+        orchestration_state_store = OrchestrationStateStore(
+            settings.orchestration_state_store_path
+        )
+        logger.info(
+            "orchestration_state_store_enabled",
+            path=settings.orchestration_state_store_path,
+        )
+    app.state.orchestration_state_store = orchestration_state_store
+
+    from agent33.autonomy.service import AutonomyService
+    from agent33.observability.trace_collector import TraceCollector
+    from agent33.release.service import ReleaseService
+
+    autonomy_service = AutonomyService(state_store=orchestration_state_store)
+    release_service = ReleaseService(state_store=orchestration_state_store)
+    trace_collector = TraceCollector(state_store=orchestration_state_store)
+    app.state.autonomy_service = autonomy_service
+    app.state.release_service = release_service
+    app.state.trace_collector = trace_collector
+    autonomy.set_autonomy_service(autonomy_service)
+    releases.set_release_service(release_service)
+    traces.set_trace_collector(trace_collector)
+
     # -- Redis -------------------------------------------------------------
     redis_conn = None
     try:

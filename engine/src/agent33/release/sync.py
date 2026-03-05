@@ -9,6 +9,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import logging
+from typing import TYPE_CHECKING
 
 from agent33.release.models import (
     SyncExecution,
@@ -17,15 +18,23 @@ from agent33.release.models import (
     SyncStatus,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = logging.getLogger(__name__)
 
 
 class SyncEngine:
     """Execute sync rules with dry-run support and validation."""
 
-    def __init__(self) -> None:
+    def __init__(self, on_change: Callable[[], None] | None = None) -> None:
         self._rules: dict[str, SyncRule] = {}
         self._executions: dict[str, SyncExecution] = {}
+        self._on_change = on_change
+
+    def _mark_changed(self) -> None:
+        if self._on_change is not None:
+            self._on_change()
 
     # ------------------------------------------------------------------
     # Rule management
@@ -34,6 +43,7 @@ class SyncEngine:
     def add_rule(self, rule: SyncRule) -> SyncRule:
         """Register a sync rule."""
         self._rules[rule.rule_id] = rule
+        self._mark_changed()
         logger.info("sync_rule_added id=%s repo=%s", rule.rule_id, rule.target_repo)
         return rule
 
@@ -46,6 +56,7 @@ class SyncEngine:
     def remove_rule(self, rule_id: str) -> bool:
         if rule_id in self._rules:
             del self._rules[rule_id]
+            self._mark_changed()
             return True
         return False
 
@@ -93,6 +104,7 @@ class SyncEngine:
                 errors=[f"Rule not found: {rule_id}"],
             )
             self._executions[exe.execution_id] = exe
+            self._mark_changed()
             return exe
 
         matched = self.match_files(rule, available_files)
@@ -118,6 +130,7 @@ class SyncEngine:
             file_results=file_results,
         )
         self._executions[exe.execution_id] = exe
+        self._mark_changed()
         logger.info("sync_dry_run rule=%s files=%d", rule_id, len(file_results))
         return exe
 
@@ -138,6 +151,7 @@ class SyncEngine:
                 errors=[f"Rule not found: {rule_id}"],
             )
             self._executions[exe.execution_id] = exe
+            self._mark_changed()
             return exe
 
         matched = self.match_files(rule, available_files)
@@ -166,6 +180,7 @@ class SyncEngine:
             completed_at=datetime.now(UTC),
         )
         self._executions[exe.execution_id] = exe
+        self._mark_changed()
         logger.info("sync_executed rule=%s files=%d", rule_id, len(file_results))
         return exe
 

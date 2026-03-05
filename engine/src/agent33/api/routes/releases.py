@@ -34,6 +34,12 @@ router = APIRouter(prefix="/v1/releases", tags=["releases"])
 _service = ReleaseService()
 
 
+def set_release_service(service: ReleaseService) -> None:
+    """Inject a shared release service instance (called from lifespan)."""
+    global _service  # noqa: PLW0603
+    _service = service
+
+
 def get_release_service() -> ReleaseService:
     """Return the release service singleton (for testing injection)."""
     return _service
