@@ -161,6 +161,50 @@ class LearningSummary(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class LearningTrendDimension(StrEnum):
+    """Grouping dimension for learning trend reporting."""
+
+    SIGNAL_TYPE = "signal_type"
+    SEVERITY = "severity"
+
+
+class LearningTrendDirection(StrEnum):
+    """Direction values for learning trend deltas."""
+
+    UP = "up"
+    DOWN = "down"
+    STABLE = "stable"
+
+
+class LearningTrendCategory(BaseModel):
+    """Current vs previous-window trend snapshot for one category key."""
+
+    key: str
+    current_signals: int = 0
+    previous_signals: int = 0
+    signal_delta: int = 0
+    current_occurrences: int = 0
+    previous_occurrences: int = 0
+    occurrence_delta: int = 0
+    direction: LearningTrendDirection = LearningTrendDirection.STABLE
+
+
+class LearningTrendReport(BaseModel):
+    """Dedup-aware trend report for learning signals."""
+
+    tenant_id: str | None = None
+    window_days: int = 7
+    dimension: LearningTrendDimension = LearningTrendDimension.SIGNAL_TYPE
+    window_start_at: datetime
+    previous_window_start_at: datetime
+    total_current_signals: int = 0
+    total_previous_signals: int = 0
+    total_current_occurrences: int = 0
+    total_previous_occurrences: int = 0
+    categories: list[LearningTrendCategory] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 # ---------------------------------------------------------------------------
 # Research Intake models
 # ---------------------------------------------------------------------------

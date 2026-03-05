@@ -16,6 +16,8 @@ from agent33.improvement.models import (
     LearningSignal,
     LearningSignalSeverity,
     LearningSignalType,
+    LearningTrendDimension,
+    LearningTrendDirection,
 )
 from agent33.improvement.persistence import (
     FileLearningSignalStore,
@@ -380,6 +382,71 @@ def test_summary_supports_tenant_and_window_trends(service: ImprovementService):
     assert summary.trend_direction == "stable"
 
 
+def test_trend_report_is_dedupe_aware_by_signal_type() -> None:
+    service = ImprovementService(
+        persistence_policy=LearningPersistencePolicy(dedupe_window_minutes=60 * 24 * 30)
+    )
+    now = datetime.now(UTC)
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-a",
+            summary="legacy flaky test",
+            source="ci",
+            recorded_at=now - timedelta(days=9),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-a",
+            summary="release pipeline regression",
+            source="ci",
+            recorded_at=now - timedelta(days=2),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.CRITICAL,
+            tenant_id="tenant-a",
+            summary="release pipeline regression",
+            source="ci",
+            recorded_at=now - timedelta(days=1),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.INCIDENT,
+            severity=LearningSignalSeverity.CRITICAL,
+            tenant_id="tenant-a",
+            summary="incident after deploy",
+            source="pagerduty",
+            recorded_at=now - timedelta(days=1),
+        )
+    )
+
+    report = service.trend_learning_signals(
+        window_days=7,
+        dimension=LearningTrendDimension.SIGNAL_TYPE,
+        tenant_id="tenant-a",
+    )
+
+    assert report.total_current_signals == 2
+    assert report.total_previous_signals == 1
+    assert report.total_current_occurrences == 3
+    assert report.total_previous_occurrences == 1
+    bug = next(item for item in report.categories if item.key == "bug")
+    assert bug.current_signals == 1
+    assert bug.previous_signals == 1
+    assert bug.current_occurrences == 2
+    assert bug.previous_occurrences == 1
+    assert bug.occurrence_delta == 1
+    assert bug.direction == LearningTrendDirection.UP
+
+
 def test_auto_intake_priority_uses_quality_score(service: ImprovementService):
     service.record_learning_signal(
         LearningSignal(
@@ -730,6 +797,86 @@ def test_summary_is_tenant_scoped_in_route(client: TestClient, monkeypatch: pyte
     assert payload["tenant_id"] == "tenant-1"
     assert payload["total_signals"] == 1
     assert payload["counts_by_tenant"] == {"tenant-1": 1}
+
+
+def test_trends_route_returns_dimension_report(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    now = datetime.now(UTC)
+    from agent33.api.routes.improvements import get_improvement_service
+
+    service = get_improvement_service()
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-1",
+            summary="legacy flaky test",
+            source="ci",
+            recorded_at=now - timedelta(days=9),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            tenant_id="tenant-1",
+            summary="current release pipeline regression",
+            source="ci",
+            recorded_at=now - timedelta(days=2),
+        )
+    )
+    service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.CRITICAL,
+            tenant_id="tenant-1",
+            summary="current release pipeline regression",
+            source="ci",
+            recorded_at=now - timedelta(days=1),
+        )
+    )
+
+    response = client.get(
+        "/v1/improvements/learning/trends",
+        params={
+            "window_days": 7,
+            "dimension": "severity",
+            "tenant_id": "tenant-1",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dimension"] == "severity"
+    assert payload["window_days"] == 7
+    assert payload["tenant_id"] == "tenant-1"
+    assert isinstance(payload["categories"], list)
+    assert all(item["direction"] in {"up", "down", "stable"} for item in payload["categories"])
+
+
+def test_trends_route_rejects_invalid_dimension(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    response = client.get(
+        "/v1/improvements/learning/trends",
+        params={"dimension": "invalid"},
+    )
+    assert response.status_code == 400
+    assert "Invalid dimension" in response.json()["detail"]
+
+
+def test_trends_route_rejects_invalid_window_days(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    response = client.get(
+        "/v1/improvements/learning/trends",
+        params={"window_days": 0},
+    )
+    assert response.status_code == 400
+    assert "window_days must be at least 1" in response.json()["detail"]
 
 
 def test_routes_support_sqlite_backend_with_file_migration(
