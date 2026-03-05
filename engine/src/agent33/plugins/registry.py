@@ -41,14 +41,15 @@ class CyclicDependencyError(PluginDependencyError):
 class PluginEntry:
     """Internal tracking entry for a discovered/loaded plugin."""
 
-    __slots__ = ("manifest", "state", "instance", "error", "plugin_dir")
+    __slots__ = ("manifest", "state", "instance", "error", "plugin_dir", "tenant_id")
 
-    def __init__(self, manifest: PluginManifest, plugin_dir: Path) -> None:
+    def __init__(self, manifest: PluginManifest, plugin_dir: Path, tenant_id: str = "") -> None:
         self.manifest = manifest
         self.plugin_dir = plugin_dir
         self.state = PluginState.DISCOVERED
         self.instance: PluginBase | None = None
         self.error: str | None = None
+        self.tenant_id = tenant_id
 
 
 class PluginRegistry:
@@ -69,6 +70,21 @@ class PluginRegistry:
 
     def __init__(self) -> None:
         self._plugins: dict[str, PluginEntry] = {}
+
+    # ------------------------------------------------------------------
+    # Tenant helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_tenant_write(
+        caller_tenant: str, owner_tenant: str, operation: str, name: str
+    ) -> None:
+        """Raise ``PermissionError`` when a tenant tries to mutate another's plugin."""
+        if caller_tenant and owner_tenant and owner_tenant != caller_tenant:
+            raise PermissionError(
+                f"Tenant '{caller_tenant}' cannot {operation} plugin '{name}' "
+                f"owned by tenant '{owner_tenant}'"
+            )
 
     # ------------------------------------------------------------------
     # Discovery
@@ -216,10 +232,17 @@ class PluginRegistry:
                 logger.warning("Failed to load plugin '%s'", name, exc_info=True)
         return loaded
 
-    async def load(self, name: str, context_factory: Any) -> None:
+    async def load(self, name: str, context_factory: Any, *, tenant_id: str = "") -> None:
         """Load a single plugin: instantiate class, call on_load().
 
-        Raises KeyError if plugin not discovered.
+        Args:
+            name: Plugin name (must be previously discovered).
+            context_factory: Callable(manifest, plugin_dir) -> PluginContext.
+            tenant_id: When non-empty, associates the plugin with this tenant
+                for isolation purposes.
+
+        Raises:
+            KeyError: If plugin not discovered.
         """
         entry = self._plugins.get(name)
         if entry is None:
@@ -228,6 +251,9 @@ class PluginRegistry:
         if entry.state not in (PluginState.DISCOVERED, PluginState.UNLOADED):
             logger.info("Plugin '%s' already in state %s, skipping load", name, entry.state)
             return
+
+        if tenant_id:
+            entry.tenant_id = tenant_id
 
         entry.state = PluginState.LOADING
         try:
@@ -282,11 +308,22 @@ class PluginRegistry:
     # Enable / Disable
     # ------------------------------------------------------------------
 
-    async def enable(self, name: str) -> None:
-        """Enable a loaded plugin: call on_enable(), make contributions active."""
+    async def enable(self, name: str, *, tenant_id: str = "") -> None:
+        """Enable a loaded plugin: call on_enable(), make contributions active.
+
+        Args:
+            name: Plugin name.
+            tenant_id: When non-empty, validates the caller's tenant owns
+                this plugin before enabling.
+
+        Raises:
+            PermissionError: If the plugin belongs to a different tenant.
+        """
         entry = self._plugins.get(name)
         if entry is None:
             raise KeyError(f"Plugin '{name}' not discovered")
+
+        self._check_tenant_write(tenant_id, entry.tenant_id, "enable", name)
 
         if entry.state not in (PluginState.LOADED, PluginState.DISABLED):
             raise RuntimeError(
@@ -305,11 +342,22 @@ class PluginRegistry:
             entry.error = str(exc)
             raise
 
-    async def disable(self, name: str) -> None:
-        """Disable an active plugin: call on_disable(), remove hooks."""
+    async def disable(self, name: str, *, tenant_id: str = "") -> None:
+        """Disable an active plugin: call on_disable(), remove hooks.
+
+        Args:
+            name: Plugin name.
+            tenant_id: When non-empty, validates the caller's tenant owns
+                this plugin before disabling.
+
+        Raises:
+            PermissionError: If the plugin belongs to a different tenant.
+        """
         entry = self._plugins.get(name)
         if entry is None:
             raise KeyError(f"Plugin '{name}' not discovered")
+
+        self._check_tenant_write(tenant_id, entry.tenant_id, "disable", name)
 
         if entry.state != PluginState.ACTIVE:
             raise RuntimeError(
@@ -328,11 +376,22 @@ class PluginRegistry:
     # Unloading
     # ------------------------------------------------------------------
 
-    async def unload(self, name: str) -> None:
-        """Unload a plugin: call on_unload(), remove all contributions."""
+    async def unload(self, name: str, *, tenant_id: str = "") -> None:
+        """Unload a plugin: call on_unload(), remove all contributions.
+
+        Args:
+            name: Plugin name.
+            tenant_id: When non-empty, validates the caller's tenant owns
+                this plugin before unloading.
+
+        Raises:
+            PermissionError: If the plugin belongs to a different tenant.
+        """
         entry = self._plugins.get(name)
         if entry is None:
             raise KeyError(f"Plugin '{name}' not discovered")
+
+        self._check_tenant_write(tenant_id, entry.tenant_id, "unload", name)
 
         if entry.state == PluginState.ACTIVE:
             await self.disable(name)
@@ -370,32 +429,61 @@ class PluginRegistry:
     # CRUD / Query
     # ------------------------------------------------------------------
 
-    def get(self, name: str) -> PluginEntry | None:
-        """Return the entry for a plugin, or None."""
-        return self._plugins.get(name)
+    def get(self, name: str, *, tenant_id: str = "") -> PluginEntry | None:
+        """Return the entry for a plugin, or None.
 
-    def get_manifest(self, name: str) -> PluginManifest | None:
-        """Return the manifest for a plugin, or None."""
+        When *tenant_id* is non-empty, returns the entry only if the plugin
+        belongs to the caller's tenant or is a system-level plugin
+        (``tenant_id=""``).
+        """
         entry = self._plugins.get(name)
+        if entry is None:
+            return None
+        if tenant_id and entry.tenant_id and entry.tenant_id != tenant_id:
+            return None
+        return entry
+
+    def get_manifest(self, name: str, *, tenant_id: str = "") -> PluginManifest | None:
+        """Return the manifest for a plugin, or None.
+
+        Respects the same tenant isolation rules as :meth:`get`.
+        """
+        entry = self.get(name, tenant_id=tenant_id)
         return entry.manifest if entry else None
 
-    def list_all(self) -> list[PluginManifest]:
-        """Return all discovered plugin manifests, sorted by name."""
+    def list_all(self, *, tenant_id: str = "") -> list[PluginManifest]:
+        """Return all discovered plugin manifests, sorted by name.
+
+        When *tenant_id* is non-empty, returns only system-level plugins
+        (``tenant_id=""``) and plugins belonging to the caller's tenant.
+        """
+        entries = self._plugins.values()
+        if tenant_id:
+            entries = [e for e in entries if e.tenant_id == "" or e.tenant_id == tenant_id]
         return sorted(
-            [e.manifest for e in self._plugins.values()],
+            [e.manifest for e in entries],
             key=lambda m: m.name,
         )
 
-    def list_active(self) -> list[PluginManifest]:
-        """Return manifests of all active plugins."""
+    def list_active(self, *, tenant_id: str = "") -> list[PluginManifest]:
+        """Return manifests of all active plugins.
+
+        Respects the same tenant isolation rules as :meth:`list_all`.
+        """
+        entries = [e for e in self._plugins.values() if e.state == PluginState.ACTIVE]
+        if tenant_id:
+            entries = [e for e in entries if e.tenant_id == "" or e.tenant_id == tenant_id]
         return sorted(
-            [e.manifest for e in self._plugins.values() if e.state == PluginState.ACTIVE],
+            [e.manifest for e in entries],
             key=lambda m: m.name,
         )
 
-    def get_state(self, name: str) -> PluginState | None:
-        """Return the current state of a plugin."""
-        entry = self._plugins.get(name)
+    def get_state(self, name: str, *, tenant_id: str = "") -> PluginState | None:
+        """Return the current state of a plugin.
+
+        Respects the same tenant isolation rules as :meth:`get`.
+        """
+        entry = self.get(name, tenant_id=tenant_id)
         return entry.state if entry else None
 
     @property
@@ -408,11 +496,21 @@ class PluginRegistry:
         """Number of currently active plugins."""
         return sum(1 for e in self._plugins.values() if e.state == PluginState.ACTIVE)
 
-    def remove(self, name: str) -> bool:
-        """Remove a plugin entry (must be UNLOADED or DISCOVERED)."""
+    def remove(self, name: str, *, tenant_id: str = "") -> bool:
+        """Remove a plugin entry (must be UNLOADED or DISCOVERED).
+
+        Args:
+            name: Plugin name.
+            tenant_id: When non-empty, validates the caller's tenant owns
+                this plugin before removing.
+
+        Raises:
+            PermissionError: If the plugin belongs to a different tenant.
+        """
         entry = self._plugins.get(name)
         if entry is None:
             return False
+        self._check_tenant_write(tenant_id, entry.tenant_id, "remove", name)
         if entry.state not in (PluginState.DISCOVERED, PluginState.UNLOADED):
             raise RuntimeError(
                 f"Cannot remove plugin '{name}' in state {entry.state}. Unload it first."

@@ -28,19 +28,45 @@ class HookRegistry:
         self._max_per_event = max_per_event
 
     # ------------------------------------------------------------------
+    # Tenant helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_tenant_write(
+        caller_tenant: str, owner_tenant: str, operation: str, name: str
+    ) -> None:
+        """Raise ``PermissionError`` when a tenant tries to mutate another's hook."""
+        if caller_tenant and owner_tenant != caller_tenant:
+            raise PermissionError(
+                f"Tenant '{caller_tenant}' cannot {operation} '{name}' "
+                f"owned by tenant '{owner_tenant or '(system)'}'"
+            )
+
+    # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
 
-    def register(self, hook: Any, definition: HookDefinition | None = None) -> None:
+    def register(
+        self, hook: Any, definition: HookDefinition | None = None, *, tenant_id: str = ""
+    ) -> None:
         """Register a hook instance.
 
         Args:
             hook: An object satisfying the Hook protocol.
             definition: Optional persistent definition for API management.
+            tenant_id: Caller's tenant ID for ownership validation.  When
+                non-empty, the hook's ``tenant_id`` must match or a
+                ``PermissionError`` is raised.
 
         Raises:
             ValueError: If the event type limit is exceeded.
+            PermissionError: If *tenant_id* doesn't match the hook's tenant.
         """
+        if tenant_id and hook.tenant_id and hook.tenant_id != tenant_id:
+            raise PermissionError(
+                f"Cannot register hook '{hook.name}': hook tenant "
+                f"'{hook.tenant_id}' does not match caller tenant '{tenant_id}'"
+            )
         event_type = hook.event_type
         existing = self._hooks[event_type]
         if len(existing) >= self._max_per_event:
@@ -58,25 +84,48 @@ class HookRegistry:
             hook.tenant_id or "(system)",
         )
 
-    def deregister(self, hook_name: str, event_type: str | None = None) -> bool:
+    def deregister(
+        self, hook_name: str, event_type: str | None = None, *, tenant_id: str = ""
+    ) -> bool:
         """Remove a hook by name. Returns True if removed.
 
-        If event_type is specified, only removes from that event type's list.
+        If *event_type* is specified, only removes from that event type's list.
         Otherwise, removes from all event types.
+
+        Args:
+            hook_name: Name of the hook to remove.
+            event_type: If specified, only removes from this event type.
+            tenant_id: When non-empty, only removes hooks owned by this
+                tenant.  System and other tenants' hooks are left in place.
         """
         removed = False
         event_types = [event_type] if event_type else list(self._hooks.keys())
         for et in event_types:
             before = len(self._hooks[et])
-            self._hooks[et] = [h for h in self._hooks[et] if h.name != hook_name]
+            if tenant_id:
+                # Only remove hooks belonging to the specified tenant
+                self._hooks[et] = [
+                    h
+                    for h in self._hooks[et]
+                    if not (h.name == hook_name and h.tenant_id == tenant_id)
+                ]
+            else:
+                self._hooks[et] = [h for h in self._hooks[et] if h.name != hook_name]
             if len(self._hooks[et]) < before:
                 removed = True
         # Also remove the definition if present
-        to_remove = [hid for hid, d in self._definitions.items() if d.name == hook_name]
+        if tenant_id:
+            to_remove = [
+                hid
+                for hid, d in self._definitions.items()
+                if d.name == hook_name and d.tenant_id == tenant_id
+            ]
+        else:
+            to_remove = [hid for hid, d in self._definitions.items() if d.name == hook_name]
         for hid in to_remove:
             del self._definitions[hid]
         if removed:
-            logger.info("hook_deregistered name=%s", hook_name)
+            logger.info("hook_deregistered name=%s tenant=%s", hook_name, tenant_id or "(any)")
         return removed
 
     # ------------------------------------------------------------------
@@ -107,9 +156,19 @@ class HookRegistry:
         hooks = self.get_hooks(event_type, tenant_id)
         return HookChainRunner(hooks=hooks, timeout_ms=timeout_ms, fail_open=fail_open)
 
-    def get_definition(self, hook_id: str) -> HookDefinition | None:
-        """Return a hook definition by ID."""
-        return self._definitions.get(hook_id)
+    def get_definition(self, hook_id: str, *, tenant_id: str = "") -> HookDefinition | None:
+        """Return a hook definition by ID.
+
+        When *tenant_id* is non-empty, returns the definition only if it is a
+        system-level definition (``tenant_id=""``) or belongs to the caller's
+        tenant.
+        """
+        defn = self._definitions.get(hook_id)
+        if defn is None:
+            return None
+        if tenant_id and defn.tenant_id not in ("", tenant_id):
+            return None
+        return defn
 
     def list_definitions(
         self,
@@ -133,20 +192,34 @@ class HookRegistry:
         self,
         hook_id: str,
         updates: dict[str, Any],
+        *,
+        tenant_id: str = "",
     ) -> HookDefinition | None:
-        """Update a hook definition. Returns the updated definition or None."""
+        """Update a hook definition. Returns the updated definition or None.
+
+        Raises:
+            PermissionError: If *tenant_id* is non-empty and the definition
+                belongs to a different tenant.
+        """
         defn = self._definitions.get(hook_id)
         if defn is None:
             return None
+        self._check_tenant_write(tenant_id, defn.tenant_id, "update", hook_id)
         updated = defn.model_copy(update=updates)
         self._definitions[hook_id] = updated
         return updated
 
-    def toggle(self, hook_id: str, enabled: bool) -> HookDefinition | None:
-        """Toggle a hook's enabled state."""
+    def toggle(self, hook_id: str, enabled: bool, *, tenant_id: str = "") -> HookDefinition | None:
+        """Toggle a hook's enabled state.
+
+        Raises:
+            PermissionError: If *tenant_id* is non-empty and the definition
+                belongs to a different tenant.
+        """
         defn = self._definitions.get(hook_id)
         if defn is None:
             return None
+        self._check_tenant_write(tenant_id, defn.tenant_id, "toggle", hook_id)
         updated = defn.model_copy(update={"enabled": enabled})
         self._definitions[hook_id] = updated
         # Also update the runtime hook instance if present
@@ -156,11 +229,17 @@ class HookRegistry:
                     h._enabled = enabled  # noqa: SLF001
         return updated
 
-    def delete_definition(self, hook_id: str) -> bool:
-        """Delete a hook definition and deregister the hook. Returns True if found."""
+    def delete_definition(self, hook_id: str, *, tenant_id: str = "") -> bool:
+        """Delete a hook definition and deregister the hook. Returns True if found.
+
+        Raises:
+            PermissionError: If *tenant_id* is non-empty and the definition
+                belongs to a different tenant.
+        """
         defn = self._definitions.get(hook_id)
         if defn is None:
             return False
+        self._check_tenant_write(tenant_id, defn.tenant_id, "delete", hook_id)
         del self._definitions[hook_id]
         self.deregister(defn.name)
         return True

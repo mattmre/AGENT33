@@ -1,4 +1,39 @@
-"""Shared connector-boundary construction and error mapping."""
+"""Shared connector-boundary construction and error mapping.
+
+This module provides the central factory for building connector-boundary
+middleware chains, policy-pack resolution, and a synchronous governance
+enforcement helper for non-async adapter calls.
+
+Policy Packs
+~~~~~~~~~~~~
+Three built-in policy packs are provided via ``_POLICY_PACKS``:
+
+**default**
+    No blocked connectors or operations.  All outbound calls pass through
+    the middleware chain (governance, timeout, retry, circuit-breaker,
+    metrics) but nothing is denied by default.  Suitable for development
+    and trusted environments.
+
+**strict-web**
+    Blocks web-facing connectors that perform outbound HTTP requests on
+    behalf of user-provided input: ``tool:web_fetch``,
+    ``workflow:http_request``, ``search:searxng``, and ``tool:reader``.
+    LLM provider calls and internal service communication remain
+    unaffected.  Use this pack in environments where external web access
+    must be prevented (e.g., air-gapped or compliance-restricted
+    deployments).
+
+**mcp-readonly**
+    Blocks the MCP ``tools/call`` operation while leaving resource reads
+    (``resources/read``, ``prompts/get``, etc.) open.  This allows agents
+    to inspect MCP server capabilities without executing side-effecting
+    tool calls.  Ideal for audit or monitoring contexts where MCP
+    inspection is needed but execution must be suppressed.
+
+Custom packs can be combined with per-instance blocklists via the
+``CONNECTOR_GOVERNANCE_BLOCKED_CONNECTORS`` and
+``CONNECTOR_GOVERNANCE_BLOCKED_OPERATIONS`` settings.
+"""
 
 from __future__ import annotations
 
@@ -25,8 +60,15 @@ def _parse_csv(value: str) -> frozenset[str]:
     return frozenset(item.strip() for item in value.split(",") if item.strip())
 
 
+# ---- Policy Pack definitions ------------------------------------------------
+# Each entry maps a pack name to a tuple of
+# (blocked_connectors: frozenset, blocked_operations: frozenset).
+# Blocked connectors are matched against ConnectorRequest.connector;
+# blocked operations are matched against ConnectorRequest.operation.
 _POLICY_PACKS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    # No restrictions – all calls are allowed.
     "default": (frozenset(), frozenset()),
+    # Block outbound web crawling / fetching tools.
     "strict-web": (
         frozenset(
             {
@@ -38,6 +80,7 @@ _POLICY_PACKS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
         ),
         frozenset(),
     ),
+    # Allow MCP resource reads but deny tool execution.
     "mcp-readonly": (
         frozenset(),
         frozenset({"tools/call"}),
