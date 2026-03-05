@@ -977,9 +977,7 @@ def test_trends_route_rejects_invalid_window_days(
     assert "window_days must be at least 1" in response.json()["detail"]
 
 
-def test_calibration_route_returns_report(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
+def test_calibration_route_returns_report(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "improvement_learning_enabled", True)
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 2)
     now = datetime.now(UTC)

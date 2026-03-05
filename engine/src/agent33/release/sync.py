@@ -68,8 +68,7 @@ class SyncEngine:
         """Return a serializable snapshot of internal state."""
         return {
             "rules": {
-                rule_id: rule.model_dump(mode="json")
-                for rule_id, rule in self._rules.items()
+                rule_id: rule.model_dump(mode="json") for rule_id, rule in self._rules.items()
             },
             "executions": {
                 exec_id: execution.model_dump(mode="json")

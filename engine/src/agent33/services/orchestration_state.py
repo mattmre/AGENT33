@@ -10,7 +10,7 @@ from typing import Any, cast
 
 def _deep_copy(value: dict[str, Any]) -> dict[str, Any]:
     """Return a JSON-compatible deep copy of *value*."""
-    return cast(dict[str, Any], json.loads(json.dumps(value)))
+    return cast("dict[str, Any]", json.loads(json.dumps(value)))
 
 
 class OrchestrationStateStore:

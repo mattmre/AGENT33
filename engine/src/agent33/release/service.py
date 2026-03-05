@@ -118,9 +118,7 @@ class ReleaseService:
                 "executions": payload.get("sync_executions", {}),
             }
         )
-        self._rollback.restore_state(
-            {"records": payload.get("rollback_records", {})}
-        )
+        self._rollback.restore_state({"records": payload.get("rollback_records", {})})
 
     @property
     def sync_engine(self) -> SyncEngine:
