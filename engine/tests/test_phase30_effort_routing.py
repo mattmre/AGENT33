@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from agent33.agents.definition import (
     AgentConstraints,
@@ -510,7 +511,7 @@ class TestEffortAlertManager:
 class TestEffortConfigValidation:
     def test_score_threshold_order_is_validated(self) -> None:
         with pytest.raises(
-            ValueError,
+            ValidationError,
             match="agent_effort_heuristic_high_score_threshold must be greater than",
         ):
             Settings(
@@ -520,7 +521,7 @@ class TestEffortConfigValidation:
 
     def test_payload_threshold_order_is_validated(self) -> None:
         with pytest.raises(
-            ValueError,
+            ValidationError,
             match="agent_effort_heuristic_large_payload_chars must be greater than",
         ):
             Settings(
