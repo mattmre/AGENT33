@@ -44,8 +44,10 @@ class ScoredFeatureCandidate(FeatureCandidateInput):
 
 
 def _priority_from_rank(rank: int) -> int:
-    clamped_rank = max(1, min(rank, 10))
-    return 11 - clamped_rank
+    """Map repository rank (1-30) into a discrete priority bucket (1-10)."""
+    clamped_rank = max(1, min(rank, 30))
+    bucket = (clamped_rank - 1) // 3  # 0–9
+    return 10 - bucket
 
 
 def build_competitive_intake(

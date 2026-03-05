@@ -38,7 +38,6 @@ from agent33.improvement.repo_ingestion import (
     FeatureCandidateInput,
     RepoHarvestRecord,
     build_competitive_intake,
-    prioritize_feature_candidates,
     score_feature_candidate,
 )
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
@@ -197,13 +196,13 @@ class RecordLearningSignalRequest(BaseModel):
 
 
 class BatchRepoIntakeRequest(BaseModel):
-    records: list[RepoHarvestRecord] = Field(default_factory=list)
+    records: list[RepoHarvestRecord] = Field(min_length=1, max_length=100)
     submitted_by: str = "repo-harvester"
     tenant_id: str = "default"
 
 
 class ScoreFeatureCandidatesRequest(BaseModel):
-    candidates: list[FeatureCandidateInput] = Field(default_factory=list)
+    candidates: list[FeatureCandidateInput] = Field(min_length=1, max_length=100)
     top_n: int = Field(default=10, ge=1, le=100)
 
 
@@ -248,18 +247,24 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
 
 @router.post("/intakes/competitive/repos")
 def submit_competitive_repo_intakes(req: BatchRepoIntakeRequest) -> dict[str, Any]:
-    """Submit a batch of competitive intakes derived from repository metadata."""
+    """Submit a batch of competitive intakes derived from repository metadata.
+
+    Note: tenant_id is accepted from the request body, consistent with this
+    router's existing trust boundary (no require_scope enforcement).
+    """
     try:
-        created_intakes = []
-        for record in req.records:
-            intake = build_competitive_intake(
-                record,
-                submitted_by=req.submitted_by,
-                tenant_id=req.tenant_id,
-            )
-            created_intakes.append(_service.submit_intake(intake).model_dump(mode="json"))
+        created_intakes = [
+            _service.submit_intake(
+                build_competitive_intake(
+                    record,
+                    submitted_by=req.submitted_by,
+                    tenant_id=req.tenant_id,
+                )
+            ).model_dump(mode="json")
+            for record in req.records
+        ]
         return {"created_intakes": created_intakes}
-    except Exception as exc:
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
@@ -268,12 +273,12 @@ def score_feature_candidates(req: ScoreFeatureCandidatesRequest) -> dict[str, An
     """Score and prioritize feature candidates based on weighted heuristics."""
     try:
         scored = [score_feature_candidate(candidate) for candidate in req.candidates]
-        prioritized = prioritize_feature_candidates(req.candidates, req.top_n)
+        prioritized = sorted(scored, key=lambda c: c.weighted_priority, reverse=True)[: req.top_n]
         return {
             "scored": [candidate.model_dump(mode="json") for candidate in scored],
             "prioritized": [candidate.model_dump(mode="json") for candidate in prioritized],
         }
-    except Exception as exc:
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
