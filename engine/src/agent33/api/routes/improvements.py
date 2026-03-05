@@ -619,3 +619,27 @@ def get_learning_trends(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     return report.model_dump(mode="json")
+
+
+@router.get("/learning/calibration")
+def get_learning_calibration(
+    window_days: int = 30,
+    target_auto_intakes_per_window: int | None = None,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Calibrate retention and auto-intake thresholds from recent learning signals."""
+    _ensure_learning_enabled()
+    effective_target = (
+        settings.improvement_learning_auto_intake_max_items
+        if target_auto_intakes_per_window is None
+        else target_auto_intakes_per_window
+    )
+    try:
+        report = _service.calibrate_learning_thresholds(
+            window_days=window_days,
+            target_auto_intakes_per_window=effective_target,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return report.model_dump(mode="json")
