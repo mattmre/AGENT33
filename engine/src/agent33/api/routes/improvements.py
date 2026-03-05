@@ -17,6 +17,7 @@ from agent33.improvement.models import (
     LearningSignal,
     LearningSignalSeverity,
     LearningSignalType,
+    LearningTrendDimension,
     LessonAction,
     LessonEventType,
     LessonLearned,
@@ -595,3 +596,26 @@ def get_learning_summary(
         "summary": summary.model_dump(mode="json"),
         "generated_intakes": [i.model_dump(mode="json") for i in generated_intakes],
     }
+
+
+@router.get("/learning/trends")
+def get_learning_trends(
+    window_days: int = 7,
+    dimension: str = LearningTrendDimension.SIGNAL_TYPE.value,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Get dedup-aware trend analytics over learning signals."""
+    _ensure_learning_enabled()
+    try:
+        parsed_dimension = LearningTrendDimension(dimension)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid dimension: {dimension}") from None
+    try:
+        report = _service.trend_learning_signals(
+            window_days=window_days,
+            dimension=parsed_dimension,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return report.model_dump(mode="json")

@@ -19,6 +19,10 @@ from agent33.improvement.models import (
     LearningSignalSeverity,
     LearningSignalType,
     LearningSummary,
+    LearningTrendCategory,
+    LearningTrendDimension,
+    LearningTrendDirection,
+    LearningTrendReport,
     LessonActionStatus,
     LessonLearned,
     MetricsSnapshot,
@@ -440,6 +444,98 @@ class ImprovementService:
             previous_window_total=previous_window_total,
             trend_delta=trend_delta,
             trend_direction=trend_direction,
+        )
+
+    def trend_learning_signals(
+        self,
+        *,
+        window_days: int = 7,
+        dimension: LearningTrendDimension = LearningTrendDimension.SIGNAL_TYPE,
+        tenant_id: str | None = None,
+    ) -> LearningTrendReport:
+        """Return dedup-aware trend analytics over current and previous windows."""
+        if window_days < 1:
+            raise ValueError("window_days must be at least 1")
+
+        now = datetime.now(UTC)
+        window_start_at = now - timedelta(days=window_days)
+        previous_window_start_at = window_start_at - timedelta(days=window_days)
+
+        current_signals_by_key: dict[str, int] = {}
+        previous_signals_by_key: dict[str, int] = {}
+        current_occurrences_by_key: dict[str, int] = {}
+        previous_occurrences_by_key: dict[str, int] = {}
+        total_current_signals = 0
+        total_previous_signals = 0
+        total_current_occurrences = 0
+        total_previous_occurrences = 0
+
+        for signal in self.list_learning_signals(limit=None, tenant_id=tenant_id):
+            key = (
+                signal.signal_type.value
+                if dimension == LearningTrendDimension.SIGNAL_TYPE
+                else signal.severity.value
+            )
+            occurrences = max(1, signal.occurrence_count)
+            if signal.recorded_at >= window_start_at:
+                current_signals_by_key[key] = current_signals_by_key.get(key, 0) + 1
+                current_occurrences_by_key[key] = (
+                    current_occurrences_by_key.get(key, 0) + occurrences
+                )
+                total_current_signals += 1
+                total_current_occurrences += occurrences
+            elif signal.recorded_at >= previous_window_start_at:
+                previous_signals_by_key[key] = previous_signals_by_key.get(key, 0) + 1
+                previous_occurrences_by_key[key] = (
+                    previous_occurrences_by_key.get(key, 0) + occurrences
+                )
+                total_previous_signals += 1
+                total_previous_occurrences += occurrences
+
+        categories: list[LearningTrendCategory] = []
+        for key in sorted(
+            set(current_signals_by_key)
+            | set(previous_signals_by_key)
+            | set(current_occurrences_by_key)
+            | set(previous_occurrences_by_key)
+        ):
+            current_signals = current_signals_by_key.get(key, 0)
+            previous_signals = previous_signals_by_key.get(key, 0)
+            current_occurrences = current_occurrences_by_key.get(key, 0)
+            previous_occurrences = previous_occurrences_by_key.get(key, 0)
+            signal_delta = current_signals - previous_signals
+            occurrence_delta = current_occurrences - previous_occurrences
+
+            direction = LearningTrendDirection.STABLE
+            if occurrence_delta > 0 or (occurrence_delta == 0 and signal_delta > 0):
+                direction = LearningTrendDirection.UP
+            elif occurrence_delta < 0 or (occurrence_delta == 0 and signal_delta < 0):
+                direction = LearningTrendDirection.DOWN
+
+            categories.append(
+                LearningTrendCategory(
+                    key=key,
+                    current_signals=current_signals,
+                    previous_signals=previous_signals,
+                    signal_delta=signal_delta,
+                    current_occurrences=current_occurrences,
+                    previous_occurrences=previous_occurrences,
+                    occurrence_delta=occurrence_delta,
+                    direction=direction,
+                )
+            )
+
+        return LearningTrendReport(
+            tenant_id=tenant_id,
+            window_days=window_days,
+            dimension=dimension,
+            window_start_at=window_start_at,
+            previous_window_start_at=previous_window_start_at,
+            total_current_signals=total_current_signals,
+            total_previous_signals=total_previous_signals,
+            total_current_occurrences=total_current_occurrences,
+            total_previous_occurrences=total_previous_occurrences,
+            categories=categories,
         )
 
     def generate_intakes_from_learning_signals(
