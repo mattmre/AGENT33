@@ -852,10 +852,7 @@ def test_trends_route_returns_dimension_report(
     assert payload["window_days"] == 7
     assert payload["tenant_id"] == "tenant-1"
     assert isinstance(payload["categories"], list)
-    assert all(
-        item["direction"] in {"up", "down", "stable"}
-        for item in payload["categories"]
-    )
+    assert all(item["direction"] in {"up", "down", "stable"} for item in payload["categories"])
 
 
 def test_trends_route_rejects_invalid_dimension(
