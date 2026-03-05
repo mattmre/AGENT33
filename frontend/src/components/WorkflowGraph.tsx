@@ -1,15 +1,18 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
   type Edge,
   type Node,
+  type NodeTypes,
   Panel,
   ReactFlowProvider,
   useEdgesState,
   useNodesState
 } from "reactflow";
 import "reactflow/dist/style.css";
+
+import { WorkflowStatusNode } from "./WorkflowStatusNode";
 
 export interface WorkflowNode {
   id: string;
@@ -39,17 +42,27 @@ export interface WorkflowGraphData {
 
 interface WorkflowGraphProps {
   data: WorkflowGraphData;
+  /** Optional callback invoked every polling tick to refresh graph data. */
+  onRefresh?: () => void;
+  /** Polling interval in milliseconds when active nodes exist. @default 2000 */
+  pollIntervalMs?: number;
 }
 
+/** Custom node type registry — must be defined outside of render to avoid remounts. */
+const nodeTypes: NodeTypes = {
+  workflowStatus: WorkflowStatusNode
+};
+
 /**
- * Maps backend WorkflowNode to ReactFlow Node format
+ * Maps backend WorkflowNode to ReactFlow Node format.
+ * All nodes use the custom `workflowStatus` type.
  */
 export function mapWorkflowNodesToReactFlow(nodes: WorkflowNode[]): Node[] {
   return nodes.map((node) => {
     const position = node.position ?? { x: node.x ?? 0, y: node.y ?? 0 };
     return {
       id: node.id,
-      type: "default",
+      type: "workflowStatus",
       position,
       data: {
         label: node.name || node.id,
@@ -62,25 +75,74 @@ export function mapWorkflowNodesToReactFlow(nodes: WorkflowNode[]): Node[] {
 }
 
 /**
- * Maps backend WorkflowEdge to ReactFlow Edge format
+ * Build a Set of node IDs whose status is `"running"`.
  */
-export function mapWorkflowEdgesToReactFlow(edges: WorkflowEdge[]): Edge[] {
+export function getRunningNodeIds(nodes: WorkflowNode[]): Set<string> {
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    if (node.status === "running") {
+      ids.add(node.id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Returns true when at least one node has an active status (`running` or `pending`)
+ * that warrants automatic polling.
+ */
+export function hasActiveNodes(nodes: WorkflowNode[]): boolean {
+  return nodes.some((n) => n.status === "running" || n.status === "pending");
+}
+
+/**
+ * Maps backend WorkflowEdge to ReactFlow Edge format.
+ *
+ * Edges whose source **or** target is a running node are animated
+ * to visually indicate in-progress data flow.
+ */
+export function mapWorkflowEdgesToReactFlow(
+  edges: WorkflowEdge[],
+  runningNodeIds?: Set<string>
+): Edge[] {
+  const running = runningNodeIds ?? new Set<string>();
   return edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
     type: "smoothstep",
-    animated: false
+    animated: running.has(edge.source) || running.has(edge.target)
   }));
 }
 
-function WorkflowGraphInner({ data }: WorkflowGraphProps): JSX.Element {
+function WorkflowGraphInner({
+  data,
+  onRefresh,
+  pollIntervalMs = 2000
+}: WorkflowGraphProps): JSX.Element {
+  const runningIds = useMemo(() => getRunningNodeIds(data.nodes), [data.nodes]);
   const initialNodes = useMemo(() => mapWorkflowNodesToReactFlow(data.nodes), [data.nodes]);
-  const initialEdges = useMemo(() => mapWorkflowEdgesToReactFlow(data.edges), [data.edges]);
+  const initialEdges = useMemo(
+    () => mapWorkflowEdgesToReactFlow(data.edges, runningIds),
+    [data.edges, runningIds]
+  );
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
   const [edges, , onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+
+  // ---- Polling: auto-refresh while any node is running or pending ----
+  const shouldPoll = useMemo(() => hasActiveNodes(data.nodes), [data.nodes]);
+
+  useEffect(() => {
+    if (!shouldPoll || !onRefresh) return;
+
+    const id = setInterval(() => {
+      onRefresh();
+    }, pollIntervalMs);
+
+    return () => clearInterval(id);
+  }, [shouldPoll, onRefresh, pollIntervalMs]);
 
   const onNodeClick = useCallback((_event: unknown, node: Node) => {
     setSelectedNode(node);
@@ -104,6 +166,7 @@ function WorkflowGraphInner({ data }: WorkflowGraphProps): JSX.Element {
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
@@ -161,10 +224,10 @@ function WorkflowGraphInner({ data }: WorkflowGraphProps): JSX.Element {
   );
 }
 
-export function WorkflowGraph({ data }: WorkflowGraphProps): JSX.Element {
+export function WorkflowGraph(props: WorkflowGraphProps): JSX.Element {
   return (
     <ReactFlowProvider>
-      <WorkflowGraphInner data={data} />
+      <WorkflowGraphInner {...props} />
     </ReactFlowProvider>
   );
 }
