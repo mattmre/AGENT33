@@ -1,39 +1,47 @@
 # Next Session Briefing
 
-Last updated: 2026-03-04T23:59:59Z
+Last updated: 2026-03-05T00:15:00Z
 
 ## Current State
 
-- **Merge status**: The repaired Session 50/51 stack is now landed on `main` (`#97`, `#98`, `#99`, `#100`, `#101`, `#102`, `#103`, `#104`, `#105`, `#108`, `#109`; docs-close helper `#107` merged to the docs branch during restack flow).
-- **Open PRs**: none.
-- **Latest session**: Session 52 (`docs/sessions/session-52-2026-03-04.md`).
-- **Prior recovery session**: Session 51 (`docs/sessions/session-51-2026-03-04.md`).
-- **Validation posture**: all landing PR checks green; full-suite post-merge confidence run on `main` is still recommended.
+- **Merge status**: `main` remains aligned with Session 52 closure and docs refresh (`#110` merged).
+- **Open PRs**: `#111`, `#112`, `#113`, `#114`, `#115`, `#116`.
+- **Latest session**: Session 53 (`docs/sessions/session-53-2026-03-05.md`).
+- **Prior session**: Session 52 (`docs/sessions/session-52-2026-03-04.md`).
+- **Validation posture**:
+  - `#111` and `#112` have completed green checks.
+  - `#113` to `#116` were updated for `ruff format` parity; CI reruns are in progress.
 - **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open.
 
-## Session 52 Wrap Highlights
+## Session 53 Highlights
 
-- Merged the remaining open PRs (`#105`, `#108`) after CI completion.
-- Pruned stale session worktrees and merged local branches to reduce context rot.
-- Updated handoff docs, phase status metadata, and ARCH-AEP tracking text to match merged reality.
+- Implemented and opened Phase 30/31/A5 priority slices as separate PRs:
+  - `#113` Phase 30 outcome-focused acceptance matrix
+  - `#114` Phase 31 dedupe-aware trend analytics/reporting
+  - `#115` Phase 31 threshold calibration report
+  - `#116` A5 synthetic bundle durable persistence
+- Preserved previous Session 53 PRs:
+  - `#111` confidence-gate typing stabilization
+  - `#112` Phase 30 threshold calibration
+- Added dedicated research notes in `docs/research/` for each implemented slice.
 
 ## Top 15 Priority Items / Phases
 
-1. Run a full `main` confidence gate (`ruff`, `mypy`, full `pytest`) after the large merge wave.
-2. Phase 30 refinement: calibrate adaptive routing thresholds with regression evidence.
-3. Phase 30 verification: add outcome-focused acceptance tests for routing decisions.
-4. Phase 31 follow-up: add trend analytics/reporting on deduped learning signals.
-5. Phase 31 follow-up: tune retention and auto-intake thresholds using production-like traces.
-6. A5 follow-up: add persistent storage for synthetic environment bundles (current storage is bounded in-memory).
-7. A5/A6 integration: execute comparative scoring against generated synthetic bundles.
-8. SkillsBench expansion: promote richer benchmark reporting and result artifacts from smoke into regular workflows.
-9. Phase 32 hardening: tenant and permission boundaries for hook/plugin registration and execution.
-10. Phase 33 hardening: pack trust/provenance, signing, and stricter distribution controls.
-11. Phase 22 continuation: unify frontend access paths for newly merged backend feature surfaces.
-12. Phase 25 continuation: wire visual explainer coverage into comparative + synthetic environment flows.
-13. Phase 26 continuation: decision/review pages for new evaluation artifacts.
-14. Phase 27 continuation: operations-cycle UX and multi-user agent improvements.
-15. Phase 28 continuation: extend enterprise security scanning coverage to newly added surfaces.
+1. Complete CI/review and merge Session 53 PR stack in safe order: `#111` -> `#112` -> `#113` -> `#114` -> `#115` -> `#116`.
+2. Run full `main` confidence gate (`ruff check`, `ruff format --check`, `mypy`, full `pytest`) after PR stack lands.
+3. A5/A6 integration: execute comparative scoring against persisted synthetic bundles.
+4. SkillsBench expansion: promote richer benchmark reporting and result artifacts beyond smoke runs.
+5. Phase 32 hardening: enforce tenant/permission boundaries for hook/plugin registration and execution.
+6. Phase 33 hardening: add pack trust/provenance, signing, and stricter distribution controls.
+7. Phase 22 continuation: unify frontend access paths for newly merged backend feature surfaces.
+8. Phase 25 continuation: wire visual explainer coverage into comparative + synthetic environment flows.
+9. Phase 26 continuation: complete decision/review pages for new evaluation artifacts.
+10. Phase 27 continuation: expand operations-cycle UX and multi-user agent workflows.
+11. Phase 28 continuation: broaden enterprise security scanning coverage for new surfaces.
+12. Phase 31 follow-up: validate trend and calibration defaults against production-like traces and tune env settings.
+13. Phase 30 follow-up: extend acceptance matrix with additional API-level policy fixtures.
+14. A5 follow-up: add corruption handling / backup strategy for bundle persistence file.
+15. Update API/docs references for new `/v1/improvements/learning/trends` and `/learning/calibration` surfaces once merged.
 
 ## Remaining Phases of Development
 
@@ -44,8 +52,8 @@ Last updated: 2026-03-04T23:59:59Z
 | 26 | Partially implemented | Decision/review page completion and wiring |
 | 27 | Partially implemented | Website operations and improvement cycle expansion |
 | 28 | Partially implemented | Security scanning integration breadth and enforcement |
-| 30 | Core merged | Refinement and verification loops remain |
-| 31 | Core + persistence/quality hardening merged | Analytics, calibration, and longer-horizon validation remain |
+| 30 | Core merged | Refinement/verification PRs open (`#112`, `#113`) |
+| 31 | Core + persistence/quality hardening merged | Analytics/calibration PRs open (`#114`, `#115`) |
 | 32 | H01/H02 merged | Additional hardening and operationalization remain |
 | 33 | Core skill-pack implementation merged | Ecosystem/distribution hardening remains |
 | 35 | Core + regression convergence merged | Ongoing regression protection and follow-on tuning |
@@ -68,9 +76,11 @@ python -m pytest tests/ -q
 
 | Purpose | Path |
 | --- | --- |
-| Session 52 wrap log | `docs/sessions/session-52-2026-03-04.md` |
+| Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
+| Session 53 Phase 30 acceptance research | PR `#113` (introduces `docs/research/session53-phase30-outcome-acceptance.md`) |
+| Session 53 Phase 31 trend research | PR `#114` (introduces `docs/research/session53-phase31-trend-analytics.md`) |
+| Session 53 Phase 31 calibration research | PR `#115` (introduces `docs/research/session53-phase31-threshold-tuning.md`) |
+| Session 53 A5 persistence research | PR `#116` (introduces `docs/research/session53-a5-bundle-persistence.md`) |
 | Session 52 roadmap research | `docs/research/session52-priority-and-phase-roadmap.md` |
-| Phase 31 hardening research | `docs/research/session51-phase31-persistence-quality-hardening.md` |
-| A5 synthetic env architecture | `docs/research/session51-awm-a5-synthetic-environments-architecture.md` |
 | ARCH-AEP tracker | `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md` |
 | Phase index | `docs/phases/README.md` |
