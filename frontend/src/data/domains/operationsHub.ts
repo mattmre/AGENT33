@@ -6,23 +6,38 @@ export const operationsHubDomain: DomainConfig = {
     description: "Monitor and manage autonomous agent lifecycle loops and tracking.",
     operations: [
         {
-            id: "operations-list-processes",
-            title: "List Active Processes",
+            id: "operations-hub-overview",
+            title: "Hub Overview",
             method: "GET",
-            path: "/v1/operations/processes",
-            description: "Retrieve all active or queued autonomous agent processes."
+            path: "/v1/operations/hub",
+            description: "Unified operations-hub view with active process counts, optional trace/budget/improvement/workflow inclusions.",
+            defaultQuery: {
+                include: "traces,budgets",
+                limit: "100"
+            }
         },
         {
-            id: "operations-lifecycle-control",
-            title: "Control Loop Lifecycle",
-            method: "POST",
-            path: "/v1/operations/processes/{process_id}/lifecycle",
-            description: "Send lifecycle commands (pause, resume, cancel) to a running process loop.",
+            id: "operations-process-detail",
+            title: "Process Detail",
+            method: "GET",
+            path: "/v1/operations/processes/{process_id}",
+            description: "Retrieve detail for a single process including actions and metadata.",
             defaultPathParams: {
-                process_id: "agent-session-1234"
+                process_id: "replace-with-process-id"
+            }
+        },
+        {
+            id: "operations-process-control",
+            title: "Process Control",
+            method: "POST",
+            path: "/v1/operations/processes/{process_id}/control",
+            description: "Execute lifecycle controls (pause, resume, cancel) against a running process.",
+            defaultPathParams: {
+                process_id: "replace-with-process-id"
             },
             defaultBody: JSON.stringify({
-                action: "pause"
+                action: "pause",
+                reason: ""
             }, null, 2)
         }
     ]

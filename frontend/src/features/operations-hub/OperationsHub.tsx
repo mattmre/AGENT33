@@ -1,14 +1,5 @@
-import { useState } from "react";
-import { ProcessList } from "./ProcessList";
-import { ControlPanel } from "./ControlPanel";
-
-export function OperationsHub({ token }: { token: string | null }): JSX.Element {
-  const [selectedProcessId, setSelectedProcessId] = useState<string | undefined>();
-
-  return (
-    <div className="operations-hub-container">
-      <ProcessList token={token} onSelectProcess={setSelectedProcessId} selectedProcessId={selectedProcessId} />
-      <ControlPanel token={token} processId={selectedProcessId} />
-    </div>
-  );
-}
+// REMOVED in Phase 27 (session 55): Superseded by OperationsHubPanel.tsx
+// This file used stale API paths (/v1/operations/processes, /v1/operations/processes/{id}/lifecycle)
+// that no longer match the backend. The OperationsHubPanel component in App.tsx is the replacement.
+//
+// See docs/research/session55-phase27-hub-alignment.md for details.
