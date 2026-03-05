@@ -6,7 +6,9 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse
+    from collections.abc import AsyncGenerator
+
+    from agent33.llm.base import ChatMessage, LLMProvider, LLMResponse, LLMStreamChunk
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +95,23 @@ class ModelRouter:
             max_tokens=max_tokens,
             tools=tools,
         )
+
+    async def stream_complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        """Stream completion via the routed provider."""
+        provider = self.route(model)
+        async for chunk in provider.stream_complete(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+        ):
+            yield chunk

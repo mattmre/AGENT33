@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from agent33.llm.base import LLMStreamChunk
 
 import httpx
 
@@ -188,15 +194,19 @@ class OpenAIProvider:
                         url = f"data:{part.media_type};base64,{part.base64_data}"
                     else:
                         url = part.url or ""
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {"url": url, "detail": part.detail},
-                    })
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": url, "detail": part.detail},
+                        }
+                    )
                 elif isinstance(part, AudioBlock):
-                    content.append({
-                        "type": "text",
-                        "text": f"[Audio: {part.url or 'embedded'}]",
-                    })
+                    content.append(
+                        {
+                            "type": "text",
+                            "text": f"[Audio: {part.url or 'embedded'}]",
+                        }
+                    )
         else:
             content = m.content
         msg: dict[str, Any] = {"role": m.role, "content": content}
@@ -299,3 +309,55 @@ class OpenAIProvider:
         data = await self._get("/models")
         models: list[dict[str, Any]] = data.get("data", [])
         return [m["id"] for m in models if "id" in m]
+
+    async def stream_complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        """Stream completion chunks via SSE."""
+        from agent33.llm.base import LLMStreamChunk
+
+        resolved_model = model or self._default_model
+        body: dict[str, Any] = {
+            "model": resolved_model,
+            "messages": [self._serialize_message(m) for m in messages],
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
+        if tools is not None:
+            body["tools"] = [{"type": "function", "function": t} for t in tools]
+
+        async with self._client.stream(
+            "POST",
+            f"{self._base_url}/chat/completions",
+            json=body,
+            headers=self._headers(),
+            timeout=self._timeout,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if not line or line.startswith(":"):
+                    continue
+                if line.startswith("data: "):
+                    line = line[6:]
+                if line == "[DONE]":
+                    break
+                try:
+                    chunk_data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                choice = chunk_data.get("choices", [{}])[0]
+                delta = choice.get("delta", {})
+                yield LLMStreamChunk(
+                    delta_content=delta.get("content", "") or "",
+                    finish_reason=choice.get("finish_reason"),
+                    model=chunk_data.get("model", resolved_model),
+                )

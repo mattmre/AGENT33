@@ -19,10 +19,11 @@ from agent33.tools.base import ToolResult
 from agent33.tools.schema import generate_tool_description
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from agent33.agents.context_manager import ContextManager
     from agent33.agents.definition import AutonomyLevel
+    from agent33.agents.events import ToolLoopEvent
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.llm.text_tool_parser import TextToolParser
@@ -385,6 +386,239 @@ class ToolLoop:
 
         # --- Max iterations exhausted -----------------------------------------
         return self._build_result(state, last_raw, last_model, "max_iterations")
+
+    async def run_stream(
+        self,
+        messages: list[ChatMessage],
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> AsyncGenerator[ToolLoopEvent, None]:
+        """Stream tool loop execution as events.
+
+        Yields ToolLoopEvent objects for each significant step.
+        Always terminates with a ``completed`` event.
+        """
+        from agent33.agents.events import ToolLoopEvent
+
+        state = ToolLoopState()
+        tools = self._collect_tool_descriptions()
+        accumulated_messages = list(messages)
+
+        yield ToolLoopEvent(
+            event_type="loop_started",
+            iteration=0,
+            data={
+                "max_iterations": self._config.max_iterations,
+                "tools_count": len(tools),
+            },
+        )
+
+        termination_reason = "max_iterations"
+        final_response: LLMResponse | None = None
+
+        try:
+            while state.iteration < self._config.max_iterations:
+                state.iteration += 1
+
+                yield ToolLoopEvent(
+                    event_type="iteration_started",
+                    iteration=state.iteration,
+                    data={"message_count": len(accumulated_messages)},
+                )
+
+                # --- LLM call -------------------------------------------------
+                yield ToolLoopEvent(
+                    event_type="llm_request",
+                    iteration=state.iteration,
+                    data={"model": model, "temperature": temperature},
+                )
+
+                try:
+                    response = await self._router.complete(
+                        accumulated_messages,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        tools=tools or None,
+                    )
+                except Exception as exc:
+                    yield ToolLoopEvent(
+                        event_type="error",
+                        iteration=state.iteration,
+                        data={"error": str(exc), "phase": "llm_call"},
+                    )
+                    termination_reason = "llm_error"
+                    break
+
+                state.total_tokens += response.prompt_tokens + response.completion_tokens
+
+                yield ToolLoopEvent(
+                    event_type="llm_response",
+                    iteration=state.iteration,
+                    data={
+                        "has_tool_calls": bool(response.tool_calls),
+                        "content_length": len(response.content or ""),
+                        "prompt_tokens": response.prompt_tokens,
+                        "completion_tokens": response.completion_tokens,
+                        "finish_reason": response.finish_reason,
+                    },
+                )
+
+                # --- Text-based tool call parsing (Phase 36) ------------------
+                if (
+                    not response.tool_calls
+                    and response.content
+                    and self._config.text_tool_parser is not None
+                ):
+                    parsed = self._config.text_tool_parser.parse(response.content)
+                    if parsed:
+                        response = dataclasses.replace(response, tool_calls=parsed)
+
+                has_tool_calls = bool(response.tool_calls)
+
+                if has_tool_calls:
+                    tool_names = [tc.function.name for tc in (response.tool_calls or [])]
+                    yield ToolLoopEvent(
+                        event_type="tool_call_requested",
+                        iteration=state.iteration,
+                        data={"tools": tool_names, "count": len(tool_names)},
+                    )
+
+                    # --- Doom-loop detection ----------------------------------
+                    if self._config.loop_detection_threshold > 0 and self._check_doom_loop(
+                        response, state
+                    ):
+                        yield ToolLoopEvent(
+                            event_type="loop_detected",
+                            iteration=state.iteration,
+                            data={
+                                "threshold": self._config.loop_detection_threshold,
+                            },
+                        )
+                        termination_reason = "loop_detected"
+                        final_response = response
+                        break
+
+                    # --- Emit tool_call_started for each call -----------------
+                    for tc in response.tool_calls or []:
+                        yield ToolLoopEvent(
+                            event_type="tool_call_started",
+                            iteration=state.iteration,
+                            data={"tool": tc.function.name, "call_id": tc.id},
+                        )
+
+                    # --- Execute tool calls -----------------------------------
+                    try:
+                        results = await self._execute_tool_calls(response, state)
+                    except Exception as exc:
+                        yield ToolLoopEvent(
+                            event_type="error",
+                            iteration=state.iteration,
+                            data={"error": str(exc), "phase": "tool_execution"},
+                        )
+                        termination_reason = "tool_error"
+                        break
+
+                    # Emit tool_call_completed for each result
+                    assert response.tool_calls is not None
+                    processed_calls = response.tool_calls[: len(results)]
+                    for tc, result in zip(processed_calls, results, strict=False):
+                        yield ToolLoopEvent(
+                            event_type="tool_call_completed",
+                            iteration=state.iteration,
+                            data={
+                                "tool": tc.function.name,
+                                "success": result.success,
+                                "output_length": len(
+                                    result.output if result.success else result.error
+                                ),
+                            },
+                        )
+
+                    # Check if budget enforcer blocked during tool execution
+                    if self._runtime_enforcer is not None and any(
+                        tr.error == "__budget_blocked__" for tr in results
+                    ):
+                        yield ToolLoopEvent(
+                            event_type="tool_call_blocked",
+                            iteration=state.iteration,
+                            data={"reason": "budget_exceeded"},
+                        )
+                        termination_reason = "budget_exceeded"
+                        final_response = response
+                        break
+
+                    # --- Append assistant + tool results -----------------------
+                    processed_tool_calls = response.tool_calls[: len(results)]
+                    accumulated_messages.append(
+                        ChatMessage(
+                            role="assistant",
+                            content=response.content,
+                            tool_calls=processed_tool_calls,
+                        )
+                    )
+                    for i, tool_result in enumerate(results):
+                        tc_obj = processed_tool_calls[i] if i < len(processed_tool_calls) else None
+                        tc_id = tc_obj.id if tc_obj else ""
+                        tc_name = tc_obj.function.name if tc_obj else ""
+                        from agent33.agents.context_manager import truncate_tool_output
+
+                        content = (
+                            truncate_tool_output(tool_result.output)
+                            if tool_result.success
+                            else f"Error: {truncate_tool_output(tool_result.error)}"
+                        )
+                        accumulated_messages.append(
+                            ChatMessage(
+                                role="tool",
+                                content=content,
+                                tool_call_id=tc_id,
+                                name=tc_name,
+                            )
+                        )
+                else:
+                    # --- No tool calls — text response ------------------------
+                    final_response = response
+                    termination_reason = "natural"
+                    break
+
+                # --- Context management ---------------------------------------
+                if self._context_manager is not None:
+                    before_len = len(accumulated_messages)
+                    accumulated_messages = await self._context_manager.manage(accumulated_messages)
+                    if len(accumulated_messages) != before_len:
+                        yield ToolLoopEvent(
+                            event_type="context_managed",
+                            iteration=state.iteration,
+                            data={
+                                "before": before_len,
+                                "after": len(accumulated_messages),
+                            },
+                        )
+
+        except Exception as exc:
+            yield ToolLoopEvent(
+                event_type="error",
+                iteration=state.iteration,
+                data={"error": str(exc), "phase": "loop"},
+            )
+            termination_reason = "error"
+
+        # --- Always emit completed event --------------------------------------
+        raw = (final_response.content if final_response else "") or ""
+        parsed_output = self._parse_output(raw)
+        yield ToolLoopEvent(
+            event_type="completed",
+            iteration=state.iteration,
+            data={
+                "termination_reason": termination_reason,
+                "total_tokens": state.total_tokens,
+                "tool_calls_made": state.tool_calls_made,
+                "tools_used": list(state.tools_used),
+                "output": parsed_output,
+            },
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

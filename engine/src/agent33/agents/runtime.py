@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING, Any
 from agent33.llm.base import ChatMessage, LLMResponse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from agent33.agents.context_manager import ContextManager
     from agent33.agents.definition import AgentDefinition
     from agent33.agents.effort import AgentEffort, AgentEffortRouter
+    from agent33.agents.events import ToolLoopEvent
     from agent33.agents.tool_loop import ToolLoopConfig
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
@@ -751,3 +752,93 @@ class AgentRuntime:
                 logger.debug("failed to emit trace", exc_info=True)
 
         return result
+
+    async def invoke_iterative_stream(
+        self,
+        inputs: dict[str, Any],
+        config: ToolLoopConfig | None = None,
+    ) -> AsyncGenerator[ToolLoopEvent, None]:
+        """Stream the iterative tool-loop execution as events.
+
+        Yields :class:`ToolLoopEvent` objects for each significant step.
+        Always terminates with a ``completed`` event.
+
+        Requires ``tool_registry`` to be set on this runtime instance.
+        """
+        from agent33.agents.events import ToolLoopEvent
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        if self._tool_registry is None:
+            yield ToolLoopEvent(
+                event_type="error",
+                iteration=0,
+                data={"error": "tool_registry not configured"},
+            )
+            return
+
+        # --- Build system prompt (same as invoke_iterative) ---
+        system_prompt = _build_system_prompt(self._definition)
+
+        # Inject skill context if injector is available
+        if self._skill_injector is not None:
+            if self._definition.skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
+                    self._definition.skills
+                )
+            for skill_name in self._active_skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
+                    skill_name
+                )
+
+        # Inject memory context if progressive recall is available
+        if self._progressive_recall is not None:
+            try:
+                user_query = json.dumps(inputs) if inputs else ""
+                recall_results = await self._progressive_recall.search(
+                    user_query, level="index", top_k=5
+                )
+                if recall_results:
+                    memory_lines = ["\n# Prior Context (from memory)"]
+                    for rr in recall_results:
+                        memory_lines.append(f"- {rr.content}")
+                    system_prompt += "\n" + "\n".join(memory_lines)
+            except Exception:
+                logger.debug("failed to retrieve memory context", exc_info=True)
+
+        # Build messages
+        user_content = json.dumps(inputs, indent=2)
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_content),
+        ]
+
+        # Create and run the tool loop
+        loop_config = config or ToolLoopConfig()
+        loop = ToolLoop(
+            router=self._router,
+            tool_registry=self._tool_registry,
+            tool_governance=self._tool_governance,
+            tool_context=self._tool_context,
+            observation_capture=self._observation_capture,
+            runtime_enforcer=self._runtime_enforcer,
+            config=loop_config,
+            agent_name=self._definition.name,
+            session_id=self._session_id,
+            context_manager=self._context_manager,
+            tenant_id=self._tenant_id,
+        )
+
+        routed_model, routed_max_tokens = self._resolve_execution_parameters(
+            inputs=inputs,
+            iterative=True,
+            max_iterations=loop_config.max_iterations,
+        )
+
+        # Stream events from the tool loop
+        async for event in loop.run_stream(
+            messages,
+            model=routed_model,
+            temperature=self._temperature,
+            max_tokens=routed_max_tokens,
+        ):
+            yield event

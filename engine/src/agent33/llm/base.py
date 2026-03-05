@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -41,6 +44,18 @@ class LLMResponse:
     def has_tool_calls(self) -> bool:
         """Return True if the response contains tool calls."""
         return self.tool_calls is not None and len(self.tool_calls) > 0
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class LLMStreamChunk:
+    """A single chunk from an LLM streaming response."""
+
+    delta_content: str = ""
+    delta_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
+    finish_reason: str | None = None
+    model: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -92,9 +107,7 @@ class ChatMessage:
         """Extract text content, regardless of whether content is str or list."""
         if isinstance(self.content, str):
             return self.content
-        return " ".join(
-            block.text for block in self.content if isinstance(block, TextBlock)
-        )
+        return " ".join(block.text for block in self.content if isinstance(block, TextBlock))
 
 
 @runtime_checkable
@@ -116,3 +129,17 @@ class LLMProvider(Protocol):
     async def list_models(self) -> list[str]:
         """Return available model identifiers."""
         ...
+
+    async def stream_complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        """Stream completion chunks. Default raises NotImplementedError."""
+        raise NotImplementedError("Streaming not supported by this provider")
+        # Make it an async generator
+        yield  # type: ignore[misc]  # pragma: no cover
