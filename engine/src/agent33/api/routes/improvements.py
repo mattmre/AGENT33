@@ -31,7 +31,9 @@ from agent33.improvement.persistence import (
     InMemoryLearningSignalStore,
     LearningSignalStore,
     SQLiteLearningSignalStore,
+    backup_learning_state,
     migrate_file_learning_state_to_db,
+    restore_learning_state,
     should_migrate_file_learning_state_to_db,
 )
 from agent33.improvement.repo_ingestion import (
@@ -204,6 +206,14 @@ class BatchRepoIntakeRequest(BaseModel):
 class ScoreFeatureCandidatesRequest(BaseModel):
     candidates: list[FeatureCandidateInput] = Field(min_length=1, max_length=100)
     top_n: int = Field(default=10, ge=1, le=100)
+
+
+class BackupLearningStateRequest(BaseModel):
+    backup_path: str = ""
+
+
+class RestoreLearningStateRequest(BaseModel):
+    backup_path: str
 
 
 def _ensure_learning_enabled() -> None:
@@ -697,3 +707,45 @@ def get_learning_calibration(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     return report.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------
+# Learning State Backup / Restore (operator) endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/learning/backup")
+def backup_learning_state_endpoint(req: BackupLearningStateRequest) -> dict[str, Any]:
+    """Create a portable JSON backup of current learning state."""
+    backup_dest = (
+        req.backup_path or settings.improvement_learning_persistence_migration_backup_path
+    )
+    try:
+        result_path = backup_learning_state(_service._learning_store, backup_dest)
+        state = _service._learning_store.load()
+        return {
+            "status": "ok",
+            "backup_path": str(result_path),
+            "signal_count": len(state.signals),
+            "intake_count": len(state.generated_intakes),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from None
+
+
+@router.post("/learning/restore")
+def restore_learning_state_endpoint(req: RestoreLearningStateRequest) -> dict[str, Any]:
+    """Restore learning state from a portable JSON backup."""
+    if not Path(req.backup_path).exists():
+        raise HTTPException(status_code=404, detail=f"Backup file not found: {req.backup_path}")
+    try:
+        state = restore_learning_state(_service._learning_store, req.backup_path)
+        _reset_service()
+        return {
+            "status": "ok",
+            "backup_path": req.backup_path,
+            "signal_count": len(state.signals),
+            "intake_count": len(state.generated_intakes),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
