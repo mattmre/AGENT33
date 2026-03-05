@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from agent33.memory.embeddings import EmbeddingProvider
     from agent33.memory.hybrid import HybridSearcher
     from agent33.memory.long_term import LongTermMemory
+    from agent33.memory.query_expansion import QueryExpander
 
 
 @dataclass
@@ -80,6 +81,9 @@ class RAGPipeline:
     hybrid_searcher:
         Optional hybrid searcher.  When provided, the pipeline uses
         hybrid BM25 + vector retrieval instead of vector-only.
+    query_expander:
+        Optional query expander.  When provided, queries are expanded
+        with LLM-generated keywords and sub-queries before search.
     """
 
     def __init__(
@@ -89,12 +93,14 @@ class RAGPipeline:
         top_k: int = 5,
         similarity_threshold: float = 0.3,
         hybrid_searcher: HybridSearcher | None = None,
+        query_expander: QueryExpander | None = None,
     ) -> None:
         self._embedder = embedding_provider
         self._memory = long_term_memory
         self._top_k = top_k
         self._threshold = similarity_threshold
         self._hybrid = hybrid_searcher
+        self._expander = query_expander
 
     async def query(self, text: str) -> RAGResult:
         """Embed *text*, search memory, and return augmented context."""
@@ -107,10 +113,25 @@ class RAGPipeline:
         diagnostics = RetrievalDiagnostics(
             retrieval_method="hybrid" if self._hybrid is not None else "vector",
         )
+
+        # ── Optional query expansion ─────────────────────────────────
+        search_text = text
+        if self._expander is not None:
+            expand_start = perf_counter()
+            expanded = await self._expander.expand(text)
+            search_text = expanded.expanded_text
+            self._add_stage_diagnostic(
+                diagnostics,
+                "query-expansion",
+                expand_start,
+                input_count=1,
+                output_count=len(expanded.keywords) + len(expanded.sub_queries),
+            )
+
         if self._hybrid is not None:
-            result = await self._query_hybrid(text, diagnostics)
+            result = await self._query_hybrid(search_text, diagnostics)
         else:
-            result = await self._query_vector(text, diagnostics)
+            result = await self._query_vector(search_text, diagnostics)
         diagnostics.total_duration_ms = int((perf_counter() - total_start) * 1000)
         return RAGQueryWithDiagnostics(result=result, diagnostics=diagnostics)
 
