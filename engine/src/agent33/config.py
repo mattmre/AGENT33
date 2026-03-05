@@ -211,6 +211,7 @@ class Settings(BaseSettings):
     synthetic_env_workflow_dir: str = "workflow-definitions"
     synthetic_env_tool_dir: str = "tool-definitions"
     synthetic_env_bundle_retention: int = 100
+    synthetic_env_bundle_persistence_path: str = "var/synthetic_environment_bundles.json"
 
     # Continuous improvement learning signals (Phase 31)
     improvement_learning_enabled: bool = False

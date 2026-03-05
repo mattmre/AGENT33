@@ -460,6 +460,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         workflow_dir=Path(settings.synthetic_env_workflow_dir),
         tool_dir=Path(settings.synthetic_env_tool_dir),
         max_saved_bundles=settings.synthetic_env_bundle_retention,
+        persistence_path=(
+            Path(settings.synthetic_env_bundle_persistence_path)
+            if settings.synthetic_env_bundle_persistence_path.strip()
+            else None
+        ),
     )
     app.state.synthetic_environment_service = synthetic_environment_service
     synthetic_envs.set_synthetic_environment_service(synthetic_environment_service)
