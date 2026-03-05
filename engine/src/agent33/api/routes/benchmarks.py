@@ -78,6 +78,8 @@ def _build_skillsbench_adapter(
     tool_context = ToolContext(
         user_scopes=token_payload.scopes,
         tool_policies=definition.governance.tool_policies,
+        requested_by=token_payload.sub,
+        tenant_id=token_payload.tenant_id or "",
     )
 
     runtime = AgentRuntime(

@@ -39,6 +39,7 @@ from agent33.api.routes import (
     releases,
     reviews,
     synthetic_envs,
+    tool_approvals,
     traces,
     training,
     visualizations,
@@ -239,6 +240,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("model_router_initialized")
 
     # -- Tool registry + governance ----------------------------------------
+    from agent33.tools.approvals import ToolApprovalService
     from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
 
@@ -246,7 +248,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tool_registry.discover_from_entrypoints()
     app.state.tool_registry = tool_registry
 
-    tool_governance = ToolGovernance()
+    tool_approval_service = ToolApprovalService(state_store=orchestration_state_store)
+    app.state.tool_approval_service = tool_approval_service
+    tool_approvals.set_tool_approval_service(tool_approval_service)
+
+    tool_governance = ToolGovernance(approval_service=tool_approval_service)
     app.state.tool_governance = tool_governance
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
@@ -699,3 +705,4 @@ app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
+app.include_router(tool_approvals.router)
