@@ -90,6 +90,68 @@ export const explanationsDomain: DomainConfig = {
       defaultPathParams: {
         explanation_id: "expl-abc123"
       }
+    },
+    {
+      id: "explanations-diff-review",
+      title: "Diff Review",
+      method: "POST",
+      path: "/v1/explanations/diff-review",
+      description: "Generate an HTML explanation from a code diff.",
+      uxHint: "explanation-html",
+      defaultBody: JSON.stringify(
+        {
+          entity_type: "pull-request",
+          entity_id: "pr-42",
+          diff_text: "--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-old line\n+new line",
+          metadata: {},
+          claims: []
+        },
+        null,
+        2
+      )
+    },
+    {
+      id: "explanations-plan-review",
+      title: "Plan Review",
+      method: "POST",
+      path: "/v1/explanations/plan-review",
+      description: "Generate an HTML explanation from a plan document.",
+      uxHint: "explanation-html",
+      defaultBody: JSON.stringify(
+        {
+          entity_type: "workflow",
+          entity_id: "hello-flow",
+          plan_text: "## Plan\n- Step 1: Review constraints\n- Step 2: Validate outputs",
+          metadata: {},
+          claims: []
+        },
+        null,
+        2
+      )
+    },
+    {
+      id: "explanations-project-recap",
+      title: "Project Recap",
+      method: "POST",
+      path: "/v1/explanations/project-recap",
+      description: "Generate an HTML explanation summarising a project milestone.",
+      uxHint: "explanation-html",
+      defaultBody: JSON.stringify(
+        {
+          entity_type: "project",
+          entity_id: "agent33",
+          recap_text: "Phase 26 delivered HTML preview and three new explanation endpoints.",
+          highlights: [
+            "Diff review endpoint added",
+            "Plan review endpoint added",
+            "Project recap endpoint added"
+          ],
+          metadata: {},
+          claims: []
+        },
+        null,
+        2
+      )
     }
   ]
 };

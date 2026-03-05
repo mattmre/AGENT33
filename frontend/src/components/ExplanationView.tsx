@@ -1,11 +1,12 @@
 /**
- * ExplanationView component - minimal stub for explanation display.
+ * ExplanationView component - renders explanation content.
  *
- * Scaffold for Phase 26 Stage 1. Future enhancements:
- * - Render explanation content with syntax highlighting
- * - Display fact-check status with visual indicators
- * - Show metadata (model, confidence, timestamp)
- * - Interactive fact-check controls
+ * Supports two content modes:
+ * - Plain text: rendered inside a &lt;p&gt; tag
+ * - HTML content: rendered inside a sandboxed &lt;iframe&gt; via srcDoc
+ *
+ * HTML detection: content starting with `<!DOCTYPE`, `<html`, or `<div`
+ * (case-insensitive, ignoring leading whitespace).
  */
 
 import React from "react";
@@ -15,7 +16,7 @@ export interface ExplanationData {
   entity_type: string;
   entity_id: string;
   content: string;
-   mode?: "generic" | "diff_review" | "plan_review" | "project_recap";
+  mode?: "generic" | "diff_review" | "plan_review" | "project_recap";
   fact_check_status: "pending" | "verified" | "flagged" | "skipped";
   created_at: string;
   metadata?: Record<string, unknown>;
@@ -37,9 +38,21 @@ export interface ExplanationViewProps {
   explanation: ExplanationData;
 }
 
+/** Returns true when `content` looks like an HTML document or fragment. */
+function isHtmlContent(content: string): boolean {
+  const trimmed = content.trimStart().toLowerCase();
+  return (
+    trimmed.startsWith("<!doctype") ||
+    trimmed.startsWith("<html") ||
+    trimmed.startsWith("<div")
+  );
+}
+
 export const ExplanationView: React.FC<ExplanationViewProps> = ({
   explanation
 }) => {
+  const htmlMode = isHtmlContent(explanation.content);
+
   return (
     <div data-testid="explanation-view" className="explanation-view">
       <div className="explanation-header">
@@ -60,7 +73,17 @@ export const ExplanationView: React.FC<ExplanationViewProps> = ({
       </div>
 
       <div className="explanation-content" data-testid="explanation-content">
-        <p>{explanation.content}</p>
+        {htmlMode ? (
+          <iframe
+            srcDoc={explanation.content}
+            sandbox="allow-same-origin"
+            style={{ width: "100%", minHeight: "400px", border: "1px solid #e5e7eb" }}
+            title="Explanation content"
+            data-testid="explanation-iframe"
+          />
+        ) : (
+          <p>{explanation.content}</p>
+        )}
       </div>
 
       {explanation.claims && explanation.claims.length > 0 && (

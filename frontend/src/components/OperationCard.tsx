@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import type { ApiResult, OperationConfig } from "../types";
+import { ExplanationView, type ExplanationData } from "./ExplanationView";
 import { WorkflowGraph, WorkflowGraphData } from "./WorkflowGraph";
 
 interface OperationCardProps {
@@ -59,6 +60,7 @@ export function OperationCard({
   const isWorkflowGraph = operation.uxHint === "workflow-graph";
   const isHealth = operation.uxHint === "health";
   const isHealthChannels = operation.uxHint === "health-channels";
+  const isExplanationHtml = operation.uxHint === "explanation-html";
 
   const [pathParamsText, setPathParamsText] = useState(
     initialPathParamsText
@@ -499,7 +501,10 @@ export function OperationCard({
       {(isHealth || isHealthChannels) && result ? (
         renderHealthResults()
       ) : null}
-      {result && !isWorkflowGraph && !isHealth && !isHealthChannels ? (
+      {isExplanationHtml && result && result.ok ? (
+        <ExplanationView explanation={result.data as ExplanationData} />
+      ) : null}
+      {result && !isWorkflowGraph && !isHealth && !isHealthChannels && !isExplanationHtml ? (
         <pre className="response-box">{JSON.stringify(result.data, null, 2)}</pre>
       ) : null}
     </article>
