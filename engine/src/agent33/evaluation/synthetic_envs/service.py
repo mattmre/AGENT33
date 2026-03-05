@@ -43,12 +43,15 @@ class SyntheticEnvironmentService:
         workflow_dir: str | Path = "workflow-definitions",
         tool_dir: str | Path = "tool-definitions",
         max_saved_bundles: int = 100,
+        persistence_path: str | Path | None = None,
     ) -> None:
         self._workflow_dir = Path(workflow_dir)
         self._tool_dir = Path(tool_dir)
         self._max_saved_bundles = max_saved_bundles
+        self._persistence_path = Path(persistence_path) if persistence_path else None
         self._bundles: dict[str, SyntheticEnvironmentBundle] = {}
         self._bundle_order: list[str] = []
+        self._load_persisted_bundles()
 
     def list_workflows(self) -> list[SyntheticWorkflowCatalogEntry]:
         """Discover workflow templates available for generation."""
@@ -399,5 +402,66 @@ class SyntheticEnvironmentService:
         self._bundles[bundle.bundle_id] = bundle
         self._bundle_order.append(bundle.bundle_id)
         if len(self._bundle_order) > self._max_saved_bundles:
+            oldest = self._bundle_order.pop(0)
+            self._bundles.pop(oldest, None)
+        self._persist_bundles()
+
+    def _load_persisted_bundles(self) -> None:
+        path = self._persistence_path
+        if path is None or not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("persistence payload must be an object")
+            raw_order = raw.get("bundle_order", [])
+            raw_bundles = raw.get("bundles", [])
+            if not isinstance(raw_order, list) or not isinstance(raw_bundles, list):
+                raise ValueError("persistence payload requires list fields")
+            loaded_bundles: dict[str, SyntheticEnvironmentBundle] = {}
+            for payload in raw_bundles:
+                bundle = SyntheticEnvironmentBundle.model_validate(payload)
+                loaded_bundles[bundle.bundle_id] = bundle
+
+            normalized_order = [
+                bundle_id
+                for bundle_id in raw_order
+                if isinstance(bundle_id, str) and bundle_id in loaded_bundles
+            ]
+            for bundle_id in loaded_bundles:
+                if bundle_id not in normalized_order:
+                    normalized_order.append(bundle_id)
+
+            self._bundles = loaded_bundles
+            self._bundle_order = normalized_order
+            self._trim_to_retention()
+        except Exception:
+            logger.warning(
+                "synthetic_environment_persistence_load_failed path=%s",
+                str(path),
+                exc_info=True,
+            )
+            self._bundles = {}
+            self._bundle_order = []
+
+    def _persist_bundles(self) -> None:
+        path = self._persistence_path
+        if path is None:
+            return
+        payload = {
+            "bundle_order": list(self._bundle_order),
+            "bundles": [
+                self._bundles[bundle_id].model_dump(mode="json")
+                for bundle_id in self._bundle_order
+                if bundle_id in self._bundles
+            ],
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = Path(f"{path}.tmp")
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        temp_path.replace(path)
+
+    def _trim_to_retention(self) -> None:
+        while len(self._bundle_order) > self._max_saved_bundles:
             oldest = self._bundle_order.pop(0)
             self._bundles.pop(oldest, None)
