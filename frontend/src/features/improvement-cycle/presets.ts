@@ -1,6 +1,5 @@
 import retrospectiveWorkflowSource from "../../../../core/workflows/improvement-cycle/retrospective.workflow.yaml?raw";
 import metricsReviewWorkflowSource from "../../../../core/workflows/improvement-cycle/metrics-review.workflow.yaml?raw";
-
 import type {
   OperationPresetBinding,
   WorkflowExecutePresetProjection,

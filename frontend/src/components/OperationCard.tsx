@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  buildWorkflowCreatePresetBody,
+  buildWorkflowExecutePreset,
+  getImprovementCyclePresetById
+} from "../features/improvement-cycle/presets";
 import { apiRequest } from "../lib/api";
 import {
   connectWorkflowLiveTransport,
@@ -7,7 +12,12 @@ import {
   shouldRefreshWorkflowGraph
 } from "../lib/workflowLiveTransport";
 import type { WorkflowLiveTransportConnection } from "../types";
-import type { ApiResult, OperationConfig } from "../types";
+import type {
+  ApiResult,
+  OperationConfig,
+  WorkflowExecutionMode,
+  WorkflowPresetDefinition
+} from "../types";
 import { ExplanationView, type ExplanationData } from "./ExplanationView";
 import { WorkflowGraph, WorkflowGraphData } from "./WorkflowGraph";
 
@@ -76,7 +86,15 @@ export function OperationCard({
   const [error, setError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
-  const [executionMode, setExecutionMode] = useState<"single" | "repeat" | "autonomous">("single");
+  const availableWorkflowPresets = useMemo(
+    () =>
+      (operation.presetBinding?.presetIds ?? [])
+        .map((presetId) => getImprovementCyclePresetById(presetId))
+        .filter((preset): preset is WorkflowPresetDefinition => preset !== undefined),
+    [operation.presetBinding]
+  );
+  const [selectedWorkflowPresetId, setSelectedWorkflowPresetId] = useState("");
+  const [executionMode, setExecutionMode] = useState<WorkflowExecutionMode>("single");
   const [repeatCount, setRepeatCount] = useState(3);
   const [repeatIntervalSeconds, setRepeatIntervalSeconds] = useState(0);
   const [scheduleMode, setScheduleMode] = useState<"interval" | "cron">("interval");
@@ -96,6 +114,18 @@ export function OperationCard({
       liveTransportRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (availableWorkflowPresets.length === 0) {
+      setSelectedWorkflowPresetId("");
+      return;
+    }
+
+    const presetIds = availableWorkflowPresets.map((preset) => preset.id);
+    setSelectedWorkflowPresetId((current) =>
+      presetIds.includes(current) ? current : availableWorkflowPresets[0].id
+    );
+  }, [availableWorkflowPresets]);
 
   const hasBody = useMemo(
     () => operation.method !== "GET" && operation.method !== "DELETE",
@@ -143,6 +173,26 @@ export function OperationCard({
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid JSON";
       setError(`Request Body: ${message}`);
+    }
+  }
+
+  function applyWorkflowPreset(): void {
+    if (!selectedWorkflowPresetId) {
+      return;
+    }
+
+    if (operation.id === "workflows-create") {
+      setBodyText(buildWorkflowCreatePresetBody(selectedWorkflowPresetId));
+      setError("");
+      return;
+    }
+
+    if (operation.id === "workflows-execute") {
+      const preset = buildWorkflowExecutePreset(selectedWorkflowPresetId);
+      setPathParamsText(JSON.stringify(preset.pathParams, null, 2));
+      setBodyText(JSON.stringify(preset.body, null, 2));
+      setExecutionMode(preset.executionMode ?? "single");
+      setError("");
     }
   }
 
@@ -197,6 +247,55 @@ export function OperationCard({
   }
 
   function renderGuidedControls(): JSX.Element | null {
+    const selectedWorkflowPreset = selectedWorkflowPresetId
+      ? getImprovementCyclePresetById(selectedWorkflowPresetId)
+      : undefined;
+
+    if (!hasBody && !selectedWorkflowPreset) {
+      return null;
+    }
+    if (selectedWorkflowPreset) {
+      return (
+        <>
+          <section className="helper-panel">
+            <h4>Workflow Preset</h4>
+            {operation.presetBinding?.helpText ? <p>{operation.presetBinding.helpText}</p> : null}
+            <div className="helper-grid">
+              <label>
+                Preset
+                <select
+                  aria-label="Workflow Preset"
+                  value={selectedWorkflowPresetId}
+                  onChange={(e) => setSelectedWorkflowPresetId(e.target.value)}
+                >
+                  {availableWorkflowPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Workflow Name
+                <input value={selectedWorkflowPreset.workflowName} readOnly />
+              </label>
+            </div>
+            <p>{selectedWorkflowPreset.description}</p>
+            <p className="operation-note">
+              Source of truth: <code>{selectedWorkflowPreset.sourcePath}</code>
+            </p>
+            <button type="button" onClick={applyWorkflowPreset}>
+              {operation.presetBinding?.applyLabel ?? "Apply preset"}
+            </button>
+          </section>
+          {hasBody ? renderNonPresetGuidedControls() : null}
+        </>
+      );
+    }
+    return renderNonPresetGuidedControls();
+  }
+
+  function renderNonPresetGuidedControls(): JSX.Element | null {
     if (!hasBody) {
       return null;
     }
@@ -207,7 +306,10 @@ export function OperationCard({
           <div className="helper-grid">
             <label>
               Mode
-              <select value={executionMode} onChange={(e) => setExecutionMode(e.target.value as "single" | "repeat" | "autonomous")}>
+              <select
+                value={executionMode}
+                onChange={(e) => setExecutionMode(e.target.value as WorkflowExecutionMode)}
+              >
                 <option value="single">Single</option>
                 <option value="repeat">Repeat</option>
                 <option value="autonomous">Autonomous</option>
@@ -290,7 +392,9 @@ export function OperationCard({
               Preset
               <select
                 value={iterativePreset}
-                onChange={(e) => setIterativePreset(e.target.value as "quick" | "balanced" | "deep")}
+                onChange={(e) =>
+                  setIterativePreset(e.target.value as "quick" | "balanced" | "deep")
+                }
               >
                 <option value="quick">Quick</option>
                 <option value="balanced">Balanced</option>

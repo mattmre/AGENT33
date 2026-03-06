@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OperationConfig } from "../types";
+import { workflowsDomain } from "../data/domains/workflows";
 
 const {
   apiRequestMock,
@@ -51,8 +52,17 @@ const workflowExecuteOperation: OperationConfig = {
   uxHint: "workflow-execute"
 };
 
+const presetCreateOperation = workflowsDomain.operations.find(
+  (operation) => operation.id === "workflows-create"
+) as OperationConfig;
+
+const presetExecuteOperation = workflowsDomain.operations.find(
+  (operation) => operation.id === "workflows-execute"
+) as OperationConfig;
+
 describe("OperationCard", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     apiRequestMock.mockReset();
     connectWorkflowLiveTransportMock.mockReset();
     shouldRefreshWorkflowGraphMock.mockClear();
@@ -192,5 +202,130 @@ describe("OperationCard", () => {
     });
     expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).not.toHaveProperty("run_id");
     expect(connectWorkflowLiveTransportMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit apply action before a workflow preset overwrites execute inputs", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "22222222-2222-4222-8222-222222222222"
+    );
+
+    connectWorkflowLiveTransportMock.mockReturnValue({ close: vi.fn() });
+    apiRequestMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        durationMs: 10,
+        url: "/v1/workflows/hello-flow/execute",
+        data: { run_id: "22222222-2222-4222-8222-222222222222", status: "success" }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "/v1/visualizations/workflows/hello-flow/graph?run_id=22222222-2222-4222-8222-222222222222",
+        data: {
+          workflow_id: "hello-flow",
+          nodes: [],
+          edges: []
+        }
+      });
+
+    render(
+      <OperationCard
+        operation={presetExecuteOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    await userEvent.selectOptions(await screen.findByLabelText("Workflow Preset"), "metrics-review");
+    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(2));
+    expect(apiRequestMock.mock.calls[0][0].pathParams).toEqual({ name: "hello-flow" });
+    expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
+      inputs: { name: "AGENT-33" },
+      run_id: "22222222-2222-4222-8222-222222222222"
+    });
+  });
+
+  it("applies workflow presets to create payloads and execute requests", async () => {
+    apiRequestMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      durationMs: 12,
+      url: "/v1/workflows/",
+      data: { created: true, name: "improvement-cycle-retrospective" }
+    });
+
+    const { unmount } = render(
+      <OperationCard
+        operation={presetCreateOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply preset" }));
+    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
+      name: "improvement-cycle-retrospective",
+      version: "1.0.0"
+    });
+
+    unmount();
+    apiRequestMock.mockReset();
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "33333333-3333-4333-8333-333333333333"
+    );
+    connectWorkflowLiveTransportMock.mockReturnValue({ close: vi.fn() });
+    apiRequestMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        durationMs: 10,
+        url: "/v1/workflows/improvement-cycle-metrics-review/execute",
+        data: { run_id: "33333333-3333-4333-8333-333333333333", status: "success" }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "/v1/visualizations/workflows/improvement-cycle-metrics-review/graph?run_id=33333333-3333-4333-8333-333333333333",
+        data: {
+          workflow_id: "improvement-cycle-metrics-review",
+          nodes: [{ id: "validate" }],
+          edges: []
+        }
+      });
+
+    render(
+      <OperationCard
+        operation={presetExecuteOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    await userEvent.selectOptions(await screen.findByLabelText("Workflow Preset"), "metrics-review");
+    await userEvent.click(await screen.findByRole("button", { name: "Apply preset" }));
+    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(2));
+    expect(apiRequestMock.mock.calls[0][0].pathParams).toEqual({
+      name: "improvement-cycle-metrics-review"
+    });
+    expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
+      inputs: {
+        review_period: "2026-03-01 to 2026-03-07",
+        baseline_period: "2026-02-23 to 2026-02-29"
+      },
+      run_id: "33333333-3333-4333-8333-333333333333"
+    });
   });
 });

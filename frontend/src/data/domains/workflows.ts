@@ -1,4 +1,5 @@
 import type { DomainConfig } from "../../types";
+import { improvementCyclePresetBinding } from "../../features/improvement-cycle/presets";
 
 export const workflowsDomain: DomainConfig = {
   id: "workflows",
@@ -35,7 +36,7 @@ export const workflowsDomain: DomainConfig = {
       method: "POST",
       path: "/v1/workflows/",
       description: "Register a workflow definition.",
-      instructionalText: "Deploy a brand new sequence of automated steps into the system repository, allowing it to be executed manually or continuously scheduled later.",
+      instructionalText: "Deploy a brand new sequence of automated steps into the system repository, allowing it to be executed manually or continuously scheduled later. Improvement-cycle presets can load canonical templates before you submit the JSON.",
       schemaInfo: {
         body: {
           description: "A JSON specifying the workflow inputs, steps, and expected outputs.",
@@ -65,7 +66,8 @@ export const workflowsDomain: DomainConfig = {
         },
         null,
         2
-      )
+      ),
+      presetBinding: improvementCyclePresetBinding
     },
     {
       id: "workflows-execute",
@@ -73,7 +75,7 @@ export const workflowsDomain: DomainConfig = {
       method: "POST",
       path: "/v1/workflows/{name}/execute",
       description: "Execute a registered workflow.",
-      instructionalText: "Instantly start running an automation sequence by supplying its required initial inputs. The system will process each step in its pipeline.",
+      instructionalText: "Instantly start running an automation sequence by supplying its required initial inputs. The system will process each step in its pipeline. Improvement-cycle presets can populate the workflow name and deterministic sample inputs before execution.",
       schemaInfo: {
         parameters: [
           { name: "name", type: "string", description: "The name of the workflow to run.", required: true }
@@ -95,7 +97,8 @@ export const workflowsDomain: DomainConfig = {
         null,
         2
       ),
-      uxHint: "workflow-execute"
+      uxHint: "workflow-execute",
+      presetBinding: improvementCyclePresetBinding
     },
     {
       id: "workflows-schedule-create",
