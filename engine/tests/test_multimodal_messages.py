@@ -208,9 +208,7 @@ class TestOpenAISerialization:
             content=[AudioBlock(base64_data="QUFB")],
         )
         result = OpenAIProvider._serialize_message(msg)
-        assert result["content"] == [
-            {"type": "text", "text": "[Audio: embedded]"}
-        ]
+        assert result["content"] == [{"type": "text", "text": "[Audio: embedded]"}]
 
     def test_tool_calls_preserved_with_multimodal(self) -> None:
         """tool_calls on an assistant message survive multimodal serialization."""

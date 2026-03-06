@@ -28,21 +28,12 @@ class TestMCPAuthMappings:
     def test_resource_scope_mapping_covers_documented_contract(self) -> None:
         from agent33.mcp_server.auth import get_required_scope_for_resource
 
-        assert (
-            get_required_scope_for_resource("agent33://agent-registry")
-            == "agents:read"
-        )
+        assert get_required_scope_for_resource("agent33://agent-registry") == "agents:read"
         assert (
             get_required_scope_for_resource("agent33://policy-pack") == "component-security:read"
         )
-        assert (
-            get_required_scope_for_resource("agent33://agents/AGT-001")
-            == "agents:read"
-        )
-        assert (
-            get_required_scope_for_resource("agent33://workflows/release")
-            == "workflows:read"
-        )
+        assert get_required_scope_for_resource("agent33://agents/AGT-001") == "agents:read"
+        assert get_required_scope_for_resource("agent33://workflows/release") == "workflows:read"
 
 
 class TestMCPAuthEnforcement:
