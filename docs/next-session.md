@@ -10,6 +10,7 @@ Last updated: 2026-03-06T17:23:44Z
 - **Latest session:** Session 57 (`docs/sessions/session-57-2026-03-06.md`)
 - **Main branch status:** `main` does not yet contain the Session 57 implementation stack; the active review queue is now **#145–#150**
 - **Superseded Session 56 queue:** #141–#144 are still open on GitHub but have been replaced by the Session 57 PR set
+- **Docs handoff PR:** #151 refreshes this briefing, the Session 57 log, and the copied research briefs
 - **Validation posture:**
   - Session 57 PRs are green on targeted validation for the touched files/surfaces
   - Frontend lint/tests/build passed on the Wave 1 work
@@ -25,6 +26,10 @@ Last updated: 2026-03-06T17:23:44Z
 | #148 | `main` | Wave 0 PR3: Phase 25 workflow transport and Phase 43 MCP integration | Ready for review/merge |
 | #149 | `feat/session57-wave1-live-workflow-base` | Wave 1 PR2: workflow SSE fallback and live graph refresh | Needs restack/retarget after dependencies merge |
 | #150 | `feat/session57-wave1-pr2-phase25-sse-graph-refresh` | Phase 27 Stage 3A: canonical workflow templates and presets | Needs restack/retarget after #149 merges |
+
+Auxiliary docs PR:
+
+- **#151** — Session 57 handoff refresh for `docs/next-session.md`, Session 57 session logging, and copied research briefs
 
 ## Superseded Session 56 PRs
 
