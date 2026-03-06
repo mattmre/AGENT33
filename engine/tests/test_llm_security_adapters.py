@@ -38,8 +38,11 @@ def test_llm_guard_input_returns_finding_with_severity_mapping(monkeypatch) -> N
 
 def test_llm_guard_output_returns_empty_when_scan_is_valid(monkeypatch) -> None:
     monkeypatch.setattr("agent33.component_security.llm_security._HAS_LLMGUARD", True)
+    captured: dict[str, str] = {}
 
     def _fake_scan_output(scanners, prompt, output):  # noqa: ANN001, ARG001
+        captured["prompt"] = prompt
+        captured["output"] = output
         return output, True, 0.1
 
     monkeypatch.setattr(
@@ -51,7 +54,18 @@ def test_llm_guard_output_returns_empty_when_scan_is_valid(monkeypatch) -> None:
         input_scanners=[],
         output_scanners=[_SensitiveScanner()],
     )
-    assert adapter.scan_output("safe output", run_id="secrun-2") == []
+    assert (
+        adapter.scan_output(
+            "safe output",
+            prompt="summarize the report",
+            run_id="secrun-2",
+        )
+        == []
+    )
+    assert captured == {
+        "prompt": "summarize the report",
+        "output": "safe output",
+    }
 
 
 def test_llm_guard_scan_errors_are_suppressed(monkeypatch) -> None:
@@ -95,3 +109,40 @@ def test_garak_run_probes_returns_empty_when_unavailable(monkeypatch) -> None:
     monkeypatch.setattr("agent33.component_security.llm_security._HAS_GARAK", False)
     adapter = GarakAdapter(probe_runner=lambda model_name, probe_name: 1.0)  # noqa: ARG005
     assert adapter.run_probes("test-model", run_id="secrun-5") == []
+
+
+def test_llm_guard_is_available_requires_runtime_components(monkeypatch) -> None:
+    monkeypatch.setattr("agent33.component_security.llm_security._HAS_LLMGUARD", True)
+    monkeypatch.setattr("agent33.component_security.llm_security._llmguard_scan_prompt", None)
+    monkeypatch.setattr("agent33.component_security.llm_security._llmguard_scan_output", None)
+    monkeypatch.setattr("agent33.component_security.llm_security.PromptInjection", None)
+    monkeypatch.setattr("agent33.component_security.llm_security.Toxicity", None)
+    monkeypatch.setattr("agent33.component_security.llm_security.InvisibleText", None)
+    monkeypatch.setattr("agent33.component_security.llm_security.Sensitive", None)
+    monkeypatch.setattr("agent33.component_security.llm_security.NoRefusal", None)
+
+    assert LLMGuardAdapter.is_available() is False
+
+
+def test_llm_guard_normalize_scan_result_ignores_arbitrary_dict_values() -> None:
+    assert LLMGuardAdapter._normalize_scan_result({"is_valid": False, "unexpected": 0.95}) == (
+        False,
+        0.0,
+    )
+
+
+def test_garak_is_available_requires_probe_runner(monkeypatch) -> None:
+    monkeypatch.setattr("agent33.component_security.llm_security._HAS_GARAK", True)
+    monkeypatch.setattr("agent33.component_security.llm_security._GARAK_MODULE", object())
+
+    assert GarakAdapter.is_available() is False
+
+
+def test_garak_boolean_results_are_handled_explicitly() -> None:
+    assert GarakAdapter._normalize_results(True, "promptinject") == []
+    assert GarakAdapter._normalize_results(False, "promptinject") == [
+        {
+            "score": 1.0,
+            "description": "Garak probe 'promptinject' failed",
+        }
+    ]

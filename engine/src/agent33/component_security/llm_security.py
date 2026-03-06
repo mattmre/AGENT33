@@ -20,6 +20,7 @@ from agent33.component_security.models import (
 from agent33.security.injection import ScanResult, scan_input, scan_inputs_recursive
 
 logger = structlog.get_logger()
+_LOGGED_DEBUG_EVENTS: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
 
 _LLMGuardScan = Callable[..., Any]
 _llmguard_scan_prompt: _LLMGuardScan | None = None
@@ -100,6 +101,75 @@ _SHADOWING_PATTERNS: list[tuple[str, str]] = [
     ("system_prompt", "Schema exposes system prompt manipulation"),
     ("inject", "Schema property name suggests injection vector"),
 ]
+
+
+def _log_debug_once(event: str, **fields: object) -> None:
+    key = (event, tuple(sorted((name, repr(value)) for name, value in fields.items())))
+    if key in _LOGGED_DEBUG_EVENTS:
+        return
+    _LOGGED_DEBUG_EVENTS.add(key)
+    logger.debug(event, **fields)
+
+
+def _is_numeric_score(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _coerce_score(value: Any) -> float:
+    if _is_numeric_score(value):
+        return float(value)
+    if isinstance(value, dict):
+        for key in ("score", "risk_score", "max_score"):
+            candidate = value.get(key)
+            if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+                return float(candidate)
+        return 0.0
+    if isinstance(value, (list, tuple)):
+        numeric_values = [float(item) for item in value if _is_numeric_score(item)]
+        if numeric_values:
+            return max(numeric_values)
+    return 0.0
+
+
+def _score_to_severity(score: float) -> FindingSeverity:
+    if score >= 0.9:
+        return FindingSeverity.CRITICAL
+    if score >= 0.7:
+        return FindingSeverity.HIGH
+    if score >= 0.5:
+        return FindingSeverity.MEDIUM
+    return FindingSeverity.LOW
+
+
+def _llm_guard_input_defaults_available() -> bool:
+    return (
+        _HAS_LLMGUARD
+        and callable(_llmguard_scan_prompt)
+        and isinstance(PromptInjection, type)
+        and isinstance(Toxicity, type)
+        and isinstance(InvisibleText, type)
+    )
+
+
+def _llm_guard_output_defaults_available() -> bool:
+    return (
+        _HAS_LLMGUARD
+        and callable(_llmguard_scan_output)
+        and isinstance(Sensitive, type)
+        and isinstance(NoRefusal, type)
+    )
+
+
+def _llm_guard_input_runtime_available() -> bool:
+    return _HAS_LLMGUARD and callable(_llmguard_scan_prompt)
+
+
+def _llm_guard_output_runtime_available() -> bool:
+    return _HAS_LLMGUARD and callable(_llmguard_scan_output)
+
+
+def _garak_runtime_available() -> bool:
+    return _HAS_GARAK and callable(getattr(_GARAK_MODULE, "run_probe", None))
 
 
 class LLMSecurityScanner:
@@ -337,34 +407,37 @@ class LLMGuardAdapter:
 
     @staticmethod
     def is_available() -> bool:
-        """Check if llm-guard package is installed."""
-        return _HAS_LLMGUARD
+        """Check if llm-guard runtime and default scanners are available."""
+        return _llm_guard_input_defaults_available() or _llm_guard_output_defaults_available()
 
     @staticmethod
     def _build_default_input_scanners() -> list[Any]:
-        if (
-            not _HAS_LLMGUARD
-            or PromptInjection is None
-            or Toxicity is None
-            or InvisibleText is None
-        ):
+        if not _llm_guard_input_defaults_available():
             return []
-        return [PromptInjection(), Toxicity(), InvisibleText()]
+        return [
+            cast("type[Any]", PromptInjection)(),
+            cast("type[Any]", Toxicity)(),
+            cast("type[Any]", InvisibleText)(),
+        ]
 
     @staticmethod
     def _build_default_output_scanners() -> list[Any]:
-        if not _HAS_LLMGUARD or Sensitive is None or NoRefusal is None:
+        if not _llm_guard_output_defaults_available():
             return []
-        return [Sensitive(), NoRefusal()]
+        return [cast("type[Any]", Sensitive)(), cast("type[Any]", NoRefusal)()]
 
     def scan_input(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
         """Scan input text using LLM Guard scanners."""
-        if not self.is_available() or _llmguard_scan_prompt is None or not self._input_scanners:
-            logger.debug("llm_guard_not_available")
+        if not self._input_scanners:
+            _log_debug_once("llm_guard_input_scan_skipped", reason="no_scanners_configured")
+            return []
+        if not _llm_guard_input_runtime_available():
+            reason = "dependency_unavailable" if not _HAS_LLMGUARD else "scan_prompt_unavailable"
+            _log_debug_once("llm_guard_input_scan_skipped", reason=reason)
             return []
         try:
             valid, score = self._run_scan(
-                _llmguard_scan_prompt,
+                cast("_LLMGuardScan", _llmguard_scan_prompt),
                 self._input_scanners,
                 text,
             )
@@ -376,7 +449,7 @@ class LLMGuardAdapter:
         return [
             SecurityFinding(
                 run_id=run_id,
-                severity=self._score_to_severity(score),
+                severity=_score_to_severity(score),
                 category=FindingCategory.MODEL_SECURITY,
                 title="LLM Guard flagged unsafe prompt input",
                 description=(
@@ -389,15 +462,26 @@ class LLMGuardAdapter:
             )
         ]
 
-    def scan_output(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
-        """Scan LLM output using LLM Guard scanners."""
-        if not self.is_available() or _llmguard_scan_output is None or not self._output_scanners:
+    def scan_output(
+        self,
+        text: str,
+        *,
+        prompt: str = "",
+        run_id: str = "",
+    ) -> list[SecurityFinding]:
+        """Scan LLM output using LLM Guard scanners and optional prompt context."""
+        if not self._output_scanners:
+            _log_debug_once("llm_guard_output_scan_skipped", reason="no_scanners_configured")
+            return []
+        if not _llm_guard_output_runtime_available():
+            reason = "dependency_unavailable" if not _HAS_LLMGUARD else "scan_output_unavailable"
+            _log_debug_once("llm_guard_output_scan_skipped", reason=reason)
             return []
         try:
             valid, score = self._run_scan(
-                _llmguard_scan_output,
+                cast("_LLMGuardScan", _llmguard_scan_output),
                 self._output_scanners,
-                text,
+                prompt,
                 text,
             )
         except Exception:
@@ -408,7 +492,7 @@ class LLMGuardAdapter:
         return [
             SecurityFinding(
                 run_id=run_id,
-                severity=self._score_to_severity(score),
+                severity=_score_to_severity(score),
                 category=FindingCategory.MODEL_SECURITY,
                 title="LLM Guard flagged unsafe model output",
                 description=(
@@ -432,46 +516,16 @@ class LLMGuardAdapter:
     def _normalize_scan_result(result: Any) -> tuple[bool, float]:
         if isinstance(result, tuple):
             if len(result) >= 3:
-                return bool(result[1]), LLMGuardAdapter._coerce_score(result[2])
+                return bool(result[1]), _coerce_score(result[2])
             if len(result) == 2:
                 return bool(result[1]), 0.0 if result[1] else 1.0
         if isinstance(result, dict):
             valid = bool(result.get("is_valid", True))
-            score = LLMGuardAdapter._coerce_score(
-                result.get("score", result.get("risk_score", 0.0))
-            )
+            score = _coerce_score(result.get("score", result.get("risk_score", 0.0)))
             return valid, score
         if isinstance(result, bool):
             return result, 0.0 if result else 1.0
         return True, 0.0
-
-    @staticmethod
-    def _coerce_score(value: Any) -> float:
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, dict):
-            for key in ("score", "risk_score", "max_score"):
-                candidate = value.get(key)
-                if isinstance(candidate, (int, float)):
-                    return float(candidate)
-            numeric_values = [float(v) for v in value.values() if isinstance(v, (int, float))]
-            if numeric_values:
-                return max(numeric_values)
-        if isinstance(value, (list, tuple)):
-            numeric_values = [float(v) for v in value if isinstance(v, (int, float))]
-            if numeric_values:
-                return max(numeric_values)
-        return 0.0
-
-    @staticmethod
-    def _score_to_severity(score: float) -> FindingSeverity:
-        if score >= 0.9:
-            return FindingSeverity.CRITICAL
-        if score >= 0.7:
-            return FindingSeverity.HIGH
-        if score >= 0.5:
-            return FindingSeverity.MEDIUM
-        return FindingSeverity.LOW
 
     @staticmethod
     def _scanner_names(scanners: list[Any]) -> list[str]:
@@ -495,11 +549,19 @@ class GarakAdapter:
 
     @staticmethod
     def is_available() -> bool:
-        """Check if garak package is installed."""
-        return _HAS_GARAK
+        """Check if garak runtime can execute probes."""
+        return _garak_runtime_available()
 
     def __init__(self, *, probe_runner: Any | None = None) -> None:
+        self._uses_default_probe_runner = probe_runner is None
         self._probe_runner = probe_runner or self._run_probe
+
+    def _can_run_probes(self) -> bool:
+        if not _HAS_GARAK:
+            return False
+        if not self._uses_default_probe_runner:
+            return callable(self._probe_runner)
+        return _garak_runtime_available()
 
     def run_probes(
         self,
@@ -509,8 +571,14 @@ class GarakAdapter:
         probe_types: list[str] | None = None,
     ) -> list[SecurityFinding]:
         """Run Garak probes against a model."""
-        if not self.is_available():
-            logger.debug("garak_not_available")
+        if not self._can_run_probes():
+            if not _HAS_GARAK:
+                reason = "dependency_unavailable"
+            elif not self._uses_default_probe_runner:
+                reason = "probe_runner_unavailable"
+            else:
+                reason = "probe_runner_unavailable"
+            _log_debug_once("garak_probe_skipped", reason=reason)
             return []
         selected_probes = probe_types or list(self.DEFAULT_PROBES)
         findings: list[SecurityFinding] = []
@@ -542,11 +610,11 @@ class GarakAdapter:
     ) -> list[SecurityFinding]:
         findings: list[SecurityFinding] = []
         for item in GarakAdapter._normalize_results(result, probe_name):
-            score = LLMGuardAdapter._coerce_score(item.get("score", 0.0))
+            score = _coerce_score(item.get("score", 0.0))
             findings.append(
                 SecurityFinding(
                     run_id=run_id,
-                    severity=LLMGuardAdapter._score_to_severity(score),
+                    severity=_score_to_severity(score),
                     category=FindingCategory.MODEL_SECURITY,
                     title=item.get(
                         "title",
@@ -572,6 +640,10 @@ class GarakAdapter:
     def _normalize_results(result: Any, probe_name: str) -> list[dict[str, Any]]:
         if result is None:
             return []
+        if result is True:
+            return []
+        if result is False:
+            return [{"score": 1.0, "description": f"Garak probe '{probe_name}' failed"}]
         if isinstance(result, dict):
             return [result] if GarakAdapter._result_has_issue(result) else []
         if isinstance(result, (list, tuple)):
@@ -579,15 +651,13 @@ class GarakAdapter:
             for item in result:
                 normalized.extend(GarakAdapter._normalize_results(item, probe_name))
             return normalized
-        if isinstance(result, (int, float)) and float(result) > 0:
+        if _is_numeric_score(result) and float(result) > 0:
             return [
                 {
                     "score": float(result),
                     "description": f"Garak probe '{probe_name}' flagged risk",
                 }
             ]
-        if result is False:
-            return [{"score": 1.0, "description": f"Garak probe '{probe_name}' failed"}]
         return []
 
     @staticmethod
@@ -595,4 +665,4 @@ class GarakAdapter:
         if result.get("finding") is True:
             return True
         score = result.get("score", result.get("risk_score", 0.0))
-        return isinstance(score, (int, float)) and float(score) > 0
+        return _coerce_score(score) > 0
