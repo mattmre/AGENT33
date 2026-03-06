@@ -260,9 +260,7 @@ async def test_ollama_stream_complete_defaults_missing_tool_call_id_and_done_rea
     chunks = [chunk async for chunk in provider.stream_complete(_messages(), model="llama3.2")]
 
     tool_delta = next(
-        chunk.tool_call_delta
-        for chunk in chunks
-        if chunk.tool_call_delta is not None
+        chunk.tool_call_delta for chunk in chunks if chunk.tool_call_delta is not None
     )
     assert tool_delta is not None
     assert tool_delta.id == "call_0"
@@ -278,9 +276,7 @@ async def test_ollama_stream_complete_defaults_missing_tool_call_id_and_done_rea
 async def test_ollama_stream_complete_propagates_boundary_blocking_error() -> None:
     provider = OllamaProvider(base_url="http://localhost:11434")
     provider._client = _OllamaStreamClient(lines=[])  # type: ignore[assignment]
-    provider._boundary_executor = _BoundaryExecutor(
-        failure=PermissionError("blocked by policy")
-    )  # type: ignore[assignment]
+    provider._boundary_executor = _BoundaryExecutor(failure=PermissionError("blocked by policy"))  # type: ignore[assignment]
 
     with pytest.raises(
         RuntimeError,

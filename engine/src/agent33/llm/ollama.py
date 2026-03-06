@@ -284,9 +284,8 @@ class OllamaProvider:
             parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
 
         finish_reason = "tool_calls" if parsed_tool_calls else "stop"
-        usage_available = (
-            isinstance(data.get("prompt_eval_count"), int)
-            and isinstance(data.get("eval_count"), int)
+        usage_available = isinstance(data.get("prompt_eval_count"), int) and isinstance(
+            data.get("eval_count"), int
         )
 
         return LLMResponse(
@@ -344,9 +343,8 @@ class OllamaProvider:
             if finish_reason is None and data.get("done"):
                 finish_reason = "tool_calls" if raw_tool_calls else "stop"
             content = msg.get("content", "") or ""
-            usage_available = (
-                isinstance(data.get("prompt_eval_count"), int)
-                and isinstance(data.get("eval_count"), int)
+            usage_available = isinstance(data.get("prompt_eval_count"), int) and isinstance(
+                data.get("eval_count"), int
             )
             prompt_tokens = data.get("prompt_eval_count", 0) if usage_available else 0
             completion_tokens = data.get("eval_count", 0) if usage_available else 0
