@@ -199,6 +199,67 @@ class TestWorkflowWSManager:
         ws_two.send_text.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_sse_backpressure_drops_oldest_event_and_keeps_latest(self) -> None:
+        manager = WorkflowWSManager(sse_queue_maxsize=1)
+        await manager.register_run("run-sse-backpressure", "wf-backpressure")
+        queue = await manager.subscribe_sse("run-sse-backpressure")
+
+        assert queue is not None
+
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_STARTED,
+                run_id="run-sse-backpressure",
+                workflow_name="wf-backpressure",
+                step_id="step-a",
+            )
+        )
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_COMPLETED,
+                run_id="run-sse-backpressure",
+                workflow_name="wf-backpressure",
+                step_id="step-a",
+            )
+        )
+
+        retained_event = queue.get_nowait()
+        assert retained_event.event_type == WorkflowEventType.STEP_COMPLETED
+        assert queue.empty()
+
+    @pytest.mark.asyncio
+    async def test_run_access_requires_matching_owner_and_tenant(self) -> None:
+        manager = WorkflowWSManager()
+        await manager.register_run(
+            "run-owned",
+            "wf-owned",
+            owner_subject="owner-a",
+            tenant_id="tenant-a",
+        )
+
+        assert await manager.can_access_run(
+            "run-owned",
+            subject="owner-a",
+            tenant_id="tenant-a",
+        )
+        assert not await manager.can_access_run(
+            "run-owned",
+            subject="owner-b",
+            tenant_id="tenant-a",
+        )
+        assert not await manager.can_access_run(
+            "run-owned",
+            subject="owner-a",
+            tenant_id="tenant-b",
+        )
+        assert await manager.can_access_run(
+            "run-owned",
+            subject="admin-user",
+            tenant_id="tenant-b",
+            is_admin=True,
+        )
+
+    @pytest.mark.asyncio
     async def test_build_sync_event_reflects_latest_snapshot(self) -> None:
         manager = WorkflowWSManager()
         run_id = "run-sync"

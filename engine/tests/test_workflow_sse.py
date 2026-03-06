@@ -88,8 +88,14 @@ def _read_sse_events(lines: Iterator[str | bytes], count: int) -> list[dict[str,
 
 def _mock_request(manager: WorkflowWSManager) -> SimpleNamespace:
     state = SimpleNamespace(ws_manager=manager)
+    state.user = SimpleNamespace(
+        sub="workflow-sse-user",
+        scopes=["workflows:read"],
+        tenant_id="",
+    )
     return SimpleNamespace(
         app=SimpleNamespace(state=state),
+        state=state,
         is_disconnected=AsyncMock(return_value=False),
     )
 
@@ -128,10 +134,60 @@ class TestWorkflowSSEEndpoint:
 
         assert response.status_code == 403
 
+    def test_sse_endpoint_hides_runs_owned_by_other_subjects(self) -> None:
+        manager = WorkflowWSManager()
+        asyncio.run(
+            manager.register_run(
+                "run-owned",
+                "wf-owned",
+                owner_subject="owner-a",
+                tenant_id="tenant-a",
+            )
+        )
+        _install_manager(manager)
+
+        token = create_access_token(
+            "owner-b",
+            scopes=["workflows:read"],
+            tenant_id="tenant-a",
+        )
+        client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+        response = client.get("/v1/workflows/run-owned/events")
+
+        assert response.status_code == 404
+
+    def test_sse_endpoint_hides_runs_from_other_tenants(self) -> None:
+        manager = WorkflowWSManager()
+        asyncio.run(
+            manager.register_run(
+                "run-tenant",
+                "wf-tenant",
+                owner_subject="tenant-user",
+                tenant_id="tenant-a",
+            )
+        )
+        _install_manager(manager)
+
+        token = create_access_token(
+            "tenant-user",
+            scopes=["workflows:read"],
+            tenant_id="tenant-b",
+        )
+        client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+        response = client.get("/v1/workflows/run-tenant/events")
+
+        assert response.status_code == 404
+
     @pytest.mark.asyncio
     async def test_sse_endpoint_streams_sync_event(self) -> None:
         manager = WorkflowWSManager(heartbeat_interval_seconds=60)
-        await manager.register_run("run-api-key", "wf-api-key")
+        await manager.register_run(
+            "run-api-key",
+            "wf-api-key",
+            owner_subject="workflow-sse-user",
+        )
         _install_manager(manager)
 
         request = _mock_request(manager)
@@ -158,7 +214,7 @@ class TestWorkflowSSEEndpoint:
     @pytest.mark.asyncio
     async def test_sse_endpoint_streams_live_events_and_cleans_up_on_disconnect(self) -> None:
         manager = WorkflowWSManager(heartbeat_interval_seconds=60)
-        await manager.register_run("run-live", "wf-live")
+        await manager.register_run("run-live", "wf-live", owner_subject="workflow-sse-user")
         _install_manager(manager)
 
         request = _mock_request(manager)
@@ -187,7 +243,11 @@ class TestWorkflowSSEEndpoint:
     @pytest.mark.asyncio
     async def test_sse_endpoint_emits_heartbeat_events(self) -> None:
         manager = WorkflowWSManager(heartbeat_interval_seconds=0.01)
-        await manager.register_run("run-heartbeat", "wf-heartbeat")
+        await manager.register_run(
+            "run-heartbeat",
+            "wf-heartbeat",
+            owner_subject="workflow-sse-user",
+        )
         _install_manager(manager)
 
         request = _mock_request(manager)
@@ -230,7 +290,13 @@ class TestWorkflowGraphLiveOverlay:
         _seed_workflow(client, workflow_name)
 
         manager = WorkflowWSManager()
-        asyncio.run(manager.register_run("run-viz-live", workflow_name))
+        asyncio.run(
+            manager.register_run(
+                "run-viz-live",
+                workflow_name,
+                owner_subject="workflow-visualizer",
+            )
+        )
         asyncio.run(
             manager.publish_event(
                 WorkflowEvent(
@@ -268,6 +334,43 @@ class TestWorkflowGraphLiveOverlay:
         graph = response.json()
         assert graph["nodes"][0]["id"] == "step-a"
         assert graph["nodes"][0]["status"] == "running"
+
+    def test_graph_route_rejects_live_overlay_for_other_subjects(self) -> None:
+        owner_token = create_access_token(
+            "workflow-owner",
+            scopes=["workflows:read", "workflows:write"],
+            tenant_id="tenant-a",
+        )
+        requester_token = create_access_token(
+            "workflow-reader",
+            scopes=["workflows:read", "workflows:write"],
+            tenant_id="tenant-a",
+        )
+        owner_client = TestClient(app, headers={"Authorization": f"Bearer {owner_token}"})
+        requester_client = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {requester_token}"},
+        )
+        workflow_name = "viz-owned"
+        _seed_workflow(owner_client, workflow_name)
+
+        manager = WorkflowWSManager()
+        asyncio.run(
+            manager.register_run(
+                "run-viz-owned",
+                workflow_name,
+                owner_subject="workflow-owner",
+                tenant_id="tenant-a",
+            )
+        )
+        _install_manager(manager)
+
+        response = requester_client.get(
+            f"/v1/visualizations/workflows/{workflow_name}/graph",
+            params={"run_id": "run-viz-owned"},
+        )
+
+        assert response.status_code == 404
 
     def test_graph_route_falls_back_to_history_when_live_run_is_missing(self) -> None:
         token = create_access_token(

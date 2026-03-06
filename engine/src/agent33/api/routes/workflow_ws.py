@@ -35,7 +35,12 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
         await websocket.close(code=4002, reason="WebSocket manager not available")
         return
 
-    if not await manager.has_run(run_id):
+    if not await manager.can_access_run(
+        run_id,
+        subject=payload.sub,
+        tenant_id=payload.tenant_id,
+        is_admin="admin" in payload.scopes,
+    ):
         await websocket.close(code=4004, reason="Unknown run_id")
         return
 

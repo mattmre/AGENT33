@@ -56,7 +56,18 @@ async def get_workflow_graph(
     used_live_overlay = False
     if run_id:
         manager = getattr(request.app.state, "ws_manager", None)
-        if manager is not None:
+        if manager is not None and await manager.has_run(run_id):
+            user = _get_request_user(request)
+            if not await manager.can_access_run(
+                run_id,
+                subject=user.sub,
+                tenant_id=getattr(user, "tenant_id", ""),
+                is_admin="admin" in getattr(user, "scopes", []),
+            ):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Workflow run '{run_id}' not found",
+                )
             live_event = await manager.build_sync_event(run_id)
             if live_event is not None and live_event.workflow_name == workflow_id:
                 execution_status = dict(live_event.data.get("step_statuses", {}))
@@ -99,3 +110,10 @@ async def get_workflow_graph(
     )
 
     return graph
+
+
+def _get_request_user(request: Request) -> Any:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user

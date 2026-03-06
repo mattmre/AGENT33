@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import uuid
 
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from agent33.main import app
 from agent33.security.auth import create_access_token
+from agent33.workflows.ws_manager import WorkflowWSManager
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +26,8 @@ def clear_workflow_state():
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
             workflows._scheduler = None
+        workflows.set_ws_manager(None)
+        app.state.ws_manager = None
 
     _reset()
     yield
@@ -317,6 +321,51 @@ class TestWorkflowGraphAuthorization:
         """workflows:read scope should be sufficient."""
         resp = reader_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         assert resp.status_code == 200
+
+    def test_run_overlay_hides_other_tenant_live_runs(self, writer_client: TestClient) -> None:
+        workflow_name = f"tenant-viz-{uuid.uuid4().hex[:8]}"
+        resp = writer_client.post(
+            "/v1/workflows/",
+            json={
+                "name": workflow_name,
+                "version": "1.0.0",
+                "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
+                "execution": {"mode": "sequential"},
+            },
+        )
+        assert resp.status_code == 201
+
+        manager = WorkflowWSManager()
+        asyncio.run(
+            manager.register_run(
+                "tenant-live-run",
+                workflow_name,
+                owner_subject="tenant-owner",
+                tenant_id="tenant-a",
+            )
+        )
+
+        from agent33.api.routes import workflows
+
+        app.state.ws_manager = manager
+        workflows.set_ws_manager(manager)
+
+        other_tenant_token = create_access_token(
+            "tenant-owner",
+            scopes=["workflows:read"],
+            tenant_id="tenant-b",
+        )
+        other_tenant_client = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {other_tenant_token}"},
+        )
+
+        overlay_resp = other_tenant_client.get(
+            f"/v1/visualizations/workflows/{workflow_name}/graph",
+            params={"run_id": "tenant-live-run"},
+        )
+
+        assert overlay_resp.status_code == 404
 
 
 # -- Deterministic layout tests ----------------------------------------------

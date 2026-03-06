@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -25,7 +25,13 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
     if manager is None:
         raise HTTPException(status_code=503, detail="Workflow live manager not available")
 
-    queue = await manager.subscribe_sse(run_id)
+    user = _get_request_user(request)
+    queue = await manager.subscribe_sse_if_allowed(
+        run_id,
+        subject=user.sub,
+        tenant_id=getattr(user, "tenant_id", ""),
+        is_admin="admin" in getattr(user, "scopes", []),
+    )
     if queue is None:
         raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
 
@@ -36,7 +42,7 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
 
     async def event_generator() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()
-        poll_timeout = min(manager.heartbeat_interval_seconds, 0.25)
+        poll_timeout = min(manager.heartbeat_interval_seconds, 1.0)
         next_heartbeat_at = loop.time() + manager.heartbeat_interval_seconds
         try:
             yield _format_sse(sync_event)
@@ -76,3 +82,10 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
 def _format_sse(event: WorkflowEvent) -> str:
     """Serialize a workflow event as a single SSE data frame."""
     return f"data: {event.to_json()}\n\n"
+
+
+def _get_request_user(request: Request) -> Any:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user

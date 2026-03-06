@@ -30,6 +30,8 @@ class WorkflowRunSnapshot:
     terminal: bool = False
     error: str | None = None
     duration_ms: float | None = None
+    owner_subject: str | None = None
+    tenant_id: str | None = None
 
     def to_event_data(self) -> dict[str, Any]:
         """Return the transport payload used by sync events."""
@@ -50,21 +52,42 @@ class WorkflowRunSnapshot:
 class WorkflowWSManager:
     """Manages WebSocket subscriptions and snapshots for workflow runs."""
 
-    def __init__(self, heartbeat_interval_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        heartbeat_interval_seconds: float = 30.0,
+        sse_queue_maxsize: int = 100,
+    ) -> None:
         self._subscriptions: dict[str, set[Any]] = {}
         self._reverse: dict[Any, set[str]] = {}
         self._sse_subscriptions: dict[str, set[asyncio.Queue[WorkflowEvent]]] = {}
         self._snapshots: dict[str, WorkflowRunSnapshot] = {}
         self._lock = asyncio.Lock()
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
+        self.sse_queue_maxsize = max(1, sse_queue_maxsize)
 
-    async def register_run(self, run_id: str, workflow_name: str) -> None:
+    async def register_run(
+        self,
+        run_id: str,
+        workflow_name: str,
+        *,
+        owner_subject: str | None = None,
+        tenant_id: str | None = None,
+    ) -> None:
         """Ensure a snapshot exists for *run_id*."""
         async with self._lock:
-            self._snapshots.setdefault(
+            snapshot = self._snapshots.setdefault(
                 run_id,
-                WorkflowRunSnapshot(run_id=run_id, workflow_name=workflow_name),
+                WorkflowRunSnapshot(
+                    run_id=run_id,
+                    workflow_name=workflow_name,
+                    owner_subject=owner_subject,
+                    tenant_id=tenant_id or None,
+                ),
             )
+            if owner_subject is not None:
+                snapshot.owner_subject = owner_subject
+            if tenant_id:
+                snapshot.tenant_id = tenant_id
 
     async def has_run(self, run_id: str) -> bool:
         """Return ``True`` when *run_id* is known to the manager."""
@@ -106,10 +129,32 @@ class WorkflowWSManager:
         run_id: str,
     ) -> asyncio.Queue[WorkflowEvent] | None:
         """Register and return an SSE queue for *run_id*."""
-        queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue()
+        queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue(maxsize=self.sse_queue_maxsize)
         async with self._lock:
             if run_id not in self._snapshots:
                 return None
+            self._sse_subscriptions.setdefault(run_id, set()).add(queue)
+        return queue
+
+    async def subscribe_sse_if_allowed(
+        self,
+        run_id: str,
+        *,
+        subject: str,
+        tenant_id: str = "",
+        is_admin: bool = False,
+    ) -> asyncio.Queue[WorkflowEvent] | None:
+        """Atomically authorize and subscribe an SSE client for *run_id*."""
+        queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue(maxsize=self.sse_queue_maxsize)
+        async with self._lock:
+            snapshot = self._snapshots.get(run_id)
+            if snapshot is None:
+                return None
+            if not is_admin:
+                if snapshot.tenant_id and snapshot.tenant_id != tenant_id:
+                    return None
+                if snapshot.owner_subject and snapshot.owner_subject != subject:
+                    return None
             self._sse_subscriptions.setdefault(run_id, set()).add(queue)
         return queue
 
@@ -142,7 +187,8 @@ class WorkflowWSManager:
             sse_targets = list(self._sse_subscriptions.get(event.run_id, set()))
 
         for queue in sse_targets:
-            queue.put_nowait(event)
+            if not self._publish_sse_event(queue, event, run_id=event.run_id):
+                logger.warning("sse_event_dropped", run_id=event.run_id)
 
         if not targets:
             return
@@ -220,6 +266,25 @@ class WorkflowWSManager:
         async with self._lock:
             return len(self._sse_subscriptions.get(run_id, set()))
 
+    async def can_access_run(
+        self,
+        run_id: str,
+        *,
+        subject: str,
+        tenant_id: str = "",
+        is_admin: bool = False,
+    ) -> bool:
+        """Return whether *subject* may access live data for *run_id*."""
+        async with self._lock:
+            snapshot = self._snapshots.get(run_id)
+            if snapshot is None:
+                return False
+            if is_admin:
+                return True
+            if snapshot.tenant_id and snapshot.tenant_id != tenant_id:
+                return False
+            return not snapshot.owner_subject or snapshot.owner_subject == subject
+
     async def connected_count(self) -> int:
         """Return the total number of tracked WebSocket connections."""
         async with self._lock:
@@ -280,6 +345,38 @@ class WorkflowWSManager:
                 subs.discard(ws)
                 if not subs:
                     del self._subscriptions[run_id]
+
+    def _publish_sse_event(
+        self,
+        queue: asyncio.Queue[WorkflowEvent],
+        event: WorkflowEvent,
+        *,
+        run_id: str,
+    ) -> bool:
+        try:
+            queue.put_nowait(event)
+            return True
+        except asyncio.QueueFull:
+            try:
+                dropped_event = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                logger.warning("sse_queue_full_without_buffered_event", run_id=run_id)
+                return False
+
+            logger.warning(
+                "sse_queue_backpressure",
+                run_id=run_id,
+                dropped_event_type=dropped_event.event_type.value,
+                replacement_event_type=event.event_type.value,
+                queue_maxsize=queue.maxsize,
+            )
+
+            try:
+                queue.put_nowait(event)
+                return True
+            except asyncio.QueueFull:
+                logger.warning("sse_queue_still_full_after_drop", run_id=run_id)
+                return False
 
 
 def _coerce_float(value: Any) -> float | None:

@@ -305,6 +305,9 @@ async def execute_workflow(
         )
 
     ws_manager = getattr(req.app.state, "ws_manager", _ws_manager)
+    user = getattr(req.state, "user", None)
+    owner_subject = getattr(user, "sub", None)
+    tenant_id = getattr(user, "tenant_id", "") if user is not None else ""
 
     if request.run_id and request.repeat_count and request.repeat_count > 1:
         raise HTTPException(
@@ -320,6 +323,8 @@ async def execute_workflow(
             request,
             ws_manager=ws_manager,
             requested_run_id=request.run_id,
+            owner_subject=owner_subject,
+            tenant_id=tenant_id,
         )
 
     # Standard single execution (backward compatible)
@@ -330,6 +335,8 @@ async def execute_workflow(
         trigger_type="manual",
         ws_manager=ws_manager,
         run_id=request.run_id,
+        owner_subject=owner_subject,
+        tenant_id=tenant_id,
     )
 
 
@@ -341,6 +348,8 @@ async def _execute_single(
     job_id: str | None = None,
     ws_manager: Any | None = None,
     run_id: str | None = None,
+    owner_subject: str | None = None,
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Execute a workflow once and return the result."""
     run_id = await _allocate_run_id(run_id, ws_manager=ws_manager)
@@ -353,7 +362,12 @@ async def _execute_single(
 
     event_sink = None
     if ws_manager is not None:
-        await ws_manager.register_run(run_id, name)
+        await ws_manager.register_run(
+            run_id,
+            name,
+            owner_subject=owner_subject,
+            tenant_id=tenant_id,
+        )
         event_sink = ws_manager.publish_event
 
     executor = WorkflowExecutor(
@@ -446,6 +460,8 @@ async def _execute_repeated_or_autonomous(
     request: WorkflowExecuteRequest,
     ws_manager: Any | None = None,
     requested_run_id: str | None = None,
+    owner_subject: str | None = None,
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Execute a workflow multiple times or autonomously."""
     import asyncio
@@ -466,6 +482,8 @@ async def _execute_repeated_or_autonomous(
             trigger_type="manual",
             ws_manager=ws_manager,
             run_id=run_id,
+            owner_subject=owner_subject,
+            tenant_id=tenant_id,
         )
         results.append(result_dict)
 
