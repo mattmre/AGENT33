@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from agent33.llm.base import LLMStreamChunk
+    from agent33.llm.base import LLMStreamChunk, ToolCallDelta
 
 import httpx
 
@@ -320,7 +320,7 @@ class OpenAIProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via SSE."""
-        from agent33.llm.base import LLMStreamChunk
+        from agent33.llm.base import LLMStreamChunk, ToolCallDelta
 
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
@@ -356,8 +356,26 @@ class OpenAIProvider:
                     continue
                 choice = chunk_data.get("choices", [{}])[0]
                 delta = choice.get("delta", {})
+
+                delta_tool_calls: list[ToolCallDelta] = []
+                if "tool_calls" in delta:
+                    for tc_delta in delta["tool_calls"]:
+                        delta_tool_calls.append(
+                            ToolCallDelta(
+                                index=tc_delta.get("index", 0),
+                                id=tc_delta.get("id", ""),
+                                function_name=tc_delta.get(
+                                    "function", {}
+                                ).get("name", ""),
+                                arguments_delta=tc_delta.get(
+                                    "function", {}
+                                ).get("arguments", ""),
+                            )
+                        )
+
                 yield LLMStreamChunk(
                     delta_content=delta.get("content", "") or "",
+                    delta_tool_calls=delta_tool_calls,
                     finish_reason=choice.get("finish_reason"),
                     model=chunk_data.get("model", resolved_model),
                 )

@@ -47,11 +47,21 @@ class LLMResponse:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ToolCallDelta:
+    """An incremental fragment of a streaming tool call."""
+
+    index: int
+    id: str = ""
+    function_name: str = ""
+    arguments_delta: str = ""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class LLMStreamChunk:
     """A single chunk from an LLM streaming response."""
 
     delta_content: str = ""
-    delta_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
+    delta_tool_calls: list[ToolCallDelta] = dataclasses.field(default_factory=list)
     finish_reason: str | None = None
     model: str = ""
     prompt_tokens: int = 0

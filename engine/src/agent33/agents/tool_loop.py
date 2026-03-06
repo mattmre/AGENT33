@@ -435,13 +435,67 @@ class ToolLoop:
                 )
 
                 try:
-                    response = await self._router.complete(
-                        accumulated_messages,
-                        model=model,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        tools=tools or None,
-                    )
+                    # Try token-level streaming, fall back to blocking
+                    if hasattr(self._router, "stream_complete"):
+                        from agent33.llm.stream_assembler import ToolCallAssembler
+
+                        assembled_content_parts: list[str] = []
+                        assembler = ToolCallAssembler()
+                        _use_streaming = True
+
+                        try:
+                            async for chunk in self._router.stream_complete(
+                                accumulated_messages,
+                                model=model,
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                                tools=tools or None,
+                            ):
+                                if chunk.delta_content:
+                                    assembled_content_parts.append(chunk.delta_content)
+                                    yield ToolLoopEvent(
+                                        event_type="llm_token",
+                                        iteration=state.iteration,
+                                        data={"content": chunk.delta_content},
+                                    )
+                                if chunk.delta_tool_calls:
+                                    assembler.feed(chunk.delta_tool_calls)
+                                if chunk.finish_reason:
+                                    break
+                        except NotImplementedError:
+                            _use_streaming = False
+                            assembler.reset()
+                            assembled_content_parts.clear()
+
+                        if _use_streaming:
+                            tool_calls = (
+                                assembler.finalize() if assembler.has_pending else None
+                            )
+                            full_content = "".join(assembled_content_parts)
+                            response = LLMResponse(
+                                content=full_content,
+                                model=model,
+                                prompt_tokens=0,
+                                completion_tokens=0,
+                                tool_calls=tool_calls,
+                                finish_reason="tool_calls" if tool_calls else "stop",
+                            )
+                        else:
+                            response = await self._router.complete(
+                                accumulated_messages,
+                                model=model,
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                                tools=tools or None,
+                            )
+                    else:
+                        response = await self._router.complete(
+                            accumulated_messages,
+                            model=model,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            tools=tools or None,
+                        )
                 except Exception as exc:
                     yield ToolLoopEvent(
                         event_type="error",

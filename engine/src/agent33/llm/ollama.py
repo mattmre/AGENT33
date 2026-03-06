@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from agent33.llm.base import LLMStreamChunk
+    from agent33.llm.base import LLMStreamChunk, ToolCallDelta
 
 import httpx
 
@@ -286,7 +286,7 @@ class OllamaProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via NDJSON."""
-        from agent33.llm.base import LLMStreamChunk
+        from agent33.llm.base import LLMStreamChunk, ToolCallDelta
 
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
@@ -314,8 +314,30 @@ class OllamaProvider:
                 except json.JSONDecodeError:
                     continue
                 msg = data.get("message", {})
+
+                # Ollama sends tool_calls as full objects in the final chunk
+                tool_calls_data = msg.get("tool_calls", [])
+                delta_tool_calls: list[ToolCallDelta] = []
+                for i, tc in enumerate(tool_calls_data):
+                    fn = tc.get("function", {})
+                    raw_args = fn.get("arguments", "{}")
+                    args_str = (
+                        raw_args
+                        if isinstance(raw_args, str)
+                        else json.dumps(raw_args)
+                    )
+                    delta_tool_calls.append(
+                        ToolCallDelta(
+                            index=i,
+                            id=tc.get("id", f"ollama-{i}"),
+                            function_name=fn.get("name", ""),
+                            arguments_delta=args_str,
+                        )
+                    )
+
                 yield LLMStreamChunk(
                     delta_content=msg.get("content", "") or "",
+                    delta_tool_calls=delta_tool_calls,
                     finish_reason="stop" if data.get("done") else None,
                     model=data.get("model", resolved_model),
                     prompt_tokens=data.get("prompt_eval_count", 0),

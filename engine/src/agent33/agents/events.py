@@ -11,6 +11,7 @@ EventType = Literal[
     "iteration_started",
     "llm_request",
     "llm_response",
+    "llm_token",
     "tool_call_requested",
     "tool_call_started",
     "tool_call_completed",
@@ -44,3 +45,17 @@ class ToolLoopEvent:
             "data": self.data,
         }
         return f"data: {json.dumps(payload)}\n\n"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class LLMTokenEvent:
+    """Lightweight token-level streaming event emitted during LLM generation.
+
+    Emitted once per content token while the LLM streams its response.
+    Separate from :class:`ToolLoopEvent` so consumers can subscribe to
+    fine-grained token events without coupling to the full tool-loop model.
+    """
+
+    event_type: str = "llm_token"
+    delta: str = ""
+    run_id: str = ""

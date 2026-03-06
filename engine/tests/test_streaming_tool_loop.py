@@ -88,7 +88,7 @@ def _make_registry(*tools: MagicMock) -> MagicMock:
 
 
 def _make_router(*responses: LLMResponse) -> MagicMock:
-    router = MagicMock()
+    router = MagicMock(spec=["complete"])
     router.complete = AsyncMock(side_effect=list(responses))
     return router
 
@@ -366,3 +366,239 @@ class TestProviderStreaming:
         from agent33.llm.router import ModelRouter
 
         assert hasattr(ModelRouter, "stream_complete")
+
+
+# ---------------------------------------------------------------------------
+# Token-level streaming tests (Phase 38 Stage 2)
+# ---------------------------------------------------------------------------
+
+
+def _make_streaming_router(
+    chunks: list[LLMStreamChunk],
+) -> MagicMock:
+    """Create a mock router whose stream_complete yields the given chunks."""
+
+    async def _stream_complete(
+        messages: Any, *, model: str = "", **kwargs: Any
+    ) -> Any:
+        for chunk in chunks:
+            yield chunk
+
+    router = MagicMock()
+    router.stream_complete = _stream_complete
+    # Also provide a complete fallback (should not be called when streaming)
+    router.complete = AsyncMock(
+        return_value=_text_response("fallback — should not be used"),
+    )
+    return router
+
+
+def _make_non_streaming_router(*responses: LLMResponse) -> MagicMock:
+    """Create a mock router WITHOUT stream_complete (fallback path)."""
+    router = MagicMock(spec=["complete"])
+    router.complete = AsyncMock(side_effect=list(responses))
+    return router
+
+
+class TestTokenStreaming:
+    async def test_llm_token_events_emitted(self) -> None:
+        """Token-level streaming should emit llm_token events."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        chunks = [
+            LLMStreamChunk(delta_content="Hello"),
+            LLMStreamChunk(delta_content=" world"),
+            LLMStreamChunk(delta_content="!", finish_reason="stop"),
+        ]
+        router = _make_streaming_router(chunks)
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        token_events = [e for e in events if e.event_type == "llm_token"]
+        assert len(token_events) == 3
+        assert token_events[0].data["content"] == "Hello"
+        assert token_events[1].data["content"] == " world"
+        assert token_events[2].data["content"] == "!"
+
+        # Should still emit llm_response after streaming
+        assert any(e.event_type == "llm_response" for e in events)
+        # Should end with completed
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "natural"
+
+    async def test_tool_calls_reassembled_from_stream(self) -> None:
+        """Tool call deltas should be reassembled into complete tool calls."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.llm.base import ToolCallDelta
+
+        # First LLM call: stream tool call deltas
+        tool_chunks = [
+            LLMStreamChunk(
+                delta_tool_calls=[
+                    ToolCallDelta(
+                        index=0, id="call_1", function_name="shell"
+                    ),
+                ],
+            ),
+            LLMStreamChunk(
+                delta_tool_calls=[
+                    ToolCallDelta(index=0, arguments_delta='{"command"'),
+                ],
+            ),
+            LLMStreamChunk(
+                delta_tool_calls=[
+                    ToolCallDelta(index=0, arguments_delta=': "ls"}'),
+                ],
+            ),
+            LLMStreamChunk(finish_reason="stop"),
+        ]
+        # Second LLM call: simple text response
+        text_chunks = [
+            LLMStreamChunk(delta_content="Done!", finish_reason="stop"),
+        ]
+
+        # Build router that yields different chunks per call
+        call_count = 0
+
+        async def _stream_complete(
+            messages: Any, *, model: str = "", **kwargs: Any
+        ) -> Any:
+            nonlocal call_count
+            call_count += 1
+            source = tool_chunks if call_count == 1 else text_chunks
+            for chunk in source:
+                yield chunk
+
+        router = MagicMock()
+        router.stream_complete = _stream_complete
+        router.complete = AsyncMock()
+
+        tool = _make_mock_tool("shell")
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        assert "tool_call_requested" in event_types
+        assert "tool_call_started" in event_types
+        assert "tool_call_completed" in event_types
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "natural"
+
+        # Verify the tool was actually called
+        assert registry.validated_execute.call_count == 1
+
+    async def test_fallback_to_complete_when_no_stream(self) -> None:
+        """When router has no stream_complete, fall back to complete()."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_non_streaming_router(_text_response("fallback answer"))
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        # Should NOT have llm_token events (blocking call)
+        assert "llm_token" not in event_types
+        # Should still work correctly
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "natural"
+        assert router.complete.call_count == 1
+
+    async def test_mixed_content_and_tool_calls_in_stream(self) -> None:
+        """Stream can contain both content and tool call deltas."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.llm.base import ToolCallDelta
+
+        # First call: content + tool calls interleaved
+        call1_chunks = [
+            LLMStreamChunk(delta_content="I'll run "),
+            LLMStreamChunk(
+                delta_content="a command",
+                delta_tool_calls=[
+                    ToolCallDelta(
+                        index=0, id="call_1", function_name="shell"
+                    ),
+                ],
+            ),
+            LLMStreamChunk(
+                delta_tool_calls=[
+                    ToolCallDelta(index=0, arguments_delta='{"command": "ls"}'),
+                ],
+            ),
+            LLMStreamChunk(finish_reason="stop"),
+        ]
+        # Second call: text response
+        call2_chunks = [
+            LLMStreamChunk(delta_content="All done", finish_reason="stop"),
+        ]
+
+        call_count = 0
+
+        async def _stream_complete(
+            messages: Any, *, model: str = "", **kwargs: Any
+        ) -> Any:
+            nonlocal call_count
+            call_count += 1
+            source = call1_chunks if call_count == 1 else call2_chunks
+            for chunk in source:
+                yield chunk
+
+        router = MagicMock()
+        router.stream_complete = _stream_complete
+        router.complete = AsyncMock()
+
+        tool = _make_mock_tool("shell")
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Check content tokens were emitted
+        token_events = [e for e in events if e.event_type == "llm_token"]
+        token_content = "".join(e.data["content"] for e in token_events)
+        assert "I'll run a command" in token_content or "All done" in token_content
+
+        # Tool call should still have been processed
+        assert any(e.event_type == "tool_call_completed" for e in events)
+        assert events[-1].event_type == "completed"
+
+    async def test_empty_stream_produces_empty_response(self) -> None:
+        """A stream with only finish_reason should produce empty content."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        chunks = [LLMStreamChunk(finish_reason="stop")]
+        router = _make_streaming_router(chunks)
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # No token events for empty stream
+        token_events = [e for e in events if e.event_type == "llm_token"]
+        assert len(token_events) == 0
+        assert events[-1].event_type == "completed"
