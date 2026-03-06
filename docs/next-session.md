@@ -1,71 +1,55 @@
 # Next Session Briefing
 
-Last updated: 2026-03-06T12:00:00Z
+Last updated: 2026-03-06T18:00:00Z
 
-> **New:** All 8 Qwen-Agent adaptation phases (36-43) implemented and merged
-> in Session 55 (PRs #133–#140). 168 new tests added. Full regression: 2923 passed.
+> **New:** Session 56 completed 4 Stage 3 / Stage 2 refinement items (PRs #141–#144).
+> 132 new tests. Projected total after merge: **~3,055 passed**.
 
 ## Current State
 
-- **Merge status**: All Session 55 PRs (`#111`–`#140`) merged to `main`. All Qwen-Agent adaptation phases complete.
-- **Open PRs**: None.
-- **Latest session**: Session 55.
+- **Merge status**: All Session 55 PRs (`#111`–`#140`) merged to `main`. Session 56 PRs (#141–#144) **pending merge**.
+- **Open PRs**: #141 (Phase 25 WS), #142 (Phase 28 LLMGuard/Garak), #143 (Phase 43 MCP resources+auth), #144 (Phase 38 token streaming).
+- **Latest session**: Session 56.
 - **Validation posture**:
   - Ruff check: clean (0 errors)
-  - Pytest: 2923 passed, 0 failures
+  - Pytest: 2,923 passed on `main`; projected **~3,055** after #141–#144 merge
   - Frontend (vitest): 76 tests pass
 - **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open.
 - **Production secrets test**: Fixed — explicitly passes default SecretStr values in test assertions.
 
-## Session 55 Highlights
+## Session 56 Highlights
 
-### Phase 1 — PR Review & Merge
-- Reviewed all 11 open PRs (#111–#121), addressed 27 review comments (including 5 security-critical fixes).
-- Applied security fixes: multi-tenant IDOR on tool approvals (#120), reviewed_by spoof prevention (#120), RAG prompt injection sanitization (#121), broad exception narrowing (#118).
-- Resolved 8 merge conflicts across wave-based rebasing.
-- Merged all PRs in 4 dependency-safe waves with interim test runs.
+### 4 Stage 3 / Stage 2 Refinement PRs
 
-### Phase 2 — Development Phase Completion
-- Researched all 10 remaining development phases (22, 25–28, 30–33, 35).
-- Phase 22 confirmed already complete; 9 phases implemented across 3 waves.
-- 9 PRs created and merged (#122–#130): ~5,600 lines added across 48 files.
-- 163 new tests added; final confidence gate: 2722 passed, 0 regressions.
-- Created 11 research documents, 2 new workflow templates.
+| # | Phase | Feature | PR | Tests |
+|---|-------|---------|-----|-------|
+| 1 | Phase 25 Stage 3 | WebSocket workflow status streaming | #141 | 35 |
+| 2 | Phase 28 Stage 3 | LLMGuard + Garak real security adapters | #142 | 31 |
+| 3 | Phase 43 Stage 2 | MCP resources + auth scope enforcement | #143 | 22 |
+| 4 | Phase 38 Stage 2 | Token-level LLM streaming + tool call reassembly | #144 | 44 |
 
-### Phase 3 — Qwen-Agent Competitive Adaptation (Phases 36-43)
-- Deep research into QwenLM/Qwen-Agent repo, identified 7 adoption items.
-- Architected 8 new phases (36-43) with detailed specs in `docs/phases/qwen-adoption-phases.md`.
-- Implemented all 8 phases across 4 waves using fresh sub-agents per task.
-- 8 PRs created and merged (#133–#140): 168 new tests added.
-- Final regression: 2923 passed, 0 failures.
-
-| Phase | Description | PR | Tests |
-|-------|-------------|-----|-------|
-| 36 | Text Tool Parser | #133 | 14 |
-| 37 | Multimodal Content | #135 | 34 |
-| 38 | Streaming Agent Loop | #137 | 17 |
-| 39 | Query Expansion | #134 | 14 |
-| 40 | Agent Archetypes | #136 | 16 |
-| 41 | GroupChat Action | #138 | 25 |
-| 42 | Jupyter Adapter | #139 | 28 |
-| 43 | MCP Server | #140 | 20 |
+- **Recovery**: Phase 25 WebSocket work survived a prior failed session as untracked files; rescued and committed as PR #141.
+- **Parallel execution**: Phases 28, 38, 43 parallelised across 3 implementer agents in separate worktrees.
+- **Critical bug fixed**: `MCPServiceBridge` was never started in `main.py` lifespan — MCP connections silently failed. Fixed in PR #143.
+- **132 new tests** added; 0 regressions expected.
 
 ## Top Priorities
 
-1. **Phase 25 Stage 3**: Real-time WebSocket integration for workflow status updates; SSE fallback for status graph.
+1. **Merge PRs #141–#144**: Review and merge Session 56 PRs; run full confidence gate after merge.
 2. **Phase 26 Stage 3**: Improvement-cycle wizard UI; interactive plan-review/diff-review approval flows.
 3. **Phase 27 Stage 3**: `improvement-cycle` workflow template wiring into frontend; multi-step wizard UX.
-4. **Phase 28 — LLMGuard/Garak adapter completion**: Current stubs need real adapter integration for enterprise security scanning.
-5. **Frontend render/interaction tests**: Need `@testing-library/react` for component-level testing (current tests are unit/logic only).
-6. **Phase 25/26 documentation & walkthroughs**: User-facing docs for visual explainer and decision/review pages.
-7. **Phase 22 validation**: Already complete on `main` but may need integration verification against new Phase 25–27 surfaces.
-8. **SkillsBench integration**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
-9. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
-10. **Phase 30 Stage 3**: Production trace tuning.
-11. **Phase 31 Stage 3**: Production-scale backup/restore validation.
-12. **Phase 32 Stage 3**: Operationalization; cross-service tenant verification.
-13. **Phase 33 Stage 3**: Ecosystem distribution; marketplace integration.
-14. **Phase 35 Stage 3**: Voice daemon full implementation; policy tuning.
+4. **Phase 25 SSE fallback**: WebSocket is live (PR #141); SSE fallback for status graph is the outstanding Stage 3 tail item.
+5. **Phase 38 Stage 3**: Docker container kernels for Jupyter adapter (Phase 42 Stage 2 dependency).
+6. **Frontend render/interaction tests**: Need `@testing-library/react` for component-level testing (current tests are unit/logic only).
+7. **Phase 25/26 documentation & walkthroughs**: User-facing docs for visual explainer and decision/review pages.
+8. **Phase 22 validation**: Already complete on `main` but may need integration verification against new Phase 25–27 surfaces.
+9. **SkillsBench integration**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
+10. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
+11. **Phase 30 Stage 3**: Production trace tuning.
+12. **Phase 31 Stage 3**: Production-scale backup/restore validation.
+13. **Phase 32 Stage 3**: Operationalization; cross-service tenant verification.
+14. **Phase 33 Stage 3**: Ecosystem distribution; marketplace integration.
+15. **Phase 35 Stage 3**: Voice daemon full implementation; policy tuning.
 
 ## Remaining Work
 
@@ -74,10 +58,10 @@ All development phases (1-43) are implemented. Remaining work is Stage 3 refinem
 | Phase | Status on `main` | Remaining Stage 3 work |
 | --- | --- | --- |
 | 22 | ✅ Complete | Validation against new Phase 25–27 surfaces |
-| 25 | Refinement merged (PR #128) | Real-time WebSocket; SSE status graph integration |
+| 25 | ✅ Stage 3 PR pending merge (#141) | SSE fallback for status graph (tail item) |
 | 26 | Refinement merged (PR #129) | Interactive approval flows; improvement-cycle wizard |
 | 27 | Refinement merged (PR #130) | Workflow template wiring; multi-step wizard UX |
-| 28 | Refinement merged (PR #127) | LLMGuard/Garak real adapters (currently stubs) |
+| 28 | ✅ Stage 3 PR pending merge (#142) | — |
 | 30 | Refinement merged (PR #122) | Production trace tuning |
 | 31 | Refinement merged (PR #123) | Production-scale backup/restore validation |
 | 32 | Refinement merged (PR #124) | Operationalization; cross-service tenant verification |
@@ -85,12 +69,12 @@ All development phases (1-43) are implemented. Remaining work is Stage 3 refinem
 | 35 | Refinement merged (PR #126) | Voice daemon full implementation; policy tuning |
 | 36 | ✅ Complete (PR #133) | — |
 | 37 | ✅ Complete (PR #135) | — |
-| 38 | ✅ Complete (PR #137) | LLM token-by-token streaming (Phase 2) |
+| 38 | ✅ Stage 2 PR pending merge (#144) | Docker container kernels (Stage 3) |
 | 39 | ✅ Complete (PR #134) | — |
 | 40 | ✅ Complete (PR #136) | — |
 | 41 | ✅ Complete (PR #138) | — |
 | 42 | ✅ Complete (PR #139) | Docker container kernels (Phase 2) |
-| 43 | ✅ Complete (PR #140) | MCP resources, auth module |
+| 43 | ✅ Stage 2 PR pending merge (#143) | — |
 
 ## Qwen-Agent Competitive Adaptation — COMPLETE
 
@@ -125,12 +109,14 @@ These patterns from Qwen-Agent are worth incorporating as design conventions:
 git checkout main
 git pull --ff-only
 gh pr list --state open
+# Expected: #141 #142 #143 #144
 
 cd engine
 python -m ruff check src tests
 python -m ruff format --check src tests
 python -m mypy src --config-file pyproject.toml
 python -m pytest tests/ -q
+# Expected: ~3,055 passed after merges
 
 cd ../frontend
 npx vitest run
@@ -140,9 +126,11 @@ npx vitest run
 
 | Purpose | Path |
 | --- | --- |
+| Session 56 log | `docs/sessions/session-56-2026-03-06.md` |
 | Session 55 log | `docs/sessions/session-55-2026-03-05.md` |
 | Session 54 log | `docs/sessions/session-54-2026-03-05.md` |
 | Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
+| Stage 3 research | `docs/research/session56-stage3-research.md` |
 | Phase 25 research | `docs/research/session55-phase25-status-graph-design.md` |
 | Phase 26 research | `docs/research/session55-phase26-html-preview-design.md` |
 | Phase 27 research | `docs/research/session55-phase27-hub-alignment.md` |
