@@ -1,10 +1,16 @@
-"""MCP server setup and tool registration."""
+"""MCP server setup and handler registration."""
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+from agent33.mcp_server.auth import enforce_resource_scope, enforce_tool_scope, get_server_request
+from agent33.mcp_server.resources import register_resources
+from agent33.tools.base import ToolContext
 
 if TYPE_CHECKING:
     from agent33.mcp_server.bridge import MCPServiceBridge
@@ -12,35 +18,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HAS_MCP = False
+Server: type[Any] | None = None
+TextContent: type[Any] | None = None
+Tool: type[Any] | None = None
 try:
-    from mcp.server import Server
-    from mcp.types import TextContent, Tool
-
-    _HAS_MCP = True
+    _mcp_server_module = importlib.import_module("mcp.server")
+    _mcp_types_module = importlib.import_module("mcp.types")
 except ImportError:
     pass
+else:  # pragma: no branch - optional dependency bootstrap
+    Server = cast("type[Any] | None", getattr(_mcp_server_module, "Server", None))
+    TextContent = cast("type[Any] | None", getattr(_mcp_types_module, "TextContent", None))
+    Tool = cast("type[Any] | None", getattr(_mcp_types_module, "Tool", None))
+    _HAS_MCP = Server is not None and TextContent is not None and Tool is not None
+
+_HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
 
 
 def create_mcp_server(bridge: MCPServiceBridge) -> Any:
-    """Create and configure the MCP server with tool handlers.
-
-    Returns the MCP Server instance, or ``None`` if mcp SDK not installed.
-    """
+    """Create and configure the MCP server with tool and resource handlers."""
     if not _HAS_MCP:
         logger.warning("MCP SDK not installed, MCP server disabled")
         return None
 
-    server = Server("agent33-core")
+    server_cls = Server
+    tool_cls = Tool
+    text_content_cls = TextContent
+    if server_cls is None or tool_cls is None or text_content_cls is None:
+        logger.warning("MCP SDK classes unavailable, MCP server disabled")
+        return None
 
-    @server.list_tools()  # type: ignore[misc]
-    async def list_tools() -> list[Tool]:
+    server = server_cls("agent33-core")
+
+    async def list_tools() -> list[Any]:
         return [
-            Tool(
+            tool_cls(
                 name="list_agents",
                 description="List all registered agents",
                 inputSchema={"type": "object", "properties": {}},
             ),
-            Tool(
+            tool_cls(
                 name="invoke_agent",
                 description="Invoke an agent with a message",
                 inputSchema={
@@ -62,7 +79,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                     "required": ["agent_name", "message"],
                 },
             ),
-            Tool(
+            tool_cls(
                 name="search_memory",
                 description="Search the memory/knowledge base",
                 inputSchema={
@@ -81,12 +98,12 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                     "required": ["query"],
                 },
             ),
-            Tool(
+            tool_cls(
                 name="list_tools",
                 description="List registered tools",
                 inputSchema={"type": "object", "properties": {}},
             ),
-            Tool(
+            tool_cls(
                 name="execute_tool",
                 description="Execute a registered tool",
                 inputSchema={
@@ -104,21 +121,24 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                     "required": ["tool_name"],
                 },
             ),
-            Tool(
+            tool_cls(
                 name="list_skills",
                 description="List registered skills",
                 inputSchema={"type": "object", "properties": {}},
             ),
-            Tool(
+            tool_cls(
                 name="get_system_status",
                 description="Get AGENT-33 system status",
                 inputSchema={"type": "object", "properties": {}},
             ),
         ]
 
-    @server.call_tool()  # type: ignore[misc]
-    async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> list[TextContent]:
+    _register_handler(server.list_tools(), list_tools)
+
+    async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> list[Any]:
         from agent33.mcp_server import tools as mcp_tools
+
+        enforce_tool_scope(server, name)
 
         args = arguments or {}
         result: Any
@@ -145,6 +165,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                 bridge,
                 tool_name=args.get("tool_name", ""),
                 arguments=args.get("arguments"),
+                context=_build_tool_context(server),
             )
         elif name == "list_skills":
             result = await mcp_tools.handle_list_skills(bridge)
@@ -153,6 +174,32 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
         else:
             result = {"error": f"Unknown tool: {name}"}
 
-        return [TextContent(type="text", text=json.dumps(result, default=str))]
+        return [text_content_cls(type="text", text=json.dumps(result, default=str))]
+
+    _register_handler(server.call_tool(), call_tool)
+
+    register_resources(
+        server,
+        bridge,
+        before_read=lambda uri: enforce_resource_scope(server, uri),
+    )
 
     return server
+
+
+def _build_tool_context(server: Any) -> ToolContext:
+    request = get_server_request(server)
+    user = getattr(getattr(request, "state", None), "user", None)
+    if user is None:
+        return ToolContext()
+
+    return ToolContext(
+        user_scopes=list(getattr(user, "scopes", [])),
+        requested_by=getattr(user, "sub", ""),
+        tenant_id=getattr(user, "tenant_id", ""),
+    )
+
+
+def _register_handler(decorator: Any, handler: _HandlerT) -> _HandlerT:
+    typed_decorator = cast("Callable[[_HandlerT], _HandlerT]", decorator)
+    return typed_decorator(handler)
