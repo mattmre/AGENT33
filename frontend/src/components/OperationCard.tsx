@@ -288,14 +288,14 @@ export function OperationCard({
               {operation.presetBinding?.applyLabel ?? "Apply preset"}
             </button>
           </section>
-          {hasBody ? renderNonPresetGuidedControls() : null}
+          {hasBody ? renderExecutionStrategyControls() : null}
         </>
       );
     }
-    return renderNonPresetGuidedControls();
+    return renderExecutionStrategyControls();
   }
 
-  function renderNonPresetGuidedControls(): JSX.Element | null {
+  function renderExecutionStrategyControls(): JSX.Element | null {
     if (!hasBody) {
       return null;
     }
