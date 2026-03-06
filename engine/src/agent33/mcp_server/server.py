@@ -144,11 +144,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                 (tool["name"] for tool in _MCP_TOOL_DEFINITIONS),
             )
         )
-        return [
-            tool_cls(**tool)
-            for tool in _MCP_TOOL_DEFINITIONS
-            if tool["name"] in allowed
-        ]
+        return [tool_cls(**tool) for tool in _MCP_TOOL_DEFINITIONS if tool["name"] in allowed]
 
     _register_handler(server.list_tools(), list_tools)
 

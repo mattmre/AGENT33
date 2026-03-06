@@ -73,6 +73,7 @@ async def mcp_sse(request: Request) -> StreamingResponse:
     transport = getattr(request.app.state, "mcp_transport", None)
 
     if mcp_server is None or transport is None:
+
         async def stub_stream() -> AsyncGenerator[str, None]:
             yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
             yield "event: status\ndata: MCP transport unavailable\n\n"

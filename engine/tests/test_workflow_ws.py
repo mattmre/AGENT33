@@ -287,16 +287,22 @@ class TestWorkflowWSManager:
         manager = WorkflowWSManager()
         await manager.register_run("run-tenant", "tenant-workflow", tenant_id="tenant-a")
 
-        assert await manager.can_access_run(
-            "run-tenant",
-            tenant_id="tenant-a",
-            scopes=[],
-        ) is True
-        assert await manager.can_access_run(
-            "run-tenant",
-            tenant_id="tenant-b",
-            scopes=[],
-        ) is False
+        assert (
+            await manager.can_access_run(
+                "run-tenant",
+                tenant_id="tenant-a",
+                scopes=[],
+            )
+            is True
+        )
+        assert (
+            await manager.can_access_run(
+                "run-tenant",
+                tenant_id="tenant-b",
+                scopes=[],
+            )
+            is False
+        )
         assert await manager.can_access_run("run-tenant", tenant_id="", scopes=["admin"]) is True
 
 
@@ -356,9 +362,7 @@ class TestExecutorEventSink:
             }
         )
 
-        async def _fail_transform(
-            *args: object, **kwargs: object
-        ) -> dict[str, object]:  # noqa: ARG001
+        async def _fail_transform(*args: object, **kwargs: object) -> dict[str, object]:  # noqa: ARG001
             raise RuntimeError("transform exploded")
 
         manager = WorkflowWSManager()
@@ -456,9 +460,7 @@ class TestWorkflowExecuteRoute:
         execution_started = asyncio.Event()
         allow_finish = asyncio.Event()
 
-        async def _blocking_transform(
-            *args: object, **kwargs: object
-        ) -> dict[str, object]:  # noqa: ARG001
+        async def _blocking_transform(*args: object, **kwargs: object) -> dict[str, object]:  # noqa: ARG001
             execution_started.set()
             await allow_finish.wait()
             return {"value": "done"}
@@ -503,9 +505,7 @@ class TestWorkflowExecuteRoute:
             await asyncio.sleep(0.01)
 
         assert response["run_id"] == run_id
-        live_payloads = [
-            json.loads(call.args[0]) for call in ws.send_text.await_args_list[1:]
-        ]
+        live_payloads = [json.loads(call.args[0]) for call in ws.send_text.await_args_list[1:]]
         assert [payload["type"] for payload in live_payloads] == [
             "step_completed",
             "workflow_completed",
@@ -584,8 +584,9 @@ class TestWorkflowWSEndpoint:
         _install_manager(manager)
 
         client = TestClient(app)
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            "/v1/workflows/run-missing-token/ws"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect("/v1/workflows/run-missing-token/ws"),
         ):
             pass
 
@@ -596,8 +597,9 @@ class TestWorkflowWSEndpoint:
 
         token = create_access_token("ws-user", scopes=["workflows:execute"])
         client = TestClient(app)
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            f"/v1/workflows/run-no-scope/ws?token={token}"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(f"/v1/workflows/run-no-scope/ws?token={token}"),
         ):
             pass
 
@@ -607,8 +609,9 @@ class TestWorkflowWSEndpoint:
         _install_manager(manager)
 
         client = TestClient(app)
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            "/v1/workflows/run-invalid-token/ws?token=bad-token"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect("/v1/workflows/run-invalid-token/ws?token=bad-token"),
         ):
             pass
 
@@ -620,9 +623,7 @@ class TestWorkflowWSEndpoint:
 
         token = create_access_token("ws-user", scopes=["workflows:read"])
         client = TestClient(app)
-        with client.websocket_connect(
-            f"/v1/workflows/{run_id}/ws?token={token}"
-        ) as websocket:
+        with client.websocket_connect(f"/v1/workflows/{run_id}/ws?token={token}") as websocket:
             message = websocket.receive_json()
             assert message["type"] == "sync"
             assert message["run_id"] == run_id
@@ -653,8 +654,9 @@ class TestWorkflowWSEndpoint:
             tenant_id="tenant-b",
         )
         client = TestClient(app)
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            f"/v1/workflows/run-tenant/ws?token={token}"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(f"/v1/workflows/run-tenant/ws?token={token}"),
         ):
             pass
 
@@ -683,9 +685,7 @@ class TestWorkflowWSEndpoint:
 
         token = create_access_token("ws-user", scopes=["workflows:read"])
         client = TestClient(app)
-        with client.websocket_connect(
-            f"/v1/workflows/{run_id}/ws?token={token}"
-        ) as websocket:
+        with client.websocket_connect(f"/v1/workflows/{run_id}/ws?token={token}") as websocket:
             message = websocket.receive_json()
             assert message["type"] == "sync"
             assert message["data"]["status"] == "running"
@@ -700,9 +700,7 @@ class TestWorkflowWSEndpoint:
 
         token = create_access_token("ws-user", scopes=["workflows:read"])
         client = TestClient(app)
-        with client.websocket_connect(
-            f"/v1/workflows/{run_id}/ws?token={token}"
-        ) as websocket:
+        with client.websocket_connect(f"/v1/workflows/{run_id}/ws?token={token}") as websocket:
             sync_message = websocket.receive_json()
             assert sync_message["type"] == "sync"
 
@@ -712,4 +710,3 @@ class TestWorkflowWSEndpoint:
             assert heartbeat["workflow_name"] == "wf-heartbeat"
             assert heartbeat["data"]["status"] == "pending"
             assert heartbeat["data"]["terminal"] is False
-

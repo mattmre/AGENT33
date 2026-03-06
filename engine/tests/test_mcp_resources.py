@@ -138,7 +138,9 @@ class TestMCPResourceContract:
     async def test_agent_registry_resource_returns_agent_catalog(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource
 
-        payload = json.loads(await handle_read_resource(_make_bridge(), "agent33://agent-registry"))
+        payload = json.loads(
+            await handle_read_resource(_make_bridge(), "agent33://agent-registry")
+        )
         assert payload["count"] == 1
         assert payload["agents"][0]["id"] == "AGT-001"
         assert payload["agents"][0]["name"] == "implementer"
@@ -186,14 +188,18 @@ class TestMCPResourceContract:
     async def test_agent_template_uses_agent_identifier(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource
 
-        payload = json.loads(await handle_read_resource(_make_bridge(), "agent33://agents/AGT-001"))
+        payload = json.loads(
+            await handle_read_resource(_make_bridge(), "agent33://agents/AGT-001")
+        )
         assert payload["name"] == "implementer"
         assert payload["resolved_id"] == "AGT-001"
 
     async def test_workflow_template_reads_from_workflow_registry(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource
 
-        payload = json.loads(await handle_read_resource(_make_bridge(), "agent33://workflows/release"))
+        payload = json.loads(
+            await handle_read_resource(_make_bridge(), "agent33://workflows/release")
+        )
         assert payload["name"] == "release"
         assert payload["steps"][0]["id"] == "build"
 
