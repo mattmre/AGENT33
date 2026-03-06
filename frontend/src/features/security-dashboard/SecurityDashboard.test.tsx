@@ -2,40 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SecurityDashboard } from "./SecurityDashboard";
-
-interface MockRun {
-  id: string;
-  status: string;
-  profile: string;
-  target: { repository_path: string; commit_ref: string; branch: string };
-  findings_count: number;
-  findings_summary: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-    info: number;
-  };
-  created_at: string;
-  completed_at: string | null;
-  error_message: string;
-  metadata: { tools_executed: string[]; tool_warnings: string[] };
-}
-
-interface MockFinding {
-  id: string;
-  run_id: string;
-  severity: string;
-  category: string;
-  title: string;
-  description: string;
-  tool: string;
-  file_path: string;
-  line_number: number | null;
-  remediation: string;
-  cwe_id: string;
-}
+import { SecurityDashboard, type SecurityFinding, type SecurityRun } from "./SecurityDashboard";
 
 const API_BASE_URL = "http://agent33.test";
 
@@ -49,7 +16,7 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function buildRun(overrides: Partial<MockRun> = {}): MockRun {
+function buildRun(overrides: Partial<SecurityRun> = {}): SecurityRun {
   return {
     id: "run-completed",
     status: "completed",
@@ -78,7 +45,7 @@ function buildRun(overrides: Partial<MockRun> = {}): MockRun {
   };
 }
 
-function buildFinding(overrides: Partial<MockFinding> = {}): MockFinding {
+function buildFinding(overrides: Partial<SecurityFinding> = {}): SecurityFinding {
   return {
     id: "finding-1",
     run_id: "run-completed",

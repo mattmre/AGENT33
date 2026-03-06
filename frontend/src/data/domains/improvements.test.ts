@@ -126,12 +126,17 @@ describe("improvementsDomain", () => {
       "imp-learning-signal-list",
       "imp-learning-summary",
       "imp-learning-trends",
-      "imp-learning-calibration",
-      "imp-learning-backup",
-      "imp-learning-restore"
+      "imp-learning-calibration"
     ]) {
       expect(getOperation(id).instructionalText).toContain("returns 404");
     }
+
+    expect(getOperation("imp-learning-backup").instructionalText).toContain(
+      "remain available even when improvement learning is disabled"
+    );
+    expect(getOperation("imp-learning-restore").instructionalText).toContain(
+      "remain available even when improvement learning is disabled"
+    );
 
     const restoreBody = JSON.parse(getOperation("imp-learning-restore").defaultBody ?? "{}");
     expect(restoreBody.backup_path).toBe("/path/to/agent33-learning-backup.json");

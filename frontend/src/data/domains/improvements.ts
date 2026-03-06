@@ -430,7 +430,7 @@ export const improvementsDomain: DomainConfig = {
       path: "/v1/improvements/learning/backup",
       description: "Create a portable JSON backup of learning state.",
       instructionalText:
-        "Requires improvement learning to be enabled; the backend returns 404 when learning is disabled.",
+        "Backup and restore remain available even when improvement learning is disabled; current backend 404 gating only applies to signals, summary, trends, and calibration.",
       defaultBody: prettyJson({
         backup_path: ""
       })
@@ -442,7 +442,7 @@ export const improvementsDomain: DomainConfig = {
       path: "/v1/improvements/learning/restore",
       description: "Restore learning state from a portable JSON backup.",
       instructionalText:
-        "Requires improvement learning to be enabled; the backend returns 404 when learning is disabled.",
+        "Backup and restore remain available even when improvement learning is disabled; current backend 404 gating only applies to signals, summary, trends, and calibration.",
       defaultBody: prettyJson({
         backup_path: "/path/to/agent33-learning-backup.json"
       })
