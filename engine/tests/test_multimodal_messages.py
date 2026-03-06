@@ -16,7 +16,6 @@ from agent33.llm.base import (
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.openai import OpenAIProvider
 
-
 # ---------------------------------------------------------------------------
 # Content block creation
 # ---------------------------------------------------------------------------
