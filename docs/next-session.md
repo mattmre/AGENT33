@@ -2,14 +2,14 @@
 
 Last updated: 2026-03-06T17:23:44Z
 
-> **New:** Session 57 replaced the stale Session 56 carry-forward queue with a fresh review stack: **PRs #145–#150**.
-> Treat **PRs #141–#144** as superseded carry-forward branches unless a fresh review proves they still contain something not covered by the Session 57 replacements.
+> **New:** Session 57 prepared a fresh review stack: **PRs #145–#150**.
+> **PRs #141–#144** are still open on GitHub, but the intent is for the Session 57 stack to replace them if that newer queue is accepted.
 
 ## Current State
 
 - **Latest session:** Session 57 (`docs/sessions/session-57-2026-03-06.md`)
 - **Main branch status:** `main` does not yet contain the Session 57 implementation stack; the active review queue is now **#145–#150**
-- **Superseded Session 56 queue:** #141–#144 are still open on GitHub but have been replaced by the Session 57 PR set
+- **Session 56 carry-forward queue:** #141–#144 are still open on GitHub, but Session 57 prepared #145–#150 as the intended replacement path
 - **Docs handoff PR:** #151 refreshes this briefing, the Session 57 log, and the copied research briefs
 - **Validation posture:**
   - Session 57 PRs are green on targeted validation for the touched files/surfaces
@@ -33,11 +33,11 @@ Auxiliary docs PR:
 
 ## Superseded Session 56 PRs
 
-These PRs are no longer the active implementation path:
+These PRs are no longer the preferred implementation path and are expected to be closed or marked superseded if the Session 57 replacements are accepted:
 
-- **#142 -> replaced by #146**
-- **#144 -> replaced by #147**
-- **#141 + #143 -> replaced by #148**
+- **#142 -> planned replacement: #146**
+- **#144 -> planned replacement: #147**
+- **#141 + #143 -> planned replacement: #148**
 
 Next session should close or clearly mark **#141–#144** as superseded once the replacement queue is accepted.
 

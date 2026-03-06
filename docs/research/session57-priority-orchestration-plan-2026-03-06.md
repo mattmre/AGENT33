@@ -12,7 +12,7 @@
 - `CLAUDE.md`
 - `docs/next-session.md`
 - `docs/phases/README.md`
-- `docs/sessions/session-56-2026-03-06.md`
+- Latest checked-in pre-Session 57 session log: `docs/sessions/session-55-2026-03-05.md`
 - Local git status/worktree layout
 - Session 56 PR carry-forward state (#141-#144)
 - Historical research remnants in `docs/research/`
@@ -79,14 +79,12 @@
 ## Local Remnants Classification
 
 ### Keep as active research inputs
-- `docs/research/session54-haystack-deep-dive-gap-analysis-2026-03-05.md`
-- `docs/research/session54-haystack-gap-remediation-implementation-plan-2026-03-05.md`
-- `docs/research/session47-priority-research-findings.md`
+- `docs/research/session54-agent-orchestration-capability-gap-matrix-2026-03-05.md`
+- `docs/research/session54-agent-orchestration-priority-deltas-architecture-2026-03-05.md`
+- `docs/research/session52-priority-and-phase-roadmap.md`
 
 ### Preserve as historical/session artifacts
-- `docs/sessions/session-47-2026-02-26.md`
-- `docs/sessions/session-48-2026-02-27.md`
-- `docs/sessions/session-49-2026-02-27.md`
+- Older checked-in session logs under `docs/sessions/` and `docs/sessions/archive/` (rather than relying on untracked Session 47-49 notes)
 - `docs/research/salvaged-skillsbench-code/`
 - `findings.md`, `progress.md`, `task_plan.md`
 - legacy `pr*_review_comment.md`
@@ -119,12 +117,12 @@
 - `docs/research/session55-phase26-html-preview-design.md`
 - `docs/research/session55-phase27-hub-alignment.md`
 - `docs/research/session54-delta-hitl-approvals-architecture-2026-03-05.md`
-- `docs/research/session56-stage3-research.md`
+- `docs/research/phase26-stage3-visual-pages-research-2026-02-17.md`
 
 ### Wave 2
 - `docs/research/session55-qwen-agent-analysis.md`
 - `docs/phases/qwen-adoption-phases.md`
-- `docs/sessions/session-56-2026-03-06.md`
+- `docs/sessions/session-55-2026-03-05.md`
 
 ### Wave 3
 - `docs/research/skillsbench-analysis.md`
