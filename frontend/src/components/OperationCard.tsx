@@ -1,6 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiRequest } from "../lib/api";
+import {
+  connectWorkflowLiveTransport,
+  isWorkflowTerminalEvent,
+  shouldRefreshWorkflowGraph
+} from "../lib/workflowLiveTransport";
+import type { WorkflowLiveTransportConnection } from "../types";
 import type { ApiResult, OperationConfig } from "../types";
 import { ExplanationView, type ExplanationData } from "./ExplanationView";
 import { WorkflowGraph, WorkflowGraphData } from "./WorkflowGraph";
@@ -77,9 +83,19 @@ export function OperationCard({
   const [scheduleIntervalSeconds, setScheduleIntervalSeconds] = useState(900);
   const [scheduleCronExpr, setScheduleCronExpr] = useState("0 */6 * * *");
   const [iterativePreset, setIterativePreset] = useState<"quick" | "balanced" | "deep">("balanced");
+  const [workflowGraphData, setWorkflowGraphData] = useState<WorkflowGraphData | null>(null);
+  const [workflowGraphError, setWorkflowGraphError] = useState("");
+  const liveTransportRef = useRef<WorkflowLiveTransportConnection | null>(null);
 
   // UX Overhaul: Hide raw technical inputs by default if this operation has friendly text.
   const [showAdvanced, setShowAdvanced] = useState(!operation.instructionalText);
+
+  useEffect(() => {
+    return () => {
+      liveTransportRef.current?.close();
+      liveTransportRef.current = null;
+    };
+  }, []);
 
   const hasBody = useMemo(
     () => operation.method !== "GET" && operation.method !== "DELETE",
@@ -329,21 +345,68 @@ export function OperationCard({
     return null;
   }
 
+  function stopWorkflowLiveTransport(): void {
+    liveTransportRef.current?.close();
+    liveTransportRef.current = null;
+  }
+
+  async function loadWorkflowGraph(workflowId: string, runId: string): Promise<void> {
+    const graphResponse = await apiRequest({
+      method: "GET",
+      path: "/v1/visualizations/workflows/{workflow_id}/graph",
+      token,
+      apiKey,
+      pathParams: { workflow_id: workflowId },
+      query: { run_id: runId }
+    });
+
+    if (!graphResponse.ok || typeof graphResponse.data !== "object" || graphResponse.data === null) {
+      throw new Error("Failed to load workflow graph");
+    }
+
+    setWorkflowGraphData(graphResponse.data as WorkflowGraphData);
+    setWorkflowGraphError("");
+  }
+
   async function runOperation(): Promise<void> {
     setError("");
+    setWorkflowGraphError("");
     setIsRunning(true);
     try {
       const pathParams = parseObjectJson(pathParamsText);
       const query = parseObjectJson(queryText);
       let requestBody = bodyText;
+      const shouldUseWorkflowLive = isWorkflowExecute && executionMode === "single";
+      const workflowName = shouldUseWorkflowLive ? pathParams.name : undefined;
+      const clientRunId =
+        shouldUseWorkflowLive && typeof workflowName === "string" && workflowName.trim() !== ""
+          ? createClientRunId()
+          : null;
+      if (isWorkflowExecute) {
+        stopWorkflowLiveTransport();
+        if (shouldUseWorkflowLive) {
+          setWorkflowGraphData(null);
+        }
+      }
       if (hasBody) {
-        requestBody = operation.uxHint ? prepareGuidedBody() : bodyText;
-        if (requestBody.trim() !== "") {
-          JSON.parse(requestBody);
+        const guidedBody = operation.uxHint ? prepareGuidedBody() : requestBody;
+        requestBody = guidedBody;
+        const parsedBody =
+          requestBody.trim() === ""
+            ? {}
+            : (JSON.parse(requestBody) as Record<string, unknown>);
+        if (clientRunId) {
+          parsedBody.run_id = clientRunId;
         }
+        requestBody = requestBody.trim() === "" && clientRunId === null
+          ? requestBody
+          : JSON.stringify(parsedBody);
         if (operation.uxHint) {
-          setBodyText(requestBody);
+          setBodyText(guidedBody);
         }
+      }
+      if (!shouldUseWorkflowLive) {
+        setWorkflowGraphData(null);
       }
       const res = await apiRequest({
         method: operation.method,
@@ -356,6 +419,42 @@ export function OperationCard({
       });
       setResult(res);
       onResult(operation.title, res);
+      if (shouldUseWorkflowLive && res.ok && clientRunId && typeof workflowName === "string") {
+        const responsePayload =
+          typeof res.data === "object" && res.data !== null
+            ? (res.data as Record<string, unknown>)
+            : null;
+        const liveRunId =
+          responsePayload && typeof responsePayload.run_id === "string"
+            ? responsePayload.run_id
+            : clientRunId;
+
+        await loadWorkflowGraph(workflowName, liveRunId);
+        liveTransportRef.current = connectWorkflowLiveTransport({
+          runId: liveRunId,
+          token,
+          apiKey,
+          onEvent: async (event) => {
+            if (!shouldRefreshWorkflowGraph(event)) {
+              return;
+            }
+            try {
+              await loadWorkflowGraph(workflowName, liveRunId);
+            } catch (graphError) {
+              const message =
+                graphError instanceof Error ? graphError.message : "Failed to refresh workflow graph";
+              setWorkflowGraphError(message);
+            } finally {
+              if (isWorkflowTerminalEvent(event)) {
+                stopWorkflowLiveTransport();
+              }
+            }
+          },
+          onError: (transportError) => {
+            setWorkflowGraphError(transportError.message);
+          }
+        });
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown error while running operation";
@@ -495,8 +594,15 @@ export function OperationCard({
       </div>
       {responseSummary ? <p className="operation-note">{responseSummary}</p> : null}
       {error ? <pre className="error-box">{error}</pre> : null}
-      {isWorkflowGraph && result && result.ok ? (
-        <WorkflowGraph data={result.data as WorkflowGraphData} />
+      {workflowGraphError ? <pre className="error-box">{workflowGraphError}</pre> : null}
+      {((isWorkflowGraph && result && result.ok) || (isWorkflowExecute && workflowGraphData)) ? (
+        <WorkflowGraph
+          data={
+            (isWorkflowGraph && result?.ok
+              ? (result.data as WorkflowGraphData)
+              : workflowGraphData) as WorkflowGraphData
+          }
+        />
       ) : null}
       {(isHealth || isHealthChannels) && result ? (
         renderHealthResults()
@@ -509,4 +615,11 @@ export function OperationCard({
       ) : null}
     </article>
   );
+}
+
+function createClientRunId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `workflow-run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

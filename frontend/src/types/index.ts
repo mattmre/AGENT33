@@ -48,3 +48,16 @@ export interface ApiResult {
 export interface RuntimeConfig {
   API_BASE_URL: string;
 }
+
+export interface WorkflowLiveEvent {
+  type: string;
+  run_id: string;
+  workflow_name: string;
+  timestamp: number;
+  step_id?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface WorkflowLiveTransportConnection {
+  close: () => void;
+}

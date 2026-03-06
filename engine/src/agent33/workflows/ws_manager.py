@@ -53,6 +53,7 @@ class WorkflowWSManager:
     def __init__(self, heartbeat_interval_seconds: float = 30.0) -> None:
         self._subscriptions: dict[str, set[Any]] = {}
         self._reverse: dict[Any, set[str]] = {}
+        self._sse_subscriptions: dict[str, set[asyncio.Queue[WorkflowEvent]]] = {}
         self._snapshots: dict[str, WorkflowRunSnapshot] = {}
         self._lock = asyncio.Lock()
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
@@ -100,6 +101,32 @@ class WorkflowWSManager:
         if run_ids:
             logger.debug("ws_disconnected", removed_subscriptions=len(run_ids))
 
+    async def subscribe_sse(
+        self,
+        run_id: str,
+    ) -> asyncio.Queue[WorkflowEvent] | None:
+        """Register and return an SSE queue for *run_id*."""
+        queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue()
+        async with self._lock:
+            if run_id not in self._snapshots:
+                return None
+            self._sse_subscriptions.setdefault(run_id, set()).add(queue)
+        return queue
+
+    async def unsubscribe_sse(
+        self,
+        run_id: str,
+        queue: asyncio.Queue[WorkflowEvent],
+    ) -> None:
+        """Remove a previously registered SSE queue for *run_id*."""
+        async with self._lock:
+            subscribers = self._sse_subscriptions.get(run_id)
+            if subscribers is None:
+                return
+            subscribers.discard(queue)
+            if not subscribers:
+                del self._sse_subscriptions[run_id]
+
     async def publish_event(self, event: WorkflowEvent) -> None:
         """Update the run snapshot and fan out *event* to subscribers."""
         async with self._lock:
@@ -112,6 +139,10 @@ class WorkflowWSManager:
             )
             self._apply_event(snapshot, event)
             targets = list(self._subscriptions.get(event.run_id, set()))
+            sse_targets = list(self._sse_subscriptions.get(event.run_id, set()))
+
+        for queue in sse_targets:
+            queue.put_nowait(event)
 
         if not targets:
             return
@@ -154,22 +185,28 @@ class WorkflowWSManager:
         await ws.send_text(event.to_json())
         return True
 
-    async def send_heartbeat(self, ws: WebSocket, run_id: str) -> bool:
-        """Send a heartbeat event for *run_id* to *ws*."""
+    async def build_heartbeat_event(self, run_id: str) -> WorkflowEvent | None:
+        """Build a transport-neutral heartbeat event for *run_id*."""
         async with self._lock:
             snapshot = self._snapshots.get(run_id)
             if snapshot is None:
-                return False
+                return None
             workflow_name = snapshot.workflow_name
             status = snapshot.status
             terminal = snapshot.terminal
 
-        event = WorkflowEvent(
+        return WorkflowEvent(
             event_type=WorkflowEventType.HEARTBEAT,
             run_id=run_id,
             workflow_name=workflow_name,
             data={"status": status, "terminal": terminal},
         )
+
+    async def send_heartbeat(self, ws: WebSocket, run_id: str) -> bool:
+        """Send a heartbeat event for *run_id* to *ws*."""
+        event = await self.build_heartbeat_event(run_id)
+        if event is None:
+            return False
         await ws.send_text(event.to_json())
         return True
 
@@ -177,6 +214,11 @@ class WorkflowWSManager:
         """Return the number of active subscribers for *run_id*."""
         async with self._lock:
             return len(self._subscriptions.get(run_id, set()))
+
+    async def active_sse_subscriptions(self, run_id: str) -> int:
+        """Return the number of active SSE subscribers for *run_id*."""
+        async with self._lock:
+            return len(self._sse_subscriptions.get(run_id, set()))
 
     async def connected_count(self) -> int:
         """Return the total number of tracked WebSocket connections."""

@@ -127,9 +127,26 @@ function WorkflowGraphInner({
     [data.edges, runningIds]
   );
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  useEffect(() => {
+    setSelectedNode((currentNode) => {
+      if (currentNode === null) {
+        return null;
+      }
+      return initialNodes.find((node) => node.id === currentNode.id) ?? null;
+    });
+  }, [initialNodes]);
 
   // ---- Polling: auto-refresh while any node is running or pending ----
   const shouldPoll = useMemo(() => hasActiveNodes(data.nodes), [data.nodes]);
