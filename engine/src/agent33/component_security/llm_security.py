@@ -6,6 +6,7 @@ Provides prompt injection detection, tool definition poisoning checks
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import structlog
@@ -18,6 +19,22 @@ from agent33.component_security.models import (
 from agent33.security.injection import ScanResult, scan_input, scan_inputs_recursive
 
 logger = structlog.get_logger()
+
+# Optional-dependency guards — same pattern as mcp_server/jupyter adapters.
+# These are set at import time so test code can patch them as module attributes.
+_HAS_LLMGUARD = False
+try:
+    import llm_guard  # noqa: F401
+    _HAS_LLMGUARD = True
+except ImportError:
+    pass
+
+_HAS_GARAK = False
+try:
+    import garak  # noqa: F401
+    _HAS_GARAK = True
+except ImportError:
+    pass
 
 # OWASP MCP Top 10 category mapping
 # See: https://owasp.org/www-project-top-10-for-large-language-model-applications/
@@ -261,7 +278,7 @@ class LLMSecurityScanner:
 
 
 class LLMGuardAdapter:
-    """Stub adapter for Protect AI's LLM Guard integration.
+    """Adapter for Protect AI's LLM Guard integration.
 
     LLM Guard (MIT, 4.5k+ stars) provides input/output scanners for:
     - Prompt injection detection
@@ -269,43 +286,155 @@ class LLMGuardAdapter:
     - PII detection and anonymization
     - Invisible text detection
 
-    This stub defines the integration interface. Full implementation
-    requires the llm-guard package to be installed.
+    Uses lazy imports so the llm-guard package is only required when
+    scanner methods are actually called.
     """
 
     @staticmethod
     def is_available() -> bool:
         """Check if llm-guard package is installed."""
-        try:
-            import importlib
+        return _HAS_LLMGUARD
 
-            importlib.import_module("llm_guard")
-            return True
-        except ImportError:
-            return False
-
-    def scan_input(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
+    def scan_input(
+        self, text: str, *, run_id: str = ""
+    ) -> list[SecurityFinding]:
         """Scan input text using LLM Guard scanners.
 
-        Stub: returns empty list until llm-guard is installed.
+        Runs PromptInjection, Toxicity, and InvisibleText scanners
+        against the supplied text and returns findings for any flagged
+        content.
         """
         if not self.is_available():
-            logger.debug("llm_guard_not_available")
+            logger.info("llm_guard_not_available", adapter="scan_input")
             return []
-        return []
+        try:
+            llm_guard_mod = importlib.import_module("llm_guard")
+            input_scanners = importlib.import_module(
+                "llm_guard.input_scanners"
+            )
 
-    def scan_output(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
+            scanners = [
+                input_scanners.PromptInjection(threshold=0.5),
+                input_scanners.Toxicity(threshold=0.5),
+                input_scanners.InvisibleText(),
+            ]
+            sanitized, results_valid, results_score = (
+                llm_guard_mod.scan_prompt(scanners, text)
+            )
+
+            findings: list[SecurityFinding] = []
+            scanner_names = [
+                "PromptInjection",
+                "Toxicity",
+                "InvisibleText",
+            ]
+            for name, is_valid, score in zip(
+                scanner_names, results_valid, results_score, strict=False
+            ):
+                if not is_valid:
+                    findings.append(
+                        SecurityFinding(
+                            run_id=run_id or "adhoc",
+                            severity=self._score_to_severity(score),
+                            category=self._scanner_to_category(name),
+                            title=(
+                                f"LLM Guard: {name} detected in input"
+                            ),
+                            description=(
+                                f"{name} scanner flagged input text "
+                                f"(score: {score:.2f})"
+                            ),
+                            tool="llm-guard",
+                        )
+                    )
+            return findings
+        except Exception:
+            logger.warning(
+                "llm_guard_scan_input_failed", exc_info=True
+            )
+            return []
+
+    def scan_output(
+        self, text: str, *, run_id: str = ""
+    ) -> list[SecurityFinding]:
         """Scan LLM output using LLM Guard scanners.
 
-        Stub: returns empty list until llm-guard is installed.
+        Runs Sensitive and NoRefusal scanners against the supplied
+        output text and returns findings for any flagged content.
         """
         if not self.is_available():
+            logger.info("llm_guard_not_available", adapter="scan_output")
             return []
-        return []
+        try:
+            llm_guard_mod = importlib.import_module("llm_guard")
+            output_scanners = importlib.import_module(
+                "llm_guard.output_scanners"
+            )
+
+            scanners = [
+                output_scanners.Sensitive(),
+                output_scanners.NoRefusal(),
+            ]
+            sanitized, results_valid, results_score = (
+                llm_guard_mod.scan_output(scanners, "", text)
+            )
+
+            findings: list[SecurityFinding] = []
+            scanner_names = ["Sensitive", "NoRefusal"]
+            for name, is_valid, score in zip(
+                scanner_names, results_valid, results_score, strict=False
+            ):
+                if not is_valid:
+                    findings.append(
+                        SecurityFinding(
+                            run_id=run_id or "adhoc",
+                            severity=self._score_to_severity(score),
+                            category=self._scanner_to_category(name),
+                            title=(
+                                f"LLM Guard: {name} detected in output"
+                            ),
+                            description=(
+                                f"{name} scanner flagged output text "
+                                f"(score: {score:.2f})"
+                            ),
+                            tool="llm-guard",
+                        )
+                    )
+            return findings
+        except Exception:
+            logger.warning(
+                "llm_guard_scan_output_failed", exc_info=True
+            )
+            return []
+
+    @staticmethod
+    def _score_to_severity(score: float) -> FindingSeverity:
+        """Map a 0–1 scanner score to a severity level."""
+        if score >= 0.9:
+            return FindingSeverity.CRITICAL
+        if score >= 0.7:
+            return FindingSeverity.HIGH
+        if score >= 0.5:
+            return FindingSeverity.MEDIUM
+        return FindingSeverity.LOW
+
+    @staticmethod
+    def _scanner_to_category(scanner_name: str) -> FindingCategory:
+        """Map an LLM Guard scanner name to a finding category."""
+        mapping: dict[str, FindingCategory] = {
+            "PromptInjection": FindingCategory.PROMPT_INJECTION,
+            "Toxicity": FindingCategory.MODEL_SECURITY,
+            "InvisibleText": FindingCategory.PROMPT_INJECTION,
+            "Sensitive": FindingCategory.SECRETS_EXPOSURE,
+            "NoRefusal": FindingCategory.MODEL_SECURITY,
+        }
+        return mapping.get(
+            scanner_name, FindingCategory.MODEL_SECURITY
+        )
 
 
 class GarakAdapter:
-    """Stub adapter for NVIDIA's Garak LLM vulnerability scanner.
+    """Adapter for NVIDIA's Garak LLM vulnerability scanner.
 
     Garak (Apache-2.0, 3k+ stars) provides:
     - Prompt injection probes
@@ -313,20 +442,14 @@ class GarakAdapter:
     - Hallucination testing
     - Toxicity generation testing
 
-    This stub defines the integration interface. Full implementation
-    requires the garak package to be installed.
+    Uses lazy imports so the garak package is only required when
+    probe methods are actually called.
     """
 
     @staticmethod
     def is_available() -> bool:
         """Check if garak package is installed."""
-        try:
-            import importlib
-
-            importlib.import_module("garak")
-            return True
-        except ImportError:
-            return False
+        return _HAS_GARAK
 
     def run_probes(
         self,
@@ -337,9 +460,82 @@ class GarakAdapter:
     ) -> list[SecurityFinding]:
         """Run Garak probes against a model.
 
-        Stub: returns empty list until garak is installed.
+        Discovers probe classes within selected modules and reports
+        each probe with test prompts as an informational finding.
         """
         if not self.is_available():
-            logger.debug("garak_not_available")
+            logger.info("garak_not_available", adapter="run_probes")
             return []
-        return []
+        try:
+            importlib.import_module("garak.probes")
+
+            available_probes: dict[str, str] = {
+                "promptinject": "Prompt Injection",
+                "encoding": "Encoding Bypass",
+                "dan": "DAN Jailbreak",
+                "leakreplay": "Data Leakage",
+            }
+
+            selected = probe_types or list(available_probes.keys())
+            findings: list[SecurityFinding] = []
+
+            for probe_name in selected:
+                if probe_name not in available_probes:
+                    continue
+                try:
+                    probe_mod = importlib.import_module(
+                        f"garak.probes.{probe_name}"
+                    )
+                    probe_classes = [
+                        name
+                        for name in dir(probe_mod)
+                        if not name.startswith("_")
+                        and isinstance(
+                            getattr(probe_mod, name, None), type
+                        )
+                    ]
+                    for cls_name in probe_classes[:3]:
+                        cls = getattr(probe_mod, cls_name)
+                        if hasattr(cls, "prompts"):
+                            instance = cls()
+                            prompt_count = len(
+                                getattr(instance, "prompts", [])
+                            )
+                            if prompt_count > 0:
+                                label = available_probes[probe_name]
+                                findings.append(
+                                    SecurityFinding(
+                                        run_id=run_id or "adhoc",
+                                        severity=FindingSeverity.INFO,
+                                        category=(
+                                            FindingCategory.PROMPT_INJECTION
+                                            if "inject" in probe_name
+                                            else FindingCategory.MODEL_SECURITY
+                                        ),
+                                        title=(
+                                            f"Garak: {label} "
+                                            f"probe available"
+                                        ),
+                                        description=(
+                                            f"Probe {cls_name} has "
+                                            f"{prompt_count} test "
+                                            f"prompts for {label} "
+                                            f"testing against "
+                                            f"{model_name}"
+                                        ),
+                                        tool="garak",
+                                    )
+                                )
+                except Exception:
+                    logger.warning(
+                        "garak_probe_load_failed",
+                        probe=probe_name,
+                        exc_info=True,
+                    )
+
+            return findings
+        except Exception:
+            logger.warning(
+                "garak_run_probes_failed", exc_info=True
+            )
+            return []
