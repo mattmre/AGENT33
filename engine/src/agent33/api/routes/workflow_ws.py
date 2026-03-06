@@ -38,6 +38,7 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
 
     if not await manager.can_access_run(
         run_id,
+        subject=payload.sub,
         tenant_id=payload.tenant_id,
         scopes=payload.scopes,
     ):

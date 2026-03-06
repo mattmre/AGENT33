@@ -34,74 +34,23 @@ export function connectWorkflowLiveTransport(
   options: WorkflowLiveTransportOptions
 ): WorkflowLiveTransportConnection {
   const { API_BASE_URL } = getRuntimeConfig();
-  const token = options.token?.trim() ?? "";
 
-  let closed = false;
-  let sseStarted = false;
-  let wsOpened = false;
-  let websocket: WebSocket | null = null;
   let abortController: AbortController | null = null;
-
-  const startSse = (): void => {
-    if (closed || sseStarted) {
-      return;
-    }
-    sseStarted = true;
-    abortController = new AbortController();
-    void streamWorkflowEventsOverSse(API_BASE_URL, options, abortController.signal);
-  };
-
-  if (token !== "") {
-    try {
-      websocket = new WebSocket(buildWorkflowWebSocketUrl(API_BASE_URL, options.runId, token));
-      websocket.onopen = () => {
-        wsOpened = true;
-      };
-      websocket.onmessage = (message) => {
-        try {
-          options.onEvent(JSON.parse(message.data) as WorkflowLiveEvent);
-        } catch (error) {
-          options.onError?.(toError(error, "Failed to parse workflow WebSocket payload"));
-        }
-      };
-      websocket.onerror = () => {
-        if (!wsOpened) {
-          startSse();
-        }
-      };
-      websocket.onclose = () => {
-        if (!closed) {
-          startSse();
-        }
-      };
-    } catch (error) {
-      options.onError?.(toError(error, "Failed to connect workflow WebSocket"));
-      startSse();
-    }
-  } else {
-    startSse();
-  }
+  abortController = new AbortController();
+  void streamWorkflowEventsOverSse(API_BASE_URL, options, abortController.signal);
 
   return {
     close: () => {
-      closed = true;
       abortController?.abort();
-      if (websocket && websocket.readyState < WebSocket.CLOSING) {
-        websocket.close();
-      }
     }
   };
 }
 
-export function buildWorkflowWebSocketUrl(
-  baseUrl: string,
-  runId: string,
-  token: string
-): string {
+export function buildWorkflowWebSocketUrl(baseUrl: string, runId: string, _token: string): string {
+  void _token;
   const httpUrl = buildUrl(baseUrl, "/v1/workflows/{run_id}/ws", { run_id: runId });
   const url = new URL(httpUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.searchParams.set("token", token);
   return url.toString();
 }
 

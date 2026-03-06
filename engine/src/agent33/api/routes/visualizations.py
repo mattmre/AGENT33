@@ -54,7 +54,6 @@ async def get_workflow_graph(
                     status_code=404,
                     detail=f"Workflow run '{run_id}' not found",
                 )
-
             live_event = await manager.build_sync_event(run_id)
             if live_event is not None and live_event.workflow_name == workflow_id:
                 execution_status = dict(live_event.data.get("step_statuses", {}))

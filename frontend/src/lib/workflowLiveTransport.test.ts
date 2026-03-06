@@ -1,51 +1,7 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  buildWorkflowWebSocketUrl,
-  connectWorkflowLiveTransport
-} from "./workflowLiveTransport";
-
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
-  onopen: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  readyState = MockWebSocket.CONNECTING;
-
-  constructor(public readonly url: string) {
-    MockWebSocket.instances.push(this);
-  }
-
-  close(): void {
-    this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.();
-  }
-
-  emitOpen(): void {
-    this.readyState = MockWebSocket.OPEN;
-    this.onopen?.();
-  }
-
-  emitMessage(data: unknown): void {
-    this.onmessage?.({ data: JSON.stringify(data) });
-  }
-
-  emitError(): void {
-    this.onerror?.();
-  }
-
-  emitClose(): void {
-    this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.();
-  }
-}
+import { connectWorkflowLiveTransport } from "./workflowLiveTransport";
 
 function buildSseResponse(bodyText: string): Response {
   const encoder = new TextEncoder();
@@ -63,69 +19,37 @@ function buildSseResponse(bodyText: string): Response {
 
 describe("workflowLiveTransport", () => {
   afterEach(() => {
-    MockWebSocket.instances = [];
     delete window.__AGENT33_CONFIG__;
   });
 
-  it("builds a run-scoped workflow websocket url", () => {
-    expect(
-      buildWorkflowWebSocketUrl("https://agent33.test", "run-123", "abc-token")
-    ).toBe("wss://agent33.test/v1/workflows/run-123/ws?token=abc-token");
-  });
-
-  it("prefers websocket when a bearer token is available", () => {
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    const fetchMock = vi.fn();
+  it("uses authenticated SSE when a bearer token is available", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      buildSseResponse(
+        'data: {"type":"sync","run_id":"run-ws","workflow_name":"wf-live","timestamp":1}\n\n'
+      )
+    );
     vi.stubGlobal("fetch", fetchMock);
-    const onEvent = vi.fn();
+    const webSocketSpy = vi.fn();
+    vi.stubGlobal("WebSocket", webSocketSpy);
+    const onEvent = vi.fn().mockName("onEvent");
 
-    const connection = connectWorkflowLiveTransport({
+    connectWorkflowLiveTransport({
       runId: "run-ws",
       token: "jwt-token",
       onEvent
     });
 
-    expect(MockWebSocket.instances).toHaveLength(1);
-    MockWebSocket.instances[0].emitOpen();
-    MockWebSocket.instances[0].emitMessage({
-      type: "sync",
-      run_id: "run-ws",
-      workflow_name: "wf-live",
-      timestamp: 1
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "sync", run_id: "run-ws" })
-    );
-
-    connection.close();
-  });
-
-  it("falls back to authenticated SSE when websocket cannot connect", async () => {
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    const fetchMock = vi.fn().mockResolvedValue(
-      buildSseResponse(
-        'data: {"type":"sync","run_id":"run-fallback","workflow_name":"wf-live","timestamp":1}\n\n'
-      )
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    const onEvent = vi.fn();
-
-    connectWorkflowLiveTransport({
-      runId: "run-fallback",
-      token: "jwt-token",
-      onEvent
-    });
-
-    expect(MockWebSocket.instances).toHaveLength(1);
-    MockWebSocket.instances[0].emitError();
-    MockWebSocket.instances[0].emitClose();
-
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(webSocketSpy).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: "Bearer jwt-token"
+      }
+    });
     await waitFor(() =>
       expect(onEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "sync", run_id: "run-fallback" })
+        expect.objectContaining({ type: "sync", run_id: "run-ws" })
       )
     );
   });
