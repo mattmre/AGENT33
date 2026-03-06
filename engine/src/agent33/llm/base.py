@@ -47,11 +47,22 @@ class LLMResponse:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ToolCallDelta:
+    """Incremental tool-call fragment emitted during streaming."""
+
+    index: int
+    id: str = ""
+    name: str = ""
+    arguments_fragment: str = ""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class LLMStreamChunk:
     """A single chunk from an LLM streaming response."""
 
     delta_content: str = ""
     delta_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
+    tool_call_delta: ToolCallDelta | None = None
     finish_reason: str | None = None
     model: str = ""
     prompt_tokens: int = 0
@@ -142,4 +153,5 @@ class LLMProvider(Protocol):
         """Stream completion chunks. Default raises NotImplementedError."""
         raise NotImplementedError("Streaming not supported by this provider")
         # Make it an async generator
-        yield  # type: ignore[misc]  # pragma: no cover
+        if False:  # pragma: no cover
+            yield LLMStreamChunk()

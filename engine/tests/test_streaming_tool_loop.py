@@ -345,6 +345,37 @@ class TestStreamingToolLoop:
         assert completed.data["tool_calls_made"] == 1
         assert "shell" in completed.data["tools_used"]
 
+    async def test_stream_falls_back_to_non_streaming_when_finish_reason_requires_tools(
+        self,
+    ) -> None:
+        """Fallback when streaming ends with raw tool_calls but emits no deltas."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = _make_tool_call(name="shell", arguments='{"command": "pwd"}', call_id="call_1")
+        tool = _make_mock_tool("shell")
+        streamed_chunk = LLMStreamChunk(finish_reason="tool_calls", model="test-model")
+
+        async def _stream_complete(*args: Any, **kwargs: Any):  # noqa: ARG001
+            yield streamed_chunk
+
+        router = MagicMock()
+        router.stream_complete = _stream_complete
+        router.complete = AsyncMock(side_effect=[_tool_response([tc]), _text_response("Done!")])
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [event.event_type for event in events]
+        assert "tool_call_requested" in event_types
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "natural"
+        assert router.complete.await_count == 2
+
 
 # ---------------------------------------------------------------------------
 # Provider method existence tests

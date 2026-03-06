@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-
-    from agent33.llm.base import LLMStreamChunk
 
 import httpx
 
@@ -24,8 +23,10 @@ from agent33.llm.base import (
     ChatMessage,
     ImageBlock,
     LLMResponse,
+    LLMStreamChunk,
     TextBlock,
     ToolCall,
+    ToolCallDelta,
     ToolCallFunction,
 )
 
@@ -179,6 +180,65 @@ class OpenAIProvider:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
 
+    async def _stream_lines(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Yield streamed response lines through the connector boundary executor."""
+        connector = "llm:openai"
+        operation = f"POST {path}"
+        done = object()
+        queue: asyncio.Queue[object] = asyncio.Queue()
+
+        async def _perform_stream() -> None:
+            async with self._client.stream(
+                "POST",
+                f"{self._base_url}{path}",
+                json=payload,
+                headers=self._headers(),
+                timeout=self._timeout,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    await queue.put(line)
+
+        async def _execute_stream(_request: ConnectorRequest) -> None:
+            await _perform_stream()
+
+        async def _produce() -> None:
+            try:
+                if self._boundary_executor is None:
+                    await _perform_stream()
+                else:
+                    request = ConnectorRequest(
+                        connector=connector,
+                        operation=operation,
+                        payload=payload,
+                        metadata={"base_url": self._base_url},
+                    )
+                    await self._boundary_executor.execute(request, _execute_stream)
+            except Exception as exc:
+                if self._boundary_executor is not None:
+                    exc = map_connector_exception(exc, connector, operation)
+                await queue.put(exc)
+            finally:
+                await queue.put(done)
+
+        producer = asyncio.create_task(_produce())
+        try:
+            while True:
+                item = await queue.get()
+                if item is done:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield cast("str", item)
+        finally:
+            producer.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await producer
+
     # -- public API -------------------------------------------------------
 
     @staticmethod
@@ -320,8 +380,6 @@ class OpenAIProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via SSE."""
-        from agent33.llm.base import LLMStreamChunk
-
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
             "model": resolved_model,
@@ -334,30 +392,40 @@ class OpenAIProvider:
         if tools is not None:
             body["tools"] = [{"type": "function", "function": t} for t in tools]
 
-        async with self._client.stream(
-            "POST",
-            f"{self._base_url}/chat/completions",
-            json=body,
-            headers=self._headers(),
-            timeout=self._timeout,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line or line.startswith(":"):
-                    continue
-                if line.startswith("data: "):
-                    line = line[6:]
-                if line == "[DONE]":
-                    break
-                try:
-                    chunk_data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                choice = chunk_data.get("choices", [{}])[0]
-                delta = choice.get("delta", {})
+        async for line in self._stream_lines("/chat/completions", body):
+            line = line.strip()
+            if not line or line.startswith(":"):
+                continue
+            if line.startswith("data: "):
+                line = line[6:]
+            if line == "[DONE]":
+                break
+            try:
+                chunk_data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            choice = chunk_data.get("choices", [{}])[0]
+            delta = choice.get("delta", {})
+            chunk_model = chunk_data.get("model", resolved_model)
+            finish_reason = choice.get("finish_reason")
+
+            content = delta.get("content", "") or ""
+            if content or finish_reason is not None:
                 yield LLMStreamChunk(
-                    delta_content=delta.get("content", "") or "",
-                    finish_reason=choice.get("finish_reason"),
-                    model=chunk_data.get("model", resolved_model),
+                    delta_content=content,
+                    finish_reason=finish_reason,
+                    model=chunk_model,
+                )
+
+            for raw_tool_call in delta.get("tool_calls", []) or []:
+                function = raw_tool_call.get("function", {})
+                yield LLMStreamChunk(
+                    tool_call_delta=ToolCallDelta(
+                        index=raw_tool_call.get("index", 0),
+                        id=raw_tool_call.get("id", ""),
+                        name=function.get("name", ""),
+                        arguments_fragment=function.get("arguments", ""),
+                    ),
+                    finish_reason=finish_reason,
+                    model=chunk_model,
                 )

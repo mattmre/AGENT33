@@ -14,7 +14,8 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from agent33.llm.base import ChatMessage, LLMResponse
+from agent33.llm.base import ChatMessage, LLMResponse, ToolCallDelta
+from agent33.llm.stream_assembler import ToolCallAssembler
 from agent33.tools.base import ToolResult
 from agent33.tools.schema import generate_tool_description
 
@@ -435,13 +436,18 @@ class ToolLoop:
                 )
 
                 try:
-                    response = await self._router.complete(
+                    stream_result: dict[str, LLMResponse] = {}
+                    async for token_event in self._stream_response_events(
                         accumulated_messages,
+                        result_holder=stream_result,
+                        iteration=state.iteration,
                         model=model,
                         temperature=temperature,
                         max_tokens=max_tokens,
                         tools=tools or None,
-                    )
+                    ):
+                        yield token_event
+                    response = stream_result["response"]
                 except Exception as exc:
                     yield ToolLoopEvent(
                         event_type="error",
@@ -619,6 +625,96 @@ class ToolLoop:
                 "output": parsed_output,
             },
         )
+
+    async def _stream_response_events(
+        self,
+        messages: list[ChatMessage],
+        *,
+        result_holder: dict[str, LLMResponse],
+        iteration: int,
+        model: str,
+        temperature: float,
+        max_tokens: int | None,
+        tools: list[dict[str, Any]] | None,
+    ) -> AsyncGenerator[ToolLoopEvent, None]:
+        """Yield token events while constructing the effective LLM response."""
+        from agent33.agents.events import ToolLoopEvent
+
+        assembler = ToolCallAssembler()
+        saw_stream_chunks = False
+        saw_tool_delta = False
+        content_parts: list[str] = []
+        response_model = model
+        prompt_tokens = 0
+        completion_tokens = 0
+        stream_finish_reason = "stop"
+
+        try:
+            async for chunk in self._router.stream_complete(
+                messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=tools,
+            ):
+                saw_stream_chunks = True
+                if chunk.delta_content:
+                    content_parts.append(chunk.delta_content)
+                    yield ToolLoopEvent(
+                        event_type="llm_token",
+                        iteration=iteration,
+                        data={"token": chunk.delta_content},
+                    )
+                if chunk.tool_call_delta is not None:
+                    assembler.add_delta(chunk.tool_call_delta)
+                    saw_tool_delta = True
+                for index, tool_call in enumerate(chunk.delta_tool_calls):
+                    assembler.add_delta(
+                        ToolCallDelta(
+                            index=index,
+                            id=tool_call.id,
+                            name=tool_call.function.name,
+                            arguments_fragment=tool_call.function.arguments,
+                        )
+                    )
+                    saw_tool_delta = True
+                if chunk.model:
+                    response_model = chunk.model
+                prompt_tokens = max(prompt_tokens, chunk.prompt_tokens)
+                completion_tokens = max(completion_tokens, chunk.completion_tokens)
+                if chunk.finish_reason is not None:
+                    stream_finish_reason = chunk.finish_reason
+        except (AttributeError, NotImplementedError, TypeError):
+            saw_stream_chunks = False
+
+        if not saw_stream_chunks:
+            result_holder["response"] = await self._router.complete(
+                messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=tools,
+            )
+            return
+
+        tool_calls = assembler.close()
+        response = LLMResponse(
+            content="".join(content_parts),
+            model=response_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            tool_calls=tool_calls or None,
+            finish_reason="tool_calls" if tool_calls else stream_finish_reason,
+        )
+        if not saw_tool_delta and not tool_calls and stream_finish_reason == "tool_calls":
+            response = await self._router.complete(
+                messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=tools,
+            )
+        result_holder["response"] = response
 
     # ------------------------------------------------------------------
     # Internal helpers

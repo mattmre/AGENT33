@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-
-    from agent33.llm.base import LLMStreamChunk
 
 import httpx
 
@@ -23,8 +22,10 @@ from agent33.llm.base import (
     ChatMessage,
     ImageBlock,
     LLMResponse,
+    LLMStreamChunk,
     TextBlock,
     ToolCall,
+    ToolCallDelta,
     ToolCallFunction,
 )
 
@@ -161,6 +162,64 @@ class OllamaProvider:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
 
+    async def _stream_lines(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Yield streamed response lines through the connector boundary executor."""
+        connector = "llm:ollama"
+        operation = f"POST {path}"
+        done = object()
+        queue: asyncio.Queue[object] = asyncio.Queue()
+
+        async def _perform_stream() -> None:
+            async with self._client.stream(
+                "POST",
+                f"{self._base_url}{path}",
+                json=payload,
+                timeout=self._timeout,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    await queue.put(line)
+
+        async def _execute_stream(_request: ConnectorRequest) -> None:
+            await _perform_stream()
+
+        async def _produce() -> None:
+            try:
+                if self._boundary_executor is None:
+                    await _perform_stream()
+                else:
+                    request = ConnectorRequest(
+                        connector=connector,
+                        operation=operation,
+                        payload=payload,
+                        metadata={"base_url": self._base_url},
+                    )
+                    await self._boundary_executor.execute(request, _execute_stream)
+            except Exception as exc:
+                if self._boundary_executor is not None:
+                    exc = map_connector_exception(exc, connector, operation)
+                await queue.put(exc)
+            finally:
+                await queue.put(done)
+
+        producer = asyncio.create_task(_produce())
+        try:
+            while True:
+                item = await queue.get()
+                if item is done:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield cast("str", item)
+        finally:
+            producer.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await producer
+
     # -- public API -------------------------------------------------------
 
     @staticmethod
@@ -286,8 +345,6 @@ class OllamaProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via NDJSON."""
-        from agent33.llm.base import LLMStreamChunk
-
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
             "model": resolved_model,
@@ -297,27 +354,44 @@ class OllamaProvider:
         }
         if max_tokens is not None:
             body["options"]["num_predict"] = max_tokens
+        if tools is not None:
+            body["tools"] = [
+                t if "type" in t else {"type": "function", "function": t} for t in tools
+            ]
 
-        async with self._client.stream(
-            "POST",
-            f"{self._base_url}/api/chat",
-            json=body,
-            timeout=self._timeout,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                msg = data.get("message", {})
+        async for line in self._stream_lines("/api/chat", body):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = data.get("message", {})
+            chunk_model = data.get("model", resolved_model)
+            finish_reason = "stop" if data.get("done") else None
+            content = msg.get("content", "") or ""
+            if content or finish_reason is not None:
                 yield LLMStreamChunk(
-                    delta_content=msg.get("content", "") or "",
-                    finish_reason="stop" if data.get("done") else None,
-                    model=data.get("model", resolved_model),
+                    delta_content=content,
+                    finish_reason=finish_reason,
+                    model=chunk_model,
                     prompt_tokens=data.get("prompt_eval_count", 0),
                     completion_tokens=data.get("eval_count", 0),
                 )
+            raw_tool_calls = msg.get("tool_calls") or []
+            if raw_tool_calls:
+                parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
+                for index, tool_call in enumerate(parsed_tool_calls):
+                    yield LLMStreamChunk(
+                        tool_call_delta=ToolCallDelta(
+                            index=index,
+                            id=tool_call.id,
+                            name=tool_call.function.name,
+                            arguments_fragment=tool_call.function.arguments,
+                        ),
+                        finish_reason="tool_calls" if data.get("done") else finish_reason,
+                        model=chunk_model,
+                        prompt_tokens=data.get("prompt_eval_count", 0),
+                        completion_tokens=data.get("eval_count", 0),
+                    )
