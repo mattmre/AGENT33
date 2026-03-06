@@ -1,6 +1,57 @@
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import type { ReactNode } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("reactflow", async () => {
+  const React = await import("react");
+  return {
+    __esModule: true,
+    default: ({
+      nodes,
+      edges,
+      onNodeClick,
+      children
+    }: {
+      nodes: Array<{ id: string; data: Record<string, unknown> }>;
+      edges: Array<{ id: string }>;
+      onNodeClick?: (event: unknown, node: { id: string; data: Record<string, unknown> }) => void;
+      children?: ReactNode;
+    }) =>
+      createElement(
+        "div",
+        { "data-testid": "reactflow-mock" },
+        createElement("div", { "data-testid": "mock-edge-count" }, String(edges.length)),
+        ...nodes.map((node) =>
+          createElement(
+            "button",
+            {
+              key: node.id,
+              onClick: () => onNodeClick?.({}, node)
+            },
+            String(node.data.label)
+          )
+        ),
+        children
+      ),
+    Background: () => createElement("div"),
+    Controls: () => createElement("div"),
+    Panel: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+    ReactFlowProvider: ({ children }: { children?: ReactNode }) =>
+      createElement("div", null, children),
+    useNodesState: <T,>(initialNodes: T[]) => {
+      const [nodes, setNodes] = React.useState(initialNodes);
+      return [nodes, setNodes, () => undefined] as const;
+    },
+    useEdgesState: <T,>(initialEdges: T[]) => {
+      const [edges, setEdges] = React.useState(initialEdges);
+      return [edges, setEdges, () => undefined] as const;
+    }
+  };
+});
 
 import {
+  WorkflowGraph,
   getRunningNodeIds,
   hasActiveNodes,
   mapWorkflowEdgesToReactFlow,
@@ -268,5 +319,61 @@ describe("getRunningNodeIds", () => {
     const ids = getRunningNodeIds(nodes);
 
     expect(ids.size).toBe(0);
+  });
+});
+
+describe("WorkflowGraph", () => {
+  it("updates rendered nodes and selected-node details when props change", () => {
+    const { rerender } = render(
+      createElement(WorkflowGraph, {
+        data: {
+          workflow_id: "hello-flow",
+          nodes: [
+            {
+              id: "step-a",
+              name: "Step A",
+              action: "transform",
+              status: "pending",
+              metadata: { attempt: 1 }
+            }
+          ],
+          edges: []
+        }
+      })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Step A" }));
+    expect(screen.getByText("pending")).toBeInTheDocument();
+    expect(screen.getByText(/"attempt": 1/)).toBeInTheDocument();
+
+    rerender(
+      createElement(WorkflowGraph, {
+        data: {
+          workflow_id: "hello-flow",
+          nodes: [
+            {
+              id: "step-a",
+              name: "Step A Updated",
+              action: "transform",
+              status: "success",
+              metadata: { attempt: 2 }
+            },
+            {
+              id: "step-b",
+              name: "Step B",
+              action: "notify",
+              status: "pending"
+            }
+          ],
+          edges: [{ id: "edge-a-b", source: "step-a", target: "step-b" }]
+        }
+      })
+    );
+
+    expect(screen.getByRole("button", { name: "Step A Updated" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Step B" })).toBeInTheDocument();
+    expect(screen.getByText("success")).toBeInTheDocument();
+    expect(screen.getByText(/"attempt": 2/)).toBeInTheDocument();
+    expect(screen.getByText("2 nodes · 1 edges")).toBeInTheDocument();
   });
 });

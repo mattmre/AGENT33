@@ -44,6 +44,7 @@ from agent33.api.routes import (
     training,
     visualizations,
     webhooks,
+    workflow_sse,
     workflow_ws,
     workflows,
 )
@@ -757,4 +758,5 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(workflow_sse.router)
 app.include_router(workflow_ws.router)
