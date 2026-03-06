@@ -42,3 +42,14 @@ class MCPServiceBridge:
             "model_router_ready": self.model_router is not None,
             "rag_pipeline_ready": self.rag_pipeline is not None,
         }
+
+    def register_resources(self, server: Any) -> None:
+        """Register MCP resource handlers on *server*.
+
+        Delegates to :func:`agent33.mcp_server.resources.register_resources`,
+        passing the bridge's own agent and skill registries.  No-op when the
+        MCP SDK is not installed.
+        """
+        from agent33.mcp_server.resources import register_resources
+
+        register_resources(server, self.agent_registry, self.skill_registry)

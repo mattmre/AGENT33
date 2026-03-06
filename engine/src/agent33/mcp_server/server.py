@@ -1,4 +1,4 @@
-"""MCP server setup and tool registration."""
+"""MCP server setup — tool and resource registration."""
 
 from __future__ import annotations
 
@@ -12,11 +12,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HAS_MCP = False
+_HAS_MCP_RESOURCES = False
 try:
     from mcp.server import Server
     from mcp.types import TextContent, Tool
 
     _HAS_MCP = True
+except ImportError:
+    pass
+
+# Resource / ResourceTemplate were added in later mcp releases; guard.
+try:
+    from mcp.types import Resource, ResourceTemplate  # type: ignore[attr-defined]
+
+    _HAS_MCP_RESOURCES = True
 except ImportError:
     pass
 
@@ -155,4 +164,58 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
 
         return [TextContent(type="text", text=json.dumps(result, default=str))]
 
+    # -- Resource handlers -------------------------------------------------
+    _register_resource_handlers(server, bridge)
+
     return server
+
+
+def _register_resource_handlers(server: Any, bridge: MCPServiceBridge) -> None:
+    """Register MCP resource list / read / template handlers.
+
+    Gracefully degrades when the installed ``mcp`` SDK does not expose
+    ``Resource`` / ``ResourceTemplate`` types (older releases).
+    """
+    from agent33.mcp_server.resources import (
+        handle_list_resource_templates,
+        handle_list_resources,
+        handle_read_resource,
+    )
+
+    if _HAS_MCP_RESOURCES:
+
+        @server.list_resources()  # type: ignore[misc]
+        async def list_resources() -> list[Resource]:  # type: ignore[name-defined]
+            raw = await handle_list_resources(bridge)
+            return [
+                Resource(
+                    uri=r["uri"],
+                    name=r["name"],
+                    description=r.get("description", ""),
+                    mimeType=r.get("mimeType", "application/json"),
+                )
+                for r in raw
+            ]
+
+        @server.list_resource_templates()  # type: ignore[misc]
+        async def list_resource_templates() -> list[ResourceTemplate]:  # type: ignore[name-defined]  # noqa: E501
+            raw = await handle_list_resource_templates(bridge)
+            return [
+                ResourceTemplate(
+                    uriTemplate=t["uriTemplate"],
+                    name=t["name"],
+                    description=t.get("description", ""),
+                    mimeType=t.get("mimeType", "application/json"),
+                )
+                for t in raw
+            ]
+
+        @server.read_resource()  # type: ignore[misc]
+        async def read_resource(uri: Any) -> str:
+            return await handle_read_resource(bridge, str(uri))
+
+    else:
+        logger.info(
+            "MCP Resource/ResourceTemplate types not available; "
+            "resource handlers skipped"
+        )

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, HTTPException, Request
 from starlette.responses import StreamingResponse
 
+from agent33.security.permissions import require_scope
+
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
@@ -27,7 +29,7 @@ def set_mcp_services(bridge: Any, server: Any) -> None:
     _mcp_server = server
 
 
-@router.get("/sse")
+@router.get("/sse", dependencies=[require_scope("agents:read")])
 async def mcp_sse(request: Request) -> StreamingResponse:
     """SSE endpoint for MCP protocol.
 
@@ -78,7 +80,7 @@ async def mcp_sse(request: Request) -> StreamingResponse:
         raise HTTPException(500, f"MCP SSE error: {exc}") from exc
 
 
-@router.post("/messages")
+@router.post("/messages", dependencies=[require_scope("agents:invoke")])
 async def mcp_messages(request: Request) -> dict[str, Any]:
     """Handle MCP protocol messages."""
     transport = getattr(request.app.state, "mcp_transport", None)

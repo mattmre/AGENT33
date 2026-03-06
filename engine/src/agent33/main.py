@@ -519,6 +519,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("training_store_init_failed", exc_info=True)
 
+    # --- MCP bridge wiring ------------------------------------------------
+    from agent33.mcp_server.bridge import MCPServiceBridge
+    from agent33.mcp_server.server import create_mcp_server
+
+    mcp_bridge = MCPServiceBridge(
+        agent_registry=agent_registry,
+        tool_registry=tool_registry,
+        model_router=model_router,
+        rag_pipeline=rag_pipeline,
+        skill_registry=skill_registry,
+    )
+    mcp_srv = create_mcp_server(mcp_bridge)
+    mcp.set_mcp_services(mcp_bridge, mcp_srv)
+    app.state.mcp_bridge = mcp_bridge
+    logger.info("mcp_bridge_initialized")
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
