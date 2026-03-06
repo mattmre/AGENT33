@@ -9,10 +9,11 @@ analysis.
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agent33.llm.base import ChatMessage, LLMResponse, ToolCallDelta
 from agent33.llm.stream_assembler import ToolCallAssembler
@@ -73,6 +74,7 @@ class ToolLoopState:
     consecutive_errors: int = 0
     confirmation_pending: bool = False
     call_history: list[str] = dataclasses.field(default_factory=list)
+    token_usage_available: bool = True
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -87,6 +89,7 @@ class ToolLoopResult:
     tool_calls_made: int
     tools_used: list[str]
     termination_reason: str  # "completed", "max_iterations", "error", "budget_exceeded"
+    tokens_available: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +199,7 @@ class ToolLoop:
                 continue
 
             # --- Track tokens -------------------------------------------------
-            state.total_tokens += response.prompt_tokens + response.completion_tokens
+            self._track_token_usage(state, response)
             last_raw = response.content
             last_model = response.model
 
@@ -212,7 +215,8 @@ class ToolLoop:
                 content=response.content[:2000],
                 metadata={
                     "model": response.model,
-                    "tokens": response.total_tokens,
+                    "tokens": response.total_tokens if response.usage_available else None,
+                    "usage_available": response.usage_available,
                     "has_tool_calls": response.has_tool_calls,
                     "iteration": state.iteration,
                 },
@@ -327,6 +331,7 @@ class ToolLoop:
                         tool_calls_made=state.tool_calls_made,
                         tools_used=list(state.tools_used),
                         termination_reason="completed",
+                        tokens_available=state.token_usage_available,
                     )
 
                 if not state.confirmation_pending:
@@ -364,6 +369,7 @@ class ToolLoop:
                         tool_calls_made=state.tool_calls_made,
                         tools_used=list(state.tools_used),
                         termination_reason="completed",
+                        tokens_available=state.token_usage_available,
                     )
 
             # --- Context management after message changes ---------------------
@@ -457,7 +463,7 @@ class ToolLoop:
                     termination_reason = "llm_error"
                     break
 
-                state.total_tokens += response.prompt_tokens + response.completion_tokens
+                self._track_token_usage(state, response)
 
                 yield ToolLoopEvent(
                     event_type="llm_response",
@@ -465,8 +471,13 @@ class ToolLoop:
                     data={
                         "has_tool_calls": bool(response.tool_calls),
                         "content_length": len(response.content or ""),
-                        "prompt_tokens": response.prompt_tokens,
-                        "completion_tokens": response.completion_tokens,
+                        "prompt_tokens": (
+                            response.prompt_tokens if response.usage_available else None
+                        ),
+                        "completion_tokens": (
+                            response.completion_tokens if response.usage_available else None
+                        ),
+                        "usage_available": response.usage_available,
                         "finish_reason": response.finish_reason,
                     },
                 )
@@ -619,7 +630,8 @@ class ToolLoop:
             iteration=state.iteration,
             data={
                 "termination_reason": termination_reason,
-                "total_tokens": state.total_tokens,
+                "total_tokens": state.total_tokens if state.token_usage_available else None,
+                "tokens_available": state.token_usage_available,
                 "tool_calls_made": state.tool_calls_made,
                 "tools_used": list(state.tools_used),
                 "output": parsed_output,
@@ -647,46 +659,73 @@ class ToolLoop:
         response_model = model
         prompt_tokens = 0
         completion_tokens = 0
-        stream_finish_reason = "stop"
+        usage_available = False
+        stream_finish_reason: str | None = None
 
         try:
-            async for chunk in self._router.stream_complete(
-                messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                tools=tools,
-            ):
-                saw_stream_chunks = True
-                if chunk.delta_content:
-                    content_parts.append(chunk.delta_content)
-                    yield ToolLoopEvent(
-                        event_type="llm_token",
-                        iteration=iteration,
-                        data={"token": chunk.delta_content},
-                    )
-                if chunk.tool_call_delta is not None:
-                    assembler.add_delta(chunk.tool_call_delta)
-                    saw_tool_delta = True
-                for index, tool_call in enumerate(chunk.delta_tool_calls):
-                    assembler.add_delta(
-                        ToolCallDelta(
-                            index=index,
-                            id=tool_call.id,
-                            name=tool_call.function.name,
-                            arguments_fragment=tool_call.function.arguments,
-                        )
-                    )
-                    saw_tool_delta = True
-                if chunk.model:
-                    response_model = chunk.model
-                prompt_tokens = max(prompt_tokens, chunk.prompt_tokens)
-                completion_tokens = max(completion_tokens, chunk.completion_tokens)
-                if chunk.finish_reason is not None:
-                    stream_finish_reason = chunk.finish_reason
-        except (AttributeError, NotImplementedError, TypeError):
+            stream = self._router.stream_complete
+        except AttributeError:
             saw_stream_chunks = False
-
+        else:
+            try:
+                stream_result = stream(
+                    messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                )
+            except NotImplementedError:
+                saw_stream_chunks = False
+            else:
+                try:
+                    stream_iter = aiter(stream_result)
+                except TypeError:
+                    if inspect.iscoroutine(stream_result):
+                        stream_result.close()
+                    saw_stream_chunks = False
+                else:
+                    try:
+                        async for chunk in cast("AsyncGenerator[Any, None]", stream_iter):
+                            saw_stream_chunks = True
+                            if chunk.delta_content:
+                                content_parts.append(chunk.delta_content)
+                                yield ToolLoopEvent(
+                                    event_type="llm_token",
+                                    iteration=iteration,
+                                    data={"token": chunk.delta_content},
+                                )
+                            if chunk.tool_call_delta is not None:
+                                assembler.add_delta(chunk.tool_call_delta)
+                                saw_tool_delta = True
+                            for index, tool_call in enumerate(chunk.delta_tool_calls):
+                                assembler.add_delta(
+                                    ToolCallDelta(
+                                        index=index,
+                                        id=tool_call.id,
+                                        name=tool_call.function.name,
+                                        arguments_fragment=tool_call.function.arguments,
+                                    )
+                                )
+                                saw_tool_delta = True
+                            if chunk.model:
+                                response_model = chunk.model
+                            if chunk.usage_available:
+                                usage_available = True
+                                prompt_tokens = max(prompt_tokens, chunk.prompt_tokens)
+                                completion_tokens = max(
+                                    completion_tokens,
+                                    chunk.completion_tokens,
+                                )
+                            if chunk.finish_reason is not None:
+                                stream_finish_reason = chunk.finish_reason
+                    except NotImplementedError:
+                        saw_stream_chunks = False
+                    except TypeError as exc:
+                        if not saw_stream_chunks and self._is_stream_unsupported_error(exc):
+                            saw_stream_chunks = False
+                        else:
+                            raise
         if not saw_stream_chunks:
             result_holder["response"] = await self._router.complete(
                 messages,
@@ -704,7 +743,8 @@ class ToolLoop:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             tool_calls=tool_calls or None,
-            finish_reason="tool_calls" if tool_calls else stream_finish_reason,
+            finish_reason="tool_calls" if tool_calls else (stream_finish_reason or "stop"),
+            usage_available=usage_available,
         )
         if not saw_tool_delta and not tool_calls and stream_finish_reason == "tool_calls":
             response = await self._router.complete(
@@ -719,6 +759,20 @@ class ToolLoop:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_stream_unsupported_error(exc: TypeError) -> bool:
+        """Return True when *exc* looks like a non-streaming provider fallback case."""
+        message = str(exc)
+        return any(
+            marker in message
+            for marker in (
+                "__aiter__",
+                "async iterable",
+                "async iterator",
+                "async for",
+            )
+        )
 
     def _collect_tool_descriptions(self) -> list[dict[str, Any]]:
         """Build OpenAI-style tool descriptions from the registry."""
@@ -1046,7 +1100,16 @@ class ToolLoop:
             tool_calls_made=state.tool_calls_made,
             tools_used=list(state.tools_used),
             termination_reason=reason,
+            tokens_available=state.token_usage_available,
         )
+
+    @staticmethod
+    def _track_token_usage(state: ToolLoopState, response: LLMResponse) -> None:
+        """Track token totals only when the provider reported them."""
+        if response.usage_available:
+            state.total_tokens += response.prompt_tokens + response.completion_tokens
+            return
+        state.token_usage_available = False
 
 
 # ---------------------------------------------------------------------------

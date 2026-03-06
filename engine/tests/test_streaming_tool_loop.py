@@ -159,6 +159,7 @@ class TestLLMStreamChunk:
         assert chunk.model == ""
         assert chunk.prompt_tokens == 0
         assert chunk.completion_tokens == 0
+        assert chunk.usage_available is False
 
     def test_chunk_with_content(self) -> None:
         chunk = LLMStreamChunk(delta_content="Hello", model="gpt-4")

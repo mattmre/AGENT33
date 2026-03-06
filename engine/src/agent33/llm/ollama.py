@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
 
 import httpx
 
@@ -18,6 +14,7 @@ from agent33.connectors.boundary import (
     map_connector_exception,
 )
 from agent33.connectors.models import ConnectorRequest
+from agent33.llm._stream_utils import stream_lines_through_boundary
 from agent33.llm.base import (
     ChatMessage,
     ImageBlock,
@@ -28,6 +25,9 @@ from agent33.llm.base import (
     ToolCallDelta,
     ToolCallFunction,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -170,55 +170,19 @@ class OllamaProvider:
         """Yield streamed response lines through the connector boundary executor."""
         connector = "llm:ollama"
         operation = f"POST {path}"
-        done = object()
-        queue: asyncio.Queue[object] = asyncio.Queue()
-
-        async def _perform_stream() -> None:
-            async with self._client.stream(
-                "POST",
-                f"{self._base_url}{path}",
-                json=payload,
-                timeout=self._timeout,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    await queue.put(line)
-
-        async def _execute_stream(_request: ConnectorRequest) -> None:
-            await _perform_stream()
-
-        async def _produce() -> None:
-            try:
-                if self._boundary_executor is None:
-                    await _perform_stream()
-                else:
-                    request = ConnectorRequest(
-                        connector=connector,
-                        operation=operation,
-                        payload=payload,
-                        metadata={"base_url": self._base_url},
-                    )
-                    await self._boundary_executor.execute(request, _execute_stream)
-            except Exception as exc:
-                if self._boundary_executor is not None:
-                    exc = map_connector_exception(exc, connector, operation)
-                await queue.put(exc)
-            finally:
-                await queue.put(done)
-
-        producer = asyncio.create_task(_produce())
-        try:
-            while True:
-                item = await queue.get()
-                if item is done:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                yield cast("str", item)
-        finally:
-            producer.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await producer
+        async for line in stream_lines_through_boundary(
+            client=self._client,
+            url=f"{self._base_url}{path}",
+            payload=payload,
+            headers=None,
+            timeout=self._timeout,
+            connector=connector,
+            operation=operation,
+            metadata={"base_url": self._base_url},
+            boundary_executor=self._boundary_executor,
+            map_exception=map_connector_exception,
+        ):
+            yield line
 
     # -- public API -------------------------------------------------------
 
@@ -311,6 +275,7 @@ class OllamaProvider:
 
         message_data = data.get("message", {})
         content = message_data.get("content", "")
+        response_model = data.get("model", resolved_model)
 
         # Parse tool calls from response if present
         raw_tool_calls = message_data.get("tool_calls")
@@ -319,14 +284,19 @@ class OllamaProvider:
             parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
 
         finish_reason = "tool_calls" if parsed_tool_calls else "stop"
+        usage_available = (
+            isinstance(data.get("prompt_eval_count"), int)
+            and isinstance(data.get("eval_count"), int)
+        )
 
         return LLMResponse(
             content=content,
-            model=resolved_model,
-            prompt_tokens=data.get("prompt_eval_count", 0),
-            completion_tokens=data.get("eval_count", 0),
+            model=response_model,
+            prompt_tokens=data.get("prompt_eval_count", 0) if usage_available else 0,
+            completion_tokens=data.get("eval_count", 0) if usage_available else 0,
             tool_calls=parsed_tool_calls,
             finish_reason=finish_reason,
+            usage_available=usage_available,
         )
 
     async def list_models(self) -> list[str]:
@@ -369,17 +339,26 @@ class OllamaProvider:
                 continue
             msg = data.get("message", {})
             chunk_model = data.get("model", resolved_model)
-            finish_reason = "stop" if data.get("done") else None
+            raw_tool_calls = msg.get("tool_calls") or []
+            finish_reason = data.get("done_reason")
+            if finish_reason is None and data.get("done"):
+                finish_reason = "tool_calls" if raw_tool_calls else "stop"
             content = msg.get("content", "") or ""
-            if content or finish_reason is not None:
+            usage_available = (
+                isinstance(data.get("prompt_eval_count"), int)
+                and isinstance(data.get("eval_count"), int)
+            )
+            prompt_tokens = data.get("prompt_eval_count", 0) if usage_available else 0
+            completion_tokens = data.get("eval_count", 0) if usage_available else 0
+            if content or finish_reason is not None or usage_available:
                 yield LLMStreamChunk(
                     delta_content=content,
                     finish_reason=finish_reason,
                     model=chunk_model,
-                    prompt_tokens=data.get("prompt_eval_count", 0),
-                    completion_tokens=data.get("eval_count", 0),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    usage_available=usage_available,
                 )
-            raw_tool_calls = msg.get("tool_calls") or []
             if raw_tool_calls:
                 parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
                 for index, tool_call in enumerate(parsed_tool_calls):
@@ -392,6 +371,7 @@ class OllamaProvider:
                         ),
                         finish_reason="tool_calls" if data.get("done") else finish_reason,
                         model=chunk_model,
-                        prompt_tokens=data.get("prompt_eval_count", 0),
-                        completion_tokens=data.get("eval_count", 0),
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        usage_available=usage_available,
                     )

@@ -35,6 +35,7 @@ class LLMResponse:
     completion_tokens: int
     tool_calls: list[ToolCall] | None = None
     finish_reason: str = "stop"
+    usage_available: bool = True
 
     @property
     def total_tokens(self) -> int:
@@ -67,6 +68,7 @@ class LLMStreamChunk:
     model: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    usage_available: bool = False
 
 
 # ---------------------------------------------------------------------------
