@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import time
+import uuid
 from collections import deque
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agent33.automation.scheduler import WorkflowScheduler
@@ -29,6 +30,7 @@ _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 
 # Workflow scheduler instance
 _scheduler: WorkflowScheduler | None = None
+_ws_manager: Any | None = None
 
 
 def get_workflow_registry() -> dict[str, WorkflowDefinition]:
@@ -39,6 +41,12 @@ def get_workflow_registry() -> dict[str, WorkflowDefinition]:
 def get_execution_history() -> deque[dict[str, Any]]:
     """Expose workflow execution history for internal route composition."""
     return _execution_history
+
+
+def set_ws_manager(manager: Any | None) -> None:
+    """Register the shared workflow WS manager for non-request code paths."""
+    global _ws_manager
+    _ws_manager = manager
 
 
 class WorkflowCreateRequest(BaseModel):
@@ -59,6 +67,7 @@ class WorkflowExecuteRequest(BaseModel):
     """Request body for executing a workflow."""
 
     inputs: dict[str, Any] = Field(default_factory=dict)
+    run_id: str | None = Field(default=None, min_length=1)
     dry_run: bool = False
     # Repeat/autonomous execution controls (safe defaults)
     repeat_count: int | None = Field(default=None, ge=1, le=100)
@@ -97,6 +106,7 @@ class WorkflowScheduleResponse(BaseModel):
 class WorkflowHistoryEntry(BaseModel):
     """Entry in workflow execution history."""
 
+    run_id: str
     workflow_name: str
     trigger_type: str  # "manual" or "scheduled"
     status: str
@@ -276,7 +286,11 @@ async def get_workflow_history(name: str) -> list[WorkflowHistoryEntry]:
 
 
 @router.post("/{name}/execute", dependencies=[require_scope("workflows:execute")])
-async def execute_workflow(name: str, request: WorkflowExecuteRequest) -> dict[str, Any]:
+async def execute_workflow(
+    name: str,
+    request: WorkflowExecuteRequest,
+    req: Request,
+) -> dict[str, Any]:
     """Execute a registered workflow."""
     workflow = _registry.get(name)
     if workflow is None:
@@ -290,12 +304,33 @@ async def execute_workflow(name: str, request: WorkflowExecuteRequest) -> dict[s
             detail=f"Input rejected: {', '.join(scan.threats)}",
         )
 
+    ws_manager = getattr(req.app.state, "ws_manager", _ws_manager)
+
+    if request.run_id and request.repeat_count and request.repeat_count > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Caller-supplied run_id is only supported for single executions",
+        )
+
     # Handle repeat/autonomous execution
     if request.repeat_count or request.autonomous:
-        return await _execute_repeated_or_autonomous(workflow, name, request)
+        return await _execute_repeated_or_autonomous(
+            workflow,
+            name,
+            request,
+            ws_manager=ws_manager,
+            requested_run_id=request.run_id,
+        )
 
     # Standard single execution (backward compatible)
-    return await _execute_single(workflow, name, request, trigger_type="manual")
+    return await _execute_single(
+        workflow,
+        name,
+        request,
+        trigger_type="manual",
+        ws_manager=ws_manager,
+        run_id=request.run_id,
+    )
 
 
 async def _execute_single(
@@ -304,30 +339,67 @@ async def _execute_single(
     request: WorkflowExecuteRequest,
     trigger_type: str = "manual",
     job_id: str | None = None,
+    ws_manager: Any | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute a workflow once and return the result."""
+    run_id = await _allocate_run_id(run_id, ws_manager=ws_manager)
+
     # Optionally override dry_run
     if request.dry_run:
         workflow = workflow.model_copy(
             update={"execution": workflow.execution.model_copy(update={"dry_run": True})}
         )
 
-    executor = WorkflowExecutor(workflow)
+    event_sink = None
+    if ws_manager is not None:
+        await ws_manager.register_run(run_id, name)
+        event_sink = ws_manager.publish_event
+
+    executor = WorkflowExecutor(
+        workflow,
+        run_id=run_id,
+        event_sink=event_sink,
+    )
     start_ts = time.time()
     start_monotonic = time.monotonic()
 
     try:
         result: WorkflowResult = await executor.execute(request.inputs)
-        error = None
+        error = next(
+            (
+                step_result.error
+                for step_result in reversed(result.step_results)
+                if step_result.error is not None
+            ),
+            None,
+        )
     except Exception as exc:
         logger.error("workflow_execution_failed", name=name, error=str(exc))
+        duration_ms = (time.monotonic() - start_monotonic) * 1000
+        if ws_manager is not None:
+            from agent33.workflows.events import WorkflowEvent, WorkflowEventType
+
+            await ws_manager.publish_event(
+                WorkflowEvent(
+                    event_type=WorkflowEventType.WORKFLOW_FAILED,
+                    run_id=run_id,
+                    workflow_name=name,
+                    data={
+                        "status": "failed",
+                        "duration_ms": duration_ms,
+                        "error": str(exc),
+                    },
+                )
+            )
         # Record failure in history
         _execution_history.append(
             {
+                "run_id": run_id,
                 "workflow_name": name,
                 "trigger_type": trigger_type,
                 "status": "failed",
-                "duration_ms": (time.monotonic() - start_monotonic) * 1000,
+                "duration_ms": duration_ms,
                 "timestamp": start_ts,
                 "error": str(exc),
                 "job_id": job_id,
@@ -342,6 +414,7 @@ async def _execute_single(
     # Record success in history
     _execution_history.append(
         {
+            "run_id": run_id,
             "workflow_name": name,
             "trigger_type": trigger_type,
             "status": result.status.value,
@@ -361,13 +434,18 @@ async def _execute_single(
         trigger_type=trigger_type,
     )
 
-    return result.model_dump()
+    response = result.model_dump()
+    response["run_id"] = run_id
+    response["workflow_name"] = name
+    return response
 
 
 async def _execute_repeated_or_autonomous(
     workflow: WorkflowDefinition,
     name: str,
     request: WorkflowExecuteRequest,
+    ws_manager: Any | None = None,
+    requested_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute a workflow multiple times or autonomously."""
     import asyncio
@@ -380,8 +458,18 @@ async def _execute_repeated_or_autonomous(
         if i > 0 and interval > 0:
             await asyncio.sleep(interval)
 
-        result_dict = await _execute_single(workflow, name, request, trigger_type="manual")
+        run_id = requested_run_id if i == 0 else None
+        result_dict = await _execute_single(
+            workflow,
+            name,
+            request,
+            trigger_type="manual",
+            ws_manager=ws_manager,
+            run_id=run_id,
+        )
         results.append(result_dict)
+
+    run_ids = [r["run_id"] for r in results]
 
     # If autonomous mode, return execution metadata instead of full results
     if request.autonomous:
@@ -389,8 +477,10 @@ async def _execute_repeated_or_autonomous(
             "executions": repeat_count,
             "workflow_name": name,
             "status": "completed",
+            "run_ids": run_ids,
             "results_summary": [
                 {
+                    "run_id": r["run_id"],
                     "status": r["status"],
                     "duration_ms": r["duration_ms"],
                     "steps_executed": len(r["steps_executed"]),
@@ -400,7 +490,36 @@ async def _execute_repeated_or_autonomous(
         }
 
     # Otherwise return last result (backward compatible for repeat_count=1)
-    return results[-1] if results else {}
+    if not results:
+        return {}
+
+    response = dict(results[-1])
+    if len(run_ids) > 1:
+        response["run_ids"] = run_ids
+    return response
+
+
+async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None) -> str:
+    """Return a unique workflow run identifier, honoring caller-supplied values."""
+    if run_id is not None:
+        if await _run_id_exists(run_id, ws_manager=ws_manager):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Workflow run '{run_id}' already exists",
+            )
+        return run_id
+
+    candidate = uuid.uuid4().hex
+    while await _run_id_exists(candidate, ws_manager=ws_manager):
+        candidate = uuid.uuid4().hex
+    return candidate
+
+
+async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
+    """Return ``True`` when *run_id* is already present in tracked workflow state."""
+    if any(entry["run_id"] == run_id for entry in _execution_history):
+        return True
+    return ws_manager is not None and await ws_manager.has_run(run_id)
 
 
 # -- Scheduling support functions ---------------------------------------------
@@ -446,6 +565,7 @@ async def _scheduled_execution_callback(
             request,
             trigger_type="scheduled",
             job_id=job_id,
+            ws_manager=_ws_manager,
         )
     except Exception as exc:
         logger.error(

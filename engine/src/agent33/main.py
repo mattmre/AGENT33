@@ -44,6 +44,7 @@ from agent33.api.routes import (
     training,
     visualizations,
     webhooks,
+    workflow_ws,
     workflows,
 )
 from agent33.api.routes import (
@@ -374,6 +375,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.hook_registry = hook_registry
         logger.info("hook_registry_initialized", hook_count=hook_registry.count())
 
+    # -- WebSocket manager for workflow events ------------------------------
+    from agent33.workflows.ws_manager import WorkflowWSManager
+
+    ws_manager = WorkflowWSManager()
+    app.state.ws_manager = ws_manager
+    workflows.set_ws_manager(ws_manager)
+    logger.info("workflow_ws_manager_initialized")
+
+    # -- MCP bridge / server / transport ------------------------------------
+    from agent33.mcp_server.bridge import MCPServiceBridge
+    from agent33.mcp_server.server import create_mcp_server
+
+    mcp_bridge = MCPServiceBridge(
+        agent_registry=agent_registry,
+        tool_registry=tool_registry,
+        model_router=model_router,
+        rag_pipeline=rag_pipeline,
+        skill_registry=skill_registry,
+        workflow_registry=workflows.get_workflow_registry(),
+    )
+    mcp_server = create_mcp_server(mcp_bridge)
+    mcp_transport = None
+    if mcp_server is not None:
+        try:
+            from mcp.server.sse import SseServerTransport
+        except ImportError:
+            logger.warning("mcp_sse_transport_unavailable")
+        else:
+            mcp_transport = SseServerTransport("/v1/mcp/messages")
+
+    app.state.mcp_bridge = mcp_bridge
+    app.state.mcp_server = mcp_server
+    app.state.mcp_transport = mcp_transport
+    logger.info(
+        "mcp_services_initialized",
+        server_enabled=mcp_server is not None,
+        transport_enabled=mcp_transport is not None,
+    )
+
     # -- Plugin registry (Phase 32.8 — Plugin SDK) -------------------------
     from agent33.plugins.capabilities import CapabilityGrant
     from agent33.plugins.context import PluginContext
@@ -523,6 +563,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Shutdown ----------------------------------------------------------
     logger.info("agent33_stopping")
+
+    workflows.set_ws_manager(None)
 
     _plugin_reg: Any = getattr(app.state, "plugin_registry", None)
     if _plugin_reg is not None:
@@ -711,3 +753,4 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(workflow_ws.router)
