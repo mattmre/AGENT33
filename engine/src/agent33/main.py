@@ -44,6 +44,7 @@ from agent33.api.routes import (
     training,
     visualizations,
     webhooks,
+    workflow_ws,
     workflows,
 )
 from agent33.api.routes import (
@@ -373,6 +374,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         hook_registry.discover_builtins()
         app.state.hook_registry = hook_registry
         logger.info("hook_registry_initialized", hook_count=hook_registry.count())
+
+    # -- WebSocket manager for workflow events ------------------------------
+    from agent33.workflows.ws_manager import WorkflowWSManager
+
+    ws_manager = WorkflowWSManager()
+    app.state.ws_manager = ws_manager
+    logger.info("workflow_ws_manager_initialized")
 
     # -- Plugin registry (Phase 32.8 — Plugin SDK) -------------------------
     from agent33.plugins.capabilities import CapabilityGrant
@@ -711,3 +719,4 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(workflow_ws.router)

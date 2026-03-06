@@ -7,7 +7,7 @@ from collections import deque
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agent33.automation.scheduler import WorkflowScheduler
@@ -276,7 +276,9 @@ async def get_workflow_history(name: str) -> list[WorkflowHistoryEntry]:
 
 
 @router.post("/{name}/execute", dependencies=[require_scope("workflows:execute")])
-async def execute_workflow(name: str, request: WorkflowExecuteRequest) -> dict[str, Any]:
+async def execute_workflow(
+    name: str, request: WorkflowExecuteRequest, req: Request
+) -> dict[str, Any]:
     """Execute a registered workflow."""
     workflow = _registry.get(name)
     if workflow is None:
@@ -290,12 +292,18 @@ async def execute_workflow(name: str, request: WorkflowExecuteRequest) -> dict[s
             detail=f"Input rejected: {', '.join(scan.threats)}",
         )
 
+    ws_manager = getattr(req.app.state, "ws_manager", None)
+
     # Handle repeat/autonomous execution
     if request.repeat_count or request.autonomous:
-        return await _execute_repeated_or_autonomous(workflow, name, request)
+        return await _execute_repeated_or_autonomous(
+            workflow, name, request, ws_manager=ws_manager
+        )
 
     # Standard single execution (backward compatible)
-    return await _execute_single(workflow, name, request, trigger_type="manual")
+    return await _execute_single(
+        workflow, name, request, trigger_type="manual", ws_manager=ws_manager
+    )
 
 
 async def _execute_single(
@@ -304,6 +312,7 @@ async def _execute_single(
     request: WorkflowExecuteRequest,
     trigger_type: str = "manual",
     job_id: str | None = None,
+    ws_manager: Any | None = None,
 ) -> dict[str, Any]:
     """Execute a workflow once and return the result."""
     # Optionally override dry_run
@@ -312,7 +321,21 @@ async def _execute_single(
             update={"execution": workflow.execution.model_copy(update={"dry_run": True})}
         )
 
-    executor = WorkflowExecutor(workflow)
+    # Build an event_sink that broadcasts to the WebSocket manager
+    event_sink = None
+    if ws_manager is not None:
+        import asyncio
+
+        def _event_sink(event: Any) -> None:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(ws_manager.broadcast(event.workflow_id, event))
+            except RuntimeError:
+                pass
+
+        event_sink = _event_sink
+
+    executor = WorkflowExecutor(workflow, event_sink=event_sink)
     start_ts = time.time()
     start_monotonic = time.monotonic()
 
@@ -368,6 +391,7 @@ async def _execute_repeated_or_autonomous(
     workflow: WorkflowDefinition,
     name: str,
     request: WorkflowExecuteRequest,
+    ws_manager: Any | None = None,
 ) -> dict[str, Any]:
     """Execute a workflow multiple times or autonomously."""
     import asyncio
@@ -380,7 +404,13 @@ async def _execute_repeated_or_autonomous(
         if i > 0 and interval > 0:
             await asyncio.sleep(interval)
 
-        result_dict = await _execute_single(workflow, name, request, trigger_type="manual")
+        result_dict = await _execute_single(
+            workflow,
+            name,
+            request,
+            trigger_type="manual",
+            ws_manager=ws_manager,
+        )
         results.append(result_dict)
 
     # If autonomous mode, return execution metadata instead of full results

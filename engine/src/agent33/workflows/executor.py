@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from pydantic import BaseModel, Field
@@ -31,6 +31,11 @@ from agent33.workflows.definition import (
     WorkflowStep,
 )
 from agent33.workflows.expressions import ExpressionEvaluator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from agent33.workflows.events import WorkflowEvent
 
 logger = structlog.get_logger()
 
@@ -78,6 +83,7 @@ class WorkflowExecutor:
         tenant_id: str = "",
         agent_registry: Any | None = None,
         model_router: Any | None = None,
+        event_sink: Callable[[WorkflowEvent], Any] | None = None,
     ) -> None:
         self._definition = definition
         self._evaluator = ExpressionEvaluator()
@@ -86,6 +92,28 @@ class WorkflowExecutor:
         self._tenant_id = tenant_id
         self._agent_registry = agent_registry
         self._model_router = model_router
+        self._event_sink = event_sink
+
+    def _emit_event(
+        self,
+        event_type: str,
+        workflow_id: str,
+        *,
+        step_id: str | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        """Fire a workflow event to the configured sink (if any)."""
+        if self._event_sink is None:
+            return
+        from agent33.workflows.events import WorkflowEvent, WorkflowEventType
+
+        evt = WorkflowEvent(
+            event_type=WorkflowEventType(event_type),
+            workflow_id=workflow_id,
+            step_id=step_id,
+            data=data or {},
+        )
+        self._event_sink(evt)
 
     async def execute(self, inputs: dict[str, Any] | None = None) -> WorkflowResult:
         """Execute the workflow with the given inputs.
@@ -102,6 +130,13 @@ class WorkflowExecutor:
         steps_executed: list[str] = []
         execution = self._definition.execution
         failed = False
+        workflow_id = self._definition.name
+
+        self._emit_event(
+            "workflow_started",
+            workflow_id,
+            data={"step_count": len(self._definition.steps)},
+        )
 
         try:
             if execution.mode == ExecutionMode.SEQUENTIAL:
@@ -193,6 +228,27 @@ class WorkflowExecutor:
             if sr.status == "success":
                 final_outputs.update(sr.outputs)
 
+        # Emit terminal workflow event
+        if failed:
+            self._emit_event(
+                "workflow_failed",
+                workflow_id,
+                data={
+                    "status": status.value,
+                    "duration_ms": round(elapsed_ms, 2),
+                },
+            )
+        else:
+            self._emit_event(
+                "workflow_completed",
+                workflow_id,
+                data={
+                    "status": status.value,
+                    "duration_ms": round(elapsed_ms, 2),
+                    "steps_executed": len(steps_executed),
+                },
+            )
+
         return WorkflowResult(
             outputs=final_outputs,
             steps_executed=steps_executed,
@@ -209,18 +265,31 @@ class WorkflowExecutor:
     ) -> StepResult:
         """Execute a single step with retry and timeout handling."""
         start = time.monotonic()
+        workflow_id = self._definition.name
 
         # Evaluate condition
         if step.condition:
             try:
                 should_run = self._evaluator.evaluate_condition(step.condition, state)
                 if not should_run:
+                    self._emit_event(
+                        "step_skipped",
+                        workflow_id,
+                        step_id=step.id,
+                        data={"reason": "condition_false"},
+                    )
                     return StepResult(
                         step_id=step.id,
                         status="skipped",
                         outputs={"skipped": True, "reason": "condition_false"},
                     )
             except Exception as exc:
+                self._emit_event(
+                    "step_failed",
+                    workflow_id,
+                    step_id=step.id,
+                    data={"error": f"Condition evaluation error: {exc}"},
+                )
                 return StepResult(
                     step_id=step.id,
                     status="failed",
@@ -260,6 +329,13 @@ class WorkflowExecutor:
         delay = step.retry.delay_seconds
         last_error: str | None = None
 
+        self._emit_event(
+            "step_started",
+            workflow_id,
+            step_id=step.id,
+            data={"action": step.action.value, "max_attempts": max_attempts},
+        )
+
         for attempt in range(1, max_attempts + 1):
             try:
                 coro = self._dispatch_action(step, resolved_inputs, state, dry_run)
@@ -298,6 +374,12 @@ class WorkflowExecutor:
                     )
                     await post_runner.run(wf_hook_ctx)
 
+                self._emit_event(
+                    "step_completed",
+                    workflow_id,
+                    step_id=step.id,
+                    data={"duration_ms": step_result.duration_ms},
+                )
                 return step_result
 
             except TimeoutError:
@@ -305,12 +387,33 @@ class WorkflowExecutor:
                 logger.warning("step_timeout", step_id=step.id, attempt=attempt)
             except Exception as exc:
                 last_error = str(exc)
-                logger.warning("step_error", step_id=step.id, attempt=attempt, error=last_error)
+                logger.warning(
+                    "step_error",
+                    step_id=step.id,
+                    attempt=attempt,
+                    error=last_error,
+                )
 
             if attempt < max_attempts:
+                self._emit_event(
+                    "step_retrying",
+                    workflow_id,
+                    step_id=step.id,
+                    data={
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "error": last_error,
+                    },
+                )
                 await asyncio.sleep(delay)
 
         elapsed = (time.monotonic() - start) * 1000
+        self._emit_event(
+            "step_failed",
+            workflow_id,
+            step_id=step.id,
+            data={"error": last_error, "duration_ms": round(elapsed, 2)},
+        )
         return StepResult(
             step_id=step.id,
             status="failed",
