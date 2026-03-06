@@ -8,7 +8,13 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from agent33.mcp_server.auth import enforce_resource_scope, enforce_tool_scope, get_server_request
+from agent33.mcp_server.auth import (
+    enforce_registry_tool_access,
+    enforce_resource_scope,
+    enforce_tool_scope,
+    filter_allowed_tools,
+    get_server_request,
+)
 from agent33.mcp_server.resources import register_resources
 from agent33.tools.base import ToolContext
 
@@ -33,6 +39,87 @@ else:  # pragma: no branch - optional dependency bootstrap
     _HAS_MCP = Server is not None and TextContent is not None and Tool is not None
 
 _HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
+_MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "list_agents",
+        "description": "List all registered agents",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "invoke_agent",
+        "description": "Invoke an agent with a message",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "Name of the agent",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Message to send",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Model override (optional)",
+                },
+            },
+            "required": ["agent_name", "message"],
+        },
+    },
+    {
+        "name": "search_memory",
+        "description": "Search the memory/knowledge base",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Number of results",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_tools",
+        "description": "List registered tools",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "execute_tool",
+        "description": "Execute a registered tool",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Tool name",
+                },
+                "arguments": {
+                    "type": "object",
+                    "description": "Tool arguments",
+                },
+            },
+            "required": ["tool_name"],
+        },
+    },
+    {
+        "name": "list_skills",
+        "description": "List registered skills",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_system_status",
+        "description": "Get AGENT-33 system status",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+)
 
 
 def create_mcp_server(bridge: MCPServiceBridge) -> Any:
@@ -51,86 +138,16 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
     server = server_cls("agent33-core")
 
     async def list_tools() -> list[Any]:
+        allowed = set(
+            filter_allowed_tools(
+                server,
+                (tool["name"] for tool in _MCP_TOOL_DEFINITIONS),
+            )
+        )
         return [
-            tool_cls(
-                name="list_agents",
-                description="List all registered agents",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            tool_cls(
-                name="invoke_agent",
-                description="Invoke an agent with a message",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {
-                            "type": "string",
-                            "description": "Name of the agent",
-                        },
-                        "message": {
-                            "type": "string",
-                            "description": "Message to send",
-                        },
-                        "model": {
-                            "type": "string",
-                            "description": "Model override (optional)",
-                        },
-                    },
-                    "required": ["agent_name", "message"],
-                },
-            ),
-            tool_cls(
-                name="search_memory",
-                description="Search the memory/knowledge base",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query",
-                        },
-                        "top_k": {
-                            "type": "integer",
-                            "description": "Number of results",
-                            "default": 5,
-                        },
-                    },
-                    "required": ["query"],
-                },
-            ),
-            tool_cls(
-                name="list_tools",
-                description="List registered tools",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            tool_cls(
-                name="execute_tool",
-                description="Execute a registered tool",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "tool_name": {
-                            "type": "string",
-                            "description": "Tool name",
-                        },
-                        "arguments": {
-                            "type": "object",
-                            "description": "Tool arguments",
-                        },
-                    },
-                    "required": ["tool_name"],
-                },
-            ),
-            tool_cls(
-                name="list_skills",
-                description="List registered skills",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            tool_cls(
-                name="get_system_status",
-                description="Get AGENT-33 system status",
-                inputSchema={"type": "object", "properties": {}},
-            ),
+            tool_cls(**tool)
+            for tool in _MCP_TOOL_DEFINITIONS
+            if tool["name"] in allowed
         ]
 
     _register_handler(server.list_tools(), list_tools)
@@ -161,6 +178,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
         elif name == "list_tools":
             result = await mcp_tools.handle_list_tools(bridge)
         elif name == "execute_tool":
+            enforce_registry_tool_access(server, bridge, str(args.get("tool_name", "")))
             result = await mcp_tools.handle_execute_tool(
                 bridge,
                 tool_name=args.get("tool_name", ""),
@@ -172,7 +190,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
         elif name == "get_system_status":
             result = await mcp_tools.handle_get_system_status(bridge)
         else:
-            result = {"error": f"Unknown tool: {name}"}
+            raise PermissionError(f"MCP tool '{name}' is not allowed")
 
         return [text_content_cls(type="text", text=json.dumps(result, default=str))]
 
@@ -181,6 +199,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
     register_resources(
         server,
         bridge,
+        before_list=lambda uri: enforce_resource_scope(server, uri),
         before_read=lambda uri: enforce_resource_scope(server, uri),
     )
 

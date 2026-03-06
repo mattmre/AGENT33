@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -188,6 +189,7 @@ class TestMCPServerCreation:
             assert server is None
 
     async def test_execute_tool_uses_request_context_for_auth_and_tool_context(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
         from agent33.mcp_server.server import create_mcp_server
         from agent33.security.auth import TokenPayload
 
@@ -217,7 +219,10 @@ class TestMCPServerCreation:
             ) as exec_tool,
         ):
             exec_tool.return_value = {"success": True}
-            create_mcp_server(MagicMock(spec=object))
+            tool_registry = MagicMock()
+            tool_registry.get.return_value = object()
+            tool_registry.get_entry.return_value = None
+            create_mcp_server(MCPServiceBridge(tool_registry=tool_registry))
             await fake_server.handlers["call_tool"](
                 "execute_tool",
                 {"tool_name": "shell", "arguments": {"command": "echo hi"}},
@@ -262,3 +267,71 @@ class TestMCPServerCreation:
             assert "tools:execute" in str(exc)
         else:
             raise AssertionError("expected PermissionError")
+
+    async def test_list_tools_only_returns_scoped_mcp_tools(self) -> None:
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(user=TokenPayload(sub="reader", scopes=["agents:read"]))
+        )
+        fake_server = _RecordingServer(request=request)
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MagicMock(spec=object))
+
+        tools = await fake_server.handlers["list_tools"]()
+        tool_names = {tool.name for tool in tools}
+
+        assert "list_agents" in tool_names
+        assert "execute_tool" not in tool_names
+
+    async def test_execute_tool_rejects_unknown_registry_tool(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(user=TokenPayload(sub="executor", scopes=["tools:execute"]))
+        )
+        fake_server = _RecordingServer(request=request)
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            tool_registry = MagicMock()
+            tool_registry.get.return_value = None
+            tool_registry.get_entry.return_value = None
+            create_mcp_server(MCPServiceBridge(tool_registry=tool_registry))
+
+        with pytest.raises(PermissionError, match="not allowed"):
+            await fake_server.handlers["call_tool"](
+                "execute_tool",
+                {"tool_name": "missing-tool", "arguments": {}},
+            )

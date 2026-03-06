@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/mcp", tags=["mcp-server"])
+
+
+class _SSEBridgeStream:
+    """Async iterator that runs the MCP SSE bridge and yields no body chunks."""
+
+    def __init__(self, request: Request, transport: Any, mcp_server: Any) -> None:
+        self._request = request
+        self._transport = transport
+        self._mcp_server = mcp_server
+        self._done = False
+
+    def __aiter__(self) -> _SSEBridgeStream:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._done:
+            raise StopAsyncIteration
+        self._done = True
+        try:
+            async with self._transport.connect_sse(
+                self._request.scope,
+                self._request.receive,
+                self._request._send,
+            ) as (read_stream, write_stream):
+                await self._mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    self._mcp_server.create_initialization_options(),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MCP SSE stream error")
+            raise
+        raise StopAsyncIteration
 
 
 def require_authenticated_user(request: Request) -> Any:
@@ -47,29 +83,11 @@ async def mcp_sse(request: Request) -> StreamingResponse:
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
-    try:
-        async def sse_stream() -> AsyncGenerator[str, None]:
-            async with transport.connect_sse(
-                request.scope,
-                request.receive,
-                request._send,
-            ) as (read_stream, write_stream):
-                await mcp_server.run(
-                    read_stream,
-                    write_stream,
-                    mcp_server.create_initialization_options(),
-                )
-                if False:
-                    yield ""
-
-        return StreamingResponse(
-            sse_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
-        )
-    except Exception as exc:
-        logger.error("MCP SSE error: %s", exc)
-        raise HTTPException(500, f"MCP SSE error: {exc}") from exc
+    return StreamingResponse(
+        _SSEBridgeStream(request, transport, mcp_server),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.post("/messages", dependencies=[Depends(require_authenticated_user)])
@@ -88,9 +106,11 @@ async def mcp_messages(request: Request) -> dict[str, Any]:
             body,
         )
         return {"status": "processed"}
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
-        logger.error("MCP message error: %s", exc)
-        return {"status": "error", "detail": str(exc)}
+        logger.exception("MCP message error")
+        raise HTTPException(500, f"MCP message error: {exc}") from exc
 
 
 @router.get("/status", dependencies=[require_scope("agents:read")])

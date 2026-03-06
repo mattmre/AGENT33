@@ -26,7 +26,11 @@ class WorkflowEventType(StrEnum):
 
 @dataclass(frozen=True)
 class WorkflowEvent:
-    """Immutable event emitted during a single workflow execution run."""
+    """Immutable event emitted during a single workflow execution run.
+
+    ``run_id`` is the unique execution identifier. ``workflow_name`` identifies the
+    workflow definition shared across multiple runs.
+    """
 
     event_type: WorkflowEventType
     run_id: str

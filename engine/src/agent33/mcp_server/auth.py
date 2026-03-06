@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent33.security.permissions import check_permission
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 TOOL_SCOPES: dict[str, str] = {
     "list_agents": "agents:read",
@@ -60,6 +63,9 @@ def get_required_scope_for_resource(uri: str) -> str | None:
     if exact_scope is not None:
         return exact_scope
 
+    if "{" in uri:
+        uri = uri.split("{", 1)[0]
+
     for prefix, scope in RESOURCE_SCOPES.items():
         if prefix.endswith("/") and uri.startswith(prefix):
             return scope
@@ -71,7 +77,7 @@ def enforce_tool_scope(server: Any, tool_name: str) -> None:
     """Raise when the current request lacks scope for an MCP tool."""
     required_scope = get_required_scope_for_tool(tool_name)
     if required_scope is None:
-        return
+        raise PermissionError(f"MCP tool '{tool_name}' is not allowed")
     _enforce_scope(server, required_scope)
 
 
@@ -79,8 +85,36 @@ def enforce_resource_scope(server: Any, uri: str) -> None:
     """Raise when the current request lacks scope for an MCP resource."""
     required_scope = get_required_scope_for_resource(uri)
     if required_scope is None:
-        return
+        raise PermissionError(f"MCP resource '{uri}' is not allowed")
     _enforce_scope(server, required_scope)
+
+
+def filter_allowed_tools(server: Any, tool_names: Iterable[str]) -> list[str]:
+    """Return only tool names visible to the current request."""
+    visible: list[str] = []
+    for tool_name in tool_names:
+        try:
+            enforce_tool_scope(server, tool_name)
+        except PermissionError:
+            continue
+        visible.append(tool_name)
+    return visible
+
+
+def enforce_registry_tool_access(server: Any, bridge: Any, tool_name: str) -> None:
+    """Raise when a requested registry tool should not be executable."""
+    _enforce_scope(server, "tools:execute")
+    if not tool_name:
+        raise PermissionError("Missing required MCP tool name")
+
+    tool_registry = getattr(bridge, "tool_registry", None)
+    if tool_registry is None or tool_registry.get(tool_name) is None:
+        raise PermissionError(f"MCP registry tool '{tool_name}' is not allowed")
+
+    entry = getattr(tool_registry, "get_entry", lambda *_: None)(tool_name)
+    status = getattr(getattr(entry, "status", None), "value", None)
+    if status == "blocked":
+        raise PermissionError(f"MCP registry tool '{tool_name}' is blocked")
 
 
 def _enforce_scope(server: Any, required_scope: str) -> None:

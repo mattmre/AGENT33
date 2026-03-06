@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from agent33.automation.scheduler import WorkflowScheduler
 from agent33.security.injection import scan_inputs_recursive
-from agent33.security.permissions import require_scope
+from agent33.security.permissions import check_permission, require_scope
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/v1/workflows", tags=["workflows"])
 # In-memory workflow registry
 _registry: dict[str, WorkflowDefinition] = {}
 
-# In-memory execution history
+# In-memory execution history (tenant ownership retained per run entry)
 _MAX_EXECUTION_HISTORY = 1000
 _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 
@@ -115,6 +115,40 @@ class WorkflowHistoryEntry(BaseModel):
     error: str | None = None
     job_id: str | None = None  # Present for scheduled executions
     step_statuses: dict[str, str] | None = None  # Optional step-level status map
+
+
+def get_request_tenant_context(request: Request) -> tuple[str, list[str]]:
+    """Return the current request tenant and scopes."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return "", []
+    return getattr(user, "tenant_id", ""), list(getattr(user, "scopes", []))
+
+
+def tenant_access_allowed(
+    owner_tenant_id: str,
+    *,
+    requester_tenant_id: str,
+    requester_scopes: list[str],
+) -> bool:
+    """Return ``True`` when the caller may access a tenant-owned workflow run."""
+    if check_permission("admin", requester_scopes):
+        return True
+    return owner_tenant_id == requester_tenant_id
+
+
+def execution_history_entry_visible(
+    entry: dict[str, Any],
+    *,
+    requester_tenant_id: str,
+    requester_scopes: list[str],
+) -> bool:
+    """Return ``True`` when a history entry is visible to the current caller."""
+    return tenant_access_allowed(
+        str(entry.get("tenant_id", "")),
+        requester_tenant_id=requester_tenant_id,
+        requester_scopes=requester_scopes,
+    )
 
 
 @router.get("/", dependencies=[require_scope("workflows:read")])
@@ -273,12 +307,18 @@ async def schedule_workflow(
 
 
 @router.get("/{name}/history", dependencies=[require_scope("workflows:read")])
-async def get_workflow_history(name: str) -> list[WorkflowHistoryEntry]:
+async def get_workflow_history(name: str, req: Request) -> list[WorkflowHistoryEntry]:
     """Get execution history for a specific workflow."""
+    tenant_id, scopes = get_request_tenant_context(req)
     history = [
         WorkflowHistoryEntry(**entry)
         for entry in _execution_history
         if entry["workflow_name"] == name
+        and execution_history_entry_visible(
+            entry,
+            requester_tenant_id=tenant_id,
+            requester_scopes=scopes,
+        )
     ]
 
     # Return most recent first
@@ -305,6 +345,7 @@ async def execute_workflow(
         )
 
     ws_manager = getattr(req.app.state, "ws_manager", _ws_manager)
+    tenant_id, _ = get_request_tenant_context(req)
 
     if request.run_id and request.repeat_count and request.repeat_count > 1:
         raise HTTPException(
@@ -320,6 +361,7 @@ async def execute_workflow(
             request,
             ws_manager=ws_manager,
             requested_run_id=request.run_id,
+            tenant_id=tenant_id,
         )
 
     # Standard single execution (backward compatible)
@@ -330,6 +372,7 @@ async def execute_workflow(
         trigger_type="manual",
         ws_manager=ws_manager,
         run_id=request.run_id,
+        tenant_id=tenant_id,
     )
 
 
@@ -341,6 +384,7 @@ async def _execute_single(
     job_id: str | None = None,
     ws_manager: Any | None = None,
     run_id: str | None = None,
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Execute a workflow once and return the result."""
     run_id = await _allocate_run_id(run_id, ws_manager=ws_manager)
@@ -353,11 +397,12 @@ async def _execute_single(
 
     event_sink = None
     if ws_manager is not None:
-        await ws_manager.register_run(run_id, name)
+        await ws_manager.register_run(run_id, name, tenant_id=tenant_id)
         event_sink = ws_manager.publish_event
 
     executor = WorkflowExecutor(
         workflow,
+        tenant_id=tenant_id,
         run_id=run_id,
         event_sink=event_sink,
     )
@@ -404,6 +449,7 @@ async def _execute_single(
                 "error": str(exc),
                 "job_id": job_id,
                 "step_statuses": None,
+                "tenant_id": tenant_id,
             }
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -423,6 +469,7 @@ async def _execute_single(
             "error": error,
             "job_id": job_id,
             "step_statuses": step_statuses,
+            "tenant_id": tenant_id,
         }
     )
 
@@ -446,6 +493,7 @@ async def _execute_repeated_or_autonomous(
     request: WorkflowExecuteRequest,
     ws_manager: Any | None = None,
     requested_run_id: str | None = None,
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Execute a workflow multiple times or autonomously."""
     import asyncio
@@ -466,6 +514,7 @@ async def _execute_repeated_or_autonomous(
             trigger_type="manual",
             ws_manager=ws_manager,
             run_id=run_id,
+            tenant_id=tenant_id,
         )
         results.append(result_dict)
 

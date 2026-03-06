@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from agent33.security.permissions import require_scope
 from agent33.services.graph_generator import generate_workflow_graph
@@ -19,7 +19,7 @@ _WORKFLOW_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 @router.get("/workflows/{workflow_id}/graph", dependencies=[require_scope("workflows:read")])
-async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
+async def get_workflow_graph(workflow_id: str, request: Request) -> dict[str, Any]:
     """Get visual graph representation of a workflow.
 
     Returns nodes with deterministic layered layout coordinates, edges,
@@ -50,10 +50,18 @@ async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
     # Try to find the most recent execution for status overlay
     execution_status: dict[str, str] = {}
     execution_history = workflows.get_execution_history()
+    tenant_id, scopes = workflows.get_request_tenant_context(request)
     if execution_history:
         # Find most recent execution for this workflow
         recent_executions = [
-            entry for entry in execution_history if entry["workflow_name"] == workflow_id
+            entry
+            for entry in execution_history
+            if entry["workflow_name"] == workflow_id
+            and workflows.execution_history_entry_visible(
+                entry,
+                requester_tenant_id=tenant_id,
+                requester_scopes=scopes,
+            )
         ]
         if recent_executions:
             # Get the most recent one

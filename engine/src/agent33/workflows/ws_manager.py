@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from agent33.security.permissions import check_permission
 from agent33.workflows.events import WorkflowEvent, WorkflowEventType
 
 if TYPE_CHECKING:
@@ -23,6 +25,7 @@ class WorkflowRunSnapshot:
 
     run_id: str
     workflow_name: str
+    tenant_id: str = ""
     status: str = "pending"
     step_statuses: dict[str, str] = field(default_factory=dict)
     last_event_type: str | None = None
@@ -47,34 +50,79 @@ class WorkflowRunSnapshot:
         return data
 
 
+@dataclass
+class _PendingMessage:
+    payload: str
+    delivered: asyncio.Future[bool] | None = None
+
+
+@dataclass
+class _ConnectionState:
+    queue: asyncio.Queue[_PendingMessage] = field(default_factory=asyncio.Queue)
+    sender_task: asyncio.Task[None] | None = None
+
+
 class WorkflowWSManager:
     """Manages WebSocket subscriptions and snapshots for workflow runs."""
 
     def __init__(self, heartbeat_interval_seconds: float = 30.0) -> None:
         self._subscriptions: dict[str, set[Any]] = {}
         self._reverse: dict[Any, set[str]] = {}
+        self._connections: dict[Any, _ConnectionState] = {}
         self._snapshots: dict[str, WorkflowRunSnapshot] = {}
         self._lock = asyncio.Lock()
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
 
-    async def register_run(self, run_id: str, workflow_name: str) -> None:
+    async def register_run(self, run_id: str, workflow_name: str, tenant_id: str = "") -> None:
         """Ensure a snapshot exists for *run_id*."""
         async with self._lock:
-            self._snapshots.setdefault(
+            snapshot = self._snapshots.setdefault(
                 run_id,
-                WorkflowRunSnapshot(run_id=run_id, workflow_name=workflow_name),
+                WorkflowRunSnapshot(
+                    run_id=run_id,
+                    workflow_name=workflow_name,
+                    tenant_id=tenant_id,
+                ),
             )
+            snapshot.workflow_name = workflow_name
+            if tenant_id:
+                snapshot.tenant_id = tenant_id
 
     async def has_run(self, run_id: str) -> bool:
         """Return ``True`` when *run_id* is known to the manager."""
         async with self._lock:
             return run_id in self._snapshots
 
+    async def can_access_run(
+        self,
+        run_id: str,
+        *,
+        tenant_id: str = "",
+        scopes: list[str] | None = None,
+    ) -> bool:
+        """Return ``True`` when the caller can access *run_id*."""
+        async with self._lock:
+            snapshot = self._snapshots.get(run_id)
+
+        if snapshot is None:
+            return False
+
+        requester_scopes = scopes or []
+        if check_permission("admin", requester_scopes):
+            return True
+        return snapshot.tenant_id == tenant_id
+
     async def connect(self, ws: WebSocket, run_id: str) -> bool:
         """Subscribe *ws* to a single workflow *run_id*."""
         async with self._lock:
             if run_id not in self._snapshots:
                 return False
+
+            state = self._connections.get(ws)
+            if state is None:
+                state = _ConnectionState()
+                state.sender_task = asyncio.create_task(self._sender_loop(ws, state))
+                self._connections[ws] = state
 
             self._subscriptions.setdefault(run_id, set()).add(ws)
             self._reverse.setdefault(ws, set()).add(run_id)
@@ -88,6 +136,7 @@ class WorkflowWSManager:
 
     async def disconnect(self, ws: WebSocket) -> None:
         """Remove *ws* from all tracked subscriptions."""
+        sender_task: asyncio.Task[None] | None = None
         async with self._lock:
             run_ids = list(self._reverse.pop(ws, set()))
             for run_id in run_ids:
@@ -96,6 +145,14 @@ class WorkflowWSManager:
                     subs.discard(ws)
                     if not subs:
                         del self._subscriptions[run_id]
+            state = self._connections.pop(ws, None)
+            if state is not None:
+                sender_task = state.sender_task
+
+        if sender_task is not None and sender_task is not asyncio.current_task():
+            sender_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sender_task
 
         if run_ids:
             logger.debug("ws_disconnected", removed_subscriptions=len(run_ids))
@@ -119,9 +176,8 @@ class WorkflowWSManager:
         payload = event.to_json()
         dead: list[Any] = []
         for ws in targets:
-            try:
-                await ws.send_text(payload)
-            except Exception:
+            delivered = await self._enqueue_text(ws, payload)
+            if not delivered:
                 dead.append(ws)
 
         if dead:
@@ -151,8 +207,7 @@ class WorkflowWSManager:
         event = await self.build_sync_event(run_id)
         if event is None:
             return False
-        await ws.send_text(event.to_json())
-        return True
+        return await self._enqueue_text(ws, event.to_json(), wait=True)
 
     async def send_heartbeat(self, ws: WebSocket, run_id: str) -> bool:
         """Send a heartbeat event for *run_id* to *ws*."""
@@ -170,8 +225,7 @@ class WorkflowWSManager:
             workflow_name=workflow_name,
             data={"status": status, "terminal": terminal},
         )
-        await ws.send_text(event.to_json())
-        return True
+        return await self._enqueue_text(ws, event.to_json(), wait=True)
 
     async def active_subscriptions(self, run_id: str) -> int:
         """Return the number of active subscribers for *run_id*."""
@@ -238,6 +292,73 @@ class WorkflowWSManager:
                 subs.discard(ws)
                 if not subs:
                     del self._subscriptions[run_id]
+        self._connections.pop(ws, None)
+
+    async def _enqueue_text(self, ws: Any, payload: str, *, wait: bool = False) -> bool:
+        async with self._lock:
+            state = self._connections.get(ws)
+            if state is None or state.sender_task is None or state.sender_task.done():
+                state = None
+            delivered: asyncio.Future[bool] | None = None
+            if state is not None and wait:
+                delivered = asyncio.get_running_loop().create_future()
+            if state is not None:
+                state.queue.put_nowait(_PendingMessage(payload=payload, delivered=delivered))
+
+        if state is None:
+            if not wait:
+                return False
+            try:
+                await ws.send_text(payload)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return False
+            return True
+
+        if delivered is None:
+            return True
+
+        try:
+            return await delivered
+        except asyncio.CancelledError:
+            raise
+
+    async def _sender_loop(self, ws: Any, state: _ConnectionState) -> None:
+        try:
+            while True:
+                message = await state.queue.get()
+                try:
+                    await ws.send_text(message.payload)
+                except asyncio.CancelledError:
+                    if message.delivered is not None and not message.delivered.done():
+                        message.delivered.cancel()
+                    raise
+                except Exception:
+                    if message.delivered is not None and not message.delivered.done():
+                        message.delivered.set_result(False)
+                    logger.debug("ws_send_failed", exc_info=True)
+                    break
+                else:
+                    if message.delivered is not None and not message.delivered.done():
+                        message.delivered.set_result(True)
+                finally:
+                    state.queue.task_done()
+        except asyncio.CancelledError:
+            raise
+        finally:
+            while True:
+                try:
+                    pending = state.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if pending.delivered is not None and not pending.delivered.done():
+                    pending.delivered.set_result(False)
+                state.queue.task_done()
+            async with self._lock:
+                current_state = self._connections.get(ws)
+                if current_state is state:
+                    self._remove_ws_unlocked(ws)
 
 
 def _coerce_float(value: Any) -> float | None:

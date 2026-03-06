@@ -195,8 +195,15 @@ class TestWorkflowWSManager:
             )
         )
 
+        for _ in range(20):
+            if ws_one.send_text.await_count == 1:
+                break
+            await asyncio.sleep(0.01)
+
         ws_one.send_text.assert_awaited_once()
         ws_two.send_text.assert_not_awaited()
+        await manager.disconnect(ws_one)
+        await manager.disconnect(ws_two)
 
     @pytest.mark.asyncio
     async def test_build_sync_event_reflects_latest_snapshot(self) -> None:
@@ -228,6 +235,69 @@ class TestWorkflowWSManager:
         assert sync_event.data["status"] == "running"
         assert sync_event.data["step_statuses"] == {"step-a": "success"}
         assert sync_event.data["last_event_type"] == "step_completed"
+
+    @pytest.mark.asyncio
+    async def test_publish_event_preserves_order_without_waiting_on_slow_subscribers(self) -> None:
+        manager = WorkflowWSManager()
+        sent_payloads: list[str] = []
+
+        async def _slow_send(payload: str) -> None:
+            await asyncio.sleep(0.05)
+            sent_payloads.append(payload)
+
+        slow_ws = MagicMock()
+        slow_ws.send_text = AsyncMock(side_effect=_slow_send)
+
+        await manager.register_run("run-ordered", "ordered-workflow")
+        await manager.connect(slow_ws, "run-ordered")
+
+        first = WorkflowEvent(
+            event_type=WorkflowEventType.STEP_STARTED,
+            run_id="run-ordered",
+            workflow_name="ordered-workflow",
+            step_id="step-a",
+        )
+        second = WorkflowEvent(
+            event_type=WorkflowEventType.STEP_COMPLETED,
+            run_id="run-ordered",
+            workflow_name="ordered-workflow",
+            step_id="step-a",
+        )
+
+        started = asyncio.get_running_loop().time()
+        await manager.publish_event(first)
+        await manager.publish_event(second)
+        elapsed = asyncio.get_running_loop().time() - started
+
+        assert elapsed < 0.05
+
+        for _ in range(20):
+            if len(sent_payloads) == 2:
+                break
+            await asyncio.sleep(0.01)
+
+        assert [json.loads(payload)["type"] for payload in sent_payloads] == [
+            "step_started",
+            "step_completed",
+        ]
+        await manager.disconnect(slow_ws)
+
+    @pytest.mark.asyncio
+    async def test_run_access_is_tenant_scoped(self) -> None:
+        manager = WorkflowWSManager()
+        await manager.register_run("run-tenant", "tenant-workflow", tenant_id="tenant-a")
+
+        assert await manager.can_access_run(
+            "run-tenant",
+            tenant_id="tenant-a",
+            scopes=[],
+        ) is True
+        assert await manager.can_access_run(
+            "run-tenant",
+            tenant_id="tenant-b",
+            scopes=[],
+        ) is False
+        assert await manager.can_access_run("run-tenant", tenant_id="", scopes=["admin"]) is True
 
 
 class TestExecutorEventSink:
@@ -427,6 +497,11 @@ class TestWorkflowExecuteRoute:
         allow_finish.set()
         response = await execution
 
+        for _ in range(20):
+            if ws.send_text.await_count >= 3:
+                break
+            await asyncio.sleep(0.01)
+
         assert response["run_id"] == run_id
         live_payloads = [
             json.loads(call.args[0]) for call in ws.send_text.await_args_list[1:]
@@ -437,6 +512,7 @@ class TestWorkflowExecuteRoute:
         ]
         assert all(payload["run_id"] == run_id for payload in live_payloads)
         assert live_payloads[-1]["data"]["status"] == "success"
+        await manager.disconnect(ws)
 
     def test_repeated_execution_preserves_distinct_run_ids(
         self,
@@ -458,6 +534,40 @@ class TestWorkflowExecuteRoute:
         history = history_response.json()
         history_run_ids = {entry["run_id"] for entry in history}
         assert set(data["run_ids"]).issubset(history_run_ids)
+
+    def test_history_is_filtered_by_tenant(self, workflow_name: str) -> None:
+        tenant_a_token = create_access_token(
+            "tenant-a-user",
+            scopes=["workflows:read", "workflows:write", "workflows:execute"],
+            tenant_id="tenant-a",
+        )
+        tenant_b_token = create_access_token(
+            "tenant-b-user",
+            scopes=["workflows:read", "workflows:write", "workflows:execute"],
+            tenant_id="tenant-b",
+        )
+        tenant_a_client = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {tenant_a_token}"},
+        )
+        tenant_b_client = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {tenant_b_token}"},
+        )
+
+        exec_response = tenant_a_client.post(
+            f"/v1/workflows/{workflow_name}/execute",
+            json={"inputs": {"value": 42}},
+        )
+        assert exec_response.status_code == 200
+
+        tenant_a_history = tenant_a_client.get(f"/v1/workflows/{workflow_name}/history")
+        assert tenant_a_history.status_code == 200
+        assert len(tenant_a_history.json()) == 1
+
+        tenant_b_history = tenant_b_client.get(f"/v1/workflows/{workflow_name}/history")
+        assert tenant_b_history.status_code == 200
+        assert tenant_b_history.json() == []
 
 
 class TestWorkflowWSEndpoint:
@@ -517,6 +627,36 @@ class TestWorkflowWSEndpoint:
             assert message["type"] == "sync"
             assert message["run_id"] == run_id
             assert message["workflow_name"] == "wf-path"
+
+    def test_ws_endpoint_accepts_header_bearer_auth(self) -> None:
+        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
+        run_id = "run-header-auth"
+        _seed_run(manager, run_id, "wf-path")
+        _install_manager(manager)
+
+        token = create_access_token("ws-user", scopes=["workflows:read"])
+        client = TestClient(app)
+        with client.websocket_connect(
+            f"/v1/workflows/{run_id}/ws",
+            headers={"Authorization": f"Bearer {token}"},
+        ) as websocket:
+            assert websocket.receive_json()["type"] == "sync"
+
+    def test_ws_endpoint_rejects_cross_tenant_access(self) -> None:
+        manager = WorkflowWSManager()
+        asyncio.run(manager.register_run("run-tenant", "wf-auth", tenant_id="tenant-a"))
+        _install_manager(manager)
+
+        token = create_access_token(
+            "ws-user",
+            scopes=["workflows:read"],
+            tenant_id="tenant-b",
+        )
+        client = TestClient(app)
+        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
+            f"/v1/workflows/run-tenant/ws?token={token}"
+        ):
+            pass
 
     def test_ws_initial_sync_includes_snapshot(self) -> None:
         manager = WorkflowWSManager(heartbeat_interval_seconds=60)

@@ -117,6 +117,7 @@ def register_resources(
     server: Any,
     bridge: MCPServiceBridge,
     *,
+    before_list: Callable[[str], None] | None = None,
     before_read: Callable[[str], None] | None = None,
 ) -> None:
     """Register MCP resource handlers on a live MCP server."""
@@ -137,6 +138,7 @@ def register_resources(
                 mimeType=resource.get("mimeType", "application/json"),
             )
             for resource in await handle_list_resources(bridge)
+            if before_list is None or _allow_listed_identifier(before_list, resource["uri"])
         ]
 
     _register_handler(server.list_resources(), list_resources)
@@ -150,6 +152,8 @@ def register_resources(
                 mimeType=resource.get("mimeType", "application/json"),
             )
             for resource in await handle_list_resource_templates(bridge)
+            if before_list is None
+            or _allow_listed_identifier(before_list, resource["uriTemplate"])
         ]
 
     _register_handler(server.list_resource_templates(), list_resource_templates)
@@ -355,6 +359,14 @@ def _parse_csv_set(value: str) -> frozenset[str]:
 def _register_handler(decorator: Any, handler: _HandlerT) -> _HandlerT:
     typed_decorator = cast("Callable[[_HandlerT], _HandlerT]", decorator)
     return typed_decorator(handler)
+
+
+def _allow_listed_identifier(checker: Callable[[str], None], identifier: str) -> bool:
+    try:
+        checker(identifier)
+    except PermissionError:
+        return False
+    return True
 
 
 def _model_dump_dict(model: Any) -> dict[str, Any]:

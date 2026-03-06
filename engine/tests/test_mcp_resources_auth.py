@@ -68,6 +68,18 @@ class TestMCPAuthEnforcement:
 
         enforce_resource_scope(_make_server("component-security:read"), "agent33://policy-pack")
 
+    def test_unknown_tool_defaults_to_deny(self) -> None:
+        from agent33.mcp_server.auth import enforce_tool_scope
+
+        with pytest.raises(PermissionError, match="not allowed"):
+            enforce_tool_scope(_make_server("admin"), "unknown_tool")
+
+    def test_unknown_resource_defaults_to_deny(self) -> None:
+        from agent33.mcp_server.auth import enforce_resource_scope
+
+        with pytest.raises(PermissionError, match="not allowed"):
+            enforce_resource_scope(_make_server("admin"), "agent33://unknown/resource")
+
     def test_enforce_scope_requires_authenticated_request(self) -> None:
         from agent33.mcp_server.auth import enforce_tool_scope
 
@@ -128,6 +140,10 @@ class TestResourceReadHandlerAuth:
         from agent33.mcp_server.bridge import MCPServiceBridge
 
         server = _MockMCPServer()
+
+        def _before_read(uri: str) -> None:
+            raise PermissionError(f"blocked {uri}")
+
         with (
             patch.object(resources_mod, "_HAS_MCP", True),
             patch.object(
@@ -148,8 +164,42 @@ class TestResourceReadHandlerAuth:
                 MCPServiceBridge(
                     workflow_registry={"release": SimpleNamespace(model_dump=lambda **_: {})}
                 ),
-                before_read=lambda uri: (_ for _ in ()).throw(PermissionError(f"blocked {uri}")),
+                before_read=_before_read,
             )
 
         with pytest.raises(PermissionError, match="agent33://workflows/release"):
             await server.handlers["read_resource"]("agent33://workflows/release")
+
+    async def test_registered_resource_listing_filters_unauthorized_items(self) -> None:
+        from agent33.mcp_server import resources as resources_mod
+        from agent33.mcp_server.bridge import MCPServiceBridge
+
+        server = _MockMCPServer()
+
+        def _before_list(identifier: str) -> None:
+            if identifier == "agent33://policy-pack":
+                raise PermissionError("blocked")
+
+        with (
+            patch.object(resources_mod, "_HAS_MCP", True),
+            patch.object(
+                resources_mod,
+                "Resource",
+                side_effect=lambda **kwargs: _Resource(**kwargs),
+                create=True,
+            ),
+            patch.object(
+                resources_mod,
+                "ResourceTemplate",
+                side_effect=lambda **kwargs: _ResourceTemplate(**kwargs),
+                create=True,
+            ),
+        ):
+            resources_mod.register_resources(
+                server,
+                MCPServiceBridge(),
+                before_list=_before_list,
+            )
+
+        resources = await server.handlers["list_resources"]()
+        assert all(str(resource.uri) != "agent33://policy-pack" for resource in resources)

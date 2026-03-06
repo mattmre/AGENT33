@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import APIRouter
+from jwt import InvalidTokenError
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from agent33.security.auth import validate_api_key, verify_token
@@ -25,7 +26,7 @@ router = APIRouter(tags=["workflows"])
 
 @router.websocket("/v1/workflows/{run_id}/ws")
 async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
-    """Stream run-scoped workflow events for a single execution."""
+    """Stream run-scoped events for the execution identified by ``run_id``."""
     payload = await _authenticate_websocket(websocket)
     if payload is None:
         return
@@ -35,7 +36,11 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
         await websocket.close(code=4002, reason="WebSocket manager not available")
         return
 
-    if not await manager.has_run(run_id):
+    if not await manager.can_access_run(
+        run_id,
+        tenant_id=payload.tenant_id,
+        scopes=payload.scopes,
+    ):
         await websocket.close(code=4004, reason="Unknown run_id")
         return
 
@@ -50,6 +55,8 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
         if not await manager.send_sync(websocket, run_id):
             await websocket.close(code=4004, reason="Unknown run_id")
             return
+    except asyncio.CancelledError:
+        raise
     except Exception:
         await manager.disconnect(websocket)
         return
@@ -61,6 +68,8 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
         while True:
             raw = await websocket.receive_text()
             await _handle_client_message(websocket, manager, run_id, raw)
+    except asyncio.CancelledError:
+        raise
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -74,15 +83,19 @@ async def workflow_ws(websocket: WebSocket, run_id: str) -> None:
 
 
 async def _authenticate_websocket(websocket: WebSocket) -> TokenPayload | None:
-    """Authenticate the WebSocket request using query-string credentials."""
-    token = websocket.query_params.get("token")
-    api_key = websocket.query_params.get("api_key")
+    """Authenticate the WebSocket request.
+
+    Header-based credentials are preferred. Query-string transport remains available
+    for browser WebSocket clients that cannot set custom headers during the handshake.
+    """
+    token, api_key, source = _extract_websocket_credentials(websocket)
 
     payload = None
     if token:
         try:
             payload = verify_token(token)
-        except Exception:
+        except InvalidTokenError:
+            logger.debug("ws_token_invalid", source=source)
             payload = None
     elif api_key:
         payload = validate_api_key(api_key)
@@ -96,6 +109,34 @@ async def _authenticate_websocket(websocket: WebSocket) -> TokenPayload | None:
         return None
 
     return payload
+
+
+def _extract_websocket_credentials(websocket: WebSocket) -> tuple[str | None, str | None, str]:
+    authorization = websocket.headers.get("authorization", "")
+    header_token = authorization[7:] if authorization.startswith("Bearer ") else None
+    header_api_key = websocket.headers.get("x-api-key")
+    query_token = websocket.query_params.get("token")
+    query_api_key = websocket.query_params.get("api_key")
+
+    provided = [
+        credential
+        for credential in (header_token, header_api_key, query_token, query_api_key)
+        if credential
+    ]
+    if len(provided) > 1:
+        return None, None, "ambiguous"
+
+    if header_token:
+        return header_token, None, "header"
+    if header_api_key:
+        return None, header_api_key, "header"
+    if query_token:
+        logger.debug("ws_query_auth_used", transport="token")
+        return query_token, None, "query"
+    if query_api_key:
+        logger.debug("ws_query_auth_used", transport="api_key")
+        return None, query_api_key, "query"
+    return None, None, "missing"
 
 
 async def _handle_client_message(
