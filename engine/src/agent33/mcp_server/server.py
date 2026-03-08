@@ -31,7 +31,7 @@ try:
     _mcp_server_module = importlib.import_module("mcp.server")
     _mcp_types_module = importlib.import_module("mcp.types")
 except ImportError as exc:
-    logger.warning("mcp_sdk_import_failed", error=str(exc), exc_info=True)
+    logger.warning("mcp_sdk_import_failed: %s", exc, exc_info=True)
 else:  # pragma: no branch - optional dependency bootstrap
     Server = cast("type[Any] | None", getattr(_mcp_server_module, "Server", None))
     TextContent = cast("type[Any] | None", getattr(_mcp_types_module, "TextContent", None))
