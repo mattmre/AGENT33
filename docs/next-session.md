@@ -1,123 +1,123 @@
 # Next Session Briefing
 
-Last updated: 2026-03-06T12:00:00Z
+Last updated: 2026-03-06T17:23:44Z
 
-> **New:** All 8 Qwen-Agent adaptation phases (36-43) implemented and merged
-> in Session 55 (PRs #133–#140). 168 new tests added. Full regression: 2923 passed.
+> **New:** Session 57 prepared a fresh review stack: **PRs #145–#150**.
+> **PRs #141–#144** are still open on GitHub, but the intent is for the Session 57 stack to replace them if that newer queue is accepted.
 
 ## Current State
 
-- **Merge status**: All Session 55 PRs (`#111`–`#140`) merged to `main`. All Qwen-Agent adaptation phases complete.
-- **Open PRs**: None.
-- **Latest session**: Session 55.
-- **Validation posture**:
-  - Ruff check: clean (0 errors)
-  - Pytest: 2923 passed, 0 failures
-  - Frontend (vitest): 76 tests pass
-- **ARCH-AEP tracker**: 29/29 closed, 0 in-progress, 0 open.
-- **Production secrets test**: Fixed — explicitly passes default SecretStr values in test assertions.
+- **Latest session:** Session 57 (`docs/sessions/session-57-2026-03-06.md`)
+- **Main branch status:** `main` does not yet contain the Session 57 implementation stack; the active review queue is now **#145–#150**
+- **Session 56 carry-forward queue:** #141–#144 are still open on GitHub, but Session 57 prepared #145–#150 as the intended replacement path
+- **Docs handoff PR:** #151 refreshes this briefing, the Session 57 log, and the copied research briefs
+- **Validation posture:**
+  - Session 57 PRs are green on targeted validation for the touched files/surfaces
+  - Frontend lint/tests/build passed on the Wave 1 work
+  - Full-repo Ruff and Mypy remain noisy because of pre-existing unrelated issues, so the trustworthy merge signal is the targeted per-PR validation recorded in the session log
 
-## Session 55 Highlights
+## Active Open PRs
 
-### Phase 1 — PR Review & Merge
-- Reviewed all 11 open PRs (#111–#121), addressed 27 review comments (including 5 security-critical fixes).
-- Applied security fixes: multi-tenant IDOR on tool approvals (#120), reviewed_by spoof prevention (#120), RAG prompt injection sanitization (#121), broad exception narrowing (#118).
-- Resolved 8 merge conflicts across wave-based rebasing.
-- Merged all PRs in 4 dependency-safe waves with interim test runs.
+| PR | Base | Scope | Status |
+| --- | --- | --- | --- |
+| #145 | `main` | Wave 1 PR1: frontend DOM tests and improvements contract alignment | Ready for review/merge |
+| #146 | `main` | Wave 0 PR1: Phase 28 LLM security adapters | Ready for review/merge |
+| #147 | `main` | Wave 0 PR2: Phase 38 streaming tool-call assembly | Ready for review/merge |
+| #148 | `main` | Wave 0 PR3: Phase 25 workflow transport and Phase 43 MCP integration | Ready for review/merge |
+| #149 | `feat/session57-wave1-live-workflow-base` | Wave 1 PR2: workflow SSE fallback and live graph refresh | Needs restack/retarget after dependencies merge |
+| #150 | `feat/session57-wave1-pr2-phase25-sse-graph-refresh` | Phase 27 Stage 3A: canonical workflow templates and presets | Needs restack/retarget after #149 merges |
 
-### Phase 2 — Development Phase Completion
-- Researched all 10 remaining development phases (22, 25–28, 30–33, 35).
-- Phase 22 confirmed already complete; 9 phases implemented across 3 waves.
-- 9 PRs created and merged (#122–#130): ~5,600 lines added across 48 files.
-- 163 new tests added; final confidence gate: 2722 passed, 0 regressions.
-- Created 11 research documents, 2 new workflow templates.
+Auxiliary docs PR:
 
-### Phase 3 — Qwen-Agent Competitive Adaptation (Phases 36-43)
-- Deep research into QwenLM/Qwen-Agent repo, identified 7 adoption items.
-- Architected 8 new phases (36-43) with detailed specs in `docs/phases/qwen-adoption-phases.md`.
-- Implemented all 8 phases across 4 waves using fresh sub-agents per task.
-- 8 PRs created and merged (#133–#140): 168 new tests added.
-- Final regression: 2923 passed, 0 failures.
+- **#151** — Session 57 handoff refresh for `docs/next-session.md`, Session 57 session logging, and copied research briefs
 
-| Phase | Description | PR | Tests |
-|-------|-------------|-----|-------|
-| 36 | Text Tool Parser | #133 | 14 |
-| 37 | Multimodal Content | #135 | 34 |
-| 38 | Streaming Agent Loop | #137 | 17 |
-| 39 | Query Expansion | #134 | 14 |
-| 40 | Agent Archetypes | #136 | 16 |
-| 41 | GroupChat Action | #138 | 25 |
-| 42 | Jupyter Adapter | #139 | 28 |
-| 43 | MCP Server | #140 | 20 |
+## Superseded Session 56 PRs
 
-## Top Priorities
+These PRs are no longer the preferred implementation path and are expected to be closed or marked superseded if the Session 57 replacements are accepted:
 
-1. **Phase 25 Stage 3**: Real-time WebSocket integration for workflow status updates; SSE fallback for status graph.
-2. **Phase 26 Stage 3**: Improvement-cycle wizard UI; interactive plan-review/diff-review approval flows.
-3. **Phase 27 Stage 3**: `improvement-cycle` workflow template wiring into frontend; multi-step wizard UX.
-4. **Phase 28 — LLMGuard/Garak adapter completion**: Current stubs need real adapter integration for enterprise security scanning.
-5. **Frontend render/interaction tests**: Need `@testing-library/react` for component-level testing (current tests are unit/logic only).
-6. **Phase 25/26 documentation & walkthroughs**: User-facing docs for visual explainer and decision/review pages.
-7. **Phase 22 validation**: Already complete on `main` but may need integration verification against new Phase 25–27 surfaces.
-8. **SkillsBench integration**: Promote richer benchmark reporting and result artifacts beyond smoke runs.
-9. **A5/A6 integration**: Execute comparative scoring against persisted synthetic bundles.
-10. **Phase 30 Stage 3**: Production trace tuning.
-11. **Phase 31 Stage 3**: Production-scale backup/restore validation.
-12. **Phase 32 Stage 3**: Operationalization; cross-service tenant verification.
-13. **Phase 33 Stage 3**: Ecosystem distribution; marketplace integration.
-14. **Phase 35 Stage 3**: Voice daemon full implementation; policy tuning.
+- **#142 -> planned replacement: #146**
+- **#144 -> planned replacement: #147**
+- **#141 + #143 -> planned replacement: #148**
 
-## Remaining Work
+Next session should close or clearly mark **#141–#144** as superseded once the replacement queue is accepted.
 
-All development phases (1-43) are implemented. Remaining work is Stage 3 refinement:
+## Session 57 Highlights
 
-| Phase | Status on `main` | Remaining Stage 3 work |
+### Wave 0 carry-forward stabilization
+
+- Reworked and repackaged the Session 56 carry-forward branches into three clean, main-based PRs:
+  - **#146** — Phase 28 LLM security adapters
+  - **#147** — Phase 38 streaming/tool-call assembly
+  - **#148** — Phase 25 workflow transport plus Phase 43 MCP integration
+- Added targeted validation and reviewer-fix follow-up before packaging those PRs
+
+### Wave 1 workflow and frontend work
+
+- **#145** added the frontend DOM test foundation and aligned the improvements domain contract with the current backend
+- **#149** added authenticated workflow SSE fallback, live graph refresh wiring, and `WorkflowGraph` prop resync behavior
+- **#150** added canonical improvement-cycle workflow templates plus lightweight create/execute preset wiring as a Stage 3A slice, with the full wizard deferred
+
+### Session 57 research / handoff artifacts
+
+- `docs/research/session57-priority-orchestration-plan-2026-03-06.md`
+- `docs/research/session57-wave1-ux-implementation-brief.md`
+- `docs/research/session57-runtime-benchmark-implementation-brief.md`
+- `docs/research/session57-ops-hardening-implementation-brief.md`
+- `docs/sessions/session-57-2026-03-06.md`
+
+## Recommended Merge / Restack Order
+
+1. **Merge the main-based Session 57 PRs**
+   1. #145
+   2. #146
+   3. #147
+   4. #148
+2. **Restack or retarget #149 onto updated `main`**
+   - Re-run its targeted backend/frontend validation after the restack
+3. **Merge #149**
+4. **Restack or retarget #150 onto updated `main` or the merged #149 result**
+   - Re-run its targeted backend/frontend validation after the restack
+5. **Merge #150**
+6. **Close or mark #141–#144 as superseded**
+
+## Top Priorities After the Active PR Queue
+
+1. **Phase 26 Stage 3**
+   - improvement-cycle wizard UX
+   - interactive approval flows
+   - plan-review / diff-review approval surfaces
+2. **Phase 27 Stage 3B**
+   - extend the Stage 3A templates/presets from #150 into the fuller multi-step wizard experience
+3. **Phase 25/26 user documentation**
+   - live workflow updates
+   - approval/review UX
+   - preset/template operator guidance
+4. **Phase 22 extension validation**
+   - verify the newly merged workflow/live-update/improvement-cycle surfaces together
+5. **Runtime / benchmark backlog**
+   - Phase 38 Docker container kernels for Jupyter
+   - SkillsBench artifact/reporting enrichment
+   - A5/A6 comparative scoring on persisted synthetic bundles
+6. **Operational hardening backlog**
+   - Phase 30 trace tuning
+   - Phase 31 backup/restore validation
+   - Phase 32 cross-service tenant verification
+   - Phase 33 marketplace/distribution integration
+   - Phase 35 voice daemon and policy tuning
+
+## Remaining Work Snapshot
+
+All development phases (1-43) are implemented. Remaining work is late-phase refinement, verification, and hardening:
+
+| Area | Current state | Remaining work |
 | --- | --- | --- |
-| 22 | ✅ Complete | Validation against new Phase 25–27 surfaces |
-| 25 | Refinement merged (PR #128) | Real-time WebSocket; SSE status graph integration |
-| 26 | Refinement merged (PR #129) | Interactive approval flows; improvement-cycle wizard |
-| 27 | Refinement merged (PR #130) | Workflow template wiring; multi-step wizard UX |
-| 28 | Refinement merged (PR #127) | LLMGuard/Garak real adapters (currently stubs) |
-| 30 | Refinement merged (PR #122) | Production trace tuning |
-| 31 | Refinement merged (PR #123) | Production-scale backup/restore validation |
-| 32 | Refinement merged (PR #124) | Operationalization; cross-service tenant verification |
-| 33 | Refinement merged (PR #125) | Ecosystem distribution; marketplace integration |
-| 35 | Refinement merged (PR #126) | Voice daemon full implementation; policy tuning |
-| 36 | ✅ Complete (PR #133) | — |
-| 37 | ✅ Complete (PR #135) | — |
-| 38 | ✅ Complete (PR #137) | LLM token-by-token streaming (Phase 2) |
-| 39 | ✅ Complete (PR #134) | — |
-| 40 | ✅ Complete (PR #136) | — |
-| 41 | ✅ Complete (PR #138) | — |
-| 42 | ✅ Complete (PR #139) | Docker container kernels (Phase 2) |
-| 43 | ✅ Complete (PR #140) | MCP resources, auth module |
-
-## Qwen-Agent Competitive Adaptation — COMPLETE
-
-Full analysis: [`docs/research/session55-qwen-agent-analysis.md`](research/session55-qwen-agent-analysis.md)
-Phase specs: [`docs/phases/qwen-adoption-phases.md`](phases/qwen-adoption-phases.md)
-
-**All 7 adoption items implemented** across Phases 36-43 (PRs #133-#140, 168 tests).
-
-| # | Item | Phase | PR | Status |
-|---|------|-------|-----|--------|
-| A1 | Streaming Agent Loop | 38 | #137 | ✅ Complete |
-| A2 | Multimodal ContentBlock | 37 | #135 | ✅ Complete |
-| A3 | Text-Based Tool Parsing | 36 | #133 | ✅ Complete |
-| B1 | GroupChat Action | 41 | #138 | ✅ Complete |
-| B2 | Agent Archetypes | 40 | #136 | ✅ Complete |
-| B3 | LLM Query Expansion | 39 | #134 | ✅ Complete |
-| C1 | Jupyter Kernel Adapter | 42 | #139 | ✅ Complete |
-| — | MCP Server | 43 | #140 | ✅ Complete |
-
-### Patterns to Adopt (Non-Backlog)
-
-These patterns from Qwen-Agent are worth incorporating as design conventions:
-
-- **Snapshot streaming model**: Each yield contains the full response so far (not deltas). Simplifies consumer code — adopt for agent loop; use delta model only at the SSE API layer.
-- **Agent-as-Tool bridge**: Register agents as tools in `ToolRegistry` for dynamic composition (complements existing `invoke-agent` workflow action).
-- **Memory-as-Agent**: Make progressive recall available as a "memory agent" that participates in conversations, not only as a context injection mechanism.
-- **`from_dict()` factory**: Add runtime agent creation from dicts without requiring JSON definition files on disk.
+| Phase 25 | Run-scoped workflow transport ready in #148; SSE fallback ready in #149 | Merge stack and validate combined UX on `main` |
+| Phase 26 | Backend primitives already exist | Wizard UX and approval/review orchestration |
+| Phase 27 | Stage 3A ready in #150 | Full Stage 3B wizard experience |
+| Phase 28 | Ready in #146 | Merge and verify on `main` |
+| Phase 38 | Streaming assembly ready in #147 | Docker container kernels |
+| Runtime / benchmark | Research brief written | SkillsBench reporting + A5/A6 comparative scoring |
+| Operational hardening | Research brief written | Phases 30/31/32/33/35 follow-through |
 
 ## Startup Checklist
 
@@ -125,42 +125,38 @@ These patterns from Qwen-Agent are worth incorporating as design conventions:
 git checkout main
 git pull --ff-only
 gh pr list --state open
-
-cd engine
-python -m ruff check src tests
-python -m ruff format --check src tests
-python -m mypy src --config-file pyproject.toml
-python -m pytest tests/ -q
-
-cd ../frontend
-npx vitest run
 ```
+
+- Confirm the active queue is still **#145–#150**
+- Confirm **#141–#144** are still stale/superseded before spending review time on them
+- Read:
+  - `docs/sessions/session-57-2026-03-06.md`
+  - `docs/research/session57-priority-orchestration-plan-2026-03-06.md`
+  - `docs/research/session57-wave1-ux-implementation-brief.md`
+  - `docs/research/session57-runtime-benchmark-implementation-brief.md`
+  - `docs/research/session57-ops-hardening-implementation-brief.md`
+- Merge the main-based PRs first, then restack **#149**, then restack **#150**
+- Use the targeted validation recorded in Session 57 / the PRs instead of assuming full-repo Ruff or Mypy are clean
+- Refresh `docs/next-session.md` again after the stack materially changes
 
 ## Key Paths
 
 | Purpose | Path |
 | --- | --- |
-| Session 55 log | `docs/sessions/session-55-2026-03-05.md` |
-| Session 54 log | `docs/sessions/session-54-2026-03-05.md` |
-| Session 53 log | `docs/sessions/session-53-2026-03-05.md` |
-| Phase 25 research | `docs/research/session55-phase25-status-graph-design.md` |
-| Phase 26 research | `docs/research/session55-phase26-html-preview-design.md` |
-| Phase 27 research | `docs/research/session55-phase27-hub-alignment.md` |
-| Phase 28 research | `docs/research/session55-phase28-persistence-architecture.md` |
-| Phase 30 research | `docs/research/session55-phase30-api-policy-fixtures.md` |
-| Phase 31 research | `docs/research/session55-phase31-production-tuning.md` |
-| Phase 32 research | `docs/research/session55-phase32-connector-boundary-audit.md` |
-| Phase 33 research | `docs/research/session55-phase33-provenance-architecture.md` |
-| Phase 35 research | `docs/research/session55-phase35-policy-calibration.md` |
-| Phase 30 acceptance research | `docs/research/session53-phase30-outcome-acceptance.md` |
-| Phase 31 trend research | `docs/research/session53-phase31-trend-analytics.md` |
-| Phase 31 calibration research | `docs/research/session53-phase31-threshold-tuning.md` |
-| A5 persistence research | `docs/research/session53-a5-bundle-persistence.md` |
-| Durable state research | `docs/research/session54-delta-durable-state-architecture-2026-03-05.md` |
-| HITL approvals research | `docs/research/session54-delta-hitl-approvals-architecture-2026-03-05.md` |
-| RAG diagnostics research | `docs/research/session54-delta-modular-retrieval-architecture-2026-03-05.md` |
-| Orchestration landscape | `docs/research/session54-agent-orchestration-top30-landscape-2026-03-05.md` |
-| Qwen-Agent analysis | `docs/research/session55-qwen-agent-analysis.md` |
-| Session 52 roadmap research | `docs/research/session52-priority-and-phase-roadmap.md` |
-| ARCH-AEP tracker | `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md` |
+| Session 57 log | `docs/sessions/session-57-2026-03-06.md` |
+| Session 57 orchestration plan | `docs/research/session57-priority-orchestration-plan-2026-03-06.md` |
+| Session 57 UX brief | `docs/research/session57-wave1-ux-implementation-brief.md` |
+| Session 57 runtime / benchmark brief | `docs/research/session57-runtime-benchmark-implementation-brief.md` |
+| Session 57 ops hardening brief | `docs/research/session57-ops-hardening-implementation-brief.md` |
 | Phase index | `docs/phases/README.md` |
+| Improvements API | `engine/src/agent33/api/routes/improvements.py` |
+| Workflow routes | `engine/src/agent33/api/routes/workflows.py` |
+| Visualization routes | `engine/src/agent33/api/routes/visualizations.py` |
+| Existing SSE pattern reference | `engine/src/agent33/api/routes/operations_hub.py` |
+| Frontend workflow entry point | `frontend/src/components/OperationCard.tsx` |
+| Frontend graph component | `frontend/src/components/WorkflowGraph.tsx` |
+
+## Notes
+
+- Keep `docs/next-session.md` aligned to the **current review stack**, not the last merged state
+- Avoid linking branch-only design docs here until those files land on the checked-out branch or merge to `main`
