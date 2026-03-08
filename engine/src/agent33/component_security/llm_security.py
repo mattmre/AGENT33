@@ -180,6 +180,15 @@ class LLMSecurityScanner:
     per OWASP MCP Top 10 guidelines.
     """
 
+    def __init__(
+        self,
+        *,
+        llm_guard_adapter: LLMGuardAdapter | None = None,
+        garak_adapter: GarakAdapter | None = None,
+    ) -> None:
+        self._llm_guard_adapter = llm_guard_adapter or LLMGuardAdapter()
+        self._garak_adapter = garak_adapter or GarakAdapter()
+
     def scan_prompt_safety(
         self,
         text: str,
@@ -201,7 +210,9 @@ class LLMSecurityScanner:
             List of SecurityFindings for detected threats.
         """
         result = scan_input(text)
-        return self._scan_result_to_findings(result, run_id=run_id, source=source, text=text)
+        findings = self._scan_result_to_findings(result, run_id=run_id, source=source, text=text)
+        findings.extend(self._llm_guard_adapter.scan_input(text, run_id=run_id))
+        return findings
 
     def scan_nested_inputs(
         self,
@@ -223,9 +234,11 @@ class LLMSecurityScanner:
             List of SecurityFindings for detected threats.
         """
         result = scan_inputs_recursive(data)
-        return self._scan_result_to_findings(
+        findings = self._scan_result_to_findings(
             result, run_id=run_id, source=source, text=str(data)[:200]
         )
+        findings.extend(self._llm_guard_adapter.scan_input(str(data), run_id=run_id))
+        return findings
 
     def scan_tool_definitions(
         self,
@@ -364,6 +377,17 @@ class LLMSecurityScanner:
                 )
             )
         return findings
+
+    def scan_model_behavior(
+        self,
+        model_name: str,
+        *,
+        run_id: str = "",
+    ) -> list[SecurityFinding]:
+        """Run optional model-probe checks when a target model is known."""
+        if not model_name:
+            return []
+        return self._garak_adapter.run_probes(model_name, run_id=run_id)
 
     @staticmethod
     def _threat_severity(threat: str) -> FindingSeverity:
