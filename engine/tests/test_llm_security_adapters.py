@@ -146,3 +146,42 @@ def test_garak_boolean_results_are_handled_explicitly() -> None:
             "description": "Garak probe 'promptinject' failed",
         }
     ]
+
+
+def test_llm_guard_bootstrap_is_lazy(monkeypatch) -> None:
+    seen: list[str] = []
+
+    def _fake_import(name: str):  # noqa: ANN001
+        seen.append(name)
+        raise ImportError(name)
+
+    monkeypatch.setattr("agent33.component_security.llm_security._LLMGUARD_BOOTSTRAPPED", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._HAS_LLMGUARD", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._llmguard_scan_prompt", None)
+    monkeypatch.setattr("agent33.component_security.llm_security._llmguard_scan_output", None)
+    monkeypatch.setattr(
+        "agent33.component_security.llm_security.importlib.import_module", _fake_import
+    )
+
+    assert seen == []
+    assert LLMGuardAdapter.is_available() is False
+    assert seen == ["llm_guard"]
+
+
+def test_garak_bootstrap_is_lazy(monkeypatch) -> None:
+    seen: list[str] = []
+
+    def _fake_import(name: str):  # noqa: ANN001
+        seen.append(name)
+        raise ImportError(name)
+
+    monkeypatch.setattr("agent33.component_security.llm_security._GARAK_BOOTSTRAPPED", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._HAS_GARAK", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._GARAK_MODULE", None)
+    monkeypatch.setattr(
+        "agent33.component_security.llm_security.importlib.import_module", _fake_import
+    )
+
+    assert seen == []
+    assert GarakAdapter.is_available() is False
+    assert seen == ["garak"]

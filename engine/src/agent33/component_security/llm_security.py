@@ -23,6 +23,10 @@ logger = structlog.get_logger()
 _LOGGED_DEBUG_EVENTS: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
 
 _LLMGuardScan = Callable[..., Any]
+_LLMGUARD_BOOTSTRAPPED = False
+_GARAK_BOOTSTRAPPED = False
+_HAS_LLMGUARD = False
+_HAS_GARAK = False
 _llmguard_scan_prompt: _LLMGuardScan | None = None
 _llmguard_scan_output: _LLMGuardScan | None = None
 PromptInjection: type[Any] | None = None
@@ -30,40 +34,8 @@ Toxicity: type[Any] | None = None
 InvisibleText: type[Any] | None = None
 Sensitive: type[Any] | None = None
 NoRefusal: type[Any] | None = None
-try:
-    _llmguard_module = importlib.import_module("llm_guard")
-    _llmguard_input_scanners = importlib.import_module("llm_guard.input_scanners")
-    _llmguard_output_scanners = importlib.import_module("llm_guard.output_scanners")
-except ImportError:  # pragma: no cover - optional dependency
-    _HAS_LLMGUARD = False
-else:  # pragma: no branch - small optional-dependency bootstrap
-    _llmguard_scan_prompt = cast(
-        "_LLMGuardScan | None",
-        getattr(_llmguard_module, "scan_prompt", None),
-    )
-    _llmguard_scan_output = cast(
-        "_LLMGuardScan | None",
-        getattr(_llmguard_module, "scan_output", None),
-    )
-    PromptInjection = cast(
-        "type[Any] | None",
-        getattr(_llmguard_input_scanners, "PromptInjection", None),
-    )
-    Toxicity = cast("type[Any] | None", getattr(_llmguard_input_scanners, "Toxicity", None))
-    InvisibleText = cast(
-        "type[Any] | None",
-        getattr(_llmguard_input_scanners, "InvisibleText", None),
-    )
-    Sensitive = cast("type[Any] | None", getattr(_llmguard_output_scanners, "Sensitive", None))
-    NoRefusal = cast("type[Any] | None", getattr(_llmguard_output_scanners, "NoRefusal", None))
-    _HAS_LLMGUARD = True
 
 _GARAK_MODULE = None
-try:
-    _GARAK_MODULE = importlib.import_module("garak")
-    _HAS_GARAK = True
-except ImportError:  # pragma: no cover - optional dependency
-    _HAS_GARAK = False
 
 # OWASP MCP Top 10 category mapping
 # See: https://owasp.org/www-project-top-10-for-large-language-model-applications/
@@ -111,6 +83,75 @@ def _log_debug_once(event: str, **fields: object) -> None:
     logger.debug(event, **fields)
 
 
+def _ensure_llm_guard_loaded() -> None:
+    global _LLMGUARD_BOOTSTRAPPED, _HAS_LLMGUARD
+    global _llmguard_scan_prompt, _llmguard_scan_output
+    global PromptInjection, Toxicity, InvisibleText, Sensitive, NoRefusal
+    if _LLMGUARD_BOOTSTRAPPED:
+        return
+    if (
+        _HAS_LLMGUARD
+        or _llmguard_scan_prompt is not None
+        or _llmguard_scan_output is not None
+        or any(
+            scanner is not None
+            for scanner in (
+                PromptInjection,
+                Toxicity,
+                InvisibleText,
+                Sensitive,
+                NoRefusal,
+            )
+        )
+    ):
+        _LLMGUARD_BOOTSTRAPPED = True
+        return
+    _LLMGUARD_BOOTSTRAPPED = True
+    try:
+        llmguard_module = importlib.import_module("llm_guard")
+        input_scanners = importlib.import_module("llm_guard.input_scanners")
+        output_scanners = importlib.import_module("llm_guard.output_scanners")
+    except ImportError:  # pragma: no cover - optional dependency
+        _HAS_LLMGUARD = False
+        return
+    _llmguard_scan_prompt = cast(
+        "_LLMGuardScan | None",
+        getattr(llmguard_module, "scan_prompt", None),
+    )
+    _llmguard_scan_output = cast(
+        "_LLMGuardScan | None",
+        getattr(llmguard_module, "scan_output", None),
+    )
+    PromptInjection = cast(
+        "type[Any] | None",
+        getattr(input_scanners, "PromptInjection", None),
+    )
+    Toxicity = cast("type[Any] | None", getattr(input_scanners, "Toxicity", None))
+    InvisibleText = cast(
+        "type[Any] | None",
+        getattr(input_scanners, "InvisibleText", None),
+    )
+    Sensitive = cast("type[Any] | None", getattr(output_scanners, "Sensitive", None))
+    NoRefusal = cast("type[Any] | None", getattr(output_scanners, "NoRefusal", None))
+    _HAS_LLMGUARD = True
+
+
+def _ensure_garak_loaded() -> None:
+    global _GARAK_BOOTSTRAPPED, _GARAK_MODULE, _HAS_GARAK
+    if _GARAK_BOOTSTRAPPED:
+        return
+    if _HAS_GARAK or _GARAK_MODULE is not None:
+        _GARAK_BOOTSTRAPPED = True
+        return
+    _GARAK_BOOTSTRAPPED = True
+    try:
+        _GARAK_MODULE = importlib.import_module("garak")
+    except ImportError:  # pragma: no cover - optional dependency
+        _HAS_GARAK = False
+        return
+    _HAS_GARAK = True
+
+
 def _is_numeric_score(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -142,6 +183,7 @@ def _score_to_severity(score: float) -> FindingSeverity:
 
 
 def _llm_guard_input_defaults_available() -> bool:
+    _ensure_llm_guard_loaded()
     return (
         _HAS_LLMGUARD
         and callable(_llmguard_scan_prompt)
@@ -152,6 +194,7 @@ def _llm_guard_input_defaults_available() -> bool:
 
 
 def _llm_guard_output_defaults_available() -> bool:
+    _ensure_llm_guard_loaded()
     return (
         _HAS_LLMGUARD
         and callable(_llmguard_scan_output)
@@ -161,14 +204,17 @@ def _llm_guard_output_defaults_available() -> bool:
 
 
 def _llm_guard_input_runtime_available() -> bool:
+    _ensure_llm_guard_loaded()
     return _HAS_LLMGUARD and callable(_llmguard_scan_prompt)
 
 
 def _llm_guard_output_runtime_available() -> bool:
+    _ensure_llm_guard_loaded()
     return _HAS_LLMGUARD and callable(_llmguard_scan_output)
 
 
 def _garak_runtime_available() -> bool:
+    _ensure_garak_loaded()
     return _HAS_GARAK and callable(getattr(_GARAK_MODULE, "run_probe", None))
 
 
