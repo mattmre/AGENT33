@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from jwt import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse, Response
 
@@ -62,7 +63,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = auth_header[7:]
             try:
                 payload = verify_token(token)
-            except Exception:
+            except InvalidTokenError:
+                logger.debug("http_token_invalid path=%s", path)
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Invalid or expired token"},

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette import status
 from starlette.responses import StreamingResponse
+
+from agent33.security.permissions import require_scope
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -15,30 +19,75 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/mcp", tags=["mcp-server"])
 
-# Module-level service references, wired during lifespan.
-_bridge: Any = None
-_mcp_server: Any = None
+
+class _SSEBridgeStream:
+    """Async iterator that runs the MCP SSE bridge and yields no body chunks."""
+
+    def __init__(self, request: Request, transport: Any, mcp_server: Any) -> None:
+        self._request = request
+        self._transport = transport
+        self._mcp_server = mcp_server
+        self._done = False
+
+    def __aiter__(self) -> _SSEBridgeStream:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._done:
+            raise StopAsyncIteration
+        self._done = True
+        try:
+            send = _get_request_send(self._request)
+            async with self._transport.connect_sse(
+                self._request.scope,
+                self._request.receive,
+                send,
+            ) as (read_stream, write_stream):
+                await self._mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    self._mcp_server.create_initialization_options(),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MCP SSE stream error")
+            raise
+        raise StopAsyncIteration
 
 
-def set_mcp_services(bridge: Any, server: Any) -> None:
-    """Wire MCP services from lifespan."""
-    global _bridge, _mcp_server  # noqa: PLW0603
-    _bridge = bridge
-    _mcp_server = server
+def require_authenticated_user(request: Request) -> Any:
+    """Ensure the current request is authenticated."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return user
 
 
-@router.get("/sse")
+def _get_request_send(request: Request) -> Any:
+    send = getattr(request, "_send", None)
+    if send is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="MCP transport send channel unavailable",
+        )
+    return send
+
+
+@router.get("/sse", dependencies=[Depends(require_authenticated_user)])
 async def mcp_sse(request: Request) -> StreamingResponse:
-    """SSE endpoint for MCP protocol.
+    """SSE endpoint for MCP protocol."""
+    mcp_server = getattr(request.app.state, "mcp_server", None)
+    transport = getattr(request.app.state, "mcp_transport", None)
 
-    When the MCP SDK is available and configured, this provides
-    the SSE transport. Otherwise returns a stub stream.
-    """
-    if _mcp_server is None:
-        # Stub: emit endpoint info and close
+    if mcp_server is None or transport is None:
+
         async def stub_stream() -> AsyncGenerator[str, None]:
             yield "event: endpoint\ndata: /v1/mcp/messages\n\n"
-            yield "event: status\ndata: MCP SDK not installed\n\n"
+            yield "event: status\ndata: MCP transport unavailable\n\n"
 
         return StreamingResponse(
             stub_stream(),
@@ -46,39 +95,14 @@ async def mcp_sse(request: Request) -> StreamingResponse:
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
-    # Real SSE transport (when MCP SDK is available)
-    try:
-        from mcp.server.sse import SseServerTransport
-
-        transport = SseServerTransport("/v1/mcp/messages")
-        # Store transport for message endpoint
-        request.app.state.mcp_transport = transport
-
-        async def sse_stream() -> AsyncGenerator[str, None]:
-            async with transport.connect_sse(
-                request.scope,
-                request.receive,
-                request._send,  # type: ignore[attr-defined]
-            ) as (read_stream, write_stream):
-                await _mcp_server.run(
-                    read_stream,
-                    write_stream,
-                    _mcp_server.create_initialization_options(),
-                )
-
-        return StreamingResponse(
-            sse_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
-        )
-    except ImportError:
-        raise HTTPException(501, "MCP SDK not installed") from None
-    except Exception as exc:
-        logger.error("MCP SSE error: %s", exc)
-        raise HTTPException(500, f"MCP SSE error: {exc}") from exc
+    return StreamingResponse(
+        _SSEBridgeStream(request, transport, mcp_server),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
-@router.post("/messages")
+@router.post("/messages", dependencies=[Depends(require_authenticated_user)])
 async def mcp_messages(request: Request) -> dict[str, Any]:
     """Handle MCP protocol messages."""
     transport = getattr(request.app.state, "mcp_transport", None)
@@ -90,25 +114,34 @@ async def mcp_messages(request: Request) -> dict[str, Any]:
         await transport.handle_post_message(
             request.scope,
             request.receive,
-            request._send,  # type: ignore[attr-defined]
+            _get_request_send(request),
             body,
         )
         return {"status": "processed"}
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
-        logger.error("MCP message error: %s", exc)
-        return {"status": "error", "detail": str(exc)}
+        logger.exception("MCP message error")
+        raise HTTPException(500, f"MCP message error: {exc}") from exc
 
 
-@router.get("/status")
-async def mcp_status() -> dict[str, Any]:
+@router.get("/status", dependencies=[require_scope("agents:read")])
+async def mcp_status(request: Request) -> dict[str, Any]:
     """MCP server status."""
-    if _bridge is None:
+    bridge = getattr(request.app.state, "mcp_bridge", None)
+    mcp_server = getattr(request.app.state, "mcp_server", None)
+    transport = getattr(request.app.state, "mcp_transport", None)
+
+    if bridge is None:
         return {
             "available": False,
-            "mcp_sdk_installed": _mcp_server is not None,
+            "mcp_sdk_installed": mcp_server is not None,
+            "transport_available": transport is not None,
         }
+
     return {
-        "available": True,
-        "mcp_sdk_installed": _mcp_server is not None,
-        **_bridge.get_system_status(),
+        "available": mcp_server is not None and transport is not None,
+        "mcp_sdk_installed": mcp_server is not None,
+        "transport_available": transport is not None,
+        **bridge.get_system_status(),
     }

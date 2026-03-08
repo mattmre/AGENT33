@@ -38,6 +38,26 @@ def reader_client() -> TestClient:
 
 
 @pytest.fixture
+def tenant_a_reader_client() -> TestClient:
+    token = create_access_token(
+        "tenant-a-reader",
+        scopes=["workflows:read"],
+        tenant_id="tenant-a",
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
+def tenant_b_reader_client() -> TestClient:
+    token = create_access_token(
+        "tenant-b-reader",
+        scopes=["workflows:read"],
+        tenant_id="tenant-b",
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
 def writer_client() -> TestClient:
     """Client with write scope."""
     token = create_access_token(
@@ -389,3 +409,37 @@ class TestWorkflowExecutionIntegration:
         resp2 = writer_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         data2 = resp2.json()
         assert all(n["status"] == "success" for n in data2["nodes"])
+
+    def test_status_overlay_is_filtered_by_tenant(
+        self,
+        simple_workflow: str,
+        tenant_a_reader_client: TestClient,
+        tenant_b_reader_client: TestClient,
+    ) -> None:
+        writer_token = create_access_token(
+            "tenant-a-writer",
+            scopes=["workflows:read", "workflows:write", "workflows:execute"],
+            tenant_id="tenant-a",
+        )
+        tenant_a_writer = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {writer_token}"},
+        )
+
+        exec_resp = tenant_a_writer.post(
+            f"/v1/workflows/{simple_workflow}/execute",
+            json={"inputs": {"value": 42}},
+        )
+        assert exec_resp.status_code == 200
+
+        tenant_a_graph = tenant_a_reader_client.get(
+            f"/v1/visualizations/workflows/{simple_workflow}/graph"
+        )
+        assert tenant_a_graph.status_code == 200
+        assert all(node["status"] == "success" for node in tenant_a_graph.json()["nodes"])
+
+        tenant_b_graph = tenant_b_reader_client.get(
+            f"/v1/visualizations/workflows/{simple_workflow}/graph"
+        )
+        assert tenant_b_graph.status_code == 200
+        assert all(node["status"] is None for node in tenant_b_graph.json()["nodes"])

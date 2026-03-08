@@ -1,10 +1,22 @@
-"""MCP server setup and tool registration."""
+"""MCP server setup and handler registration."""
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+from agent33.mcp_server.auth import (
+    enforce_registry_tool_access,
+    enforce_resource_scope,
+    enforce_tool_scope,
+    filter_allowed_tools,
+    get_server_request,
+)
+from agent33.mcp_server.resources import register_resources
+from agent33.tools.base import ToolContext
 
 if TYPE_CHECKING:
     from agent33.mcp_server.bridge import MCPServiceBridge
@@ -12,113 +24,134 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HAS_MCP = False
+Server: type[Any] | None = None
+TextContent: type[Any] | None = None
+Tool: type[Any] | None = None
 try:
-    from mcp.server import Server
-    from mcp.types import TextContent, Tool
+    _mcp_server_module = importlib.import_module("mcp.server")
+    _mcp_types_module = importlib.import_module("mcp.types")
+except ImportError as exc:
+    logger.warning("mcp_sdk_import_failed: %s", exc, exc_info=True)
+else:  # pragma: no branch - optional dependency bootstrap
+    Server = cast("type[Any] | None", getattr(_mcp_server_module, "Server", None))
+    TextContent = cast("type[Any] | None", getattr(_mcp_types_module, "TextContent", None))
+    Tool = cast("type[Any] | None", getattr(_mcp_types_module, "Tool", None))
+    _HAS_MCP = Server is not None and TextContent is not None and Tool is not None
 
-    _HAS_MCP = True
-except ImportError:
-    pass
+_HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
+_MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "list_agents",
+        "description": "List all registered agents",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "invoke_agent",
+        "description": "Invoke an agent with a message",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "Name of the agent",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Message to send",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Model override (optional)",
+                },
+            },
+            "required": ["agent_name", "message"],
+        },
+    },
+    {
+        "name": "search_memory",
+        "description": "Search the memory/knowledge base",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Number of results",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_tools",
+        "description": "List registered tools",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "execute_tool",
+        "description": "Execute a registered tool",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Tool name",
+                },
+                "arguments": {
+                    "type": "object",
+                    "description": "Tool arguments",
+                },
+            },
+            "required": ["tool_name"],
+        },
+    },
+    {
+        "name": "list_skills",
+        "description": "List registered skills",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_system_status",
+        "description": "Get AGENT-33 system status",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+)
 
 
 def create_mcp_server(bridge: MCPServiceBridge) -> Any:
-    """Create and configure the MCP server with tool handlers.
-
-    Returns the MCP Server instance, or ``None`` if mcp SDK not installed.
-    """
+    """Create and configure the MCP server with tool and resource handlers."""
     if not _HAS_MCP:
         logger.warning("MCP SDK not installed, MCP server disabled")
         return None
 
-    server = Server("agent33-core")
+    server_cls = Server
+    tool_cls = Tool
+    text_content_cls = TextContent
+    if server_cls is None or tool_cls is None or text_content_cls is None:
+        logger.warning("MCP SDK classes unavailable, MCP server disabled")
+        return None
 
-    @server.list_tools()  # type: ignore[misc]
-    async def list_tools() -> list[Tool]:
-        return [
-            Tool(
-                name="list_agents",
-                description="List all registered agents",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            Tool(
-                name="invoke_agent",
-                description="Invoke an agent with a message",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {
-                            "type": "string",
-                            "description": "Name of the agent",
-                        },
-                        "message": {
-                            "type": "string",
-                            "description": "Message to send",
-                        },
-                        "model": {
-                            "type": "string",
-                            "description": "Model override (optional)",
-                        },
-                    },
-                    "required": ["agent_name", "message"],
-                },
-            ),
-            Tool(
-                name="search_memory",
-                description="Search the memory/knowledge base",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query",
-                        },
-                        "top_k": {
-                            "type": "integer",
-                            "description": "Number of results",
-                            "default": 5,
-                        },
-                    },
-                    "required": ["query"],
-                },
-            ),
-            Tool(
-                name="list_tools",
-                description="List registered tools",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            Tool(
-                name="execute_tool",
-                description="Execute a registered tool",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "tool_name": {
-                            "type": "string",
-                            "description": "Tool name",
-                        },
-                        "arguments": {
-                            "type": "object",
-                            "description": "Tool arguments",
-                        },
-                    },
-                    "required": ["tool_name"],
-                },
-            ),
-            Tool(
-                name="list_skills",
-                description="List registered skills",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            Tool(
-                name="get_system_status",
-                description="Get AGENT-33 system status",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-        ]
+    server = server_cls("agent33-core")
 
-    @server.call_tool()  # type: ignore[misc]
-    async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> list[TextContent]:
+    async def list_tools() -> list[Any]:
+        allowed = set(
+            filter_allowed_tools(
+                server,
+                (tool["name"] for tool in _MCP_TOOL_DEFINITIONS),
+            )
+        )
+        return [tool_cls(**tool) for tool in _MCP_TOOL_DEFINITIONS if tool["name"] in allowed]
+
+    _register_handler(server.list_tools(), list_tools)
+
+    async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> list[Any]:
         from agent33.mcp_server import tools as mcp_tools
+
+        enforce_tool_scope(server, name)
 
         args = arguments or {}
         result: Any
@@ -141,18 +174,47 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
         elif name == "list_tools":
             result = await mcp_tools.handle_list_tools(bridge)
         elif name == "execute_tool":
+            enforce_registry_tool_access(server, bridge, str(args.get("tool_name", "")))
             result = await mcp_tools.handle_execute_tool(
                 bridge,
                 tool_name=args.get("tool_name", ""),
                 arguments=args.get("arguments"),
+                context=_build_tool_context(server),
             )
         elif name == "list_skills":
             result = await mcp_tools.handle_list_skills(bridge)
         elif name == "get_system_status":
             result = await mcp_tools.handle_get_system_status(bridge)
         else:
-            result = {"error": f"Unknown tool: {name}"}
+            raise PermissionError(f"MCP tool '{name}' is not allowed")
 
-        return [TextContent(type="text", text=json.dumps(result, default=str))]
+        return [text_content_cls(type="text", text=json.dumps(result, default=str))]
+
+    _register_handler(server.call_tool(), call_tool)
+
+    register_resources(
+        server,
+        bridge,
+        before_list=lambda uri: enforce_resource_scope(server, uri),
+        before_read=lambda uri: enforce_resource_scope(server, uri),
+    )
 
     return server
+
+
+def _build_tool_context(server: Any) -> ToolContext:
+    request = get_server_request(server)
+    user = getattr(getattr(request, "state", None), "user", None)
+    if user is None:
+        return ToolContext()
+
+    return ToolContext(
+        user_scopes=list(getattr(user, "scopes", [])),
+        requested_by=getattr(user, "sub", ""),
+        tenant_id=getattr(user, "tenant_id", ""),
+    )
+
+
+def _register_handler(decorator: Any, handler: _HandlerT) -> _HandlerT:
+    typed_decorator = cast("Callable[[_HandlerT], _HandlerT]", decorator)
+    return typed_decorator(handler)
