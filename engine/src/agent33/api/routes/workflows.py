@@ -566,7 +566,7 @@ async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None)
 
 async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
     """Return ``True`` when *run_id* is already present in tracked workflow state."""
-    if any(entry["run_id"] == run_id for entry in _execution_history):
+    if any(entry.get("run_id") == run_id for entry in _execution_history):
         return True
     return ws_manager is not None and await ws_manager.has_run(run_id)
 

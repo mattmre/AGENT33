@@ -400,8 +400,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if mcp_server is not None:
         try:
             from mcp.server.sse import SseServerTransport
-        except ImportError:
-            logger.warning("mcp_sse_transport_unavailable")
+        except ImportError as exc:
+            logger.warning(
+                "mcp_sse_transport_unavailable",
+                error=str(exc),
+                exc_info=True,
+            )
         else:
             mcp_transport = SseServerTransport("/v1/mcp/messages")
 

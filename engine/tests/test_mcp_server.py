@@ -129,6 +129,8 @@ class TestMCPRoutes:
         allowed = client.get("/v1/mcp/status", headers=_make_headers("agents:read"))
         assert allowed.status_code == 200
         assert allowed.json()["status"] == "operational"
+        assert allowed.json()["available"] is False
+        assert allowed.json()["transport_available"] is False
 
     def test_routes_reuse_persistent_transport(self) -> None:
         app = _build_route_app()
@@ -151,6 +153,11 @@ class TestMCPRoutes:
             )
             assert message_response.status_code == 200
             assert message_response.json() == {"status": "processed"}
+
+            status_response = client.get("/v1/mcp/status", headers=_make_headers("agents:read"))
+            assert status_response.status_code == 200
+            assert status_response.json()["available"] is True
+            assert status_response.json()["transport_available"] is True
 
         assert app.state.mcp_transport is transport
         assert len(transport.connect_calls) == 1

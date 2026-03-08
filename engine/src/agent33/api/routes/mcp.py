@@ -37,10 +37,11 @@ class _SSEBridgeStream:
             raise StopAsyncIteration
         self._done = True
         try:
+            send = _get_request_send(self._request)
             async with self._transport.connect_sse(
                 self._request.scope,
                 self._request.receive,
-                self._request._send,
+                send,
             ) as (read_stream, write_stream):
                 await self._mcp_server.run(
                     read_stream,
@@ -64,6 +65,16 @@ def require_authenticated_user(request: Request) -> Any:
             detail="Not authenticated",
         )
     return user
+
+
+def _get_request_send(request: Request) -> Any:
+    send = getattr(request, "_send", None)
+    if send is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="MCP transport send channel unavailable",
+        )
+    return send
 
 
 @router.get("/sse", dependencies=[Depends(require_authenticated_user)])
@@ -103,7 +114,7 @@ async def mcp_messages(request: Request) -> dict[str, Any]:
         await transport.handle_post_message(
             request.scope,
             request.receive,
-            request._send,
+            _get_request_send(request),
             body,
         )
         return {"status": "processed"}
@@ -119,15 +130,18 @@ async def mcp_status(request: Request) -> dict[str, Any]:
     """MCP server status."""
     bridge = getattr(request.app.state, "mcp_bridge", None)
     mcp_server = getattr(request.app.state, "mcp_server", None)
+    transport = getattr(request.app.state, "mcp_transport", None)
 
     if bridge is None:
         return {
             "available": False,
             "mcp_sdk_installed": mcp_server is not None,
+            "transport_available": transport is not None,
         }
 
     return {
-        "available": mcp_server is not None,
+        "available": mcp_server is not None and transport is not None,
         "mcp_sdk_installed": mcp_server is not None,
+        "transport_available": transport is not None,
         **bridge.get_system_status(),
     }
