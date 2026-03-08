@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -249,7 +250,13 @@ async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
             )
 
     # Until scan runs capture an explicit model target, probe the configured default model.
-    findings.extend(_llm_scanner.scan_model_behavior(settings.ollama_default_model, run_id=run.id))
+    findings.extend(
+        await asyncio.to_thread(
+            _llm_scanner.scan_model_behavior,
+            settings.ollama_default_model,
+            run_id=run.id,
+        )
+    )
 
     # Store findings alongside existing ones
     existing = _service._findings.get(run.id, [])

@@ -280,11 +280,9 @@ class LLMSecurityScanner:
             List of SecurityFindings for detected threats.
         """
         result = scan_inputs_recursive(data)
-        findings = self._scan_result_to_findings(
+        return self._scan_result_to_findings(
             result, run_id=run_id, source=source, text=str(data)[:200]
         )
-        findings.extend(self._llm_guard_adapter.scan_input(str(data), run_id=run_id))
-        return findings
 
     def scan_tool_definitions(
         self,
