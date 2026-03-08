@@ -1,20 +1,8 @@
 import { useMemo, useState } from "react";
-
-interface Finding {
-  id: string;
-  severity: string;
-  category: string;
-  title: string;
-  description: string;
-  tool: string;
-  file_path: string;
-  line_number: number | null;
-  remediation: string;
-  cwe_id: string;
-}
+import type { SecurityFinding } from "./SecurityDashboard";
 
 interface FindingsTableProps {
-  findings: Finding[];
+  findings: SecurityFinding[];
 }
 
 type SortKey = "severity" | "category" | "title" | "tool" | "file_path";

@@ -1,22 +1,7 @@
+import type { SecurityRun } from "./SecurityDashboard";
+
 interface ScanRunCardProps {
-  run: {
-    id: string;
-    status: string;
-    profile: string;
-    target: { repository_path: string; branch: string };
-    findings_count: number;
-    findings_summary: {
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-      info: number;
-    };
-    created_at: string;
-    completed_at: string | null;
-    error_message: string;
-    metadata: { tools_executed: string[] };
-  };
+  run: SecurityRun;
   isSelected: boolean;
   onSelect: () => void;
   onDownloadSarif: () => void;
