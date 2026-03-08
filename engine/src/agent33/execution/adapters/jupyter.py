@@ -3,20 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Check if jupyter_client is available
-_HAS_JUPYTER = False
-try:
-    import jupyter_client  # noqa: F401
-
-    _HAS_JUPYTER = True
-except ImportError:
-    pass
+# Check if jupyter_client is available without importing it at module import time.
+_HAS_JUPYTER = importlib.util.find_spec("jupyter_client") is not None
 
 
 class OutputArtifact:
@@ -57,9 +52,11 @@ class KernelSession:
     async def start(self) -> None:
         """Start the kernel."""
         if not _HAS_JUPYTER:
-            msg = "jupyter_client is not installed. Install with: pip install agent33[jupyter]"
-            raise RuntimeError(msg)
-        import jupyter_client
+            error_msg = (
+                "jupyter_client is not installed. Install with: pip install agent33[jupyter]"
+            )
+            raise RuntimeError(error_msg)
+        jupyter_client = importlib.import_module("jupyter_client")
 
         self._manager = jupyter_client.AsyncKernelManager(kernel_name=self.kernel_name)
         await self._manager.start_kernel()
@@ -93,8 +90,8 @@ class KernelSession:
             Tuple of (stdout_text, list of OutputArtifacts).
         """
         if not self._started or not self._client:
-            msg = "Kernel not started"
-            raise RuntimeError(msg)
+            error_msg = "Kernel not started"
+            raise RuntimeError(error_msg)
 
         self.last_used = time.time()
         msg_id = self._client.execute(code)
@@ -110,34 +107,40 @@ class KernelSession:
                 raise TimeoutError(f"Kernel execution timed out after {timeout}s")
 
             try:
-                msg = await asyncio.wait_for(
+                message: dict[str, Any] = await asyncio.wait_for(
                     self._client.get_iopub_msg(),
                     timeout=min(remaining, 5.0),
                 )
             except TimeoutError:
                 continue
 
-            if msg["parent_header"].get("msg_id") != msg_id:
+            parent_header = message.get("parent_header")
+            if not isinstance(parent_header, dict) or parent_header.get("msg_id") != msg_id:
                 continue
 
-            msg_type = msg["msg_type"]
-            content = msg["content"]
+            msg_type = str(message.get("msg_type", ""))
+            raw_content = message.get("content")
+            content: dict[str, Any] = raw_content if isinstance(raw_content, dict) else {}
 
             if msg_type == "stream":
                 stdout_parts.append(content.get("text", ""))
             elif msg_type in ("display_data", "execute_result"):
-                data = content.get("data", {})
-                metadata = content.get("metadata", {})
+                raw_data = content.get("data", {})
+                data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+                raw_metadata = content.get("metadata", {})
+                metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
                 for mime, value in data.items():
+                    mime_metadata = metadata.get(mime, {})
                     artifacts.append(
                         OutputArtifact(
-                            mime_type=mime,
+                            mime_type=str(mime),
                             data=value if isinstance(value, str) else str(value),
-                            metadata=metadata.get(mime, {}),
+                            metadata=mime_metadata if isinstance(mime_metadata, dict) else {},
                         )
                     )
             elif msg_type == "error":
-                tb_lines = content.get("traceback", [])
+                raw_tb_lines = content.get("traceback", [])
+                tb_lines = raw_tb_lines if isinstance(raw_tb_lines, list) else []
                 error_text = "\n".join(tb_lines)
                 stdout_parts.append(f"Error: {error_text}")
             elif msg_type == "status" and content.get("execution_state") == "idle":

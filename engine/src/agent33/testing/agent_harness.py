@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 from agent33.agents.definition import AgentDefinition
 from agent33.agents.runtime import AgentResult, AgentRuntime
-from agent33.llm.base import ChatMessage, LLMResponse
+from agent33.llm.base import ChatMessage, LLMResponse, LLMStreamChunk
 from agent33.llm.router import ModelRouter
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,31 @@ class _CannedProvider:
 
     async def list_models(self) -> list[str]:
         return ["mock"]
+
+    async def stream_complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        response = await self.complete(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+        )
+        yield LLMStreamChunk(
+            delta_content=response.content,
+            finish_reason=response.finish_reason,
+            model=response.model,
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
+            usage_available=response.usage_available,
+        )
 
 
 class AgentTestHarness:

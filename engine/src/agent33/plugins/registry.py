@@ -457,7 +457,7 @@ class PluginRegistry:
         When *tenant_id* is non-empty, returns only system-level plugins
         (``tenant_id=""``) and plugins belonging to the caller's tenant.
         """
-        entries = self._plugins.values()
+        entries: list[PluginEntry] = list(self._plugins.values())
         if tenant_id:
             entries = [e for e in entries if e.tenant_id == "" or e.tenant_id == tenant_id]
         return sorted(
