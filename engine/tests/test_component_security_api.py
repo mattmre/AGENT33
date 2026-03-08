@@ -396,6 +396,7 @@ class TestComponentSecurityApi:
             "/v1/component-security/runs",
             json={
                 "target": {"repository_path": str(tmp_path)},
+                "profile": "deep",
                 "requested_by": "reviewer",
                 "execute_now": False,
             },
@@ -440,4 +441,52 @@ class TestComponentSecurityApi:
         assert response.status_code == 200
         payload = response.json()
         assert payload["llm_findings"] >= 2
+        assert payload["total_findings"] == payload["llm_findings"]
+
+    def test_llm_scan_skips_model_behavior_for_non_deep_profiles(
+        self,
+        writer_client: TestClient,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        create_response = writer_client.post(
+            "/v1/component-security/runs",
+            json={
+                "target": {"repository_path": str(tmp_path)},
+                "profile": "quick",
+                "requested_by": "reviewer",
+                "execute_now": False,
+            },
+        )
+        run_id = create_response.json()["id"]
+
+        def _scan_prompt_safety(
+            text: str, *, run_id: str = "", source: str = ""
+        ) -> list[SecurityFinding]:
+            return [
+                SecurityFinding(
+                    run_id=run_id,
+                    severity=FindingSeverity.LOW,
+                    category=FindingCategory.PROMPT_INJECTION,
+                    title=f"prompt:{source}",
+                    description=text,
+                    tool="llm-security",
+                )
+            ]
+
+        def _scan_model_behavior(model_name: str, *, run_id: str = "") -> list[SecurityFinding]:
+            raise AssertionError(f"model probes should be skipped for quick profile: {model_name}")
+
+        monkeypatch.setattr(
+            component_security._llm_scanner, "scan_prompt_safety", _scan_prompt_safety
+        )
+        monkeypatch.setattr(
+            component_security._llm_scanner, "scan_model_behavior", _scan_model_behavior
+        )
+
+        response = writer_client.post(f"/v1/component-security/runs/{run_id}/llm-scan")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["llm_findings"] >= 1
         assert payload["total_findings"] == payload["llm_findings"]

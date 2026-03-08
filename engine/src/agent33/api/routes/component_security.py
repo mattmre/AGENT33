@@ -249,14 +249,17 @@ async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
                 _llm_scanner.scan_prompt_safety(field, run_id=run.id, source="run_metadata")
             )
 
-    # Until scan runs capture an explicit model target, probe the configured default model.
-    findings.extend(
-        await asyncio.to_thread(
-            _llm_scanner.scan_model_behavior,
-            settings.ollama_default_model,
-            run_id=run.id,
+    # Model probes are materially slower than metadata scans, so keep them
+    # aligned with the deepest security profile until runs capture an explicit
+    # AI target model.
+    if run.profile == SecurityProfile.DEEP and settings.ollama_default_model:
+        findings.extend(
+            await asyncio.to_thread(
+                _llm_scanner.scan_model_behavior,
+                settings.ollama_default_model,
+                run_id=run.id,
+            )
         )
-    )
 
     # Store findings alongside existing ones
     existing = _service._findings.get(run.id, [])

@@ -105,10 +105,13 @@ def test_garak_probe_results_are_converted_to_findings(monkeypatch) -> None:
     assert findings[0].severity == FindingSeverity.HIGH
 
 
-def test_garak_run_probes_returns_empty_when_unavailable(monkeypatch) -> None:
+def test_garak_run_probes_uses_custom_runner_without_runtime_dependency(monkeypatch) -> None:
     monkeypatch.setattr("agent33.component_security.llm_security._HAS_GARAK", False)
     adapter = GarakAdapter(probe_runner=lambda model_name, probe_name: 1.0)  # noqa: ARG005
-    assert adapter.run_probes("test-model", run_id="secrun-5") == []
+    findings = adapter.run_probes("test-model", run_id="secrun-5")
+
+    assert len(findings) == len(GarakAdapter.DEFAULT_PROBES)
+    assert all(finding.tool == "garak" for finding in findings)
 
 
 def test_llm_guard_is_available_requires_runtime_components(monkeypatch) -> None:
@@ -146,6 +149,32 @@ def test_garak_boolean_results_are_handled_explicitly() -> None:
             "description": "Garak probe 'promptinject' failed",
         }
     ]
+
+
+def test_garak_run_probes_bootstraps_runtime_before_default_runner_check(
+    monkeypatch,
+) -> None:
+    class _FakeGarakModule:
+        @staticmethod
+        def run_probe(model_name: str, probe_name: str):  # noqa: ARG004
+            return [{"score": 0.8, "description": probe_name}]
+
+    monkeypatch.setattr("agent33.component_security.llm_security._GARAK_BOOTSTRAPPED", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._HAS_GARAK", False)
+    monkeypatch.setattr("agent33.component_security.llm_security._GARAK_MODULE", None)
+    monkeypatch.setattr(
+        "agent33.component_security.llm_security.importlib.import_module",
+        lambda name: _FakeGarakModule() if name == "garak" else None,
+    )
+
+    findings = GarakAdapter().run_probes(
+        "test-model",
+        run_id="secrun-bootstrapped",
+        probe_types=["promptinject"],
+    )
+
+    assert len(findings) == 1
+    assert findings[0].tool == "garak"
 
 
 def test_llm_guard_bootstrap_is_lazy(monkeypatch) -> None:

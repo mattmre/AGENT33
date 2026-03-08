@@ -625,8 +625,6 @@ class GarakAdapter:
         self._probe_runner = probe_runner or self._run_probe
 
     def _can_run_probes(self) -> bool:
-        if not _HAS_GARAK:
-            return False
         if not self._uses_default_probe_runner:
             return callable(self._probe_runner)
         return _garak_runtime_available()
