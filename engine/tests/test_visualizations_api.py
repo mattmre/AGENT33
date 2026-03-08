@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import uuid
 
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from agent33.main import app
 from agent33.security.auth import create_access_token
+from agent33.workflows.ws_manager import WorkflowWSManager
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +26,8 @@ def clear_workflow_state():
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
             workflows._scheduler = None
+        workflows.set_ws_manager(None)
+        app.state.ws_manager = None
 
     _reset()
     yield
@@ -34,6 +38,26 @@ def clear_workflow_state():
 def reader_client() -> TestClient:
     """Client with only read scope."""
     token = create_access_token("reader-user", scopes=["workflows:read"])
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
+def tenant_a_reader_client() -> TestClient:
+    token = create_access_token(
+        "tenant-a-reader",
+        scopes=["workflows:read"],
+        tenant_id="tenant-a",
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
+def tenant_b_reader_client() -> TestClient:
+    token = create_access_token(
+        "tenant-b-reader",
+        scopes=["workflows:read"],
+        tenant_id="tenant-b",
+    )
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
@@ -318,6 +342,51 @@ class TestWorkflowGraphAuthorization:
         resp = reader_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         assert resp.status_code == 200
 
+    def test_run_overlay_hides_other_tenant_live_runs(self, writer_client: TestClient) -> None:
+        workflow_name = f"tenant-viz-{uuid.uuid4().hex[:8]}"
+        resp = writer_client.post(
+            "/v1/workflows/",
+            json={
+                "name": workflow_name,
+                "version": "1.0.0",
+                "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
+                "execution": {"mode": "sequential"},
+            },
+        )
+        assert resp.status_code == 201
+
+        manager = WorkflowWSManager()
+        asyncio.run(
+            manager.register_run(
+                "tenant-live-run",
+                workflow_name,
+                owner_subject="tenant-owner",
+                tenant_id="tenant-a",
+            )
+        )
+
+        from agent33.api.routes import workflows
+
+        app.state.ws_manager = manager
+        workflows.set_ws_manager(manager)
+
+        other_tenant_token = create_access_token(
+            "tenant-owner",
+            scopes=["workflows:read"],
+            tenant_id="tenant-b",
+        )
+        other_tenant_client = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {other_tenant_token}"},
+        )
+
+        overlay_resp = other_tenant_client.get(
+            f"/v1/visualizations/workflows/{workflow_name}/graph",
+            params={"run_id": "tenant-live-run"},
+        )
+
+        assert overlay_resp.status_code == 404
+
 
 # -- Deterministic layout tests ----------------------------------------------
 
@@ -389,3 +458,37 @@ class TestWorkflowExecutionIntegration:
         resp2 = writer_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         data2 = resp2.json()
         assert all(n["status"] == "success" for n in data2["nodes"])
+
+    def test_status_overlay_is_filtered_by_tenant(
+        self,
+        simple_workflow: str,
+        tenant_a_reader_client: TestClient,
+        tenant_b_reader_client: TestClient,
+    ) -> None:
+        writer_token = create_access_token(
+            "tenant-a-writer",
+            scopes=["workflows:read", "workflows:write", "workflows:execute"],
+            tenant_id="tenant-a",
+        )
+        tenant_a_writer = TestClient(
+            app,
+            headers={"Authorization": f"Bearer {writer_token}"},
+        )
+
+        exec_resp = tenant_a_writer.post(
+            f"/v1/workflows/{simple_workflow}/execute",
+            json={"inputs": {"value": 42}},
+        )
+        assert exec_resp.status_code == 200
+
+        tenant_a_graph = tenant_a_reader_client.get(
+            f"/v1/visualizations/workflows/{simple_workflow}/graph"
+        )
+        assert tenant_a_graph.status_code == 200
+        assert all(node["status"] == "success" for node in tenant_a_graph.json()["nodes"])
+
+        tenant_b_graph = tenant_b_reader_client.get(
+            f"/v1/visualizations/workflows/{simple_workflow}/graph"
+        )
+        assert tenant_b_graph.status_code == 200
+        assert all(node["status"] is None for node in tenant_b_graph.json()["nodes"])

@@ -13,7 +13,12 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "vitest/globals", "vite/client"]
+    "types": [
+      "node",
+      "vitest/globals",
+      "vite/client",
+      "@testing-library/jest-dom"
+    ]
   },
   "include": ["src"]
 }

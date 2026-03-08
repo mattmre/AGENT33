@@ -7,11 +7,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from agent33.llm.base import LLMStreamChunk
-
 import httpx
 
 from agent33.connectors.boundary import (
@@ -19,15 +14,21 @@ from agent33.connectors.boundary import (
     map_connector_exception,
 )
 from agent33.connectors.models import ConnectorRequest
+from agent33.llm._stream_utils import stream_lines_through_boundary
 from agent33.llm.base import (
     AudioBlock,
     ChatMessage,
     ImageBlock,
     LLMResponse,
+    LLMStreamChunk,
     TextBlock,
     ToolCall,
+    ToolCallDelta,
     ToolCallFunction,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,28 @@ class OpenAIProvider:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
 
+    async def _stream_lines(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Yield streamed response lines through the connector boundary executor."""
+        connector = "llm:openai"
+        operation = f"POST {path}"
+        async for line in stream_lines_through_boundary(
+            client=self._client,
+            url=f"{self._base_url}{path}",
+            payload=payload,
+            headers=self._headers(),
+            timeout=self._timeout,
+            connector=connector,
+            operation=operation,
+            metadata={"base_url": self._base_url},
+            boundary_executor=self._boundary_executor,
+            map_exception=map_connector_exception,
+        ):
+            yield line
+
     # -- public API -------------------------------------------------------
 
     @staticmethod
@@ -272,12 +295,31 @@ class OpenAIProvider:
         data = await self._post("/chat/completions", payload)
 
         choices = data.get("choices", [])
+        usage = data.get("usage")
+        response_model = data.get("model", resolved_model)
+        usage_dict = cast("dict[str, Any] | None", usage if isinstance(usage, dict) else None)
+        usage_available = (
+            usage_dict is not None
+            and isinstance(usage_dict.get("prompt_tokens"), int)
+            and isinstance(usage_dict.get("completion_tokens"), int)
+        )
+        prompt_token_count = (
+            cast("int", usage_dict["prompt_tokens"])
+            if usage_available and usage_dict is not None
+            else 0
+        )
+        completion_token_count = (
+            cast("int", usage_dict["completion_tokens"])
+            if usage_available and usage_dict is not None
+            else 0
+        )
         if not choices:
             return LLMResponse(
                 content="",
-                model=resolved_model,
-                prompt_tokens=data.get("usage", {}).get("prompt_tokens", 0),
-                completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
+                model=response_model,
+                prompt_tokens=prompt_token_count,
+                completion_tokens=completion_token_count,
+                usage_available=usage_available,
             )
 
         choice = choices[0]
@@ -294,14 +336,14 @@ class OpenAIProvider:
             if finish in ("tool_calls", "function_call"):
                 finish = "tool_calls"
 
-        usage = data.get("usage", {})
         return LLMResponse(
             content=content,
-            model=resolved_model,
-            prompt_tokens=usage.get("prompt_tokens", 0),
-            completion_tokens=usage.get("completion_tokens", 0),
+            model=response_model,
+            prompt_tokens=prompt_token_count,
+            completion_tokens=completion_token_count,
             tool_calls=parsed_tool_calls,
             finish_reason=finish,
+            usage_available=usage_available,
         )
 
     async def list_models(self) -> list[str]:
@@ -320,8 +362,6 @@ class OpenAIProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via SSE."""
-        from agent33.llm.base import LLMStreamChunk
-
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
             "model": resolved_model,
@@ -334,30 +374,57 @@ class OpenAIProvider:
         if tools is not None:
             body["tools"] = [{"type": "function", "function": t} for t in tools]
 
-        async with self._client.stream(
-            "POST",
-            f"{self._base_url}/chat/completions",
-            json=body,
-            headers=self._headers(),
-            timeout=self._timeout,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line or line.startswith(":"):
-                    continue
-                if line.startswith("data: "):
-                    line = line[6:]
-                if line == "[DONE]":
-                    break
-                try:
-                    chunk_data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                choice = chunk_data.get("choices", [{}])[0]
-                delta = choice.get("delta", {})
+        async for line in self._stream_lines("/chat/completions", body):
+            line = line.strip()
+            if not line or line.startswith(":"):
+                continue
+            if line.startswith("data: "):
+                line = line[6:]
+            if line == "[DONE]":
+                break
+            try:
+                chunk_data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            choices = chunk_data.get("choices") or []
+            choice = choices[0] if choices else {}
+            delta = choice.get("delta", {})
+            chunk_model = chunk_data.get("model", resolved_model)
+            finish_reason = choice.get("finish_reason")
+            if finish_reason == "function_call":
+                finish_reason = "tool_calls"
+            usage = chunk_data.get("usage")
+            usage_available = (
+                isinstance(usage, dict)
+                and isinstance(usage.get("prompt_tokens"), int)
+                and isinstance(usage.get("completion_tokens"), int)
+            )
+            prompt_tokens = usage.get("prompt_tokens", 0) if usage_available else 0
+            completion_tokens = usage.get("completion_tokens", 0) if usage_available else 0
+
+            content = delta.get("content", "") or ""
+            if content or finish_reason is not None or usage_available:
                 yield LLMStreamChunk(
-                    delta_content=delta.get("content", "") or "",
-                    finish_reason=choice.get("finish_reason"),
-                    model=chunk_data.get("model", resolved_model),
+                    delta_content=content,
+                    finish_reason=finish_reason,
+                    model=chunk_model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    usage_available=usage_available,
+                )
+
+            for raw_tool_call in delta.get("tool_calls", []) or []:
+                function = raw_tool_call.get("function", {})
+                yield LLMStreamChunk(
+                    tool_call_delta=ToolCallDelta(
+                        index=raw_tool_call.get("index", 0),
+                        id=raw_tool_call.get("id", ""),
+                        name=function.get("name", ""),
+                        arguments_fragment=function.get("arguments", ""),
+                    ),
+                    finish_reason=finish_reason,
+                    model=chunk_model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    usage_available=usage_available,
                 )

@@ -3,7 +3,7 @@ import { getRuntimeConfig } from "../../lib/api";
 import { ScanRunCard } from "./ScanRunCard";
 import { FindingsTable } from "./FindingsTable";
 
-interface SecurityRun {
+export interface SecurityRun {
   id: string;
   status: string;
   profile: string;
@@ -22,7 +22,7 @@ interface SecurityRun {
   metadata: { tools_executed: string[]; tool_warnings: string[] };
 }
 
-interface SecurityFinding {
+export interface SecurityFinding {
   id: string;
   run_id: string;
   severity: string;

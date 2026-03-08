@@ -11,6 +11,7 @@ from agent33.component_security.llm_security import (
 from agent33.component_security.models import (
     FindingCategory,
     FindingSeverity,
+    SecurityFinding,
 )
 
 
@@ -169,6 +170,59 @@ class TestThreatSeverityMapping:
     def test_unknown_threat_is_medium(self) -> None:
         scanner = LLMSecurityScanner()
         assert scanner._threat_severity("unknown_threat") == FindingSeverity.MEDIUM
+
+
+class _GuardFindingAdapter:
+    def scan_input(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
+        return [
+            SecurityFinding(
+                run_id=run_id,
+                severity=FindingSeverity.HIGH,
+                category=FindingCategory.MODEL_SECURITY,
+                title="guard",
+                description=text,
+                tool="llm-guard",
+            )
+        ]
+
+
+class _GarakFindingAdapter:
+    def run_probes(self, model_name: str, *, run_id: str = "") -> list[SecurityFinding]:
+        return [
+            SecurityFinding(
+                run_id=run_id,
+                severity=FindingSeverity.MEDIUM,
+                category=FindingCategory.MODEL_SECURITY,
+                title=model_name,
+                description="probe",
+                tool="garak",
+            )
+        ]
+
+
+class TestScannerAdapterIntegration:
+    def test_prompt_scanning_includes_llm_guard_findings(self) -> None:
+        scanner = LLMSecurityScanner(
+            llm_guard_adapter=_GuardFindingAdapter(),
+            garak_adapter=_GarakFindingAdapter(),
+        )
+
+        findings = scanner.scan_prompt_safety("safe text", run_id="secrun-guard-merge")
+
+        assert len(findings) == 1
+        assert findings[0].tool == "llm-guard"
+
+    def test_model_behavior_scanning_delegates_to_garak(self) -> None:
+        scanner = LLMSecurityScanner(
+            llm_guard_adapter=_GuardFindingAdapter(),
+            garak_adapter=_GarakFindingAdapter(),
+        )
+
+        findings = scanner.scan_model_behavior("llama3.2", run_id="secrun-garak-merge")
+
+        assert len(findings) == 1
+        assert findings[0].tool == "garak"
+        assert findings[0].title == "llama3.2"
 
 
 class TestLLMGuardAdapter:

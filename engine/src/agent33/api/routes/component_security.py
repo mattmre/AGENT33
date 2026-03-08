@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from agent33.component_security.models import (
     SecurityFinding,
     SecurityProfile,
 )
+from agent33.config import settings
 from agent33.security.permissions import require_scope
 from agent33.services.security_scan import (
     RunNotFoundError,
@@ -246,6 +248,18 @@ async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
             findings.extend(
                 _llm_scanner.scan_prompt_safety(field, run_id=run.id, source="run_metadata")
             )
+
+    # Model probes are materially slower than metadata scans, so keep them
+    # aligned with the deepest security profile until runs capture an explicit
+    # AI target model.
+    if run.profile == SecurityProfile.DEEP and settings.ollama_default_model:
+        findings.extend(
+            await asyncio.to_thread(
+                _llm_scanner.scan_model_behavior,
+                settings.ollama_default_model,
+                run_id=run.id,
+            )
+        )
 
     # Store findings alongside existing ones
     existing = _service._findings.get(run.id, [])

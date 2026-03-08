@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from agent33.memory.rag import RAGPipeline
     from agent33.skills.registry import SkillRegistry
     from agent33.tools.registry import ToolRegistry
+    from agent33.workflows.definition import WorkflowDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +26,14 @@ class MCPServiceBridge:
         model_router: ModelRouter | None = None,
         rag_pipeline: RAGPipeline | None = None,
         skill_registry: SkillRegistry | None = None,
+        workflow_registry: dict[str, WorkflowDefinition] | None = None,
     ) -> None:
         self.agent_registry = agent_registry
         self.tool_registry = tool_registry
         self.model_router = model_router
         self.rag_pipeline = rag_pipeline
         self.skill_registry = skill_registry
+        self.workflow_registry = workflow_registry
 
     def get_system_status(self) -> dict[str, Any]:
         """Return system status summary."""
@@ -39,6 +42,26 @@ class MCPServiceBridge:
             "agents_loaded": (len(self.agent_registry.list_all()) if self.agent_registry else 0),
             "tools_loaded": (len(self.tool_registry.list_all()) if self.tool_registry else 0),
             "skills_loaded": (len(self.skill_registry.list_all()) if self.skill_registry else 0),
+            "workflows_loaded": len(self.workflow_registry or {}),
             "model_router_ready": self.model_router is not None,
             "rag_pipeline_ready": self.rag_pipeline is not None,
         }
+
+    def get_agent(self, identifier: str) -> Any:
+        """Return an agent definition by spec ID or registry name."""
+        if self.agent_registry is None:
+            return None
+
+        get_by_agent_id = getattr(self.agent_registry, "get_by_agent_id", None)
+        if callable(get_by_agent_id):
+            agent = get_by_agent_id(identifier)
+            if agent is not None:
+                return agent
+
+        return self.agent_registry.get(identifier)
+
+    def get_workflow(self, identifier: str) -> Any:
+        """Return a workflow definition by ID/name."""
+        if self.workflow_registry is None:
+            return None
+        return self.workflow_registry.get(identifier)

@@ -163,6 +163,12 @@ class TestLifespanState:
         app, _, _ = patched_app
         assert hasattr(app.state, "alert_manager")
 
+    def test_state_has_mcp_services(self, patched_app):
+        app, _, _ = patched_app
+        assert hasattr(app.state, "mcp_bridge")
+        assert hasattr(app.state, "mcp_server")
+        assert hasattr(app.state, "mcp_transport")
+
 
 class TestEmbeddingSubsystem:
     """Verify embedding provider, cache, and RAG wiring."""

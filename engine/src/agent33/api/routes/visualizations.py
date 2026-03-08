@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from agent33.security.permissions import require_scope
 from agent33.services.graph_generator import generate_workflow_graph
@@ -19,21 +19,12 @@ _WORKFLOW_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 @router.get("/workflows/{workflow_id}/graph", dependencies=[require_scope("workflows:read")])
-async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
-    """Get visual graph representation of a workflow.
-
-    Returns nodes with deterministic layered layout coordinates, edges,
-    and overlays latest execution step statuses when available.
-
-    Args:
-        workflow_id: The workflow name/identifier.
-
-    Returns:
-        Graph structure with nodes, edges, layout metadata, and optional status overlay.
-
-    Raises:
-        HTTPException: 404 if workflow not found, 422 for cyclic workflows.
-    """
+async def get_workflow_graph(
+    workflow_id: str,
+    request: Request,
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    """Get visual graph representation of a workflow."""
     if not _WORKFLOW_ID_PATTERN.fullmatch(workflow_id):
         raise HTTPException(status_code=400, detail="Invalid workflow identifier format")
 
@@ -47,33 +38,55 @@ async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
             detail=f"Workflow '{workflow_id}' not found",
         )
 
-    # Try to find the most recent execution for status overlay
     execution_status: dict[str, str] = {}
-    execution_history = workflows.get_execution_history()
-    if execution_history:
-        # Find most recent execution for this workflow
-        recent_executions = [
-            entry for entry in execution_history if entry["workflow_name"] == workflow_id
-        ]
-        if recent_executions:
-            # Get the most recent one
-            most_recent = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
+    used_live_overlay = False
+    if run_id:
+        manager = getattr(request.app.state, "ws_manager", None)
+        if manager is not None and await manager.has_run(run_id):
+            user = _get_request_user(request)
+            if not await manager.can_access_run(
+                run_id,
+                subject=user.sub,
+                tenant_id=getattr(user, "tenant_id", ""),
+                scopes=list(getattr(user, "scopes", [])),
+            ):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Workflow run '{run_id}' not found",
+                )
+            live_event = await manager.build_sync_event(run_id)
+            if live_event is not None and live_event.workflow_name == workflow_id:
+                execution_status = dict(live_event.data.get("step_statuses", {}))
+                used_live_overlay = True
 
-            # Use step_statuses if available (new format).
-            step_statuses = most_recent.get("step_statuses")
-            if step_statuses:
-                execution_status = step_statuses
-            else:
-                # Fallback for old format: use workflow-level status
-                workflow_status = most_recent.get("status")
-                if workflow_status == "success":
-                    for step in workflow.steps:
-                        execution_status[step.id] = "success"
-                elif workflow_status == "failed":
-                    for step in workflow.steps:
-                        execution_status[step.id] = "failed"
+    if not used_live_overlay:
+        execution_history = workflows.get_execution_history()
+        tenant_id, scopes = workflows.get_request_tenant_context(request)
+        if execution_history:
+            recent_executions = [
+                entry
+                for entry in execution_history
+                if entry["workflow_name"] == workflow_id
+                and workflows.execution_history_entry_visible(
+                    entry,
+                    requester_tenant_id=tenant_id,
+                    requester_scopes=scopes,
+                )
+            ]
+            if recent_executions:
+                most_recent = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
+                step_statuses = most_recent.get("step_statuses")
+                if step_statuses:
+                    execution_status = step_statuses
+                else:
+                    workflow_status = most_recent.get("status")
+                    if workflow_status == "success":
+                        for step in workflow.steps:
+                            execution_status[step.id] = "success"
+                    elif workflow_status == "failed":
+                        for step in workflow.steps:
+                            execution_status[step.id] = "failed"
 
-    # Generate graph with optional status overlay.
     try:
         graph = generate_workflow_graph(workflow, execution_status)
     except CycleDetectedError as exc:
@@ -82,9 +95,18 @@ async def get_workflow_graph(workflow_id: str) -> dict[str, Any]:
     logger.info(
         "workflow_graph_generated",
         workflow_id=workflow_id,
+        run_id=run_id,
         node_count=len(graph.get("nodes", [])),
         edge_count=len(graph.get("edges", [])),
         has_status_overlay=bool(execution_status),
+        used_live_overlay=used_live_overlay,
     )
 
     return graph
+
+
+def _get_request_user(request: Request) -> Any:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user

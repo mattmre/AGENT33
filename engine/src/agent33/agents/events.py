@@ -10,6 +10,7 @@ EventType = Literal[
     "loop_started",
     "iteration_started",
     "llm_request",
+    "llm_token",
     "llm_response",
     "tool_call_requested",
     "tool_call_started",

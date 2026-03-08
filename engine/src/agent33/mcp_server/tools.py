@@ -111,6 +111,7 @@ async def handle_execute_tool(
     bridge: MCPServiceBridge,
     tool_name: str,
     arguments: dict[str, Any] | None = None,
+    context: Any | None = None,
 ) -> dict[str, Any]:
     """Execute a registered tool."""
     if not bridge.tool_registry:
@@ -123,8 +124,8 @@ async def handle_execute_tool(
     try:
         from agent33.tools.base import ToolContext
 
-        context = ToolContext()
-        result = await tool.execute(arguments or {}, context)
+        tool_context = context if isinstance(context, ToolContext) else ToolContext()
+        result = await tool.execute(arguments or {}, tool_context)
         return {
             "tool": tool_name,
             "output": result.output or "",
