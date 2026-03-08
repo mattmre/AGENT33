@@ -7,11 +7,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from agent33.llm.base import LLMStreamChunk
-
 import httpx
 
 from agent33.connectors.boundary import (
@@ -19,14 +14,20 @@ from agent33.connectors.boundary import (
     map_connector_exception,
 )
 from agent33.connectors.models import ConnectorRequest
+from agent33.llm._stream_utils import stream_lines_through_boundary
 from agent33.llm.base import (
     ChatMessage,
     ImageBlock,
     LLMResponse,
+    LLMStreamChunk,
     TextBlock,
     ToolCall,
+    ToolCallDelta,
     ToolCallFunction,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,28 @@ class OllamaProvider:
             raise map_connector_exception(last_exc, connector, operation) from last_exc
         raise failure from last_exc
 
+    async def _stream_lines(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Yield streamed response lines through the connector boundary executor."""
+        connector = "llm:ollama"
+        operation = f"POST {path}"
+        async for line in stream_lines_through_boundary(
+            client=self._client,
+            url=f"{self._base_url}{path}",
+            payload=payload,
+            headers=None,
+            timeout=self._timeout,
+            connector=connector,
+            operation=operation,
+            metadata={"base_url": self._base_url},
+            boundary_executor=self._boundary_executor,
+            map_exception=map_connector_exception,
+        ):
+            yield line
+
     # -- public API -------------------------------------------------------
 
     @staticmethod
@@ -252,6 +275,7 @@ class OllamaProvider:
 
         message_data = data.get("message", {})
         content = message_data.get("content", "")
+        response_model = data.get("model", resolved_model)
 
         # Parse tool calls from response if present
         raw_tool_calls = message_data.get("tool_calls")
@@ -260,14 +284,18 @@ class OllamaProvider:
             parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
 
         finish_reason = "tool_calls" if parsed_tool_calls else "stop"
+        usage_available = isinstance(data.get("prompt_eval_count"), int) and isinstance(
+            data.get("eval_count"), int
+        )
 
         return LLMResponse(
             content=content,
-            model=resolved_model,
-            prompt_tokens=data.get("prompt_eval_count", 0),
-            completion_tokens=data.get("eval_count", 0),
+            model=response_model,
+            prompt_tokens=data.get("prompt_eval_count", 0) if usage_available else 0,
+            completion_tokens=data.get("eval_count", 0) if usage_available else 0,
             tool_calls=parsed_tool_calls,
             finish_reason=finish_reason,
+            usage_available=usage_available,
         )
 
     async def list_models(self) -> list[str]:
@@ -286,8 +314,6 @@ class OllamaProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream completion chunks via NDJSON."""
-        from agent33.llm.base import LLMStreamChunk
-
         resolved_model = model or self._default_model
         body: dict[str, Any] = {
             "model": resolved_model,
@@ -297,27 +323,53 @@ class OllamaProvider:
         }
         if max_tokens is not None:
             body["options"]["num_predict"] = max_tokens
+        if tools is not None:
+            body["tools"] = [
+                t if "type" in t else {"type": "function", "function": t} for t in tools
+            ]
 
-        async with self._client.stream(
-            "POST",
-            f"{self._base_url}/api/chat",
-            json=body,
-            timeout=self._timeout,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                msg = data.get("message", {})
+        async for line in self._stream_lines("/api/chat", body):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = data.get("message", {})
+            chunk_model = data.get("model", resolved_model)
+            raw_tool_calls = msg.get("tool_calls") or []
+            finish_reason = data.get("done_reason")
+            if finish_reason is None and data.get("done"):
+                finish_reason = "tool_calls" if raw_tool_calls else "stop"
+            content = msg.get("content", "") or ""
+            usage_available = isinstance(data.get("prompt_eval_count"), int) and isinstance(
+                data.get("eval_count"), int
+            )
+            prompt_tokens = data.get("prompt_eval_count", 0) if usage_available else 0
+            completion_tokens = data.get("eval_count", 0) if usage_available else 0
+            if content or finish_reason is not None or usage_available:
                 yield LLMStreamChunk(
-                    delta_content=msg.get("content", "") or "",
-                    finish_reason="stop" if data.get("done") else None,
-                    model=data.get("model", resolved_model),
-                    prompt_tokens=data.get("prompt_eval_count", 0),
-                    completion_tokens=data.get("eval_count", 0),
+                    delta_content=content,
+                    finish_reason=finish_reason,
+                    model=chunk_model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    usage_available=usage_available,
                 )
+            if raw_tool_calls:
+                parsed_tool_calls = self._parse_tool_calls(raw_tool_calls)
+                for index, tool_call in enumerate(parsed_tool_calls):
+                    yield LLMStreamChunk(
+                        tool_call_delta=ToolCallDelta(
+                            index=index,
+                            id=tool_call.id,
+                            name=tool_call.function.name,
+                            arguments_fragment=tool_call.function.arguments,
+                        ),
+                        finish_reason="tool_calls" if data.get("done") else finish_reason,
+                        model=chunk_model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        usage_available=usage_available,
+                    )
