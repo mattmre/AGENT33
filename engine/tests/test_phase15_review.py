@@ -20,6 +20,7 @@ from agent33.review.models import (
     ChecklistVerdict,
     L1ChecklistResults,
     L2ChecklistResults,
+    ReviewArtifactLink,
     ReviewDecision,
     ReviewRecord,
     RiskLevel,
@@ -61,6 +62,21 @@ class TestReviewModels:
         original = record.updated_at
         record.touch()
         assert record.updated_at >= original
+
+    def test_record_accepts_artifact_links(self):
+        record = ReviewRecord(
+            task_id="T-003",
+            artifacts=[
+                ReviewArtifactLink(
+                    kind="explanation",
+                    artifact_id="expl-123",
+                    label="plan-review",
+                    mode="plan_review",
+                )
+            ],
+        )
+        assert len(record.artifacts) == 1
+        assert record.artifacts[0].artifact_id == "expl-123"
 
     def test_unique_ids(self):
         r1 = ReviewRecord(task_id="T-001")
@@ -287,8 +303,20 @@ class TestReviewServiceL1Only:
 
     def test_full_l1_only_flow(self):
         # Create
-        record = self.svc.create(task_id="T-100", branch="feat/foo")
+        record = self.svc.create(
+            task_id="T-100",
+            branch="feat/foo",
+            artifacts=[
+                ReviewArtifactLink(
+                    kind="explanation",
+                    artifact_id="expl-100",
+                    label="plan-review",
+                    mode="plan_review",
+                )
+            ],
+        )
         assert record.state == SignoffState.DRAFT
+        assert record.artifacts[0].artifact_id == "expl-100"
 
         # Assess risk (low → L1 only)
         record = self.svc.assess_risk(record.id, [RiskTrigger.CODE_ISOLATED])
@@ -551,12 +579,33 @@ class TestReviewAPI:
         assert data["task_id"] == "T-API-001"
         assert data["id"].startswith("rev-")
 
+    def test_create_review_with_artifact_link(self):
+        resp = self.client.post(
+            "/v1/reviews/",
+            json={
+                "task_id": "T-API-ART",
+                "branch": "main",
+                "artifacts": [
+                    {
+                        "kind": "explanation",
+                        "artifact_id": "expl-200",
+                        "label": "diff-review",
+                        "mode": "diff_review",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["artifacts"][0]["artifact_id"] == "expl-200"
+
     def test_list_reviews(self):
         self._create_review("T-1")
         self._create_review("T-2")
         resp = self.client.get("/v1/reviews/")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
+        assert resp.json()[0]["artifact_count"] == 0
 
     def test_get_review(self):
         created = self._create_review()

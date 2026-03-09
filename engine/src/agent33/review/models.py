@@ -137,6 +137,15 @@ class ReviewEvidence(BaseModel):
     evidence_capture_ref: str = ""
 
 
+class ReviewArtifactLink(BaseModel):
+    """Operator-facing linkage to a review artifact such as an explanation."""
+
+    kind: str = ""
+    artifact_id: str = ""
+    label: str = ""
+    mode: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Top-level review record
 # ---------------------------------------------------------------------------
@@ -161,6 +170,7 @@ class ReviewRecord(BaseModel):
     l2_review: LayerReview = Field(default_factory=LayerReview)
     final_signoff: FinalSignoff = Field(default_factory=FinalSignoff)
     evidence: ReviewEvidence = Field(default_factory=ReviewEvidence)
+    artifacts: list[ReviewArtifactLink] = Field(default_factory=list)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

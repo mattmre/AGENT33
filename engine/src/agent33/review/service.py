@@ -14,6 +14,7 @@ from agent33.review.models import (
     FinalSignoff,
     L1ChecklistResults,
     L2ChecklistResults,
+    ReviewArtifactLink,
     ReviewDecision,
     ReviewRecord,
     RiskTrigger,
@@ -56,6 +57,7 @@ class ReviewService:
         branch: str = "",
         pr_number: int | None = None,
         tenant_id: str = "",
+        artifacts: list[ReviewArtifactLink] | None = None,
     ) -> ReviewRecord:
         """Create a new review record in DRAFT state."""
         record = ReviewRecord(
@@ -63,6 +65,7 @@ class ReviewService:
             branch=branch,
             pr_number=pr_number,
             tenant_id=tenant_id,
+            artifacts=artifacts or [],
         )
         self._reviews[record.id] = record
         logger.info("review_created id=%s task=%s", record.id, task_id)
