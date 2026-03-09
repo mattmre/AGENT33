@@ -100,9 +100,7 @@ async def test_improvement_cycle_templates_execute_deterministically(
     assert markdown_heading in str(scaffold["report_markdown"])
 
     prompts_key = (
-        "action_items"
-        if filename == "retrospective.workflow.yaml"
-        else "recommendation_prompts"
+        "action_items" if filename == "retrospective.workflow.yaml" else "recommendation_prompts"
     )
     prompts = scaffold[prompts_key]
     assert isinstance(prompts, list)
