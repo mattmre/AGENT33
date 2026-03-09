@@ -276,7 +276,7 @@ def submit_intake(req: SubmitIntakeRequest, request: Request) -> dict[str, Any]:
     try:
         intake = ResearchIntake(
             submitted_by=req.submitted_by,
-            tenant_id=_resolve_tenant_id(request, req.tenant_id, default="default") or "default",
+            tenant_id=_resolve_tenant_id(request, req.tenant_id, default="default"),
             classification=IntakeClassification(
                 research_type=req.research_type,
                 category=req.category,
@@ -310,7 +310,7 @@ def submit_competitive_repo_intakes(
     Body-supplied tenant IDs are accepted only when they match the authenticated
     tenant or the caller is admin.
     """
-    tenant_id = _resolve_tenant_id(request, req.tenant_id, default="default") or "default"
+    tenant_id = _resolve_tenant_id(request, req.tenant_id, default="default")
     try:
         created_intakes = [
             _service.submit_intake(
@@ -637,7 +637,7 @@ def record_learning_signal(req: RecordLearningSignalRequest, request: Request) -
         signal = LearningSignal(
             signal_type=LearningSignalType(signal_type),
             severity=LearningSignalSeverity(req.severity),
-            tenant_id=(_resolve_tenant_id(request, req.tenant_id, default="default") or "default"),
+            tenant_id=_resolve_tenant_id(request, req.tenant_id, default="default"),
             summary=req.summary,
             details=req.details,
             source=req.source,

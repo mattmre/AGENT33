@@ -323,6 +323,26 @@ class TestTraceCollector:
         assert len(exec_only) == 1
         assert exec_only[0].message == "err1"
 
+    def test_list_failures_filter_by_tenant(self):
+        tenant_a_trace = self.collector.start_trace(task_id="T-902", tenant_id="tenant-a")
+        tenant_b_trace = self.collector.start_trace(task_id="T-903", tenant_id="tenant-b")
+        self.collector.record_failure(
+            tenant_a_trace.trace_id,
+            message="tenant-a failure",
+            category=FailureCategory.EXECUTION,
+        )
+        self.collector.record_failure(
+            tenant_b_trace.trace_id,
+            message="tenant-b failure",
+            category=FailureCategory.SECURITY,
+        )
+
+        tenant_failures = self.collector.list_failures(tenant_id="tenant-a")
+
+        assert len(tenant_failures) == 1
+        assert tenant_failures[0].trace_id == tenant_a_trace.trace_id
+        assert tenant_failures[0].message == "tenant-a failure"
+
 
 # ===================================================================
 # 4. Artifact retention

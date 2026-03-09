@@ -133,6 +133,10 @@ class TraceCollector:
             raise TraceNotFoundError(f"Trace not found: {trace_id}")
         return trace
 
+    def _trace_matches_tenant(self, trace_id: str, tenant_id: str) -> bool:
+        trace = self._traces.get(trace_id)
+        return trace is not None and trace.tenant_id == tenant_id
+
     def list_traces(
         self,
         tenant_id: str | None = None,
@@ -297,10 +301,7 @@ class TraceCollector:
             trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
             results = [f for f in results if f.trace_id == trace.trace_id]
         elif tenant_id is not None:
-            tenant_trace_ids = {
-                trace.trace_id for trace in self._traces.values() if trace.tenant_id == tenant_id
-            }
-            results = [f for f in results if f.trace_id in tenant_trace_ids]
+            results = [f for f in results if self._trace_matches_tenant(f.trace_id, tenant_id)]
         if category is not None:
             results = [f for f in results if f.classification.category == category]
         results.sort(key=lambda f: f.occurred_at, reverse=True)
