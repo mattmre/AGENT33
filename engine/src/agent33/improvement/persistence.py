@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -22,6 +23,18 @@ class LearningPersistenceState(BaseModel):
     signals: list[LearningSignal] = Field(default_factory=list)
     generated_intakes: list[ResearchIntake] = Field(default_factory=list)
     signal_intake_map: dict[str, str] = Field(default_factory=dict)
+
+
+class LearningStateBackupEnvelope(BaseModel):
+    """Portable backup envelope with validation metadata."""
+
+    format_version: int = 1
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    signal_count: int
+    intake_count: int
+    signal_intake_map_count: int
+    checksum_sha256: str
+    state: LearningPersistenceState
 
 
 class LearningSignalStore(Protocol):
@@ -286,15 +299,51 @@ def migrate_file_learning_state_to_db(
     return migrate_learning_state(source, destination)
 
 
+def _serialize_learning_state(state: LearningPersistenceState) -> str:
+    return json.dumps(
+        state.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _build_backup_envelope(state: LearningPersistenceState) -> LearningStateBackupEnvelope:
+    serialized_state = _serialize_learning_state(state)
+    checksum = hashlib.sha256(serialized_state.encode("utf-8")).hexdigest()
+    return LearningStateBackupEnvelope(
+        signal_count=len(state.signals),
+        intake_count=len(state.generated_intakes),
+        signal_intake_map_count=len(state.signal_intake_map),
+        checksum_sha256=checksum,
+        state=state,
+    )
+
+
+def _validate_backup_envelope(envelope: LearningStateBackupEnvelope) -> LearningPersistenceState:
+    state = envelope.state
+    if envelope.signal_count != len(state.signals):
+        raise ValueError("Backup metadata signal_count does not match payload")
+    if envelope.intake_count != len(state.generated_intakes):
+        raise ValueError("Backup metadata intake_count does not match payload")
+    if envelope.signal_intake_map_count != len(state.signal_intake_map):
+        raise ValueError("Backup metadata signal_intake_map_count does not match payload")
+    checksum = hashlib.sha256(_serialize_learning_state(state).encode("utf-8")).hexdigest()
+    if checksum != envelope.checksum_sha256:
+        raise ValueError("Backup checksum validation failed")
+    return state
+
+
 def backup_learning_state(store: LearningSignalStore, backup_path: str) -> Path:
     """Persist a portable JSON backup of current learning state."""
     backup_file = Path(backup_path)
     backup_file.parent.mkdir(parents=True, exist_ok=True)
-    payload = store.load().model_dump(mode="json")
-    backup_file.write_text(
-        json.dumps(payload, indent=2, sort_keys=True),
+    envelope = _build_backup_envelope(store.load())
+    tmp_path = backup_file.with_suffix(f"{backup_file.suffix}.tmp")
+    tmp_path.write_text(
+        json.dumps(envelope.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    tmp_path.replace(backup_file)
     return backup_file
 
 
@@ -307,6 +356,11 @@ def restore_learning_state(
     if not payload.strip():
         state = LearningPersistenceState()
     else:
-        state = LearningPersistenceState.model_validate(json.loads(payload))
+        parsed = json.loads(payload)
+        if isinstance(parsed, dict) and "state" in parsed:
+            envelope = LearningStateBackupEnvelope.model_validate(parsed)
+            state = _validate_backup_envelope(envelope)
+        else:
+            state = LearningPersistenceState.model_validate(parsed)
     store.save(state)
     return state

@@ -21,6 +21,7 @@ from agent33.improvement.models import (
 )
 from agent33.improvement.persistence import (
     FileLearningSignalStore,
+    InMemoryLearningSignalStore,
     SQLiteLearningSignalStore,
     backup_learning_state,
     migrate_file_learning_state_to_db,
@@ -215,7 +216,7 @@ def test_file_to_db_migration_path_creates_backup_when_requested(tmp_path: Path)
     assert len(migrated.signals) == 1
     assert backup_path.exists()
     backup_payload = json.loads(backup_path.read_text(encoding="utf-8"))
-    assert len(backup_payload["signals"]) == 1
+    assert len(backup_payload["state"]["signals"]) == 1
 
 
 def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
@@ -245,6 +246,111 @@ def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
     restored_signals = restored_service.list_learning_signals(tenant_id="tenant-backup", limit=10)
     assert len(restored_signals) == 1
     assert restored_signals[0].summary == "Needs backup"
+
+
+def test_backup_file_uses_versioned_envelope(tmp_path: Path):
+    source_path = tmp_path / "source_learning.json"
+    backup_path = tmp_path / "backup_learning.json"
+
+    source_store = FileLearningSignalStore(str(source_path))
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Versioned backup",
+            tenant_id="tenant-envelope",
+        )
+    )
+
+    backup_learning_state(source_store, str(backup_path))
+
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    assert payload["format_version"] == 1
+    assert payload["signal_count"] == 1
+    assert payload["intake_count"] == 0
+    assert payload["signal_intake_map_count"] == 0
+    assert payload["checksum_sha256"]
+    assert payload["state"]["signals"][0]["summary"] == "Versioned backup"
+
+
+def test_restore_learning_state_accepts_legacy_raw_backup(tmp_path: Path):
+    backup_path = tmp_path / "legacy_backup.json"
+    target_store = SQLiteLearningSignalStore(str(tmp_path / "restored.sqlite3"))
+
+    backup_path.write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {
+                        "signal_id": "SIG-legacy",
+                        "signal_type": "bug",
+                        "severity": "high",
+                        "summary": "Legacy backup payload",
+                        "tenant_id": "tenant-legacy",
+                    }
+                ],
+                "generated_intakes": [],
+                "signal_intake_map": {},
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    restored = restore_learning_state(target_store, str(backup_path))
+
+    assert len(restored.signals) == 1
+    assert restored.signals[0].summary == "Legacy backup payload"
+
+
+def test_restore_learning_state_rejects_checksum_mismatch(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Checksum mismatch",
+            tenant_id="tenant-checksum",
+        )
+    )
+    backup_path = tmp_path / "checksum_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["state"]["signals"][0]["summary"] = "Tampered backup"
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Backup checksum validation failed"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
+def test_restore_learning_state_rejects_count_mismatch(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Count mismatch",
+            tenant_id="tenant-count",
+        )
+    )
+    backup_path = tmp_path / "count_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["signal_count"] = 2
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Backup metadata signal_count does not match payload"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
 
 
 def test_file_store_corruption_recovery_is_deterministic(tmp_path: Path):
@@ -1195,8 +1301,8 @@ def test_backup_endpoint_creates_portable_backup(
     assert backup_path.exists()
 
     backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
-    assert len(backup_data["signals"]) == 1
-    assert backup_data["signals"][0]["summary"] == "Signal for backup test"
+    assert len(backup_data["state"]["signals"]) == 1
+    assert backup_data["state"]["signals"][0]["summary"] == "Signal for backup test"
 
 
 def test_backup_endpoint_uses_default_path_when_omitted(
