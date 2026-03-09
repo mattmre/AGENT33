@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import FrozenInstanceError
+from time import perf_counter
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -156,9 +158,7 @@ class TestWorkflowWSManager:
         assert await manager.connected_count() == 1
 
     @pytest.mark.asyncio
-    async def test_subscribe_multiple_workflows(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_subscribe_multiple_workflows(self, manager: WorkflowWSManager) -> None:
         ws = _mock_ws()
         await manager.subscribe(ws, "wf-1")
         await manager.subscribe(ws, "wf-2")
@@ -167,9 +167,7 @@ class TestWorkflowWSManager:
         assert await manager.connected_count() == 1  # same ws
 
     @pytest.mark.asyncio
-    async def test_subscribe_multiple_clients(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_subscribe_multiple_clients(self, manager: WorkflowWSManager) -> None:
         ws1 = _mock_ws()
         ws2 = _mock_ws()
         await manager.subscribe(ws1, "wf-1")
@@ -185,9 +183,7 @@ class TestWorkflowWSManager:
         assert await manager.active_subscriptions("wf-1") == 0
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_nonexistent(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_unsubscribe_nonexistent(self, manager: WorkflowWSManager) -> None:
         ws = _mock_ws()
         # Should not raise
         await manager.unsubscribe(ws, "wf-nope")
@@ -204,9 +200,7 @@ class TestWorkflowWSManager:
         assert await manager.connected_count() == 0
 
     @pytest.mark.asyncio
-    async def test_disconnect_preserves_other_clients(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_disconnect_preserves_other_clients(self, manager: WorkflowWSManager) -> None:
         ws1 = _mock_ws()
         ws2 = _mock_ws()
         await manager.subscribe(ws1, "wf-1")
@@ -216,9 +210,7 @@ class TestWorkflowWSManager:
         assert await manager.connected_count() == 1
 
     @pytest.mark.asyncio
-    async def test_broadcast_sends_to_subscribers(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_broadcast_sends_to_subscribers(self, manager: WorkflowWSManager) -> None:
         ws1 = _mock_ws()
         ws2 = _mock_ws()
         await manager.subscribe(ws1, "wf-1")
@@ -239,9 +231,7 @@ class TestWorkflowWSManager:
         assert payload["workflow_id"] == "wf-1"
 
     @pytest.mark.asyncio
-    async def test_broadcast_no_subscribers(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_broadcast_no_subscribers(self, manager: WorkflowWSManager) -> None:
         evt = WorkflowEvent(
             event_type=WorkflowEventType.WORKFLOW_COMPLETED,
             workflow_id="wf-none",
@@ -250,9 +240,7 @@ class TestWorkflowWSManager:
         await manager.broadcast("wf-none", evt)
 
     @pytest.mark.asyncio
-    async def test_broadcast_only_target_workflow(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_broadcast_only_target_workflow(self, manager: WorkflowWSManager) -> None:
         ws1 = _mock_ws()
         ws2 = _mock_ws()
         await manager.subscribe(ws1, "wf-1")
@@ -268,9 +256,7 @@ class TestWorkflowWSManager:
         ws2.send_text.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_broadcast_dead_connection_cleanup(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_broadcast_dead_connection_cleanup(self, manager: WorkflowWSManager) -> None:
         alive = _mock_ws(alive=True)
         dead = _mock_ws(alive=False)
         await manager.subscribe(alive, "wf-1")
@@ -290,9 +276,38 @@ class TestWorkflowWSManager:
         alive.send_text.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_subscribe_idempotent(
+    async def test_broadcast_sends_to_clients_concurrently(
         self, manager: WorkflowWSManager
     ) -> None:
+        ready = asyncio.Event()
+
+        class _SlowWS:
+            async def send_text(self, payload: str) -> None:
+                assert payload
+                await asyncio.sleep(0.05)
+
+        class _FastWS:
+            async def send_text(self, payload: str) -> None:
+                assert payload
+                ready.set()
+
+        await manager.subscribe(_SlowWS(), "wf-1")
+        await manager.subscribe(_FastWS(), "wf-1")
+
+        evt = WorkflowEvent(
+            event_type=WorkflowEventType.STEP_COMPLETED,
+            workflow_id="wf-1",
+        )
+
+        start = perf_counter()
+        broadcast_task = asyncio.create_task(manager.broadcast("wf-1", evt))
+        await asyncio.wait_for(ready.wait(), timeout=0.02)
+        await broadcast_task
+
+        assert perf_counter() - start < 0.1
+
+    @pytest.mark.asyncio
+    async def test_subscribe_idempotent(self, manager: WorkflowWSManager) -> None:
         ws = _mock_ws()
         await manager.subscribe(ws, "wf-1")
         await manager.subscribe(ws, "wf-1")  # same sub again
@@ -300,9 +315,7 @@ class TestWorkflowWSManager:
         assert await manager.active_subscriptions("wf-1") == 1
 
     @pytest.mark.asyncio
-    async def test_disconnect_unknown_ws(
-        self, manager: WorkflowWSManager
-    ) -> None:
+    async def test_disconnect_unknown_ws(self, manager: WorkflowWSManager) -> None:
         ws = _mock_ws()
         # Should not raise
         await manager.disconnect(ws)
@@ -393,6 +406,37 @@ class TestExecutorEventSink:
         types = [e.event_type for e in captured]
         assert WorkflowEventType.STEP_SKIPPED in types
 
+    @pytest.mark.asyncio
+    async def test_route_event_sink_flushes_in_order(self) -> None:
+        from agent33.api.routes.workflows import _build_workflow_event_sink
+
+        captured: list[str] = []
+
+        class _Manager:
+            async def broadcast(self, workflow_id: str, event: WorkflowEvent) -> None:
+                await asyncio.sleep(0.01 if event.step_id == "s1" else 0)
+                captured.append(f"{workflow_id}:{event.step_id}")
+
+        sink, flush = _build_workflow_event_sink(_Manager())
+        sink(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_STARTED,
+                workflow_id="wf-ordered",
+                step_id="s1",
+            )
+        )
+        sink(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_COMPLETED,
+                workflow_id="wf-ordered",
+                step_id="s2",
+            )
+        )
+
+        await flush()
+
+        assert captured == ["wf-ordered:s1", "wf-ordered:s2"]
+
 
 # ---------------------------------------------------------------------------
 # WebSocket endpoint tests (using mock/unit approach)
@@ -425,8 +469,9 @@ class TestWorkflowWSEndpointAuth:
 
         app.state.ws_manager = WorkflowWSManager()
         client = TestClient(app)
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            "/v1/workflows/ws?token=bad-token"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect("/v1/workflows/ws?token=bad-token"),
         ):
             pass
 
@@ -441,12 +486,28 @@ class TestWorkflowWSEndpointAuth:
         app.state.ws_manager = WorkflowWSManager()
         token = create_access_token("ws-user", scopes=["admin"])
         client = TestClient(app)
-        with client.websocket_connect(
-            f"/v1/workflows/ws?token={token}"
-        ) as ws:
+        with client.websocket_connect(f"/v1/workflows/ws?token={token}") as ws:
             ws.send_json({"action": "ping"})
             resp = ws.receive_json()
             assert resp == {"type": "pong"}
+
+    def test_ws_endpoint_rejects_missing_workflows_read_scope(self) -> None:
+        """WebSocket connection without workflows:read should be rejected."""
+        from starlette.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
+
+        from agent33.main import app
+        from agent33.security.auth import create_access_token
+        from agent33.workflows.ws_manager import WorkflowWSManager
+
+        app.state.ws_manager = WorkflowWSManager()
+        token = create_access_token("ws-user", scopes=["agents:read"])
+        client = TestClient(app)
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(f"/v1/workflows/ws?token={token}"),
+        ):
+            pass
 
 
 class TestWorkflowWSEndpointActions:
@@ -464,9 +525,7 @@ class TestWorkflowWSEndpointActions:
         app.state.ws_manager = WorkflowWSManager()
         token = create_access_token("ws-action-user", scopes=["admin"])
         client = TestClient(app)
-        with client.websocket_connect(
-            f"/v1/workflows/ws?token={token}"
-        ) as ws:
+        with client.websocket_connect(f"/v1/workflows/ws?token={token}") as ws:
             yield ws
 
     def test_ping_pong(self, ws_conn: Any) -> None:
@@ -475,21 +534,15 @@ class TestWorkflowWSEndpointActions:
         assert resp == {"type": "pong"}
 
     def test_subscribe(self, ws_conn: Any) -> None:
-        ws_conn.send_json(
-            {"action": "subscribe", "workflow_id": "wf-test-1"}
-        )
+        ws_conn.send_json({"action": "subscribe", "workflow_id": "wf-test-1"})
         resp = ws_conn.receive_json()
         assert resp["type"] == "subscribed"
         assert resp["workflow_id"] == "wf-test-1"
 
     def test_unsubscribe(self, ws_conn: Any) -> None:
-        ws_conn.send_json(
-            {"action": "subscribe", "workflow_id": "wf-test-2"}
-        )
+        ws_conn.send_json({"action": "subscribe", "workflow_id": "wf-test-2"})
         ws_conn.receive_json()  # consume subscribed response
-        ws_conn.send_json(
-            {"action": "unsubscribe", "workflow_id": "wf-test-2"}
-        )
+        ws_conn.send_json({"action": "unsubscribe", "workflow_id": "wf-test-2"})
         resp = ws_conn.receive_json()
         assert resp["type"] == "unsubscribed"
         assert resp["workflow_id"] == "wf-test-2"

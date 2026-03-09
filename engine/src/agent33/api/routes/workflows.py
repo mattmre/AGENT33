@@ -323,17 +323,9 @@ async def _execute_single(
 
     # Build an event_sink that broadcasts to the WebSocket manager
     event_sink = None
+    flush_events = None
     if ws_manager is not None:
-        import asyncio
-
-        def _event_sink(event: Any) -> None:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(ws_manager.broadcast(event.workflow_id, event))
-            except RuntimeError:
-                pass
-
-        event_sink = _event_sink
+        event_sink, flush_events = _build_workflow_event_sink(ws_manager)
 
     executor = WorkflowExecutor(workflow, event_sink=event_sink)
     start_ts = time.time()
@@ -343,6 +335,8 @@ async def _execute_single(
         result: WorkflowResult = await executor.execute(request.inputs)
         error = None
     except Exception as exc:
+        if flush_events is not None:
+            await flush_events()
         logger.error("workflow_execution_failed", name=name, error=str(exc))
         # Record failure in history
         _execution_history.append(
@@ -358,6 +352,9 @@ async def _execute_single(
             }
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if flush_events is not None:
+        await flush_events()
 
     # Extract step statuses from result
     step_statuses = {sr.step_id: sr.status for sr in result.step_results}
@@ -385,6 +382,35 @@ async def _execute_single(
     )
 
     return result.model_dump()
+
+
+def _build_workflow_event_sink(ws_manager: Any) -> tuple[Any, Any]:
+    """Create a FIFO event sink and flush callback for WebSocket broadcasts."""
+    import asyncio
+
+    queue: asyncio.Queue[Any | None] = asyncio.Queue()
+
+    async def _broadcast_worker() -> None:
+        while True:
+            event = await queue.get()
+            try:
+                if event is None:
+                    return
+                await ws_manager.broadcast(event.workflow_id, event)
+            finally:
+                queue.task_done()
+
+    worker_task = asyncio.create_task(_broadcast_worker())
+
+    def _event_sink(event: Any) -> None:
+        queue.put_nowait(event)
+
+    async def _flush_events() -> None:
+        await queue.join()
+        await queue.put(None)
+        await worker_task
+
+    return _event_sink, _flush_events
 
 
 async def _execute_repeated_or_autonomous(

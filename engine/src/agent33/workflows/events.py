@@ -28,7 +28,7 @@ class WorkflowEvent:
 
     Attributes:
         event_type: The kind of event.
-        workflow_id: Identifier for the workflow execution run.
+        workflow_id: Workflow definition name associated with the execution.
         timestamp: Unix epoch timestamp (seconds).
         step_id: Optional step identifier (populated for step-level events).
         data: Arbitrary payload specific to the event type.

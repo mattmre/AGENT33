@@ -77,13 +77,15 @@ class WorkflowWSManager:
             targets = list(subs)
 
         payload = event.to_json()
-        dead: list[Any] = []
-
-        for ws in targets:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                dead.append(ws)
+        results = await asyncio.gather(
+            *(ws.send_text(payload) for ws in targets),
+            return_exceptions=True,
+        )
+        dead = [
+            ws
+            for ws, result in zip(targets, results, strict=False)
+            if isinstance(result, Exception)
+        ]
 
         if dead:
             async with self._lock:
