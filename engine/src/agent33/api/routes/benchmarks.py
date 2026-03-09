@@ -51,15 +51,23 @@ def _get_artifact_store() -> SkillsBenchArtifactStore:
     return _artifact_store
 
 
-def _store_run(run: BenchmarkRunResult) -> None:
-    """Store a benchmark run with bounded retention."""
+def _cache_run(run: BenchmarkRunResult) -> None:
+    """Cache a benchmark run with bounded retention."""
     _runs[run.run_id] = run
+    if run.run_id in _run_order:
+        _run_order.remove(run.run_id)
     _run_order.append(run.run_id)
-    store = _get_artifact_store()
-    store.persist_run(run)
     if len(_run_order) > _MAX_STORED_RUNS:
         oldest = _run_order.pop(0)
         _runs.pop(oldest, None)
+
+
+def _store_run(run: BenchmarkRunResult) -> None:
+    """Persist and cache a benchmark run with bounded retention."""
+    _cache_run(run)
+    store = _get_artifact_store()
+    if not store.has_run(run.run_id):
+        store.persist_run(run)
 
 
 def _get_run(run_id: str) -> BenchmarkRunResult | None:
@@ -67,9 +75,12 @@ def _get_run(run_id: str) -> BenchmarkRunResult | None:
     run = _runs.get(run_id)
     if run is not None:
         return run
-    run = _get_artifact_store().load_run(run_id)
+    try:
+        run = _get_artifact_store().load_run(run_id)
+    except ValueError:
+        return None
     if run is not None:
-        _runs[run_id] = run
+        _cache_run(run)
     return run
 
 
@@ -353,7 +364,7 @@ async def get_benchmark_run_ctrf(run_id: str) -> dict[str, Any]:
     if report is None:
         report = _ctrf.generate_report(run)
         ctrf_path = store.persist_ctrf_report(run_id, report)
-        run.ctrf_report_path = ctrf_path.relative_to(store.base_path / run_id).as_posix()
+        run.ctrf_report_path = ctrf_path.relative_to(store.base_path / run.run_id).as_posix()
         store.persist_run(run)
     return report
 
