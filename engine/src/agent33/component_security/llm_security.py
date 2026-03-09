@@ -25,6 +25,7 @@ logger = structlog.get_logger()
 _HAS_LLMGUARD = False
 try:
     import llm_guard  # noqa: F401
+
     _HAS_LLMGUARD = True
 except ImportError:
     pass
@@ -32,6 +33,7 @@ except ImportError:
 _HAS_GARAK = False
 try:
     import garak  # noqa: F401
+
     _HAS_GARAK = True
 except ImportError:
     pass
@@ -295,9 +297,7 @@ class LLMGuardAdapter:
         """Check if llm-guard package is installed."""
         return _HAS_LLMGUARD
 
-    def scan_input(
-        self, text: str, *, run_id: str = ""
-    ) -> list[SecurityFinding]:
+    def scan_input(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
         """Scan input text using LLM Guard scanners.
 
         Runs PromptInjection, Toxicity, and InvisibleText scanners
@@ -305,22 +305,18 @@ class LLMGuardAdapter:
         content.
         """
         if not self.is_available():
-            logger.info("llm_guard_not_available", adapter="scan_input")
+            logger.debug("llm_guard_not_available", adapter="scan_input")
             return []
         try:
             llm_guard_mod = importlib.import_module("llm_guard")
-            input_scanners = importlib.import_module(
-                "llm_guard.input_scanners"
-            )
+            input_scanners = importlib.import_module("llm_guard.input_scanners")
 
             scanners = [
                 input_scanners.PromptInjection(threshold=0.5),
                 input_scanners.Toxicity(threshold=0.5),
                 input_scanners.InvisibleText(),
             ]
-            sanitized, results_valid, results_score = (
-                llm_guard_mod.scan_prompt(scanners, text)
-            )
+            _sanitized, results_valid, results_score = llm_guard_mod.scan_prompt(scanners, text)
 
             findings: list[SecurityFinding] = []
             scanner_names = [
@@ -337,46 +333,37 @@ class LLMGuardAdapter:
                             run_id=run_id or "adhoc",
                             severity=self._score_to_severity(score),
                             category=self._scanner_to_category(name),
-                            title=(
-                                f"LLM Guard: {name} detected in input"
-                            ),
+                            title=(f"LLM Guard: {name} detected in input"),
                             description=(
-                                f"{name} scanner flagged input text "
-                                f"(score: {score:.2f})"
+                                f"{name} scanner flagged input text (score: {score:.2f})"
                             ),
                             tool="llm-guard",
                         )
                     )
             return findings
         except Exception:
-            logger.warning(
-                "llm_guard_scan_input_failed", exc_info=True
-            )
+            logger.warning("llm_guard_scan_input_failed", exc_info=True)
             return []
 
-    def scan_output(
-        self, text: str, *, run_id: str = ""
-    ) -> list[SecurityFinding]:
+    def scan_output(self, text: str, *, run_id: str = "") -> list[SecurityFinding]:
         """Scan LLM output using LLM Guard scanners.
 
         Runs Sensitive and NoRefusal scanners against the supplied
         output text and returns findings for any flagged content.
         """
         if not self.is_available():
-            logger.info("llm_guard_not_available", adapter="scan_output")
+            logger.debug("llm_guard_not_available", adapter="scan_output")
             return []
         try:
             llm_guard_mod = importlib.import_module("llm_guard")
-            output_scanners = importlib.import_module(
-                "llm_guard.output_scanners"
-            )
+            output_scanners = importlib.import_module("llm_guard.output_scanners")
 
             scanners = [
                 output_scanners.Sensitive(),
                 output_scanners.NoRefusal(),
             ]
-            sanitized, results_valid, results_score = (
-                llm_guard_mod.scan_output(scanners, "", text)
+            _sanitized, results_valid, results_score = llm_guard_mod.scan_output(
+                scanners, "", text
             )
 
             findings: list[SecurityFinding] = []
@@ -390,21 +377,16 @@ class LLMGuardAdapter:
                             run_id=run_id or "adhoc",
                             severity=self._score_to_severity(score),
                             category=self._scanner_to_category(name),
-                            title=(
-                                f"LLM Guard: {name} detected in output"
-                            ),
+                            title=(f"LLM Guard: {name} detected in output"),
                             description=(
-                                f"{name} scanner flagged output text "
-                                f"(score: {score:.2f})"
+                                f"{name} scanner flagged output text (score: {score:.2f})"
                             ),
                             tool="llm-guard",
                         )
                     )
             return findings
         except Exception:
-            logger.warning(
-                "llm_guard_scan_output_failed", exc_info=True
-            )
+            logger.warning("llm_guard_scan_output_failed", exc_info=True)
             return []
 
     @staticmethod
@@ -428,9 +410,7 @@ class LLMGuardAdapter:
             "Sensitive": FindingCategory.SECRETS_EXPOSURE,
             "NoRefusal": FindingCategory.MODEL_SECURITY,
         }
-        return mapping.get(
-            scanner_name, FindingCategory.MODEL_SECURITY
-        )
+        return mapping.get(scanner_name, FindingCategory.MODEL_SECURITY)
 
 
 class GarakAdapter:
@@ -464,7 +444,7 @@ class GarakAdapter:
         each probe with test prompts as an informational finding.
         """
         if not self.is_available():
-            logger.info("garak_not_available", adapter="run_probes")
+            logger.debug("garak_not_available", adapter="run_probes")
             return []
         try:
             importlib.import_module("garak.probes")
@@ -483,24 +463,18 @@ class GarakAdapter:
                 if probe_name not in available_probes:
                     continue
                 try:
-                    probe_mod = importlib.import_module(
-                        f"garak.probes.{probe_name}"
-                    )
+                    probe_mod = importlib.import_module(f"garak.probes.{probe_name}")
                     probe_classes = [
                         name
                         for name in dir(probe_mod)
                         if not name.startswith("_")
-                        and isinstance(
-                            getattr(probe_mod, name, None), type
-                        )
+                        and isinstance(getattr(probe_mod, name, None), type)
                     ]
                     for cls_name in probe_classes[:3]:
                         cls = getattr(probe_mod, cls_name)
                         if hasattr(cls, "prompts"):
                             instance = cls()
-                            prompt_count = len(
-                                getattr(instance, "prompts", [])
-                            )
+                            prompt_count = len(getattr(instance, "prompts", []))
                             if prompt_count > 0:
                                 label = available_probes[probe_name]
                                 findings.append(
@@ -512,10 +486,7 @@ class GarakAdapter:
                                             if "inject" in probe_name
                                             else FindingCategory.MODEL_SECURITY
                                         ),
-                                        title=(
-                                            f"Garak: {label} "
-                                            f"probe available"
-                                        ),
+                                        title=(f"Garak: {label} probe available"),
                                         description=(
                                             f"Probe {cls_name} has "
                                             f"{prompt_count} test "
@@ -535,7 +506,5 @@ class GarakAdapter:
 
             return findings
         except Exception:
-            logger.warning(
-                "garak_run_probes_failed", exc_info=True
-            )
+            logger.warning("garak_run_probes_failed", exc_info=True)
             return []
