@@ -353,6 +353,54 @@ def test_restore_learning_state_rejects_count_mismatch(tmp_path: Path):
         )
 
 
+def test_restore_learning_state_rejects_unsupported_backup_format_version(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Unsupported version",
+            tenant_id="tenant-version",
+        )
+    )
+    backup_path = tmp_path / "unsupported_version_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["format_version"] = 99
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported backup format version: 99"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
+def test_restore_learning_state_requires_format_version_in_envelope(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Missing version",
+            tenant_id="tenant-version",
+        )
+    )
+    backup_path = tmp_path / "missing_version_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    del payload["format_version"]
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid backup envelope"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
 def test_file_store_corruption_recovery_is_deterministic(tmp_path: Path):
     corrupt_path = tmp_path / "corrupt_learning.json"
     corrupt_path.write_text("{not-json", encoding="utf-8")

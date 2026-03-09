@@ -16,6 +16,9 @@ from agent33.improvement.models import LearningSignal, ResearchIntake  # noqa: T
 
 logger = structlog.get_logger()
 
+CURRENT_BACKUP_FORMAT_VERSION = 1
+SUPPORTED_BACKUP_FORMAT_VERSIONS = frozenset({CURRENT_BACKUP_FORMAT_VERSION})
+
 
 class LearningPersistenceState(BaseModel):
     """Durable state for learning signals and generated intakes."""
@@ -28,7 +31,7 @@ class LearningPersistenceState(BaseModel):
 class LearningStateBackupEnvelope(BaseModel):
     """Portable backup envelope with validation metadata."""
 
-    format_version: int = 1
+    format_version: int
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     signal_count: int
     intake_count: int
@@ -311,6 +314,7 @@ def _build_backup_envelope(state: LearningPersistenceState) -> LearningStateBack
     serialized_state = _serialize_learning_state(state)
     checksum = hashlib.sha256(serialized_state.encode("utf-8")).hexdigest()
     return LearningStateBackupEnvelope(
+        format_version=CURRENT_BACKUP_FORMAT_VERSION,
         signal_count=len(state.signals),
         intake_count=len(state.generated_intakes),
         signal_intake_map_count=len(state.signal_intake_map),
@@ -320,6 +324,8 @@ def _build_backup_envelope(state: LearningPersistenceState) -> LearningStateBack
 
 
 def _validate_backup_envelope(envelope: LearningStateBackupEnvelope) -> LearningPersistenceState:
+    if envelope.format_version not in SUPPORTED_BACKUP_FORMAT_VERSIONS:
+        raise ValueError(f"Unsupported backup format version: {envelope.format_version}")
     state = envelope.state
     if envelope.signal_count != len(state.signals):
         raise ValueError("Backup metadata signal_count does not match payload")
@@ -358,7 +364,10 @@ def restore_learning_state(
     else:
         parsed = json.loads(payload)
         if isinstance(parsed, dict) and "state" in parsed:
-            envelope = LearningStateBackupEnvelope.model_validate(parsed)
+            try:
+                envelope = LearningStateBackupEnvelope.model_validate(parsed)
+            except ValidationError as exc:
+                raise ValueError("Invalid backup envelope") from exc
             state = _validate_backup_envelope(envelope)
         else:
             state = LearningPersistenceState.model_validate(parsed)
