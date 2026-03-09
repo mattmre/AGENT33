@@ -344,7 +344,14 @@ class AgentRuntime:
     def _emit_routing_metrics(self) -> None:
         if self._routing_metrics_emitter is None:
             return
-        self._routing_metrics_emitter(self._routing_decision_metadata)
+        from fastapi import HTTPException
+
+        try:
+            self._routing_metrics_emitter(self._routing_decision_metadata)
+        except HTTPException:
+            raise
+        except Exception:
+            logger.debug("failed to emit routing metrics", exc_info=True)
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -541,12 +548,6 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
-        routed_model, routed_max_tokens = self._resolve_execution_parameters(
-            inputs=inputs,
-            iterative=True,
-            max_iterations=(config.max_iterations if config is not None else None),
-        )
-
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
 
@@ -584,6 +585,11 @@ class AgentRuntime:
                     raise ValueError(f"Missing required input: {name}")
 
             loop_config = config or ToolLoopConfig()
+            routed_model, routed_max_tokens = self._resolve_execution_parameters(
+                inputs=inputs,
+                iterative=True,
+                max_iterations=loop_config.max_iterations,
+            )
             tool_loop = ToolLoop(
                 router=self._router,
                 tool_registry=self._tool_registry,
@@ -684,13 +690,19 @@ class AgentRuntime:
                 agent_definition=self._definition,
                 inputs=inputs,
                 system_prompt=system_prompt,
-                model=routed_model,
+                model=self._model,
             )
             hook_ctx = await pre_runner.run(hook_ctx)
             if hook_ctx.abort:
                 raise HookAbortError(hook_ctx.abort_reason)
             inputs = hook_ctx.inputs
             system_prompt = hook_ctx.system_prompt
+
+        routed_model, routed_max_tokens = self._resolve_execution_parameters(
+            inputs=inputs,
+            iterative=True,
+            max_iterations=(config.max_iterations if config is not None else None),
+        )
 
         user_content = json.dumps(inputs, indent=2)
         messages = [

@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from agent33.agents.definition import (
@@ -510,6 +511,64 @@ class TestAgentRuntimeEffortRouting:
         assert result.routing_decision is not None
         assert result.routing_decision["estimated_token_budget"] == 180
 
+    async def test_invoke_iterative_routes_after_pre_hook_input_mutation(self) -> None:
+        from agent33.hooks.protocol import BaseHook
+        from agent33.hooks.registry import HookRegistry
+
+        class InputExpansionHook(BaseHook):
+            async def execute(self, context, call_next):
+                context.inputs["task"] = (
+                    "Analyze architecture tradeoffs for routing strategy and "
+                    + ("context " * 180)
+                )
+                context.inputs["evidence"] = "hook-added"
+                return await call_next(context)
+
+        definition = _make_definition(max_tokens=120)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="high-model"))
+        tool_registry = MagicMock()
+        tool_registry.list_all.return_value = []
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            low_model="low-model",
+            medium_model="medium-model",
+            high_model="high-model",
+            low_token_multiplier=0.75,
+            medium_token_multiplier=1.0,
+            high_token_multiplier=1.5,
+            heuristic_enabled=True,
+        )
+        registry = HookRegistry()
+        registry.register(
+            InputExpansionHook(
+                name="expand-inputs",
+                event_type="agent.invoke.pre",
+                priority=100,
+            )
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=None,
+            effort_router=effort_router,
+            tool_registry=tool_registry,
+            hook_registry=registry,
+        )
+
+        result = await runtime.invoke_iterative(
+            {"task": "brief"},
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        call_kwargs = model_router.complete.call_args.kwargs
+        assert call_kwargs["model"] == "high-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.HIGH.value
+        assert result.routing_decision["input_field_count"] == 2
+        assert result.routing_decision["input_char_count"] > len('{"task": "brief"}')
+
     async def test_invoke_includes_heuristic_calibration_metadata(self) -> None:
         definition = _make_definition(max_tokens=100)
         model_router = MagicMock()
@@ -590,6 +649,53 @@ class TestAgentRuntimeEffortRouting:
         assert runtime.routing_decision_metadata["iterations"] == 2
         assert runtime.routing_decision_metadata["tool_calls_made"] == 1
         assert runtime.routing_decision_metadata["termination_reason"] == "natural"
+
+    async def test_invoke_ignores_unexpected_routing_metrics_emitter_failures(self) -> None:
+        definition = _make_definition(max_tokens=100)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="safe-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            high_model="safe-model",
+            high_token_multiplier=1.5,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+            routing_metrics_emitter=lambda _routing: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+
+        result = await runtime.invoke({"task": "stay fail-open"})
+
+        assert result.model == "safe-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.HIGH.value
+
+    async def test_invoke_propagates_fail_closed_routing_metrics_errors(self) -> None:
+        definition = _make_definition(max_tokens=100)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="safe-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            high_model="safe-model",
+            high_token_multiplier=1.5,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+            routing_metrics_emitter=lambda _routing: (_ for _ in ()).throw(
+                HTTPException(status_code=503, detail="Effort telemetry export failed")
+            ),
+        )
+
+        with pytest.raises(HTTPException, match="Effort telemetry export failed"):
+            await runtime.invoke({"task": "fail closed"})
 
 
 class TestEffortRoutingObservabilityAPI:
