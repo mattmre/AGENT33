@@ -12,7 +12,9 @@ Covers:
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
+from agent33.main import app
 from agent33.observability.failure import (
     FailureCategory,
     FailureRecord,
@@ -37,6 +39,7 @@ from agent33.observability.trace_models import (
     TraceStatus,
     TraceStep,
 )
+from agent33.security.auth import create_access_token
 
 # ===================================================================
 # 1. Trace models
@@ -414,6 +417,14 @@ class TestTraceAPI:
         assert resp.status_code == 201
         return resp.json()
 
+    def _tenant_client(self, tenant_id: str) -> TestClient:
+        token = create_access_token(
+            "trace-user",
+            scopes=["workflows:read", "tools:execute"],
+            tenant_id=tenant_id,
+        )
+        return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
     def test_start_trace(self):
         data = self._start_trace()
         assert data["trace_id"].startswith("TRC-")
@@ -431,6 +442,19 @@ class TestTraceAPI:
         resp = self.client.get(f"/v1/traces/{created['trace_id']}")
         assert resp.status_code == 200
         assert resp.json()["task_id"] == "T-API-001"
+
+    def test_get_trace_is_tenant_scoped(self):
+        tenant_a = self._tenant_client("tenant-a")
+        tenant_b = self._tenant_client("tenant-b")
+
+        created = tenant_a.post(
+            "/v1/traces/",
+            json={"task_id": "T-TENANT-A", "agent_id": "AGT-006"},
+        )
+        trace_id = created.json()["trace_id"]
+
+        assert tenant_a.get(f"/v1/traces/{trace_id}").status_code == 200
+        assert tenant_b.get(f"/v1/traces/{trace_id}").status_code == 404
 
     def test_get_trace_not_found(self):
         resp = self.client.get("/v1/traces/TRC-doesnotexist")
@@ -464,6 +488,22 @@ class TestTraceAPI:
             },
         )
         assert resp.status_code == 404
+
+    def test_add_action_is_tenant_scoped(self):
+        tenant_a = self._tenant_client("tenant-a")
+        tenant_b = self._tenant_client("tenant-b")
+
+        created = tenant_a.post(
+            "/v1/traces/",
+            json={"task_id": "T-TENANT-ACTION", "agent_id": "AGT-006"},
+        )
+        trace_id = created.json()["trace_id"]
+
+        denied = tenant_b.post(
+            f"/v1/traces/{trace_id}/actions",
+            json={"step_id": "STP-001", "action_id": "ACT-001", "tool": "shell"},
+        )
+        assert denied.status_code == 404
 
     def test_complete_trace(self):
         created = self._start_trace()

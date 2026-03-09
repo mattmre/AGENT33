@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from agent33.config import settings
@@ -27,11 +28,11 @@ from agent33.improvement.persistence import (
     restore_learning_state,
 )
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
+from agent33.main import app
+from agent33.security.auth import create_access_token
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from starlette.testclient import TestClient
 
 
 @pytest.fixture()
@@ -72,6 +73,15 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 3)
     yield
     _reset_service()
+
+
+def _tenant_client(tenant_id: str, scopes: list[str] | None = None) -> TestClient:
+    token = create_access_token(
+        "learning-user",
+        scopes=scopes or [],
+        tenant_id=tenant_id,
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
 def test_settings_reject_invalid_learning_corruption_behavior() -> None:
@@ -897,6 +907,32 @@ def test_summary_is_tenant_scoped_in_route(client: TestClient, monkeypatch: pyte
     assert payload["counts_by_tenant"] == {"tenant-1": 1}
 
 
+def test_learning_routes_reject_cross_tenant_override_for_authenticated_user(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    tenant_client = _tenant_client("tenant-1")
+
+    create_resp = tenant_client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "high",
+            "summary": "cross-tenant attempt",
+            "tenant_id": "tenant-2",
+        },
+    )
+    assert create_resp.status_code == 403
+    assert "Tenant mismatch" in create_resp.json()["detail"]
+
+    summary_resp = tenant_client.get(
+        "/v1/improvements/learning/summary",
+        params={"tenant_id": "tenant-2"},
+    )
+    assert summary_resp.status_code == 403
+    assert "Tenant mismatch" in summary_resp.json()["detail"]
+
+
 def test_trends_route_returns_dimension_report(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1197,6 +1233,33 @@ def test_backup_endpoint_creates_portable_backup(
     backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
     assert len(backup_data["signals"]) == 1
     assert backup_data["signals"][0]["summary"] == "Signal for backup test"
+
+
+def test_backup_restore_routes_require_admin_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    backup_path = tmp_path / "operator_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    _reset_service()
+
+    tenant_client = _tenant_client("tenant-a")
+    backup_resp = tenant_client.post(
+        "/v1/improvements/learning/backup",
+        json={"backup_path": str(backup_path)},
+    )
+    assert backup_resp.status_code == 403
+
+    restore_resp = tenant_client.post(
+        "/v1/improvements/learning/restore",
+        json={"backup_path": str(backup_path)},
+    )
+    assert restore_resp.status_code == 403
 
 
 def test_backup_endpoint_uses_default_path_when_omitted(

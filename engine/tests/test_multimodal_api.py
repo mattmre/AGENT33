@@ -49,6 +49,11 @@ def tenant_b_writer() -> TestClient:
     return _client(["multimodal:read", "multimodal:write"], tenant_id="tenant-b")
 
 
+@pytest.fixture
+def admin_client() -> TestClient:
+    return _client(["admin"], tenant_id="tenant-a")
+
+
 def test_create_request_with_execute_now_false(writer_client: TestClient) -> None:
     response = writer_client.post(
         "/v1/multimodal/requests",
@@ -143,6 +148,39 @@ def test_policy_blocks_disallowed_modality(writer_client: TestClient) -> None:
     )
     assert response.status_code == 400
     assert "not allowed" in response.json()["detail"]
+
+
+def test_policy_route_rejects_cross_tenant_write_for_non_admin(
+    writer_client: TestClient,
+) -> None:
+    response = writer_client.post(
+        "/v1/multimodal/tenants/tenant-b/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 403
+    assert "Tenant mismatch" in response.json()["detail"]
+
+
+def test_policy_route_allows_admin_cross_tenant_write(
+    admin_client: TestClient,
+    tenant_b_writer: TestClient,
+) -> None:
+    response = admin_client.post(
+        "/v1/multimodal/tenants/tenant-b/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 200
+
+    blocked = tenant_b_writer.post(
+        "/v1/multimodal/requests",
+        json={
+            "modality": "text_to_speech",
+            "input_text": "this is too long",
+            "execute_now": False,
+        },
+    )
+    assert blocked.status_code == 400
+    assert "max_text_chars" in blocked.json()["detail"]
 
 
 def test_list_requests_is_tenant_scoped(

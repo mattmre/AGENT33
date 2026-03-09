@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from agent33.config import settings
@@ -43,6 +43,7 @@ from agent33.improvement.repo_ingestion import (
     score_feature_candidate,
 )
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
+from agent33.security.permissions import check_permission, require_scope
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
 
@@ -221,18 +222,61 @@ def _ensure_learning_enabled() -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
+def _request_tenant_context(request: Request) -> tuple[str, list[str]]:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return "", []
+    return getattr(user, "tenant_id", ""), list(getattr(user, "scopes", []))
+
+
+def _resolve_tenant_id(
+    request: Request,
+    requested_tenant_id: str | None,
+    *,
+    default: str | None = None,
+) -> str | None:
+    tenant_id, scopes = _request_tenant_context(request)
+    is_admin = check_permission("admin", scopes) if scopes else False
+    normalized_requested = requested_tenant_id or None
+
+    if tenant_id and not is_admin:
+        if normalized_requested not in {None, "default", tenant_id}:
+            raise HTTPException(
+                status_code=403,
+                detail="Tenant mismatch for authenticated principal",
+            )
+        return tenant_id
+
+    if normalized_requested is not None:
+        return normalized_requested
+    if tenant_id:
+        return tenant_id
+    return default
+
+
+def _enforce_intake_access(request: Request, intake: ResearchIntake | None) -> ResearchIntake:
+    if intake is None:
+        raise HTTPException(status_code=404, detail="Intake not found")
+
+    tenant_id, scopes = _request_tenant_context(request)
+    is_admin = check_permission("admin", scopes) if scopes else False
+    if tenant_id and not is_admin and intake.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Intake not found")
+    return intake
+
+
 # ---------------------------------------------------------------------------
 # Research Intake endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.post("/intakes")
-def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
+def submit_intake(req: SubmitIntakeRequest, request: Request) -> dict[str, Any]:
     """Submit a new research intake."""
     try:
         intake = ResearchIntake(
             submitted_by=req.submitted_by,
-            tenant_id=req.tenant_id,
+            tenant_id=_resolve_tenant_id(request, req.tenant_id, default="default") or "default",
             classification=IntakeClassification(
                 research_type=req.research_type,
                 category=req.category,
@@ -251,29 +295,36 @@ def submit_intake(req: SubmitIntakeRequest) -> dict[str, Any]:
         )
         result = _service.submit_intake(intake)
         return result.model_dump(mode="json")
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @router.post("/intakes/competitive/repos")
-def submit_competitive_repo_intakes(req: BatchRepoIntakeRequest) -> dict[str, Any]:
+def submit_competitive_repo_intakes(
+    req: BatchRepoIntakeRequest, request: Request
+) -> dict[str, Any]:
     """Submit a batch of competitive intakes derived from repository metadata.
 
-    Note: tenant_id is accepted from the request body, consistent with this
-    router's existing trust boundary (no require_scope enforcement).
+    Body-supplied tenant IDs are accepted only when they match the authenticated
+    tenant or the caller is admin.
     """
+    tenant_id = _resolve_tenant_id(request, req.tenant_id, default="default") or "default"
     try:
         created_intakes = [
             _service.submit_intake(
                 build_competitive_intake(
                     record,
                     submitted_by=req.submitted_by,
-                    tenant_id=req.tenant_id,
+                    tenant_id=tenant_id,
                 )
             ).model_dump(mode="json")
             for record in req.records
         ]
         return {"created_intakes": created_intakes}
+    except HTTPException:
+        raise
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
@@ -294,6 +345,7 @@ def score_feature_candidates(req: ScoreFeatureCandidatesRequest) -> dict[str, An
 
 @router.get("/intakes")
 def list_intakes(
+    request: Request,
     status: str | None = None,
     research_type: str | None = None,
     tenant_id: str | None = None,
@@ -305,28 +357,32 @@ def list_intakes(
             intake_status = IntakeStatus(status)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
+    resolved_tenant_id = _resolve_tenant_id(request, tenant_id)
     intakes = _service.list_intakes(
-        status=intake_status, research_type=research_type, tenant_id=tenant_id
+        status=intake_status,
+        research_type=research_type,
+        tenant_id=resolved_tenant_id,
     )
     return [i.model_dump(mode="json") for i in intakes]
 
 
 @router.get("/intakes/{intake_id}")
-def get_intake(intake_id: str) -> dict[str, Any]:
+def get_intake(intake_id: str, request: Request) -> dict[str, Any]:
     """Get a specific research intake."""
-    intake = _service.get_intake(intake_id)
-    if intake is None:
-        raise HTTPException(status_code=404, detail="Intake not found")
+    intake = _enforce_intake_access(request, _service.get_intake(intake_id))
     return intake.model_dump(mode="json")
 
 
 @router.post("/intakes/{intake_id}/transition")
-def transition_intake(intake_id: str, req: TransitionIntakeRequest) -> dict[str, Any]:
+def transition_intake(
+    intake_id: str, req: TransitionIntakeRequest, request: Request
+) -> dict[str, Any]:
     """Transition an intake through its lifecycle."""
     try:
         new_status = IntakeStatus(req.new_status)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid status: {req.new_status}") from None
+    _enforce_intake_access(request, _service.get_intake(intake_id))
     try:
         result = _service.transition_intake(
             intake_id,
@@ -571,7 +627,7 @@ def complete_refresh(refresh_id: str, req: CompleteRefreshRequest) -> dict[str, 
 
 
 @router.post("/learning/signals")
-def record_learning_signal(req: RecordLearningSignalRequest) -> dict[str, Any]:
+def record_learning_signal(req: RecordLearningSignalRequest, request: Request) -> dict[str, Any]:
     """Record a continuous-learning signal."""
     _ensure_learning_enabled()
     try:
@@ -581,7 +637,7 @@ def record_learning_signal(req: RecordLearningSignalRequest) -> dict[str, Any]:
         signal = LearningSignal(
             signal_type=LearningSignalType(signal_type),
             severity=LearningSignalSeverity(req.severity),
-            tenant_id=req.tenant_id,
+            tenant_id=(_resolve_tenant_id(request, req.tenant_id, default="default") or "default"),
             summary=req.summary,
             details=req.details,
             source=req.source,
@@ -594,6 +650,7 @@ def record_learning_signal(req: RecordLearningSignalRequest) -> dict[str, Any]:
 
 @router.get("/learning/signals")
 def list_learning_signals(
+    request: Request,
     signal_type: str | None = None,
     signal_type_alias: str | None = Query(default=None, alias="type"),
     severity: str | None = None,
@@ -617,13 +674,14 @@ def list_learning_signals(
             parsed_severity = LearningSignalSeverity(severity)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid severity: {severity}") from None
+    resolved_tenant_id = _resolve_tenant_id(request, tenant_id)
 
     return [
         signal.model_dump(mode="json")
         for signal in _service.list_learning_signals(
             signal_type=parsed_type,
             severity=parsed_severity,
-            tenant_id=tenant_id,
+            tenant_id=resolved_tenant_id,
             limit=limit,
         )
     ]
@@ -631,6 +689,7 @@ def list_learning_signals(
 
 @router.get("/learning/summary")
 def get_learning_summary(
+    request: Request,
     limit: int | None = None,
     generate_intakes: bool = False,
     tenant_id: str | None = None,
@@ -641,8 +700,11 @@ def get_learning_summary(
     effective_limit = (
         settings.improvement_learning_summary_default_limit if limit is None else limit
     )
+    resolved_tenant_id = _resolve_tenant_id(request, tenant_id)
     summary = _service.summarize_learning_signals(
-        limit=effective_limit, tenant_id=tenant_id, window_days=window_days
+        limit=effective_limit,
+        tenant_id=resolved_tenant_id,
+        window_days=window_days,
     )
 
     generated_intakes = []
@@ -653,7 +715,7 @@ def get_learning_summary(
         generated_intakes = _service.generate_intakes_from_learning_signals(
             min_severity=min_severity,
             max_items=settings.improvement_learning_auto_intake_max_items,
-            tenant_id=tenant_id,
+            tenant_id=resolved_tenant_id,
         )
 
     return {
@@ -664,6 +726,7 @@ def get_learning_summary(
 
 @router.get("/learning/trends")
 def get_learning_trends(
+    request: Request,
     window_days: int = 7,
     dimension: str = LearningTrendDimension.SIGNAL_TYPE.value,
     tenant_id: str | None = None,
@@ -678,7 +741,7 @@ def get_learning_trends(
         report = _service.trend_learning_signals(
             window_days=window_days,
             dimension=parsed_dimension,
-            tenant_id=tenant_id,
+            tenant_id=_resolve_tenant_id(request, tenant_id),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -687,6 +750,7 @@ def get_learning_trends(
 
 @router.get("/learning/calibration")
 def get_learning_calibration(
+    request: Request,
     window_days: int = 30,
     target_auto_intakes_per_window: int | None = None,
     tenant_id: str | None = None,
@@ -702,7 +766,7 @@ def get_learning_calibration(
         report = _service.calibrate_learning_thresholds(
             window_days=window_days,
             target_auto_intakes_per_window=effective_target,
-            tenant_id=tenant_id,
+            tenant_id=_resolve_tenant_id(request, tenant_id),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -714,7 +778,7 @@ def get_learning_calibration(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/learning/backup")
+@router.post("/learning/backup", dependencies=[require_scope("admin")])
 def backup_learning_state_endpoint(req: BackupLearningStateRequest) -> dict[str, Any]:
     """Create a portable JSON backup of current learning state."""
     backup_dest = (
@@ -733,7 +797,7 @@ def backup_learning_state_endpoint(req: BackupLearningStateRequest) -> dict[str,
         raise HTTPException(status_code=500, detail=str(exc)) from None
 
 
-@router.post("/learning/restore")
+@router.post("/learning/restore", dependencies=[require_scope("admin")])
 def restore_learning_state_endpoint(req: RestoreLearningStateRequest) -> dict[str, Any]:
     """Restore learning state from a portable JSON backup."""
     if not Path(req.backup_path).exists():

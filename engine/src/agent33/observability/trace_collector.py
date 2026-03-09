@@ -121,6 +121,18 @@ class TraceCollector:
             raise TraceNotFoundError(f"Trace not found: {trace_id}")
         return trace
 
+    def get_trace_for_tenant(
+        self,
+        trace_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> TraceRecord:
+        """Get a trace by ID, optionally enforcing tenant ownership."""
+        trace = self.get_trace(trace_id)
+        if tenant_id is not None and trace.tenant_id != tenant_id:
+            raise TraceNotFoundError(f"Trace not found: {trace_id}")
+        return trace
+
     def list_traces(
         self,
         tenant_id: str | None = None,
@@ -148,9 +160,11 @@ class TraceCollector:
         self,
         trace_id: str,
         step_id: str,
+        *,
+        tenant_id: str | None = None,
     ) -> TraceStep:
         """Add a new step to a trace."""
-        trace = self.get_trace(trace_id)
+        trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
         step = TraceStep(step_id=step_id, started_at=datetime.now(UTC))
         trace.execution.append(step)
         self._persist_state()
@@ -167,13 +181,14 @@ class TraceCollector:
         exit_code: int | None = None,
         duration_ms: int = 0,
         status: ActionStatus = ActionStatus.SUCCESS,
+        tenant_id: str | None = None,
     ) -> TraceAction:
         """Add an action to a step within a trace."""
-        trace = self.get_trace(trace_id)
+        trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
         # Find the step
         step = next((s for s in trace.execution if s.step_id == step_id), None)
         if step is None:
-            step = self.add_step(trace_id, step_id)
+            step = self.add_step(trace_id, step_id, tenant_id=tenant_id)
 
         action = TraceAction(
             action_id=action_id,
@@ -194,9 +209,10 @@ class TraceCollector:
         status: TraceStatus = TraceStatus.COMPLETED,
         failure_code: str = "",
         failure_message: str = "",
+        tenant_id: str | None = None,
     ) -> TraceRecord:
         """Mark a trace as completed."""
-        trace = self.get_trace(trace_id)
+        trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
         trace.complete(status, failure_code, failure_message)
 
         # Complete any open steps
@@ -224,8 +240,10 @@ class TraceCollector:
         category: FailureCategory = FailureCategory.UNKNOWN,
         severity: FailureSeverity = FailureSeverity.MEDIUM,
         subcode: str = "",
+        tenant_id: str | None = None,
     ) -> FailureRecord:
         """Record a failure against a trace."""
+        trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
         from agent33.observability.failure import _CATEGORY_META
 
         meta = _CATEGORY_META.get(category, {})
@@ -246,13 +264,9 @@ class TraceCollector:
         self._failures[failure.failure_id] = failure
 
         # Also update the trace outcome
-        try:
-            trace = self.get_trace(trace_id)
-            trace.outcome.failure_code = category.value
-            trace.outcome.failure_message = message
-            trace.outcome.failure_category = category.value
-        except TraceNotFoundError as e:
-            logger.debug("Trace not found during collection: %s", e)
+        trace.outcome.failure_code = category.value
+        trace.outcome.failure_message = message
+        trace.outcome.failure_category = category.value
 
         logger.info(
             "failure_recorded id=%s trace=%s category=%s",
@@ -275,11 +289,18 @@ class TraceCollector:
         trace_id: str | None = None,
         category: FailureCategory | None = None,
         limit: int = 100,
+        tenant_id: str | None = None,
     ) -> list[FailureRecord]:
         """List failure records with optional filters."""
         results = list(self._failures.values())
         if trace_id is not None:
-            results = [f for f in results if f.trace_id == trace_id]
+            trace = self.get_trace_for_tenant(trace_id, tenant_id=tenant_id)
+            results = [f for f in results if f.trace_id == trace.trace_id]
+        elif tenant_id is not None:
+            tenant_trace_ids = {
+                trace.trace_id for trace in self._traces.values() if trace.tenant_id == tenant_id
+            }
+            results = [f for f in results if f.trace_id in tenant_trace_ids]
         if category is not None:
             results = [f for f in results if f.classification.category == category]
         results.sort(key=lambda f: f.occurred_at, reverse=True)

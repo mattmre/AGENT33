@@ -12,7 +12,7 @@ from agent33.multimodal.service import (
     PolicyViolationError,
     RequestNotFoundError,
 )
-from agent33.security.permissions import require_scope
+from agent33.security.permissions import check_permission, require_scope
 
 router = APIRouter(prefix="/v1/multimodal", tags=["multimodal"])
 _service = MultimodalService()
@@ -38,6 +38,13 @@ def _tenant_id(request: Request) -> str:
     if user is None:
         return ""
     return getattr(user, "tenant_id", "")
+
+
+def _scopes(request: Request) -> list[str]:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return []
+    return list(getattr(user, "scopes", []))
 
 
 @router.post("/requests", status_code=201, dependencies=[require_scope("multimodal:write")])
@@ -136,7 +143,15 @@ async def cancel_request(request_id: str, request: Request) -> dict[str, Any]:
     "/tenants/{tenant_id}/policy",
     dependencies=[require_scope("multimodal:write")],
 )
-async def set_tenant_policy(tenant_id: str, policy: MultimodalPolicy) -> dict[str, Any]:
+async def set_tenant_policy(
+    tenant_id: str, policy: MultimodalPolicy, request: Request
+) -> dict[str, Any]:
     """Set policy guardrails for a tenant (Stage 1 helper endpoint)."""
-    _service.set_policy(tenant_id, policy)
+    request_tenant_id = _tenant_id(request)
+    request_scopes = _scopes(request)
+    is_admin = check_permission("admin", request_scopes) if request_scopes else False
+    if request_tenant_id and not is_admin and tenant_id != request_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch for authenticated principal")
+    resolved_tenant_id = tenant_id or request_tenant_id
+    _service.set_policy(resolved_tenant_id, policy)
     return policy.model_dump(mode="json")
