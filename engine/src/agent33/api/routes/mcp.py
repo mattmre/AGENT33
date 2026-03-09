@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
-from agent33.security.permissions import require_scope
+from agent33.mcp_server.auth import check_resource_scope, check_tool_scope
+from agent33.security.permissions import _get_token_payload, require_scope
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -30,7 +32,7 @@ def set_mcp_services(bridge: Any, server: Any) -> None:
 
 
 @router.get("/sse", dependencies=[require_scope("agents:read")])
-async def mcp_sse(request: Request) -> StreamingResponse:
+async def mcp_sse(request: Request) -> Response:
     """SSE endpoint for MCP protocol.
 
     When the MCP SDK is available and configured, this provides
@@ -56,23 +58,20 @@ async def mcp_sse(request: Request) -> StreamingResponse:
         # Store transport for message endpoint
         request.app.state.mcp_transport = transport
 
-        async def sse_stream() -> AsyncGenerator[str, None]:
+        async def handle_sse() -> Response:
             async with transport.connect_sse(
                 request.scope,
                 request.receive,
-                request._send,  # type: ignore[attr-defined]
+                request._send,
             ) as (read_stream, write_stream):
                 await _mcp_server.run(
                     read_stream,
                     write_stream,
                     _mcp_server.create_initialization_options(),
                 )
+            return Response()
 
-        return StreamingResponse(
-            sse_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
-        )
+        return await handle_sse()
     except ImportError:
         raise HTTPException(501, "MCP SDK not installed") from None
     except Exception as exc:
@@ -80,20 +79,71 @@ async def mcp_sse(request: Request) -> StreamingResponse:
         raise HTTPException(500, f"MCP SSE error: {exc}") from exc
 
 
-@router.post("/messages", dependencies=[require_scope("agents:invoke")])
+def _iter_mcp_messages(payload: Any) -> list[dict[str, Any]]:
+    """Normalize a JSON-RPC payload into a list of message objects."""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        return [payload]
+    return []
+
+
+def _enforce_message_scope(request: Request, body: bytes) -> None:
+    """Apply scope checks for MCP JSON-RPC messages before transport handling."""
+    payload = _get_token_payload(request)
+
+    try:
+        message_payload = json.loads(body.decode("utf-8")) if body else {}
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return
+
+    for message in _iter_mcp_messages(message_payload):
+        method = str(message.get("method", ""))
+        params = message.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+
+        if method == "tools/call":
+            tool_name = str(params.get("name", ""))
+            if not check_tool_scope(tool_name, payload.scopes):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Missing required scope for MCP tool: {tool_name}",
+                )
+            continue
+
+        if method == "resources/read":
+            uri = str(params.get("uri", ""))
+            if not check_resource_scope(uri, payload.scopes):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Missing required scope for MCP resource: {uri}",
+                )
+
+
+@router.post("/messages", dependencies=[require_scope("agents:read")])
 async def mcp_messages(request: Request) -> dict[str, Any]:
     """Handle MCP protocol messages."""
+    body = await request.body()
+    _enforce_message_scope(request, body)
+
     transport = getattr(request.app.state, "mcp_transport", None)
     if transport is None:
         return {"status": "accepted", "note": "MCP transport not initialized"}
 
+    receive_state = {"sent": False}
+
+    async def replay_receive() -> dict[str, Any]:
+        if not receive_state["sent"]:
+            receive_state["sent"] = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return {"type": "http.disconnect"}
+
     try:
-        body = await request.body()
         await transport.handle_post_message(
             request.scope,
-            request.receive,
-            request._send,  # type: ignore[attr-defined]
-            body,
+            replay_receive,
+            request._send,
         )
         return {"status": "processed"}
     except Exception as exc:

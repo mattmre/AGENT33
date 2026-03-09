@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_bridge(**kwargs):  # type: ignore[no-untyped-def]
     from agent33.mcp_server.bridge import MCPServiceBridge
@@ -317,17 +317,16 @@ class TestMCPAuthToolScope:
 
         assert check_tool_scope("list_agents", ["tools:execute"]) is False
 
-    def test_unknown_tool_allowed_by_default(self) -> None:
+    def test_unknown_tool_requires_default_scope(self) -> None:
         from agent33.mcp_server.auth import check_tool_scope
 
-        assert check_tool_scope("totally_new_tool", []) is True
+        assert check_tool_scope("totally_new_tool", []) is False
+        assert check_tool_scope("totally_new_tool", ["agents:read"]) is True
 
     def test_multiple_scopes_one_matches(self) -> None:
         from agent33.mcp_server.auth import check_tool_scope
 
-        assert check_tool_scope(
-            "list_agents", ["tools:execute", "agents:read"]
-        ) is True
+        assert check_tool_scope("list_agents", ["tools:execute", "agents:read"]) is True
 
     def test_empty_scopes_denied(self) -> None:
         from agent33.mcp_server.auth import check_tool_scope
@@ -346,68 +345,48 @@ class TestMCPAuthResourceScope:
     def test_matching_scope(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://agents", ["agents:read"]
-        ) is True
+        assert check_resource_scope("agent33://agents", ["agents:read"]) is True
 
     def test_denied_when_no_matching_scope(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://agents", ["tools:execute"]
-        ) is False
+        assert check_resource_scope("agent33://agents", ["tools:execute"]) is False
 
     def test_prefix_match_for_parameterised_uri(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://agents/my-agent", ["agents:read"]
-        ) is True
+        assert check_resource_scope("agent33://agents/my-agent", ["agents:read"]) is True
 
     def test_prefix_match_tools(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://tools/shell", ["agents:read"]
-        ) is True
+        assert check_resource_scope("agent33://tools/shell", ["agents:read"]) is True
 
     def test_prefix_match_denied(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://agents/my-agent", ["tools:execute"]
-        ) is False
+        assert check_resource_scope("agent33://agents/my-agent", ["tools:execute"]) is False
 
     def test_unknown_agent33_uri_defaults_to_agents_read(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://something/else", ["agents:read"]
-        ) is True
+        assert check_resource_scope("agent33://something/else", ["agents:read"]) is True
 
     def test_unknown_agent33_uri_denied(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://something/else", ["tools:execute"]
-        ) is False
+        assert check_resource_scope("agent33://something/else", ["tools:execute"]) is False
 
     def test_non_agent33_uri_allowed_by_default(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "https://example.com/resource", []
-        ) is True
+        assert check_resource_scope("https://example.com/resource", []) is True
 
     def test_status_resource_scope(self) -> None:
         from agent33.mcp_server.auth import check_resource_scope
 
-        assert check_resource_scope(
-            "agent33://status", ["agents:read"]
-        ) is True
-        assert check_resource_scope(
-            "agent33://status", ["tools:execute"]
-        ) is False
+        assert check_resource_scope("agent33://status", ["agents:read"]) is True
+        assert check_resource_scope("agent33://status", ["tools:execute"]) is False
 
 
 # ===================================================================

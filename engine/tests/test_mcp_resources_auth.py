@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
 # Mock server helper — captures decorator-registered handlers
@@ -98,12 +100,13 @@ class TestRegisterResourcesHandlers:
     def _setup(
         self,
         agent_registry: Any = None,
+        tool_registry: Any = None,
         skill_registry: Any = None,
     ) -> _MockMCPServer:
         from agent33.mcp_server.resources import register_resources
 
         server = _MockMCPServer()
-        register_resources(server, agent_registry, skill_registry)
+        register_resources(server, agent_registry, tool_registry, skill_registry)
         return server
 
     async def test_list_resources_returns_4_entries(self) -> None:
@@ -144,6 +147,17 @@ class TestRegisterResourcesHandlers:
         data = json.loads(raw)
         assert data["status"] == "operational"
 
+    async def test_read_resource_tools_uses_tool_registry(self) -> None:
+        tool = MagicMock()
+        tool.name = "shell"
+        tool.description = "Run shell commands"
+        reg = MagicMock()
+        reg.list_all.return_value = [tool]
+        server = self._setup(tool_registry=reg)
+        raw = await server._handlers["read_resource"]("agent33://tools")
+        data = json.loads(raw)
+        assert data == [{"name": "shell", "description": "Run shell commands"}]
+
     async def test_read_resource_skills_with_registry(self) -> None:
         reg = MagicMock()
         reg.list_all.return_value = [_mock_skill("summarize")]
@@ -174,13 +188,15 @@ class TestRegisterResourcesHandlers:
         reg = MagicMock()
         reg.get.return_value = None
         server = self._setup(agent_registry=reg)
-        with pytest.raises(ValueError, match="Agent not found"):
-            await server._handlers["read_resource"]("agent33://agents/missing")
+        raw = await server._handlers["read_resource"]("agent33://agents/missing")
+        data = json.loads(raw)
+        assert data["error"] == "Agent 'missing' not found"
 
     async def test_read_resource_unknown_uri_raises_value_error(self) -> None:
         server = self._setup()
-        with pytest.raises(ValueError, match="Unknown resource URI"):
-            await server._handlers["read_resource"]("agent33://unknown/path")
+        raw = await server._handlers["read_resource"]("agent33://unknown/path")
+        data = json.loads(raw)
+        assert data["error"] == "Unknown resource URI: agent33://unknown/path"
 
 
 # ===================================================================
@@ -251,14 +267,19 @@ class TestBridgeRegisterResources:
         from agent33.mcp_server.bridge import MCPServiceBridge
 
         agent_reg = MagicMock()
+        tool_reg = MagicMock()
         skill_reg = MagicMock()
-        bridge = MCPServiceBridge(agent_registry=agent_reg, skill_registry=skill_reg)
+        bridge = MCPServiceBridge(
+            agent_registry=agent_reg,
+            tool_registry=tool_reg,
+            skill_registry=skill_reg,
+        )
         server = _MockMCPServer()
 
         with patch("agent33.mcp_server.resources.register_resources") as mock_fn:
             bridge.register_resources(server)
 
-        mock_fn.assert_called_once_with(server, agent_reg, skill_reg)
+        mock_fn.assert_called_once_with(server, agent_reg, tool_reg, skill_reg)
 
     def test_register_resources_wires_handlers(self) -> None:
         from agent33.mcp_server.bridge import MCPServiceBridge
@@ -276,28 +297,69 @@ class TestBridgeRegisterResources:
 # ===================================================================
 
 
-class TestAppStateMCPBridge:
-    def test_mcp_bridge_accessible_on_app_state(self) -> None:
-        """Manually wire mcp_bridge to app.state — same pattern as Phase 25 tests."""
-        from agent33.main import app
-        from agent33.mcp_server.bridge import MCPServiceBridge
-
-        bridge = MCPServiceBridge()
-        app.state.mcp_bridge = bridge
-        assert app.state.mcp_bridge is bridge
-        assert isinstance(app.state.mcp_bridge, MCPServiceBridge)
-
-    def test_mcp_status_endpoint_with_bridge_set(self) -> None:
-        from fastapi.testclient import TestClient
-
+class TestSetMCPServices:
+    def test_mcp_status_endpoint_with_module_level_services(self) -> None:
+        from agent33.api.routes.mcp import set_mcp_services
         from agent33.main import app
         from agent33.mcp_server.bridge import MCPServiceBridge
         from agent33.security.auth import create_access_token
 
-        app.state.mcp_bridge = MCPServiceBridge()
+        bridge = MCPServiceBridge()
+        set_mcp_services(bridge, None)
         token = create_access_token("test-user", scopes=["admin"])
         client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
         response = client.get("/v1/mcp/status")
         assert response.status_code == 200
         data = response.json()
         assert "available" in data or "status" in data
+
+
+def _make_mcp_route_app(scopes: list[str]) -> FastAPI:
+    from agent33.api.routes import mcp
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _fake_auth(request: Request, call_next):
+        request.state.user = SimpleNamespace(scopes=scopes, tenant_id="tenant-test")
+        return await call_next(request)
+
+    app.include_router(mcp.router)
+    return app
+
+
+class TestMCPMessageRouteScopes:
+    def test_tools_call_requires_tool_specific_scope(self) -> None:
+        client = TestClient(_make_mcp_route_app(["agents:read"]))
+
+        response = client.post(
+            "/v1/mcp/messages",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "invoke_agent", "arguments": {"agent_name": "a"}},
+            },
+        )
+
+        assert response.status_code == 403
+        assert "invoke_agent" in response.json()["detail"]
+
+    def test_tools_call_allows_matching_scope(self) -> None:
+        app = _make_mcp_route_app(["agents:read", "agents:invoke"])
+        app.state.mcp_transport = MagicMock()
+        app.state.mcp_transport.handle_post_message = AsyncMock()
+        client = TestClient(app)
+
+        response = client.post(
+            "/v1/mcp/messages",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "invoke_agent", "arguments": {"agent_name": "a"}},
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "processed"

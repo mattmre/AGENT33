@@ -47,9 +47,14 @@ class MCPServiceBridge:
         """Register MCP resource handlers on *server*.
 
         Delegates to :func:`agent33.mcp_server.resources.register_resources`,
-        passing the bridge's own agent and skill registries.  No-op when the
+        passing the bridge's own agent, tool, and skill registries.  No-op when the
         MCP SDK is not installed.
         """
         from agent33.mcp_server.resources import register_resources
 
-        register_resources(server, self.agent_registry, self.skill_registry)
+        register_resources(
+            server,
+            self.agent_registry,
+            self.tool_registry,
+            self.skill_registry,
+        )

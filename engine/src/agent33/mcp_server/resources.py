@@ -8,22 +8,19 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-import structlog
-
 if TYPE_CHECKING:
     from agent33.agents.registry import AgentRegistry
     from agent33.mcp_server.bridge import MCPServiceBridge
     from agent33.skills.registry import SkillRegistry
+    from agent33.tools.registry import ToolRegistry
 
 _HAS_MCP = False
 try:
-    from mcp.types import Resource, ResourceTemplate  # type: ignore[attr-defined]
+    from mcp.types import Resource, ResourceTemplate
 
     _HAS_MCP = True
 except ImportError:
     pass
-
-logger = structlog.get_logger()
 
 # Static resources (known at startup)
 STATIC_RESOURCES: list[dict[str, str]] = [
@@ -122,6 +119,7 @@ async def handle_read_resource(bridge: MCPServiceBridge, uri: str) -> str:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
 
 def _read_agents_list(bridge: MCPServiceBridge) -> str:
     if not bridge.agent_registry:
@@ -222,6 +220,7 @@ def _read_skill_detail(bridge: MCPServiceBridge, name: str) -> str:
 def register_resources(
     server: Any,
     agent_registry: AgentRegistry | None,
+    tool_registry: ToolRegistry | None = None,
     skill_registry: SkillRegistry | None = None,
 ) -> None:
     """Register 4 static resources and 3 resource templates on *server*.
@@ -231,8 +230,15 @@ def register_resources(
     if not _HAS_MCP:
         return
 
-    @server.list_resources()  # type: ignore[misc]
-    async def list_resources() -> list[Resource]:  # type: ignore[name-defined]
+    from agent33.mcp_server.bridge import MCPServiceBridge
+
+    bridge = MCPServiceBridge(
+        agent_registry=agent_registry,
+        tool_registry=tool_registry,
+        skill_registry=skill_registry,
+    )
+
+    async def list_resources() -> list[Resource]:
         return [
             Resource(
                 uri=r["uri"],
@@ -243,66 +249,14 @@ def register_resources(
             for r in STATIC_RESOURCES
         ]
 
-    @server.read_resource()  # type: ignore[misc]
-    async def read_resource(uri: Any) -> str:
-        uri_str = str(uri)
-        if uri_str == "agent33://agents":
-            if not agent_registry:
-                return json.dumps({"error": "Agent registry not available"})
-            agents = agent_registry.list_all()
-            return json.dumps(
-                [
-                    {
-                        "name": a.name,
-                        "description": getattr(a, "description", ""),
-                        "capabilities": [
-                            c.value if hasattr(c, "value") else str(c)
-                            for c in getattr(a, "capabilities", []) or []
-                        ],
-                    }
-                    for a in agents
-                ],
-                indent=2,
-            )
-        if uri_str == "agent33://tools":
-            return json.dumps({"tools": []})
-        if uri_str == "agent33://skills":
-            if not skill_registry:
-                return json.dumps({"error": "Skill registry not available"})
-            skills = skill_registry.list_all()
-            return json.dumps(
-                [
-                    {
-                        "name": s.name,
-                        "description": getattr(s, "description", ""),
-                        "tags": list(getattr(s, "tags", []) or []),
-                    }
-                    for s in skills
-                ],
-                indent=2,
-            )
-        if uri_str == "agent33://status":
-            return json.dumps({"status": "operational", "version": "1.0"})
-        if uri_str.startswith("agent33://agents/"):
-            name = uri_str.split("/", 3)[-1]
-            if not agent_registry:
-                raise ValueError("Agent registry not available")
-            defn = agent_registry.get(name)
-            if defn is None:
-                raise ValueError(f"Agent not found: {name}")
-            return json.dumps(defn.model_dump(mode="json"), indent=2, default=str)
-        if uri_str.startswith("agent33://skills/"):
-            name = uri_str.split("/", 3)[-1]
-            if not skill_registry:
-                raise ValueError("Skill registry not available")
-            skill = skill_registry.get(name)
-            if skill is None:
-                raise ValueError(f"Skill not found: {name}")
-            return json.dumps(skill.model_dump(mode="json"), indent=2, default=str)
-        raise ValueError(f"Unknown resource URI: {uri_str}")
+    server.list_resources()(list_resources)
 
-    @server.list_resource_templates()  # type: ignore[misc]
-    async def list_resource_templates() -> list[ResourceTemplate]:  # type: ignore[name-defined]
+    async def read_resource(uri: Any) -> str:
+        return await handle_read_resource(bridge, str(uri))
+
+    server.read_resource()(read_resource)
+
+    async def list_resource_templates() -> list[ResourceTemplate]:
         return [
             ResourceTemplate(
                 uriTemplate=t["uriTemplate"],
@@ -312,3 +266,5 @@ def register_resources(
             )
             for t in RESOURCE_TEMPLATES
         ]
+
+    server.list_resource_templates()(list_resource_templates)

@@ -41,13 +41,12 @@ SCOPE_REQUIREMENTS: dict[str, str] = {
 def check_tool_scope(tool_name: str, user_scopes: list[str]) -> bool:
     """Check whether *user_scopes* satisfy the requirement for *tool_name*.
 
-    ``admin`` always passes.  Unknown tools are permitted by default.
+    ``admin`` always passes.  Unknown tools fall back to the default
+    requirement returned by :func:`get_required_scope_for_tool`.
     """
     if "admin" in user_scopes:
         return True
-    required = TOOL_SCOPES.get(tool_name)
-    if not required:
-        return True  # unknown tools allowed by default
+    required = get_required_scope_for_tool(tool_name)
     return required in user_scopes
 
 
