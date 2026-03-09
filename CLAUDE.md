@@ -36,6 +36,18 @@ pip install -e ".[dev]"                             # install in dev mode
 agent33 status                                      # health check
 ```
 
+When working from a git worktree, prefer a local environment:
+
+```bash
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\Activate.ps1
+```
+
+This repo has had editable-install drift across sibling worktrees. A local `engine/.venv`
+is the preferred fix; use `PYTHONPATH=<active-worktree>\engine\src` only as a fallback
+when you must run against the system interpreter.
+
 ## Architecture
 
 ### Engine Package Layout (`engine/src/agent33/`)
@@ -196,7 +208,7 @@ written. Do not present "X new tests" as evidence of completeness.
 - **Ruff Check vs Format Parity:** `ruff check` can pass while CI still fails on `ruff format --check`. Always run both locally before pushing PR updates, especially for test-heavy edits where small wrapping/format deltas are easy to miss.
 - **Windows Worktree Cleanup:** `git worktree remove --force` can fail on Windows when orphaned reserved-name files (for example `nul`) exist in a worktree path. If that happens, remove with long-path `cmd /c rd /s /q "\\?\<absolute-path>"` and then re-run `git worktree list` to confirm cleanup.
 - **Handoff Drift After Merge Waves:** `docs/next-session.md` can become stale quickly during rapid PR merge waves; refresh it immediately after final merges so priority queues and phase status reflect `main`, not pre-merge branch state.
-- **Editable Install Drift Across Worktrees:** This environment can have an editable `agent33` install pointing at a different worktree than the branch under test. For targeted backend validation, set `PYTHONPATH=<active-worktree>\\engine\\src` so pytest and ad-hoc imports execute the code from the current worktree instead of a stale sibling checkout.
+- **Editable Install Drift Across Worktrees:** This environment can have an editable `agent33` install pointing at a different worktree than the branch under test. Preferred fix: create and activate a worktree-local `engine/.venv` and install `-e ".[dev]"` there. Fallback only: set `PYTHONPATH=<active-worktree>\\engine\\src` so pytest and ad-hoc imports execute the code from the current worktree instead of a stale sibling checkout.
 - **Parallel Git Dependencies:** Do not parallelize dependent git commands such as `git add` and `git commit`. They can race each other and leave a pushed branch that exists remotely but does not yet contain the intended commit.
 
 Add these to your existing pre-commit checklist:
