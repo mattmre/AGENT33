@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
@@ -223,6 +224,7 @@ class AgentRuntime:
         observation_capture: Any | None = None,
         trace_emitter: Any | None = None,
         session_id: str = "",
+        invocation_mode: str = "invoke",
         progressive_recall: Any | None = None,
         skill_injector: Any | None = None,
         active_skills: list[str] | None = None,
@@ -253,6 +255,8 @@ class AgentRuntime:
         self._observation_capture = observation_capture
         self._trace_emitter = trace_emitter
         self._session_id = session_id
+        self._invocation_mode = invocation_mode
+        self._invocation_id = uuid.uuid4().hex
         self._progressive_recall = progressive_recall
         self._skill_injector = skill_injector
         self._active_skills = active_skills or definition.skills
@@ -267,6 +271,17 @@ class AgentRuntime:
     @property
     def definition(self) -> AgentDefinition:
         return self._definition
+
+    @property
+    def routing_decision_metadata(self) -> dict[str, Any] | None:
+        return self._routing_decision_metadata
+
+    def _update_routing_outcome(self, **metadata: Any) -> None:
+        if self._routing_decision_metadata is None:
+            return
+        self._routing_decision_metadata.update(
+            {key: value for key, value in metadata.items() if value is not None}
+        )
 
     def _resolve_execution_parameters(
         self,
@@ -290,7 +305,14 @@ class AgentRuntime:
             iterative=iterative,
             max_iterations=max_iterations,
         )
+        serialized_inputs = json.dumps(inputs or {}, sort_keys=True, ensure_ascii=False)
         self._routing_decision_metadata = {
+            "invocation_id": self._invocation_id,
+            "invocation_mode": self._invocation_mode,
+            "session_id": self._session_id,
+            "agent_name": self._definition.name,
+            "requested_model": self._requested_model,
+            "default_model": self._model,
             "effort": decision.effort.value,
             "effort_source": decision.effort_source.value,
             "token_multiplier": decision.token_multiplier,
@@ -306,6 +328,9 @@ class AgentRuntime:
             "heuristic_reasons": list(decision.heuristic_reasons),
             "selected_model": decision.model,
             "routed_max_tokens": decision.max_tokens,
+            "input_field_count": len(inputs or {}),
+            "input_char_count": len(serialized_inputs),
+            "requested_max_iterations": max_iterations,
         }
         logger.info(
             "effort routing decision: effort=%s source=%s model=%s max_tokens=%d",
@@ -319,10 +344,7 @@ class AgentRuntime:
     def _emit_routing_metrics(self) -> None:
         if self._routing_metrics_emitter is None:
             return
-        try:
-            self._routing_metrics_emitter(self._routing_decision_metadata)
-        except Exception:
-            logger.debug("failed to emit routing metrics", exc_info=True)
+        self._routing_metrics_emitter(self._routing_decision_metadata)
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -431,6 +453,11 @@ class AgentRuntime:
             tokens_used=response.total_tokens,
             model=response.model,
             routing_decision=self._routing_decision_metadata,
+        )
+        self._update_routing_outcome(
+            actual_model=response.model,
+            tokens_used=response.total_tokens,
+            completion_status="completed",
         )
         self._emit_routing_metrics()
 
@@ -583,6 +610,12 @@ class AgentRuntime:
             )
 
             if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
+                self._update_routing_outcome(
+                    actual_model=routed_model,
+                    iterations=reasoning_result.total_steps,
+                    termination_reason=reasoning_result.termination_reason,
+                    completion_status="completed",
+                )
                 self._emit_routing_metrics()
                 return IterativeAgentResult(
                     output={"response": reasoning_result.final_output}
@@ -698,6 +731,15 @@ class AgentRuntime:
             tools_used=loop_result.tools_used,
             termination_reason=loop_result.termination_reason,
             routing_decision=self._routing_decision_metadata,
+        )
+        self._update_routing_outcome(
+            actual_model=loop_result.model,
+            tokens_used=loop_result.tokens_used,
+            iterations=loop_result.iterations,
+            tool_calls_made=loop_result.tool_calls_made,
+            tools_used=list(loop_result.tools_used),
+            termination_reason=loop_result.termination_reason,
+            completion_status="completed",
         )
         self._emit_routing_metrics()
 
@@ -841,4 +883,15 @@ class AgentRuntime:
             temperature=self._temperature,
             max_tokens=routed_max_tokens,
         ):
+            if event.event_type == "completed":
+                completion_data = event.data if isinstance(event.data, dict) else {}
+                self._update_routing_outcome(
+                    actual_model=routed_model,
+                    tokens_used=completion_data.get("total_tokens"),
+                    iterations=event.iteration,
+                    tool_calls_made=completion_data.get("tool_calls_made"),
+                    tools_used=completion_data.get("tools_used"),
+                    termination_reason=completion_data.get("termination_reason"),
+                    completion_status="completed",
+                )
             yield event
