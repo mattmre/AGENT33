@@ -29,6 +29,7 @@ from agent33.api.routes import (
     health,
     hooks,
     improvements,
+    marketplace,
     mcp,
     memory_search,
     multimodal,
@@ -390,16 +391,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("skill_injector_initialized")
 
     # -- Pack registry (optional) ------------------------------------------
+    from agent33.packs.marketplace import LocalPackMarketplace
     from agent33.packs.registry import PackRegistry
 
     packs_dir = Path(settings.pack_definitions_dir)
-    pack_registry = PackRegistry(packs_dir=packs_dir, skill_registry=skill_registry)
+    pack_marketplace = LocalPackMarketplace(Path(settings.pack_marketplace_dir))
+    pack_registry = PackRegistry(
+        packs_dir=packs_dir,
+        skill_registry=skill_registry,
+        marketplace=pack_marketplace,
+    )
     if packs_dir.is_dir():
         pack_count = pack_registry.discover()
         logger.info("pack_registry_loaded", count=pack_count, path=str(packs_dir))
     else:
         logger.debug("pack_definitions_dir_not_found", path=str(packs_dir))
     app.state.pack_registry = pack_registry
+    app.state.pack_marketplace = pack_marketplace
 
     # -- Hook registry -----------------------------------------------------
     hook_registry = None
@@ -784,10 +792,10 @@ app.include_router(component_security.router)
 app.include_router(outcomes.router)
 app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
+app.include_router(marketplace.router)
 app.include_router(mcp.router)
 app.include_router(plugins_routes.router)
 app.include_router(packs.router)
-app.include_router(plugins_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)

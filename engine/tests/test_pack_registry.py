@@ -15,6 +15,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from agent33.packs.marketplace import LocalPackMarketplace
 from agent33.packs.models import PackSource
 from agent33.packs.registry import PackRegistry
 from agent33.skills.registry import SkillRegistry
@@ -173,14 +174,59 @@ class TestPackRegistryInstall:
         assert result.success is False
         assert "not found" in result.errors[0]
 
-    def test_install_unsupported_source_type(self, tmp_path: Path) -> None:
+    def test_install_marketplace_latest_version(self, tmp_path: Path) -> None:
         skill_reg = SkillRegistry()
-        pack_reg = PackRegistry(packs_dir=tmp_path, skill_registry=skill_reg)
+        marketplace_dir = tmp_path / "marketplace"
+        _write_pack(marketplace_dir / "v1", name="cloud-pack", version="1.0.0")
+        _write_pack(marketplace_dir / "v2", name="cloud-pack", version="2.0.0")
+        pack_reg = PackRegistry(
+            packs_dir=tmp_path / "packs",
+            skill_registry=skill_reg,
+            marketplace=LocalPackMarketplace(marketplace_dir),
+        )
 
         source = PackSource(source_type="marketplace", name="cloud-pack")
         result = pack_reg.install(source)
+
+        assert result.success is True
+        assert result.version == "2.0.0"
+        installed = pack_reg.get("cloud-pack")
+        assert installed is not None
+        assert installed.version == "2.0.0"
+        assert installed.source == "marketplace"
+
+    def test_install_marketplace_specific_version(self, tmp_path: Path) -> None:
+        skill_reg = SkillRegistry()
+        marketplace_dir = tmp_path / "marketplace"
+        _write_pack(marketplace_dir / "v1", name="cloud-pack", version="1.0.0")
+        _write_pack(marketplace_dir / "v2", name="cloud-pack", version="2.0.0")
+        pack_reg = PackRegistry(
+            packs_dir=tmp_path / "packs",
+            skill_registry=skill_reg,
+            marketplace=LocalPackMarketplace(marketplace_dir),
+        )
+
+        source = PackSource(source_type="marketplace", name="cloud-pack", version="1.0.0")
+        result = pack_reg.install(source)
+
+        assert result.success is True
+        assert result.version == "1.0.0"
+        installed = pack_reg.get("cloud-pack")
+        assert installed is not None
+        assert installed.version == "1.0.0"
+
+    def test_install_marketplace_missing_pack(self, tmp_path: Path) -> None:
+        skill_reg = SkillRegistry()
+        pack_reg = PackRegistry(
+            packs_dir=tmp_path / "packs",
+            skill_registry=skill_reg,
+            marketplace=LocalPackMarketplace(tmp_path / "marketplace"),
+        )
+
+        result = pack_reg.install(PackSource(source_type="marketplace", name="missing-pack"))
+
         assert result.success is False
-        assert "Unsupported" in result.errors[0]
+        assert result.errors == ["Marketplace pack 'missing-pack' was not found"]
 
 
 class TestPackRegistryUninstall:
