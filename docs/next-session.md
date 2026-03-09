@@ -1,11 +1,13 @@
 # Next Session Briefing
 
-Last updated: 2026-03-09T17:45:00Z
+Last updated: 2026-03-09T23:15:00Z
 
 ## Current State
 
 - `main` now includes the validated nightly integration branch `codex/nightly-merge-main`.
-- The open PR queue has been cleared; PRs `#141-#156` were either integrated into `main` or closed as superseded by the newer baseline.
+- PRs `#141-#156` remain cleared on `main`, but Session 64 opened two new review branches:
+  - PR `#157` — A5/A6 bundle-scoped comparative evaluation
+  - PR `#158` — Phase 32 cross-service tenant-verification foundation
 - Tonight's merged work includes:
   - Phase 26 Stage 3 improvement-cycle review wizard
   - Phase 27 Stage 3A canonical workflow templates and preset wiring
@@ -31,14 +33,17 @@ Last updated: 2026-03-09T17:45:00Z
 ## Next Priorities
 
 1. A5/A6 comparative scoring against persisted synthetic bundles.
-2. Phase 30 production trace tuning.
-3. Phase 31 production-scale backup/restore validation.
-4. Phase 32 operationalization and cross-service tenant verification.
-5. Phase 33 ecosystem distribution and marketplace integration.
-6. Phase 35 voice daemon implementation and policy tuning.
-7. Refresh user-facing docs for the newly merged wizard, presets, and Docker kernel workflow.
+2. Review and merge PR `#157`.
+3. Review and merge PR `#158`.
+4. Phase 30 production trace tuning.
+5. Phase 31 production-scale backup/restore validation.
+6. Phase 32 follow-on connector / MCP tenant verification after PR `#158`.
+7. Phase 33 ecosystem distribution and marketplace integration.
+8. Phase 35 voice daemon implementation and policy tuning.
+9. Refresh user-facing docs for the newly merged wizard, presets, and Docker kernel workflow.
 
 ## Notes
 
 - `main` was updated directly from the validated integration branch because the remaining open PR stack had become stale relative to the already-merged Session 57 cleanup baseline.
 - The session58 handoff PR was intentionally closed as stale rather than merged as-is; its queue snapshot no longer matched repository reality after the nightly merge.
+- The local editable `agent33` install still points at another worktree in this environment, so targeted backend validation should continue to set `PYTHONPATH` to the active worktree's `engine/src` until the editable install is refreshed.
