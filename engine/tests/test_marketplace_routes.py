@@ -46,24 +46,26 @@ def _write_pack(base: Path, *, name: str, version: str) -> Path:
     return pack_dir
 
 
-def _create_test_app(tmp_path: Path) -> TestClient:
+def _create_test_app(tmp_path: Path, *, configure_marketplace: bool = True) -> TestClient:
     """Create a minimal FastAPI app with the marketplace router."""
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
     marketplace_dir = tmp_path / "marketplace"
     marketplace_dir.mkdir()
-    _write_pack(marketplace_dir, name="analytics-pack", version="1.0.0")
-    _write_pack(marketplace_dir, name="analytics-pack", version="2.0.0")
-    _write_pack(marketplace_dir, name="ops-pack", version="1.2.0")
+    if configure_marketplace:
+        _write_pack(marketplace_dir, name="analytics-pack", version="1.0.0")
+        _write_pack(marketplace_dir, name="analytics-pack", version="2.0.0")
+        _write_pack(marketplace_dir, name="ops-pack", version="1.2.0")
 
     skill_registry = SkillRegistry()
     app = FastAPI()
     app.include_router(router)
-    app.state.pack_marketplace = LocalPackMarketplace(marketplace_dir)
+    if configure_marketplace:
+        app.state.pack_marketplace = LocalPackMarketplace(marketplace_dir)
     app.state.pack_registry = PackRegistry(
         packs_dir=packs_dir,
         skill_registry=skill_registry,
-        marketplace=app.state.pack_marketplace,
+        marketplace=getattr(app.state, "pack_marketplace", None),
     )
 
     from starlette.middleware.base import BaseHTTPMiddleware
@@ -137,3 +139,26 @@ class TestMarketplaceRoutes:
         assert data["success"] is True
         assert data["pack_name"] == "analytics-pack"
         assert data["version"] == "1.0.0"
+
+    def test_install_marketplace_pack_requires_configured_marketplace(
+        self, tmp_path: Path
+    ) -> None:
+        client = _create_test_app(tmp_path, configure_marketplace=False)
+
+        response = client.post(
+            "/v1/marketplace/install",
+            json={"name": "analytics-pack", "version": "1.0.0"},
+        )
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Marketplace catalog not initialized"
+
+    def test_install_marketplace_pack_requires_name(self, tmp_path: Path) -> None:
+        client = _create_test_app(tmp_path)
+
+        response = client.post(
+            "/v1/marketplace/install",
+            json={"version": "1.0.0"},
+        )
+
+        assert response.status_code == 422

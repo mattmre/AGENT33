@@ -228,6 +228,20 @@ class TestPackRegistryInstall:
         assert result.success is False
         assert result.errors == ["Marketplace pack 'missing-pack' was not found"]
 
+    def test_install_marketplace_requires_name(self, tmp_path: Path) -> None:
+        skill_reg = SkillRegistry()
+        pack_reg = PackRegistry(
+            packs_dir=tmp_path / "packs",
+            skill_registry=skill_reg,
+            marketplace=LocalPackMarketplace(tmp_path / "marketplace"),
+        )
+
+        result = pack_reg.install(PackSource(source_type="marketplace"))
+
+        assert result.success is False
+        assert result.pack_name == "unknown"
+        assert result.errors == ["Marketplace installs require a pack name"]
+
 
 class TestPackRegistryUninstall:
     """Test pack uninstallation."""
