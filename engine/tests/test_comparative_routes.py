@@ -229,8 +229,8 @@ class TestBundleEvaluationRoutes:
                     {
                         "agent_name": "alpha",
                         "metric_name": "M-01",
-                        "environment_id": "SENV-missing",
-                        "task_id": self.task_id,
+                        "environment_id": self.environment_id,
+                        "task_id": "TASK-missing",
                         "value": 0.91,
                     }
                 ]
@@ -239,6 +239,27 @@ class TestBundleEvaluationRoutes:
 
         assert resp.status_code == 400
         assert "does not belong to environment" in resp.json()["detail"]
+
+    def test_record_bundle_scores_rejects_unknown_environment(self) -> None:
+        resp = self.client.post(
+            f"/v1/evaluation/comparative/bundles/{self.bundle_id}/scores",
+            json={
+                "scores": [
+                    {
+                        "agent_name": "alpha",
+                        "metric_name": "M-01",
+                        "environment_id": "SENV-missing",
+                        "task_id": "TASK-missing",
+                        "value": 0.91,
+                    }
+                ]
+            },
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == (
+            f"Environment 'SENV-missing' is not part of bundle '{self.bundle_id}'"
+        )
 
     def test_evaluate_bundle_returns_task_aligned_leaderboard(self) -> None:
         record_resp = self.client.post(

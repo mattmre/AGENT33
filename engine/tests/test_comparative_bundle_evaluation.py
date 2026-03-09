@@ -64,6 +64,25 @@ def test_record_bundle_scores_rejects_unknown_task_ids(tmp_path: Path) -> None:
         )
 
 
+def test_record_bundle_scores_rejects_missing_task_ids(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    comparative = ComparativeEvaluationService()
+
+    with pytest.raises(ValueError, match="Unknown bundle task IDs: <missing>"):
+        comparative.record_bundle_scores(
+            bundle.bundle_id,
+            [
+                AgentScore(
+                    agent_name="alpha",
+                    metric_name="M-01",
+                    value=0.9,
+                    task_id=None,
+                )
+            ],
+            allowed_task_ids={task.task_id for env in bundle.environments for task in env.tasks},
+        )
+
+
 def test_bundle_evaluation_uses_only_shared_task_ids(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
     comparative = ComparativeEvaluationService()

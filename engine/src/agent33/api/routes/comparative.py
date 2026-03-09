@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agent33.evaluation.comparative.service import ComparativeEvaluationService
+from agent33.evaluation.synthetic_envs.models import SyntheticEnvironmentBundle
 from agent33.evaluation.synthetic_envs.service import SyntheticEnvironmentService
 from agent33.security.permissions import require_scope
 
@@ -176,7 +177,7 @@ async def record_scores(body: RecordScoresRequest) -> dict[str, Any]:
     return {"recorded": len(scores), "population_size": svc.population_tracker.population_size}
 
 
-def _bundle_task_index(bundle: Any) -> tuple[set[str], dict[str, set[str]]]:
+def _bundle_task_index(bundle: SyntheticEnvironmentBundle) -> tuple[set[str], dict[str, set[str]]]:
     all_task_ids: set[str] = set()
     environment_task_ids: dict[str, set[str]] = {}
     for environment in bundle.environments:
@@ -200,6 +201,12 @@ async def record_bundle_scores(bundle_id: str, body: RecordBundleScoresRequest) 
 
     task_ids, environment_task_ids = _bundle_task_index(bundle)
     for score in body.scores:
+        if score.environment_id and score.environment_id not in environment_task_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Environment '{score.environment_id}' is not part of bundle '{bundle_id}'",
+            )
+
         environment_tasks = environment_task_ids.get(score.environment_id, set())
         if score.environment_id and score.task_id not in environment_tasks:
             raise HTTPException(

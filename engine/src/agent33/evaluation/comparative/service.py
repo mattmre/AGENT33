@@ -114,7 +114,8 @@ class ComparativeEvaluationService:
             raise ValueError("Unknown bundle task IDs: " + invalid_summary)
 
         for score in scores:
-            assert score.task_id is not None
+            if score.task_id is None:
+                raise ValueError("Unknown bundle task IDs: <missing>")
             canonical_scores.append(
                 score.model_copy(
                     update={"task_id": self.build_bundle_task_id(bundle_id, score.task_id)}
