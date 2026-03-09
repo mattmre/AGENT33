@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from agent33.review.models import (
     L1ChecklistResults,
     L2ChecklistResults,
+    ReviewArtifactLink,
     ReviewDecision,
     RiskTrigger,
 )
@@ -44,6 +45,7 @@ class CreateReviewRequest(BaseModel):
     task_id: str
     branch: str = ""
     pr_number: int | None = None
+    artifacts: list[ReviewArtifactLink] = Field(default_factory=list)
 
 
 class AssessRiskRequest(BaseModel):
@@ -76,6 +78,7 @@ class ReviewSummary(BaseModel):
     risk_level: str
     l1_required: bool
     l2_required: bool
+    artifact_count: int
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +108,14 @@ async def create_review(body: CreateReviewRequest, request: Request) -> dict[str
         branch=body.branch,
         pr_number=body.pr_number,
         tenant_id=tenant_id,
+        artifacts=body.artifacts,
     )
-    return {"id": record.id, "state": record.state.value, "task_id": record.task_id}
+    return {
+        "id": record.id,
+        "state": record.state.value,
+        "task_id": record.task_id,
+        "artifacts": [artifact.model_dump(mode="json") for artifact in record.artifacts],
+    }
 
 
 @router.get("/", dependencies=[require_scope("workflows:read")])
@@ -122,6 +131,7 @@ async def list_reviews(request: Request) -> list[ReviewSummary]:
             risk_level=r.risk_assessment.risk_level.value,
             l1_required=r.risk_assessment.l1_required,
             l2_required=r.risk_assessment.l2_required,
+            artifact_count=len(r.artifacts),
         )
         for r in records
     ]
