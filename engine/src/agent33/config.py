@@ -159,6 +159,7 @@ class Settings(BaseSettings):
     skillsbench_skill_matcher_top_k: int = 20
     skillsbench_skill_matcher_skip_llm_below: int = 3
     skillsbench_context_manager_enabled: bool = True
+    skillsbench_storage_path: str = "var/skillsbench_runs"
 
     # Skill Packs
     pack_definitions_dir: str = "packs"

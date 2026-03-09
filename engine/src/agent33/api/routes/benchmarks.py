@@ -13,6 +13,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.responses import PlainTextResponse
 
 from agent33.agents.runtime import AgentRuntime
 from agent33.benchmarks.skillsbench.adapter import SkillsBenchAdapter
@@ -22,8 +23,11 @@ from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunStatus,
     TaskFilter,
 )
+from agent33.benchmarks.skillsbench.reporting import SkillsBenchCTRFGenerator
 from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner
+from agent33.benchmarks.skillsbench.storage import SkillsBenchArtifactStore
 from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTaskLoader
+from agent33.config import settings
 from agent33.security.permissions import _get_token_payload, require_scope
 from agent33.tools.base import ToolContext
 
@@ -35,15 +39,38 @@ router = APIRouter(prefix="/v1/benchmarks", tags=["benchmarks"])
 _MAX_STORED_RUNS = 100
 _runs: dict[str, BenchmarkRunResult] = {}
 _run_order: list[str] = []
+_artifact_store: SkillsBenchArtifactStore | None = None
+_ctrf = SkillsBenchCTRFGenerator()
+
+
+def _get_artifact_store() -> SkillsBenchArtifactStore:
+    """Return the shared SkillsBench artifact store."""
+    global _artifact_store  # noqa: PLW0603
+    if _artifact_store is None:
+        _artifact_store = SkillsBenchArtifactStore(Path(settings.skillsbench_storage_path))
+    return _artifact_store
 
 
 def _store_run(run: BenchmarkRunResult) -> None:
     """Store a benchmark run with bounded retention."""
     _runs[run.run_id] = run
     _run_order.append(run.run_id)
+    store = _get_artifact_store()
+    store.persist_run(run)
     if len(_run_order) > _MAX_STORED_RUNS:
         oldest = _run_order.pop(0)
         _runs.pop(oldest, None)
+
+
+def _get_run(run_id: str) -> BenchmarkRunResult | None:
+    """Fetch a run from memory or persisted storage."""
+    run = _runs.get(run_id)
+    if run is not None:
+        return run
+    run = _get_artifact_store().load_run(run_id)
+    if run is not None:
+        _runs[run_id] = run
+    return run
 
 
 def _get_state_dependency(request: Request, name: str) -> Any:
@@ -102,6 +129,7 @@ def _build_skillsbench_adapter(
         ),
         skill_registry=skill_registry,
         agent_runtime=runtime,
+        artifact_store=_get_artifact_store(),
     )
 
 
@@ -262,9 +290,24 @@ async def list_benchmark_runs(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """List recent SkillsBench benchmark runs."""
+    persisted_runs = _get_artifact_store().list_runs(limit=limit)
+    if persisted_runs:
+        return [
+            {
+                "run_id": run.run_id,
+                "status": run.status,
+                "total_tasks": run.total_tasks,
+                "total_trials": run.total_trials,
+                "passed_trials": run.passed_trials,
+                "pass_rate": run.pass_rate,
+                "total_duration_ms": run.total_duration_ms,
+            }
+            for run in persisted_runs
+        ]
+
     result: list[dict[str, Any]] = []
     for run_id in reversed(_run_order):
-        run = _runs.get(run_id)
+        run = _get_run(run_id)
         if run is None:
             continue
         result.append(
@@ -289,7 +332,43 @@ async def list_benchmark_runs(
 )
 async def get_benchmark_run(run_id: str) -> dict[str, Any]:
     """Get detailed results for a specific benchmark run."""
-    run = _runs.get(run_id)
+    run = _get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
     return run.model_dump()
+
+
+@router.get(
+    "/skillsbench/runs/{run_id}/ctrf",
+    dependencies=[require_scope("workflows:read")],
+)
+async def get_benchmark_run_ctrf(run_id: str) -> dict[str, Any]:
+    """Export a persisted SkillsBench benchmark run as CTRF."""
+    run = _get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+    store = _get_artifact_store()
+    report = store.load_ctrf_report(run_id)
+    if report is None:
+        report = _ctrf.generate_report(run)
+        ctrf_path = store.persist_ctrf_report(run_id, report)
+        run.ctrf_report_path = ctrf_path.relative_to(store.base_path / run_id).as_posix()
+        store.persist_run(run)
+    return report
+
+
+@router.get(
+    "/skillsbench/runs/{run_id}/artifacts/{artifact_path:path}",
+    dependencies=[require_scope("workflows:read")],
+    response_class=PlainTextResponse,
+)
+async def get_benchmark_artifact(run_id: str, artifact_path: str) -> str:
+    """Return a persisted text artifact for a benchmark run."""
+    if _get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+    content = _get_artifact_store().read_artifact(run_id, artifact_path)
+    if content is None:
+        raise HTTPException(status_code=404, detail=f"Artifact not found: {artifact_path}")
+    return content

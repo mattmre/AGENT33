@@ -1,0 +1,81 @@
+"""CTRF export helpers for SkillsBench benchmark runs."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from agent33.benchmarks.skillsbench.models import BenchmarkRunResult, TrialOutcome
+
+
+class SkillsBenchCTRFGenerator:
+    """Generate CTRF-style reports for benchmark runs."""
+
+    TOOL_NAME = "agent33-skillsbench"
+    TOOL_VERSION = "1.0.0"
+
+    def generate_report(self, run: BenchmarkRunResult) -> dict[str, Any]:
+        """Generate a CTRF-compatible JSON structure for a benchmark run."""
+        tests: list[dict[str, Any]] = []
+        passed = 0
+        failed = 0
+
+        for trial in run.trials:
+            status = "passed" if trial.outcome == TrialOutcome.PASSED else "failed"
+            if status == "passed":
+                passed += 1
+            else:
+                failed += 1
+            tests.append(
+                {
+                    "name": (
+                        f"{trial.task_id} [trial {trial.trial_number}]"
+                        f" [{trial.agent}/{trial.model}]"
+                    ),
+                    "status": status,
+                    "duration": trial.duration_ms,
+                    "message": trial.error_message or trial.termination_reason,
+                    "extra": {
+                        "skills_enabled": trial.skills_enabled,
+                        "iterations": trial.iterations,
+                        "tool_calls_made": trial.tool_calls_made,
+                        "tokens_used": trial.tokens_used,
+                        "pytest_returncode": trial.pytest_returncode,
+                        "artifacts": [artifact.model_dump() for artifact in trial.artifacts],
+                        "skillsbench": {
+                            "trial_outcome": trial.outcome,
+                            "task_id": trial.task_id,
+                        },
+                    },
+                }
+            )
+
+        start_ms = int(run.started_at.timestamp() * 1000)
+        stop_ms = int(run.completed_at.timestamp() * 1000) if run.completed_at else start_ms
+
+        return {
+            "results": {
+                "tool": {
+                    "name": self.TOOL_NAME,
+                    "version": self.TOOL_VERSION,
+                },
+                "summary": {
+                    "tests": len(tests),
+                    "passed": passed,
+                    "failed": failed,
+                    "skipped": 0,
+                    "pending": 0,
+                    "other": 0,
+                    "start": start_ms,
+                    "stop": stop_ms,
+                },
+                "extra": {
+                    "skillsbench": {
+                        "run_id": run.run_id,
+                        "total_tasks": run.total_tasks,
+                        "total_trials": run.total_trials,
+                        "pass_rate": run.pass_rate,
+                    },
+                },
+                "tests": tests,
+            },
+        }
