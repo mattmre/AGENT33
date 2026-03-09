@@ -180,6 +180,22 @@ class Settings(BaseSettings):
     connector_circuit_recovery_seconds: float = 30.0
     connector_circuit_half_open_successes: int = 1
 
+    # Jupyter kernel execution
+    jupyter_kernel_enabled: bool = False
+    jupyter_kernel_adapter_id: str = "jupyter-kernel"
+    jupyter_kernel_tool_id: str = "code-interpreter"
+    jupyter_kernel_mode: str = "local"  # local | docker
+    jupyter_kernel_name: str = "python3"
+    jupyter_kernel_max_sessions: int = 10
+    jupyter_kernel_idle_timeout_seconds: float = 300.0
+    jupyter_kernel_startup_timeout_seconds: float = 30.0
+    jupyter_kernel_execution_timeout_seconds: float = 60.0
+    jupyter_kernel_docker_image: str = "quay.io/jupyter/minimal-notebook:python-3.11"
+    jupyter_kernel_allowed_images: str = ""
+    jupyter_kernel_network_enabled: bool = False
+    jupyter_kernel_mount_workdir: bool = True
+    jupyter_kernel_container_workdir: str = "/workspace"
+
     # Hook framework
     hooks_enabled: bool = True
     hooks_definitions_dir: str = "hook-definitions"
@@ -251,6 +267,14 @@ class Settings(BaseSettings):
         normalized = value.strip().lower()
         if normalized not in {"reset", "raise"}:
             raise ValueError("corruption behavior must be one of: reset, raise")
+        return normalized
+
+    @field_validator("jupyter_kernel_mode")
+    @classmethod
+    def _validate_jupyter_kernel_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"local", "docker"}:
+            raise ValueError("jupyter kernel mode must be one of: local, docker")
         return normalized
 
     @field_validator(
