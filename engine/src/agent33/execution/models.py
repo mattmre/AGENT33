@@ -72,6 +72,14 @@ class OutputSpec(BaseModel):
     output_files: list[str] = Field(default_factory=list)
 
 
+class OutputArtifact(BaseModel):
+    """Structured artifact captured during execution."""
+
+    mime_type: str
+    data: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ExecutionContract(BaseModel):
     """Full contract that governs a single code execution."""
 
@@ -96,7 +104,8 @@ class ExecutionResult(BaseModel):
     duration_ms: float = 0.0
     error: str | None = None
     truncated: bool = False
-    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    artifacts: list[OutputArtifact] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +149,29 @@ class APIInterface(BaseModel):
     endpoint_mapping: dict[str, str] = Field(default_factory=dict)
 
 
+class KernelContainerPolicy(BaseModel):
+    """Container runtime controls for kernel-backed execution."""
+
+    enabled: bool = False
+    image: str = "quay.io/jupyter/minimal-notebook:python-3.11"
+    allowed_images: list[str] = Field(default_factory=list)
+    network_enabled: bool = False
+    mount_working_directory: bool = True
+    container_workdir: str = "/workspace"
+    extra_run_args: list[str] = Field(default_factory=list)
+
+
+class KernelInterface(BaseModel):
+    """Interface spec for Jupyter kernel adapters."""
+
+    kernel_name: str = "python3"
+    max_sessions: int = Field(default=10, ge=1, le=100)
+    idle_timeout_seconds: float = Field(default=300.0, ge=1.0, le=86_400.0)
+    startup_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
+    execution_timeout_seconds: float = Field(default=60.0, ge=1.0, le=3_600.0)
+    container: KernelContainerPolicy = Field(default_factory=KernelContainerPolicy)
+
+
 class RetryConfig(BaseModel):
     """Retry behaviour for adapter error handling."""
 
@@ -172,6 +204,7 @@ class AdapterDefinition(BaseModel):
     type: AdapterType
     cli: CLIInterface | None = None
     api: APIInterface | None = None
+    kernel: KernelInterface | None = None
     error_handling: ErrorHandling = Field(default_factory=ErrorHandling)
     sandbox_override: dict[str, Any] = Field(default_factory=dict)
     status: AdapterStatus = AdapterStatus.ACTIVE

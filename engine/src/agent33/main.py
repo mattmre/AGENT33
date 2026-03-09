@@ -210,6 +210,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.workflows.actions import execute_code
 
     code_executor = CodeExecutor(tool_registry=None)
+    if settings.jupyter_kernel_enabled:
+        from agent33.execution.adapters.jupyter import (
+            JupyterAdapter,
+            build_default_jupyter_definition,
+        )
+
+        try:
+            jupyter_definition = build_default_jupyter_definition(
+                adapter_id=settings.jupyter_kernel_adapter_id,
+                tool_id=settings.jupyter_kernel_tool_id,
+                kernel_name=settings.jupyter_kernel_name,
+                max_sessions=settings.jupyter_kernel_max_sessions,
+                idle_timeout_seconds=settings.jupyter_kernel_idle_timeout_seconds,
+                startup_timeout_seconds=settings.jupyter_kernel_startup_timeout_seconds,
+                execution_timeout_seconds=settings.jupyter_kernel_execution_timeout_seconds,
+                docker_enabled=settings.jupyter_kernel_mode == "docker",
+                docker_image=settings.jupyter_kernel_docker_image,
+                docker_allowed_images=[
+                    image.strip()
+                    for image in settings.jupyter_kernel_allowed_images.split(",")
+                    if image.strip()
+                ],
+                docker_network_enabled=settings.jupyter_kernel_network_enabled,
+                docker_mount_working_directory=settings.jupyter_kernel_mount_workdir,
+                docker_container_workdir=settings.jupyter_kernel_container_workdir,
+            )
+            code_executor.register_adapter(JupyterAdapter(jupyter_definition))
+            logger.info(
+                "jupyter_kernel_adapter_registered",
+                adapter_id=settings.jupyter_kernel_adapter_id,
+                tool_id=settings.jupyter_kernel_tool_id,
+                mode=settings.jupyter_kernel_mode,
+            )
+        except Exception as exc:
+            logger.warning("jupyter_kernel_adapter_failed", error=str(exc))
     app.state.code_executor = code_executor
     execute_code.set_executor(code_executor)
     logger.info("code_executor_initialized")

@@ -42,7 +42,8 @@ async def execute(
         adapter_id: Optional explicit adapter to use.
         inputs: Resolved step inputs. Expected keys: ``command``,
             ``arguments``, ``environment``, ``working_directory``,
-            ``input_files``, ``stdin``.
+            ``input_files``, ``stdin``. Kernel-backed execution may also
+            provide ``code``, ``language``, ``session_id``, and ``metadata``.
         sandbox: Optional sandbox overrides from the workflow step.
         dry_run: If True, log but skip actual execution.
 
@@ -74,13 +75,19 @@ async def execute(
     )
 
     # Build ExecutionInputs from the step inputs dict.
+    metadata = dict(inputs.get("metadata", {}) or {})
+    if "session_id" in inputs and "session_id" not in metadata:
+        metadata["session_id"] = inputs["session_id"]
+    if "language" in inputs and "language" not in metadata:
+        metadata["language"] = inputs["language"]
+
     exec_inputs = ExecutionInputs(
-        command=inputs.get("command", ""),
+        command=inputs.get("command") or inputs.get("language", ""),
         arguments=inputs.get("arguments", []),
         environment=inputs.get("environment", {}),
         working_directory=inputs.get("working_directory"),
         input_files=inputs.get("input_files", []),
-        stdin=inputs.get("stdin"),
+        stdin=inputs.get("stdin") or inputs.get("code"),
     )
 
     # Build optional sandbox config.
@@ -91,6 +98,7 @@ async def execute(
         adapter_id=adapter_id,
         inputs=exec_inputs,
         sandbox=sandbox_cfg,
+        metadata=metadata,
     )
 
     executor = get_executor()
@@ -105,4 +113,6 @@ async def execute(
         "duration_ms": result.duration_ms,
         "error": result.error,
         "truncated": result.truncated,
+        "artifacts": [artifact.model_dump() for artifact in result.artifacts],
+        "metadata": result.metadata,
     }
