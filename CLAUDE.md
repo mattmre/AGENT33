@@ -196,6 +196,8 @@ written. Do not present "X new tests" as evidence of completeness.
 - **Ruff Check vs Format Parity:** `ruff check` can pass while CI still fails on `ruff format --check`. Always run both locally before pushing PR updates, especially for test-heavy edits where small wrapping/format deltas are easy to miss.
 - **Windows Worktree Cleanup:** `git worktree remove --force` can fail on Windows when orphaned reserved-name files (for example `nul`) exist in a worktree path. If that happens, remove with long-path `cmd /c rd /s /q "\\?\<absolute-path>"` and then re-run `git worktree list` to confirm cleanup.
 - **Handoff Drift After Merge Waves:** `docs/next-session.md` can become stale quickly during rapid PR merge waves; refresh it immediately after final merges so priority queues and phase status reflect `main`, not pre-merge branch state.
+- **Worktree Import Drift:** When running Python tests from a worktree, explicitly set `PYTHONPATH=<worktree>\engine\src` or pytest can import a different editable install from another worktree and give misleading results.
+- **Full-Suite Timeout Risk:** The full backend suite can exceed the default Codex command timeout. If a full `pytest tests --no-cov` run is required, use a longer timeout and report clearly if you only have targeted validation plus lint/mypy.
 
 Add these to your existing pre-commit checklist:
 
