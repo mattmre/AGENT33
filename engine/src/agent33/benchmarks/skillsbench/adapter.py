@@ -17,6 +17,7 @@ protocol so it can be plugged directly into :class:`~agent33.evaluation.service.
 
 from __future__ import annotations
 
+import json
 import logging
 import tempfile
 import time
@@ -28,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunResult,
     BenchmarkRunStatus,
+    TrialArtifact,
     TrialOutcome,
     TrialRecord,
 )
@@ -37,6 +39,7 @@ if TYPE_CHECKING:
     from agent33.agents.runtime import AgentRuntime
     from agent33.benchmarks.skillsbench.config import SkillsBenchConfig
     from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner
+    from agent33.benchmarks.skillsbench.storage import SkillsBenchArtifactStore
     from agent33.benchmarks.skillsbench.task_loader import (
         SkillsBenchTask,
         SkillsBenchTaskLoader,
@@ -83,12 +86,14 @@ class SkillsBenchAdapter:
         skill_registry: SkillRegistry,
         agent_runtime: AgentRuntime,
         skill_matcher: SkillMatcher | None = None,
+        artifact_store: SkillsBenchArtifactStore | None = None,
     ) -> None:
         self._task_loader = task_loader
         self._pytest_runner = pytest_runner
         self._skill_registry = skill_registry
         self._agent_runtime = agent_runtime
         self._skill_matcher = skill_matcher
+        self._artifact_store = artifact_store
 
     # ------------------------------------------------------------------
     # TrialEvaluatorAdapter protocol
@@ -184,6 +189,10 @@ class SkillsBenchAdapter:
                 trial_metadata["iterations"] = result.iterations
                 trial_metadata["tool_calls_made"] = result.tool_calls_made
                 trial_metadata["termination_reason"] = result.termination_reason
+                trial_metadata["agent_output"] = self._serialize_agent_payload(
+                    getattr(result, "output", {})
+                )
+                trial_metadata["agent_raw_response"] = str(getattr(result, "raw_response", ""))
             except Exception as exc:
                 logger.warning(
                     "skillsbench_agent_error task=%s error=%s", task_id, exc, exc_info=True
@@ -196,6 +205,7 @@ class SkillsBenchAdapter:
             finally:
                 if original_active_skills is not None:
                     runtime_any._active_skills = original_active_skills
+                self._unload_bundled_skills(loaded_skill_names)
 
             # 4. Run pytest binary reward
             pytest_result = await self._pytest_runner.evaluate(
@@ -205,6 +215,8 @@ class SkillsBenchAdapter:
 
         trial_metadata["pytest_returncode"] = pytest_result.returncode
         trial_metadata["pytest_duration_ms"] = pytest_result.duration_ms
+        trial_metadata["pytest_stdout"] = pytest_result.stdout
+        trial_metadata["pytest_stderr"] = pytest_result.stderr
 
         logger.info(
             "skillsbench_trial_complete task=%s passed=%s returncode=%d",
@@ -280,6 +292,7 @@ class SkillsBenchAdapter:
         for task in tasks:
             for trial_num in range(1, config.trials_per_task + 1):
                 record = await self._run_single_trial(
+                    run_id=run_id,
                     task=task,
                     trial_number=trial_num,
                     agent=config.agent_name,
@@ -291,6 +304,9 @@ class SkillsBenchAdapter:
         run_result.compute_aggregates()
         run_result.status = BenchmarkRunStatus.COMPLETED
         run_result.completed_at = datetime.now(UTC)
+        run_result.artifact_root = run_id
+        if self._artifact_store is not None:
+            self._artifact_store.persist_run(run_result)
 
         logger.info(
             "skillsbench_benchmark_complete run_id=%s tasks=%d trials=%d pass_rate=%.2f",
@@ -308,6 +324,7 @@ class SkillsBenchAdapter:
 
     async def _run_single_trial(
         self,
+        run_id: str,
         task: SkillsBenchTask,
         trial_number: int,
         agent: str,
@@ -334,6 +351,14 @@ class SkillsBenchAdapter:
             trial_outcome = TrialOutcome.FAILED
 
         meta = outcome.metadata or {}
+        stdout_excerpt = str(meta.get("pytest_stdout", ""))[:400]
+        stderr_excerpt = str(meta.get("pytest_stderr", ""))[:400]
+        artifacts = self._persist_trial_artifacts(
+            run_id=run_id,
+            task_id=task.task_id,
+            trial_number=trial_number,
+            metadata=meta,
+        )
 
         return TrialRecord(
             task_id=task.task_id,
@@ -349,6 +374,9 @@ class SkillsBenchAdapter:
             termination_reason=meta.get("termination_reason", ""),
             pytest_returncode=meta.get("pytest_returncode", -1),
             error_message=meta.get("error", ""),
+            pytest_stdout_excerpt=stdout_excerpt,
+            pytest_stderr_excerpt=stderr_excerpt,
+            artifacts=artifacts,
             metadata=meta,
         )
 
@@ -374,3 +402,56 @@ class SkillsBenchAdapter:
                 "skillsbench_skills_load_error task=%s error=%s", task_id, exc, exc_info=True
             )
             return []
+
+    def _unload_bundled_skills(self, loaded_skill_names: list[str]) -> None:
+        """Remove task-scoped skills after a trial to avoid cross-trial leakage."""
+        for skill_name in loaded_skill_names:
+            self._skill_registry.remove(skill_name)
+
+    def _persist_trial_artifacts(
+        self,
+        *,
+        run_id: str,
+        task_id: str,
+        trial_number: int,
+        metadata: dict[str, Any],
+    ) -> list[TrialArtifact]:
+        """Persist per-trial artifacts and return their metadata records."""
+        if self._artifact_store is None:
+            return []
+
+        artifact_specs = [
+            ("pytest_stdout", "pytest-stdout.txt", str(metadata.pop("pytest_stdout", ""))),
+            ("pytest_stderr", "pytest-stderr.txt", str(metadata.pop("pytest_stderr", ""))),
+            ("agent_output", "agent-output.txt", str(metadata.pop("agent_output", ""))),
+            (
+                "agent_raw_response",
+                "agent-raw-response.txt",
+                str(metadata.pop("agent_raw_response", "")),
+            ),
+        ]
+
+        artifacts: list[TrialArtifact] = []
+        for kind, filename, content in artifact_specs:
+            if not content:
+                continue
+            artifacts.append(
+                self._artifact_store.persist_text_artifact(
+                    run_id=run_id,
+                    task_id=task_id,
+                    trial_number=trial_number,
+                    kind=kind,
+                    filename=filename,
+                    content=content,
+                )
+            )
+        return artifacts
+
+    def _serialize_agent_payload(self, payload: Any) -> str:
+        """Normalize agent output payloads for artifact persistence."""
+        if isinstance(payload, str):
+            return payload
+        try:
+            return json.dumps(payload, indent=2, sort_keys=True)
+        except TypeError:
+            return str(payload)

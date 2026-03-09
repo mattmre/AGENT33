@@ -10,7 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from agent33.api.routes import benchmarks
-from agent33.benchmarks.skillsbench.models import BenchmarkRunResult, BenchmarkRunStatus
+from agent33.benchmarks.skillsbench.models import (
+    BenchmarkRunResult,
+    BenchmarkRunStatus,
+    TrialOutcome,
+    TrialRecord,
+)
+from agent33.benchmarks.skillsbench.storage import SkillsBenchArtifactStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -41,9 +47,11 @@ def _create_task(root: Path, category: str, task_name: str) -> None:
 
 
 class TestSkillsBenchRoutes:
-    def setup_method(self) -> None:
+    def setup_method(self, method) -> None:
+        del method
         benchmarks._runs.clear()
         benchmarks._run_order.clear()
+        benchmarks._artifact_store = None
 
     def test_list_tasks_returns_summaries(self, tmp_path: Path) -> None:
         _create_task(tmp_path, "math", "addition")
@@ -63,6 +71,7 @@ class TestSkillsBenchRoutes:
     def test_run_benchmark_stores_summary(self, tmp_path: Path, monkeypatch) -> None:
         client = TestClient(_make_app())
         _create_task(tmp_path, "math", "addition")
+        benchmarks._artifact_store = SkillsBenchArtifactStore(tmp_path / "store")
 
         run_result = BenchmarkRunResult(
             run_id="sb-test-run",
@@ -85,9 +94,11 @@ class TestSkillsBenchRoutes:
         assert response.status_code == 201
         assert response.json()["run_id"] == "sb-test-run"
         assert benchmarks._runs["sb-test-run"].run_id == "sb-test-run"
+        assert (tmp_path / "store" / "sb-test-run" / "run.json").is_file()
 
-    def test_list_and_get_runs(self) -> None:
+    def test_list_and_get_runs(self, tmp_path: Path) -> None:
         client = TestClient(_make_app())
+        benchmarks._artifact_store = SkillsBenchArtifactStore(tmp_path / "store")
         run = BenchmarkRunResult(
             run_id="sb-existing",
             status=BenchmarkRunStatus.COMPLETED,
@@ -111,3 +122,45 @@ class TestSkillsBenchRoutes:
         client = TestClient(_make_app())
         response = client.get("/v1/benchmarks/skillsbench/runs/missing")
         assert response.status_code == 404
+
+    def test_ctrf_and_artifact_routes(self, tmp_path: Path) -> None:
+        client = TestClient(_make_app())
+        store = SkillsBenchArtifactStore(tmp_path / "store")
+        benchmarks._artifact_store = store
+
+        artifact = store.persist_text_artifact(
+            run_id="sb-existing",
+            task_id="math/addition",
+            trial_number=1,
+            kind="pytest_stdout",
+            filename="pytest-stdout.txt",
+            content="1 passed",
+        )
+        run = BenchmarkRunResult(
+            run_id="sb-existing",
+            status=BenchmarkRunStatus.COMPLETED,
+            total_tasks=1,
+            total_trials=1,
+            passed_trials=1,
+            pass_rate=1.0,
+        )
+        run.trials.append(
+            TrialRecord(
+                task_id="math/addition",
+                trial_number=1,
+                outcome=TrialOutcome.PASSED,
+                artifacts=[artifact],
+            )
+        )
+        run.compute_aggregates()
+        benchmarks._store_run(run)
+
+        ctrf_response = client.get("/v1/benchmarks/skillsbench/runs/sb-existing/ctrf")
+        assert ctrf_response.status_code == 200
+        assert ctrf_response.json()["results"]["summary"]["tests"] == 1
+
+        artifact_response = client.get(
+            f"/v1/benchmarks/skillsbench/runs/sb-existing/artifacts/{artifact.relative_path}"
+        )
+        assert artifact_response.status_code == 200
+        assert artifact_response.text == "1 passed"

@@ -15,6 +15,7 @@ from agent33.benchmarks.skillsbench.models import (
     TrialOutcome,
 )
 from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner, PytestResult
+from agent33.benchmarks.skillsbench.storage import SkillsBenchArtifactStore
 from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTask, SkillsBenchTaskLoader
 from agent33.skills.registry import SkillRegistry
 
@@ -65,6 +66,7 @@ def _make_adapter(
     agent_result: Any = None,
     agent_raises: Exception | None = None,
     task_raises: Exception | None = None,
+    artifact_store: SkillsBenchArtifactStore | None = None,
 ) -> SkillsBenchAdapter:
     """Build a SkillsBenchAdapter with mocked dependencies."""
     # Task loader
@@ -104,6 +106,7 @@ def _make_adapter(
         pytest_runner=pytest_runner,
         skill_registry=skill_registry,
         agent_runtime=agent_runtime,
+        artifact_store=artifact_store,
     )
 
 
@@ -221,6 +224,7 @@ class TestSkillsBenchAdapterEvaluate:
         assert outcome.success is True
         # Verify skill registry discover was called
         adapter._skill_registry.discover.assert_called_once_with(Path("/fake/skills"))
+        adapter._skill_registry.remove.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_skills_disabled_skips_loading(self) -> None:
@@ -245,6 +249,25 @@ class TestSkillsBenchAdapterEvaluate:
             skills_enabled=True,
         )
         adapter._skill_registry.discover.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_loaded_skills_are_removed_after_trial(self) -> None:
+        task = _make_task(skills_dir=Path("/fake/skills"))
+        adapter = _make_adapter(task=task, pytest_passed=True)
+        skill_a = MagicMock()
+        skill_a.name = "skill-a"
+        adapter._skill_registry.list_all.side_effect = [[], [skill_a]]
+        adapter._skill_registry.discover.return_value = 1
+
+        outcome = await adapter.evaluate(
+            task_id="math/addition",
+            agent="code-worker",
+            model="llama3.2",
+            skills_enabled=True,
+        )
+
+        assert outcome.success is True
+        adapter._skill_registry.remove.assert_called_once_with("skill-a")
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +390,28 @@ class TestSkillsBenchAdapterRunBenchmark:
         assert trial.skills_enabled is True
         assert trial.outcome == TrialOutcome.PASSED
         assert trial.trial_number == 1
+
+    @pytest.mark.asyncio
+    async def test_run_benchmark_persists_trial_artifacts(self, tmp_path: Path) -> None:
+        store = SkillsBenchArtifactStore(tmp_path / "skillsbench-store")
+        adapter = _make_adapter(pytest_passed=True, artifact_store=store)
+        config = SkillsBenchConfig(
+            skillsbench_root=Path("/fake"),
+            trials_per_task=1,
+            skills_enabled=False,
+        )
+
+        result = await adapter.run_benchmark(config)
+
+        assert len(result.trials) == 1
+        trial = result.trials[0]
+        assert {artifact.kind for artifact in trial.artifacts} == {
+            "pytest_stdout",
+            "agent_output",
+            "agent_raw_response",
+        }
+        assert (store.base_path / result.run_id / "run.json").is_file()
+        assert trial.pytest_stdout_excerpt == "1 passed"
 
     @pytest.mark.asyncio
     async def test_run_benchmark_agent_error_produces_error_outcome(self) -> None:

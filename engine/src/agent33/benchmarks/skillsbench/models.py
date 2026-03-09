@@ -29,6 +29,17 @@ class BenchmarkRunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class TrialArtifact(BaseModel):
+    """Persisted artifact produced for a single benchmark trial."""
+
+    name: str = Field(..., description="Human-readable artifact label.")
+    kind: str = Field(..., description="Artifact category, e.g. pytest_stdout.")
+    relative_path: str = Field(..., description="Artifact path relative to the run directory.")
+    content_type: str = Field(default="text/plain", description="Artifact MIME type.")
+    size_bytes: int = Field(default=0, ge=0)
+    preview: str = Field(default="", description="Short excerpt for API responses.")
+
+
 class TrialRecord(BaseModel):
     """Record of a single trial execution."""
 
@@ -45,6 +56,9 @@ class TrialRecord(BaseModel):
     termination_reason: str = Field(default="", description="Why the agent stopped.")
     pytest_returncode: int = Field(default=-1, description="Raw pytest return code.")
     error_message: str = Field(default="", description="Error details if outcome is ERROR.")
+    pytest_stdout_excerpt: str = Field(default="", description="Short excerpt from pytest stdout.")
+    pytest_stderr_excerpt: str = Field(default="", description="Short excerpt from pytest stderr.")
+    artifacts: list[TrialArtifact] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict, description="Extra metadata.")
 
     @property
@@ -75,6 +89,20 @@ class TaskFilter(BaseModel):
     )
 
 
+class TaskBenchmarkSummary(BaseModel):
+    """Per-task rollup for a benchmark run."""
+
+    task_id: str
+    category: str
+    total_trials: int = Field(default=0, ge=0)
+    passed_trials: int = Field(default=0, ge=0)
+    failed_trials: int = Field(default=0, ge=0)
+    error_trials: int = Field(default=0, ge=0)
+    pass_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    avg_duration_ms: float = Field(default=0.0, ge=0.0)
+    total_tokens_used: int = Field(default=0, ge=0)
+
+
 class BenchmarkRunResult(BaseModel):
     """Aggregated result of a complete SkillsBench benchmark run."""
 
@@ -95,6 +123,9 @@ class BenchmarkRunResult(BaseModel):
     pass_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     total_tokens_used: int = Field(default=0, ge=0)
     total_duration_ms: float = Field(default=0.0, ge=0.0)
+    task_summaries: list[TaskBenchmarkSummary] = Field(default_factory=list)
+    artifact_root: str = Field(default="", description="Relative storage directory for this run.")
+    ctrf_report_path: str = Field(default="", description="Relative path to the CTRF report.")
 
     def compute_aggregates(self) -> None:
         """Recompute aggregate fields from the trials list."""
@@ -107,3 +138,37 @@ class BenchmarkRunResult(BaseModel):
         self.pass_rate = self.passed_trials / self.total_trials if self.total_trials > 0 else 0.0
         task_ids = {t.task_id for t in self.trials}
         self.total_tasks = len(task_ids)
+        self.task_summaries = self._build_task_summaries()
+
+    def _build_task_summaries(self) -> list[TaskBenchmarkSummary]:
+        """Build per-task aggregate summaries from trial records."""
+        grouped: dict[str, list[TrialRecord]] = {}
+        for trial in self.trials:
+            grouped.setdefault(trial.task_id, []).append(trial)
+
+        summaries: list[TaskBenchmarkSummary] = []
+        for task_id in sorted(grouped):
+            trials = grouped[task_id]
+            total_trials = len(trials)
+            passed_trials = sum(1 for trial in trials if trial.outcome == TrialOutcome.PASSED)
+            failed_trials = sum(1 for trial in trials if trial.outcome == TrialOutcome.FAILED)
+            error_trials = sum(1 for trial in trials if trial.outcome == TrialOutcome.ERROR)
+            category = task_id.split("/", 1)[0] if "/" in task_id else ""
+            summaries.append(
+                TaskBenchmarkSummary(
+                    task_id=task_id,
+                    category=category,
+                    total_trials=total_trials,
+                    passed_trials=passed_trials,
+                    failed_trials=failed_trials,
+                    error_trials=error_trials,
+                    pass_rate=passed_trials / total_trials if total_trials else 0.0,
+                    avg_duration_ms=(
+                        sum(trial.duration_ms for trial in trials) / total_trials
+                        if total_trials
+                        else 0.0
+                    ),
+                    total_tokens_used=sum(trial.tokens_used for trial in trials),
+                )
+            )
+        return summaries

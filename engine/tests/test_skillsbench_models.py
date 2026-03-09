@@ -9,6 +9,7 @@ from agent33.benchmarks.skillsbench.models import (
     BenchmarkRunResult,
     BenchmarkRunStatus,
     TaskFilter,
+    TrialArtifact,
     TrialOutcome,
     TrialRecord,
 )
@@ -79,6 +80,15 @@ class TestTrialRecord:
             termination_reason="max_iterations",
             pytest_returncode=1,
             error_message="",
+            pytest_stdout_excerpt="stdout",
+            pytest_stderr_excerpt="stderr",
+            artifacts=[
+                TrialArtifact(
+                    name="pytest-stdout.txt",
+                    kind="pytest_stdout",
+                    relative_path="trials/math__addition/trial-01/pytest-stdout.txt",
+                )
+            ],
             metadata={"custom_key": "value"},
         )
         assert record.duration_ms == 1500.5
@@ -90,6 +100,9 @@ class TestTrialRecord:
         assert record.tool_calls_made == 12
         assert record.termination_reason == "max_iterations"
         assert record.pytest_returncode == 1
+        assert record.pytest_stdout_excerpt == "stdout"
+        assert record.pytest_stderr_excerpt == "stderr"
+        assert record.artifacts[0].kind == "pytest_stdout"
         assert record.metadata["custom_key"] == "value"
 
     def test_trial_number_must_be_positive(self) -> None:
@@ -195,6 +208,8 @@ class TestBenchmarkRunResult:
         assert result.total_tokens_used == 500
         assert result.total_duration_ms == 195.0
         assert result.pass_rate == 0.5
+        assert len(result.task_summaries) == 2
+        assert result.task_summaries[0].task_id == "math/add"
 
     def test_compute_aggregates_all_passed(self) -> None:
         trials = [
@@ -209,6 +224,7 @@ class TestBenchmarkRunResult:
         result.compute_aggregates()
         assert result.pass_rate == 1.0
         assert result.passed_trials == 5
+        assert result.task_summaries[0].pass_rate == 1.0
 
     def test_compute_aggregates_all_failed(self) -> None:
         trials = [
