@@ -245,7 +245,7 @@ class TestStreamingToolLoop:
         """LLM error should produce error event."""
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
-        router = MagicMock()
+        router = MagicMock(spec=["complete"])
         router.complete = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
         registry = _make_registry()
         config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
@@ -378,9 +378,7 @@ def _make_streaming_router(
 ) -> MagicMock:
     """Create a mock router whose stream_complete yields the given chunks."""
 
-    async def _stream_complete(
-        messages: Any, *, model: str = "", **kwargs: Any
-    ) -> Any:
+    async def _stream_complete(messages: Any, *, model: str = "", **kwargs: Any) -> Any:
         for chunk in chunks:
             yield chunk
 
@@ -441,9 +439,7 @@ class TestTokenStreaming:
         tool_chunks = [
             LLMStreamChunk(
                 delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0, id="call_1", function_name="shell"
-                    ),
+                    ToolCallDelta(index=0, id="call_1", function_name="shell"),
                 ],
             ),
             LLMStreamChunk(
@@ -466,9 +462,7 @@ class TestTokenStreaming:
         # Build router that yields different chunks per call
         call_count = 0
 
-        async def _stream_complete(
-            messages: Any, *, model: str = "", **kwargs: Any
-        ) -> Any:
+        async def _stream_complete(messages: Any, *, model: str = "", **kwargs: Any) -> Any:
             nonlocal call_count
             call_count += 1
             source = tool_chunks if call_count == 1 else text_chunks
@@ -532,9 +526,7 @@ class TestTokenStreaming:
             LLMStreamChunk(
                 delta_content="a command",
                 delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0, id="call_1", function_name="shell"
-                    ),
+                    ToolCallDelta(index=0, id="call_1", function_name="shell"),
                 ],
             ),
             LLMStreamChunk(
@@ -551,9 +543,7 @@ class TestTokenStreaming:
 
         call_count = 0
 
-        async def _stream_complete(
-            messages: Any, *, model: str = "", **kwargs: Any
-        ) -> Any:
+        async def _stream_complete(messages: Any, *, model: str = "", **kwargs: Any) -> Any:
             nonlocal call_count
             call_count += 1
             source = call1_chunks if call_count == 1 else call2_chunks
@@ -602,3 +592,33 @@ class TestTokenStreaming:
         token_events = [e for e in events if e.event_type == "llm_token"]
         assert len(token_events) == 0
         assert events[-1].event_type == "completed"
+
+    async def test_stream_preserves_chunk_usage_and_finish_reason(self) -> None:
+        """Streamed responses should retain chunk token usage and finish reason."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        chunks = [
+            LLMStreamChunk(delta_content="partial ", model="stream-model"),
+            LLMStreamChunk(
+                delta_content="answer",
+                model="stream-model",
+                prompt_tokens=11,
+                completion_tokens=13,
+                finish_reason="length",
+            ),
+        ]
+        router = _make_streaming_router(chunks)
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        llm_response = next(e for e in events if e.event_type == "llm_response")
+        assert llm_response.data["prompt_tokens"] == 11
+        assert llm_response.data["completion_tokens"] == 13
+        assert llm_response.data["finish_reason"] == "length"
+        assert events[-1].data["total_tokens"] == 24

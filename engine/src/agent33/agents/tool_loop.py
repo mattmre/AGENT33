@@ -441,6 +441,10 @@ class ToolLoop:
 
                         assembled_content_parts: list[str] = []
                         assembler = ToolCallAssembler()
+                        stream_model = model
+                        stream_prompt_tokens = 0
+                        stream_completion_tokens = 0
+                        stream_finish_reason: str | None = None
                         _use_streaming = True
 
                         try:
@@ -460,7 +464,13 @@ class ToolLoop:
                                     )
                                 if chunk.delta_tool_calls:
                                     assembler.feed(chunk.delta_tool_calls)
+                                if chunk.model:
+                                    stream_model = chunk.model
+                                if chunk.prompt_tokens or chunk.completion_tokens:
+                                    stream_prompt_tokens = chunk.prompt_tokens
+                                    stream_completion_tokens = chunk.completion_tokens
                                 if chunk.finish_reason:
+                                    stream_finish_reason = chunk.finish_reason
                                     break
                         except NotImplementedError:
                             _use_streaming = False
@@ -468,17 +478,16 @@ class ToolLoop:
                             assembled_content_parts.clear()
 
                         if _use_streaming:
-                            tool_calls = (
-                                assembler.finalize() if assembler.has_pending else None
-                            )
+                            tool_calls = assembler.finalize() if assembler.has_pending else None
                             full_content = "".join(assembled_content_parts)
                             response = LLMResponse(
                                 content=full_content,
-                                model=model,
-                                prompt_tokens=0,
-                                completion_tokens=0,
+                                model=stream_model,
+                                prompt_tokens=stream_prompt_tokens,
+                                completion_tokens=stream_completion_tokens,
                                 tool_calls=tool_calls,
-                                finish_reason="tool_calls" if tool_calls else "stop",
+                                finish_reason=stream_finish_reason
+                                or ("tool_calls" if tool_calls else "stop"),
                             )
                         else:
                             response = await self._router.complete(

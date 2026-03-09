@@ -321,15 +321,11 @@ class OllamaProvider:
                 for i, tc in enumerate(tool_calls_data):
                     fn = tc.get("function", {})
                     raw_args = fn.get("arguments", "{}")
-                    args_str = (
-                        raw_args
-                        if isinstance(raw_args, str)
-                        else json.dumps(raw_args)
-                    )
+                    args_str = raw_args if isinstance(raw_args, str) else json.dumps(raw_args)
                     delta_tool_calls.append(
                         ToolCallDelta(
                             index=i,
-                            id=tc.get("id", f"ollama-{i}"),
+                            id=tc.get("id", f"call_{i}"),
                             function_name=fn.get("name", ""),
                             arguments_delta=args_str,
                         )
