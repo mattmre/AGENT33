@@ -59,8 +59,6 @@ async def mcp_sse(request: Request) -> StreamingResponse:
                     write_stream,
                     mcp_server.create_initialization_options(),
                 )
-                if False:
-                    yield ""
 
         return StreamingResponse(
             sse_stream(),
