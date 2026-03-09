@@ -36,6 +36,29 @@ class AgentScore(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class BundleRankingEntry(BaseModel):
+    """Bundle-scoped aligned ranking entry for one agent."""
+
+    rank: int
+    agent_name: str
+    average_score: float
+    percentile: float = 0.0
+    completed_tasks: int = 0
+    total_tasks: int = 0
+
+
+class BundleLeaderboardSnapshot(BaseModel):
+    """Leaderboard snapshot for one metric over one persisted synthetic bundle."""
+
+    snapshot_id: str = Field(default_factory=lambda: _new_id("BLB"))
+    bundle_id: str
+    metric_name: str
+    task_ids: list[str] = Field(default_factory=list)
+    entries: list[BundleRankingEntry] = Field(default_factory=list)
+    population_size: int = 0
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class PopulationStats(BaseModel):
     """Descriptive statistics for a metric across a population of agents."""
 
