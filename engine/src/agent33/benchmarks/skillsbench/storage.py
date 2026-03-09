@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any, cast
 
 from agent33.benchmarks.skillsbench.models import BenchmarkRunResult, TrialArtifact
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class SkillsBenchArtifactStore:
@@ -38,6 +42,10 @@ class SkillsBenchArtifactStore:
             return None
         return BenchmarkRunResult.model_validate_json(path.read_text(encoding="utf-8"))
 
+    def has_run(self, run_id: str) -> bool:
+        """Return whether a persisted snapshot exists for the run."""
+        return (self._run_dir(run_id) / "run.json").is_file()
+
     def list_runs(self, limit: int = 50) -> list[BenchmarkRunResult]:
         """List persisted runs, newest first."""
         if not self._base_path.exists():
@@ -50,7 +58,29 @@ class SkillsBenchArtifactStore:
         )
         runs: list[BenchmarkRunResult] = []
         for path in run_files[:limit]:
-            runs.append(BenchmarkRunResult.model_validate_json(path.read_text(encoding="utf-8")))
+            payload = cast("dict[str, Any]", json.loads(path.read_text(encoding="utf-8")))
+            runs.append(
+                BenchmarkRunResult.model_validate(
+                    {
+                        "run_id": payload.get("run_id", ""),
+                        "status": payload.get("status", ""),
+                        "started_at": payload.get("started_at"),
+                        "completed_at": payload.get("completed_at"),
+                        "config_summary": payload.get("config_summary", {}),
+                        "total_tasks": payload.get("total_tasks", 0),
+                        "total_trials": payload.get("total_trials", 0),
+                        "passed_trials": payload.get("passed_trials", 0),
+                        "failed_trials": payload.get("failed_trials", 0),
+                        "error_trials": payload.get("error_trials", 0),
+                        "pass_rate": payload.get("pass_rate", 0.0),
+                        "total_tokens_used": payload.get("total_tokens_used", 0),
+                        "total_duration_ms": payload.get("total_duration_ms", 0.0),
+                        "task_summaries": payload.get("task_summaries", []),
+                        "artifact_root": payload.get("artifact_root", ""),
+                        "ctrf_report_path": payload.get("ctrf_report_path", ""),
+                    }
+                )
+            )
         return runs
 
     def persist_text_artifact(
@@ -107,7 +137,10 @@ class SkillsBenchArtifactStore:
         return cast("dict[str, Any]", json.loads(path.read_text(encoding="utf-8")))
 
     def _run_dir(self, run_id: str) -> Path:
-        return self._base_path / run_id
+        safe_run_id = run_id.strip()
+        if not _RUN_ID_PATTERN.fullmatch(safe_run_id):
+            raise ValueError(f"Invalid SkillsBench run_id: {run_id!r}")
+        return self._base_path / safe_run_id
 
     def _trial_dir(self, run_id: str, task_id: str, trial_number: int) -> Path:
         safe_task_id = task_id.replace("/", "__")

@@ -18,11 +18,19 @@ class SkillsBenchCTRFGenerator:
         tests: list[dict[str, Any]] = []
         passed = 0
         failed = 0
+        skipped = 0
 
         for trial in run.trials:
-            status = "passed" if trial.outcome == TrialOutcome.PASSED else "failed"
+            if trial.outcome == TrialOutcome.PASSED:
+                status = "passed"
+            elif trial.outcome == TrialOutcome.SKIPPED:
+                status = "skipped"
+            else:
+                status = "failed"
             if status == "passed":
                 passed += 1
+            elif status == "skipped":
+                skipped += 1
             else:
                 failed += 1
             tests.append(
@@ -62,7 +70,7 @@ class SkillsBenchCTRFGenerator:
                     "tests": len(tests),
                     "passed": passed,
                     "failed": failed,
-                    "skipped": 0,
+                    "skipped": skipped,
                     "pending": 0,
                     "other": 0,
                     "start": start_ms,

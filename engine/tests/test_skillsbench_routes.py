@@ -118,6 +118,39 @@ class TestSkillsBenchRoutes:
         assert detail_response.status_code == 200
         assert detail_response.json()["run_id"] == "sb-existing"
 
+    def test_get_run_caches_disk_loaded_runs_with_bounded_retention(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        store = SkillsBenchArtifactStore(tmp_path / "store")
+        benchmarks._artifact_store = store
+        monkeypatch.setattr(benchmarks, "_MAX_STORED_RUNS", 2)
+
+        benchmarks._store_run(BenchmarkRunResult(run_id="sb-1"))
+        benchmarks._store_run(BenchmarkRunResult(run_id="sb-2"))
+        store.persist_run(BenchmarkRunResult(run_id="sb-3"))
+
+        loaded = benchmarks._get_run("sb-3")
+
+        assert loaded is not None
+        assert loaded.run_id == "sb-3"
+        assert benchmarks._run_order == ["sb-2", "sb-3"]
+        assert "sb-1" not in benchmarks._runs
+
+    def test_store_run_skips_duplicate_persist_when_snapshot_exists(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        store = SkillsBenchArtifactStore(tmp_path / "store")
+        benchmarks._artifact_store = store
+        run = BenchmarkRunResult(run_id="sb-existing")
+        store.persist_run(run)
+
+        persist_spy = MagicMock(wraps=store.persist_run)
+        monkeypatch.setattr(store, "persist_run", persist_spy)
+
+        benchmarks._store_run(run)
+
+        persist_spy.assert_not_called()
+
     def test_get_run_returns_404_for_missing_run(self) -> None:
         client = TestClient(_make_app())
         response = client.get("/v1/benchmarks/skillsbench/runs/missing")
