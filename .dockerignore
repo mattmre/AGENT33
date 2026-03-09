@@ -1,0 +1,14 @@
+.git
+.mypy_cache
+.ruff_cache
+node_modules
+test-results
+worktrees
+
+frontend/dist
+frontend/node_modules
+
+engine/.coverage
+engine/.mypy_cache
+engine/.pytest_cache
+engine/.ruff_cache
