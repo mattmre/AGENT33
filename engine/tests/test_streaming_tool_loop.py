@@ -93,6 +93,18 @@ def _make_router(*responses: LLMResponse) -> MagicMock:
     return router
 
 
+def _make_streaming_router(chunks: list[LLMStreamChunk]) -> MagicMock:
+    async def _stream_complete(messages: Any, *, model: str = "", **kwargs: Any) -> Any:
+        del messages, model, kwargs
+        for chunk in chunks:
+            yield chunk
+
+    router = MagicMock()
+    router.stream_complete = _stream_complete
+    router.complete = AsyncMock(return_value=_text_response("fallback"))
+    return router
+
+
 def _initial_messages() -> list[ChatMessage]:
     return [
         ChatMessage(role="system", content="You are a helpful agent."),
@@ -376,6 +388,37 @@ class TestStreamingToolLoop:
         assert events[-1].event_type == "completed"
         assert events[-1].data["termination_reason"] == "natural"
         assert router.complete.await_count == 2
+
+    async def test_stream_preserves_chunk_usage_and_finish_reason(self) -> None:
+        """Streaming should retain chunk token usage and finish reason."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        chunks = [
+            LLMStreamChunk(delta_content="partial ", model="stream-model"),
+            LLMStreamChunk(
+                delta_content="answer",
+                model="stream-model",
+                prompt_tokens=11,
+                completion_tokens=13,
+                finish_reason="length",
+                usage_available=True,
+            ),
+        ]
+        router = _make_streaming_router(chunks)
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        llm_response = next(e for e in events if e.event_type == "llm_response")
+        assert llm_response.data["prompt_tokens"] == 11
+        assert llm_response.data["completion_tokens"] == 13
+        assert llm_response.data["finish_reason"] == "length"
+        assert events[-1].data["total_tokens"] == 24
 
 
 # ---------------------------------------------------------------------------
