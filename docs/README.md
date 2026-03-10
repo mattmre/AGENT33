@@ -9,13 +9,14 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 1. [Setup Guide](setup-guide.md)
 2. [Walkthroughs](walkthroughs.md)
 3. [Phase 25/26 Live Review Walkthrough](phase25-26-live-review-walkthrough.md)
-4. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
-5. [Use Cases](use-cases.md)
-6. [Functionality and Workflows](functionality-and-workflows.md)
-7. [API Surface](api-surface.md)
-8. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
-9. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
-10. [Phase 22 PR Checkpoints](prs/README.md)
+4. [Operator Guide: Improvement Cycles and Docker Kernels](operator-improvement-cycle-and-jupyter.md)
+5. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
+6. [Use Cases](use-cases.md)
+7. [Functionality and Workflows](functionality-and-workflows.md)
+8. [API Surface](api-surface.md)
+9. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
+10. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
+11. [Phase 22 PR Checkpoints](prs/README.md)
 
 ## Runtime Snapshot
 
@@ -33,6 +34,7 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 | `setup-guide.md` | End-to-end environment setup, auth bootstrap, and first successful requests |
 | `walkthroughs.md` | Task-oriented walkthroughs across agents, workflows, memory, review, release, evaluation, autonomy, and improvement APIs |
 | `phase25-26-live-review-walkthrough.md` | Operator guide for live workflow execution, review artifact generation, signoff, and tool approvals |
+| `operator-improvement-cycle-and-jupyter.md` | Current operator path for the improvement-cycle wizard, canonical presets, and Docker-backed Jupyter execution |
 | `validation/phase22-phase25-27-surface-validation.md` | Evidence-backed validation record for the Phase 22 extension surfaces introduced by the Phase 25-27 stack |
 | `use-cases.md` | Practical implementation patterns with module requirements and tradeoffs |
 | `functionality-and-workflows.md` | Current functionality inventory, lifecycle/state flows, and persistence boundaries |

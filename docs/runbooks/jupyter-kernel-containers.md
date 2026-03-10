@@ -38,3 +38,44 @@ Optional settings:
 - One-shot sessions are removed after execution.
 - Stateful sessions are removed explicitly or via adapter shutdown.
 - Forced cleanup uses `docker rm -f <container>` and deletes the runtime connection directory.
+
+## Quick Smoke Workflow
+
+Register a minimal workflow that exercises the Docker-backed `code-interpreter` tool:
+
+```bash
+curl -X POST http://localhost:8000/v1/workflows/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "docker-kernel-smoke",
+    "version": "1.0.0",
+    "description": "Validate Docker-backed Jupyter execution",
+    "triggers": {"manual": true},
+    "inputs": {},
+    "outputs": {
+      "result": {"type": "object"}
+    },
+    "steps": [
+      {
+        "id": "run-notebook-code",
+        "action": "execute-code",
+        "inputs": {
+          "tool_id": "code-interpreter",
+          "language": "python",
+          "code": "print(6 * 7)"
+        }
+      }
+    ],
+    "execution": {"mode": "sequential"}
+  }'
+```
+
+Then execute it:
+
+```bash
+curl -X POST http://localhost:8000/v1/workflows/docker-kernel-smoke/execute \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": {}}'
+```
