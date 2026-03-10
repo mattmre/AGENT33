@@ -144,4 +144,63 @@ describe("LiveVoicePanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("voice runtime is disabled");
   });
+
+  it("surfaces hydration request failures and clears loading state", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("voice backend offline"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveVoicePanel token="test-token" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("voice backend offline");
+    expect(screen.getByText("Ready to start")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeEnabled();
+  });
+
+  it("renders thrown start errors and clears the busy state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockRejectedValueOnce(new Error("network dropped during start"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<LiveVoicePanel token="test-token" />);
+
+    await user.click(await screen.findByRole("button", { name: "Connect Microphone" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("network dropped during start");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeEnabled();
+    });
+  });
+
+  it("renders thrown stop errors and clears the busy state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            id: "vcs-existing",
+            room_name: "agent33-voice-tenant-a",
+            state: "active",
+            transport: "stub",
+            daemon_health: true,
+            started_at: "2026-03-09T18:00:00Z",
+            last_error: ""
+          }
+        ])
+      )
+      .mockRejectedValueOnce(new Error("stop request failed"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<LiveVoicePanel token="test-token" />);
+
+    await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("stop request failed");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+    });
+  });
 });

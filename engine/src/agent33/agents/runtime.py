@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from agent33.llm.base import ChatMessage, LLMResponse
@@ -223,6 +224,7 @@ class AgentRuntime:
         observation_capture: Any | None = None,
         trace_emitter: Any | None = None,
         session_id: str = "",
+        invocation_mode: str = "invoke",
         progressive_recall: Any | None = None,
         skill_injector: Any | None = None,
         active_skills: list[str] | None = None,
@@ -253,6 +255,8 @@ class AgentRuntime:
         self._observation_capture = observation_capture
         self._trace_emitter = trace_emitter
         self._session_id = session_id
+        self._invocation_mode = invocation_mode
+        self._invocation_id = uuid.uuid4().hex
         self._progressive_recall = progressive_recall
         self._skill_injector = skill_injector
         self._active_skills = active_skills or definition.skills
@@ -267,6 +271,17 @@ class AgentRuntime:
     @property
     def definition(self) -> AgentDefinition:
         return self._definition
+
+    @property
+    def routing_decision_metadata(self) -> dict[str, Any] | None:
+        return self._routing_decision_metadata
+
+    def _update_routing_outcome(self, **metadata: Any) -> None:
+        if self._routing_decision_metadata is None:
+            return
+        self._routing_decision_metadata.update(
+            {key: value for key, value in metadata.items() if value is not None}
+        )
 
     def _resolve_execution_parameters(
         self,
@@ -290,7 +305,14 @@ class AgentRuntime:
             iterative=iterative,
             max_iterations=max_iterations,
         )
+        serialized_inputs = json.dumps(inputs or {}, sort_keys=True, ensure_ascii=False)
         self._routing_decision_metadata = {
+            "invocation_id": self._invocation_id,
+            "invocation_mode": self._invocation_mode,
+            "session_id": self._session_id,
+            "agent_name": self._definition.name,
+            "requested_model": self._requested_model,
+            "default_model": self._model,
             "effort": decision.effort.value,
             "effort_source": decision.effort_source.value,
             "token_multiplier": decision.token_multiplier,
@@ -306,6 +328,9 @@ class AgentRuntime:
             "heuristic_reasons": list(decision.heuristic_reasons),
             "selected_model": decision.model,
             "routed_max_tokens": decision.max_tokens,
+            "input_field_count": len(inputs or {}),
+            "input_char_count": len(serialized_inputs),
+            "requested_max_iterations": max_iterations,
         }
         logger.info(
             "effort routing decision: effort=%s source=%s model=%s max_tokens=%d",
@@ -319,10 +344,49 @@ class AgentRuntime:
     def _emit_routing_metrics(self) -> None:
         if self._routing_metrics_emitter is None:
             return
+        from fastapi import HTTPException
+
         try:
             self._routing_metrics_emitter(self._routing_decision_metadata)
+        except HTTPException:
+            raise
         except Exception:
             logger.debug("failed to emit routing metrics", exc_info=True)
+
+    def _validate_required_inputs(self, inputs: dict[str, Any]) -> None:
+        for name, param in self._definition.inputs.items():
+            if param.required and name not in inputs:
+                raise ValueError(f"Missing required input: {name}")
+
+    async def _run_pre_invoke_hook(
+        self,
+        *,
+        inputs: dict[str, Any],
+        system_prompt: str,
+    ) -> tuple[dict[str, Any], str]:
+        if self._hook_registry is None:
+            return inputs, system_prompt
+
+        from agent33.hooks.models import AgentHookContext, HookEventType
+        from agent33.hooks.protocol import HookAbortError
+
+        pre_runner = self._hook_registry.get_chain_runner(
+            HookEventType.AGENT_INVOKE_PRE, self._tenant_id
+        )
+        hook_ctx = AgentHookContext(
+            event_type=HookEventType.AGENT_INVOKE_PRE,
+            tenant_id=self._tenant_id,
+            metadata={},
+            agent_name=self._definition.name,
+            agent_definition=self._definition,
+            inputs=inputs,
+            system_prompt=system_prompt,
+            model=self._model,
+        )
+        hook_ctx = await pre_runner.run(hook_ctx)
+        if hook_ctx.abort:
+            raise HookAbortError(hook_ctx.abort_reason)
+        return hook_ctx.inputs, hook_ctx.system_prompt
 
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
@@ -356,35 +420,11 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
-        # Validate required inputs
-        for name, param in self._definition.inputs.items():
-            if param.required and name not in inputs:
-                raise ValueError(f"Missing required input: {name}")
-
-        # --- Hook: agent.invoke.pre ---
-        if self._hook_registry is not None:
-            from agent33.hooks.models import AgentHookContext, HookEventType
-            from agent33.hooks.protocol import HookAbortError
-
-            pre_runner = self._hook_registry.get_chain_runner(
-                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
-            )
-            hook_ctx = AgentHookContext(
-                event_type=HookEventType.AGENT_INVOKE_PRE,
-                tenant_id=self._tenant_id,
-                metadata={},
-                agent_name=self._definition.name,
-                agent_definition=self._definition,
-                inputs=inputs,
-                system_prompt=system_prompt,
-                model=self._model,
-            )
-            hook_ctx = await pre_runner.run(hook_ctx)
-            if hook_ctx.abort:
-                raise HookAbortError(hook_ctx.abort_reason)
-            # Allow hooks to modify inputs and system prompt
-            inputs = hook_ctx.inputs
-            system_prompt = hook_ctx.system_prompt
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
 
         user_content = json.dumps(inputs, indent=2)
 
@@ -431,6 +471,11 @@ class AgentRuntime:
             tokens_used=response.total_tokens,
             model=response.model,
             routing_decision=self._routing_decision_metadata,
+        )
+        self._update_routing_outcome(
+            actual_model=response.model,
+            tokens_used=response.total_tokens,
+            completion_status="completed",
         )
         self._emit_routing_metrics()
 
@@ -514,95 +559,8 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
-        routed_model, routed_max_tokens = self._resolve_execution_parameters(
-            inputs=inputs,
-            iterative=True,
-            max_iterations=(config.max_iterations if config is not None else None),
-        )
-
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
-
-        # --- Reasoning protocol path (Phase 29.1) ---
-        if self._reasoning_protocol is not None:
-            # Inject skill context
-            if self._skill_injector is not None:
-                if self._definition.skills:
-                    system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
-                        self._definition.skills
-                    )
-                for skill_name in self._active_skills:
-                    system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
-                        skill_name
-                    )
-
-            # Inject memory context
-            if self._progressive_recall is not None:
-                try:
-                    user_query = json.dumps(inputs) if inputs else ""
-                    recall_results = await self._progressive_recall.search(
-                        user_query, level="index", top_k=5
-                    )
-                    if recall_results:
-                        memory_lines = ["\n# Prior Context (from memory)"]
-                        for rr in recall_results:
-                            memory_lines.append(f"- {rr.content}")
-                        system_prompt += "\n" + "\n".join(memory_lines)
-                except Exception:
-                    logger.debug("failed to retrieve memory context", exc_info=True)
-
-            # Validate required inputs
-            for name, param in self._definition.inputs.items():
-                if param.required and name not in inputs:
-                    raise ValueError(f"Missing required input: {name}")
-
-            loop_config = config or ToolLoopConfig()
-            tool_loop = ToolLoop(
-                router=self._router,
-                tool_registry=self._tool_registry,
-                tool_governance=self._tool_governance,
-                tool_context=self._tool_context,
-                observation_capture=self._observation_capture,
-                runtime_enforcer=self._runtime_enforcer,
-                config=loop_config,
-                agent_name=self._definition.name,
-                session_id=self._session_id,
-                context_manager=self._context_manager,
-                autonomy_level=self._definition.autonomy_level,
-            )
-
-            task_input = json.dumps(inputs, indent=2)
-            reasoning_result = await self._reasoning_protocol.run(
-                task_input=task_input,
-                tool_loop=tool_loop,
-                model=routed_model,
-                router=self._router,
-                temperature=self._temperature,
-                max_tokens=routed_max_tokens,
-                system_prompt=system_prompt,
-            )
-
-            if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
-                self._emit_routing_metrics()
-                return IterativeAgentResult(
-                    output={"response": reasoning_result.final_output}
-                    if isinstance(reasoning_result.final_output, str)
-                    else reasoning_result.final_output,
-                    raw_response=reasoning_result.final_output,
-                    tokens_used=0,
-                    model=routed_model,
-                    iterations=reasoning_result.total_steps,
-                    tool_calls_made=0,
-                    tools_used=[],
-                    termination_reason=reasoning_result.termination_reason,
-                    routing_decision=self._routing_decision_metadata,
-                )
-
-            logger.warning(
-                "Reasoning protocol degraded with phase dispatch failure for agent %s; "
-                "falling back to standard iterative tool loop",
-                self._definition.name,
-            )
 
         # Inject skill context if injector is available
         if self._skill_injector is not None:
@@ -630,34 +588,82 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
-        # Validate required inputs
-        for name, param in self._definition.inputs.items():
-            if param.required and name not in inputs:
-                raise ValueError(f"Missing required input: {name}")
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
 
-        # --- Hook: agent.invoke.pre (iterative) ---
-        if self._hook_registry is not None:
-            from agent33.hooks.models import AgentHookContext, HookEventType
-            from agent33.hooks.protocol import HookAbortError
+        loop_config = config or ToolLoopConfig()
+        routed_model: str | None = None
+        routed_max_tokens: int | None = None
 
-            pre_runner = self._hook_registry.get_chain_runner(
-                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
-            )
-            hook_ctx = AgentHookContext(
-                event_type=HookEventType.AGENT_INVOKE_PRE,
-                tenant_id=self._tenant_id,
-                metadata={},
-                agent_name=self._definition.name,
-                agent_definition=self._definition,
+        # --- Reasoning protocol path (Phase 29.1) ---
+        if self._reasoning_protocol is not None:
+            routed_model, routed_max_tokens = self._resolve_execution_parameters(
                 inputs=inputs,
-                system_prompt=system_prompt,
-                model=routed_model,
+                iterative=True,
+                max_iterations=loop_config.max_iterations,
             )
-            hook_ctx = await pre_runner.run(hook_ctx)
-            if hook_ctx.abort:
-                raise HookAbortError(hook_ctx.abort_reason)
-            inputs = hook_ctx.inputs
-            system_prompt = hook_ctx.system_prompt
+            tool_loop = ToolLoop(
+                router=self._router,
+                tool_registry=self._tool_registry,
+                tool_governance=self._tool_governance,
+                tool_context=self._tool_context,
+                observation_capture=self._observation_capture,
+                runtime_enforcer=self._runtime_enforcer,
+                config=loop_config,
+                agent_name=self._definition.name,
+                session_id=self._session_id,
+                context_manager=self._context_manager,
+                autonomy_level=self._definition.autonomy_level,
+            )
+
+            task_input = json.dumps(inputs, indent=2)
+            reasoning_result = await self._reasoning_protocol.run(
+                task_input=task_input,
+                tool_loop=tool_loop,
+                model=routed_model,
+                router=self._router,
+                temperature=self._temperature,
+                max_tokens=routed_max_tokens,
+                system_prompt=system_prompt,
+            )
+
+            if reasoning_result.termination_reason != "degraded_phase_dispatch_failure":
+                self._update_routing_outcome(
+                    actual_model=routed_model,
+                    iterations=reasoning_result.total_steps,
+                    termination_reason=reasoning_result.termination_reason,
+                    completion_status="completed",
+                )
+                self._emit_routing_metrics()
+                return IterativeAgentResult(
+                    output={"response": reasoning_result.final_output}
+                    if isinstance(reasoning_result.final_output, str)
+                    else reasoning_result.final_output,
+                    raw_response=reasoning_result.final_output,
+                    tokens_used=0,
+                    model=routed_model,
+                    iterations=reasoning_result.total_steps,
+                    tool_calls_made=0,
+                    tools_used=[],
+                    termination_reason=reasoning_result.termination_reason,
+                    routing_decision=self._routing_decision_metadata,
+                )
+
+            logger.warning(
+                "Reasoning protocol degraded with phase dispatch failure for agent %s; "
+                "falling back to standard iterative tool loop",
+                self._definition.name,
+            )
+
+        if routed_model is None or routed_max_tokens is None:
+            routed_model, routed_max_tokens = self._resolve_execution_parameters(
+                inputs=inputs,
+                iterative=True,
+                max_iterations=loop_config.max_iterations,
+            )
 
         user_content = json.dumps(inputs, indent=2)
         messages = [
@@ -666,7 +672,6 @@ class AgentRuntime:
         ]
 
         # --- Create and run the tool loop ---
-        loop_config = config or ToolLoopConfig()
         loop = ToolLoop(
             router=self._router,
             tool_registry=self._tool_registry,
@@ -698,6 +703,15 @@ class AgentRuntime:
             tools_used=loop_result.tools_used,
             termination_reason=loop_result.termination_reason,
             routing_decision=self._routing_decision_metadata,
+        )
+        self._update_routing_outcome(
+            actual_model=loop_result.model,
+            tokens_used=loop_result.tokens_used,
+            iterations=loop_result.iterations,
+            tool_calls_made=loop_result.tool_calls_made,
+            tools_used=list(loop_result.tools_used),
+            termination_reason=loop_result.termination_reason,
+            completion_status="completed",
         )
         self._emit_routing_metrics()
 
@@ -805,6 +819,12 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
+
         # Build messages
         user_content = json.dumps(inputs, indent=2)
         messages = [
@@ -841,4 +861,15 @@ class AgentRuntime:
             temperature=self._temperature,
             max_tokens=routed_max_tokens,
         ):
+            if event.event_type == "completed":
+                completion_data = event.data if isinstance(event.data, dict) else {}
+                self._update_routing_outcome(
+                    actual_model=routed_model,
+                    tokens_used=completion_data.get("total_tokens"),
+                    iterations=event.iteration,
+                    tool_calls_made=completion_data.get("tool_calls_made"),
+                    tools_used=completion_data.get("tools_used"),
+                    termination_reason=completion_data.get("termination_reason"),
+                    completion_status="completed",
+                )
             yield event

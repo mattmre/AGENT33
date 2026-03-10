@@ -15,6 +15,8 @@ from agent33.evaluation.comparative.elo import EloCalculator
 from agent33.evaluation.comparative.models import (
     AgentProfile,
     AgentScore,
+    BundleLeaderboardSnapshot,
+    BundleRankingEntry,
     ComparisonResult,
     EloRating,
     LeaderboardSnapshot,
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of leaderboard snapshots to retain
 _MAX_SNAPSHOTS = 200
+_BUNDLE_TASK_SEPARATOR = "::"
 
 
 class ComparativeEvaluationService:
@@ -84,6 +87,43 @@ class ComparativeEvaluationService:
             len(scores),
             self._population.population_size,
         )
+
+    @staticmethod
+    def build_bundle_task_id(bundle_id: str, task_id: str) -> str:
+        """Return a canonical task ID namespaced to one persisted bundle."""
+        return f"{bundle_id}{_BUNDLE_TASK_SEPARATOR}{task_id}"
+
+    def record_bundle_scores(
+        self,
+        bundle_id: str,
+        scores: list[AgentScore],
+        *,
+        allowed_task_ids: set[str],
+    ) -> list[AgentScore]:
+        """Validate and record bundle-scoped scores against persisted task IDs."""
+        canonical_scores: list[AgentScore] = []
+        invalid_task_ids: set[str] = set()
+        for score in scores:
+            task_id = score.task_id
+            if task_id is None:
+                invalid_task_ids.add("<missing>")
+            elif task_id not in allowed_task_ids:
+                invalid_task_ids.add(task_id)
+
+        if invalid_task_ids:
+            invalid_summary = ", ".join(sorted(invalid_task_ids))
+            raise ValueError("Unknown bundle task IDs: " + invalid_summary)
+
+        for score in scores:
+            task_id = score.task_id
+            if task_id is None:
+                raise ValueError("Unknown bundle task IDs: <missing>")
+            canonical_scores.append(
+                score.model_copy(update={"task_id": self.build_bundle_task_id(bundle_id, task_id)})
+            )
+
+        self.record_scores(canonical_scores)
+        return canonical_scores
 
     # ------------------------------------------------------------------
     # Comparative evaluation
@@ -162,6 +202,30 @@ class ComparativeEvaluationService:
                     results.append(result)
         return results
 
+    def run_bundle_round_robin(
+        self,
+        bundle_id: str,
+        metric_name: str,
+    ) -> tuple[list[ComparisonResult], BundleLeaderboardSnapshot]:
+        """Run pairwise comparisons over task-aligned scores for one synthetic bundle."""
+        leaderboard = self.generate_bundle_leaderboard(bundle_id, metric_name)
+        canonical_task_ids = {
+            self.build_bundle_task_id(bundle_id, task_id) for task_id in leaderboard.task_ids
+        }
+        agents = [entry.agent_name for entry in leaderboard.entries]
+        results: list[ComparisonResult] = []
+        for index, agent_a in enumerate(agents):
+            for agent_b in agents[index + 1 :]:
+                result = self._comparator.compare_agents_on_task_subset(
+                    agent_a,
+                    agent_b,
+                    metric_name,
+                    canonical_task_ids,
+                )
+                if result is not None:
+                    results.append(result)
+        return results, leaderboard
+
     # ------------------------------------------------------------------
     # Leaderboard
     # ------------------------------------------------------------------
@@ -214,6 +278,55 @@ class ComparativeEvaluationService:
         )
         self._store_snapshot(snapshot)
         return snapshot
+
+    def generate_bundle_leaderboard(
+        self,
+        bundle_id: str,
+        metric_name: str,
+    ) -> BundleLeaderboardSnapshot:
+        """Generate a task-aligned leaderboard for one persisted synthetic bundle."""
+        task_scores_by_agent = self._get_bundle_task_scores(bundle_id, metric_name)
+        if len(task_scores_by_agent) < self._min_population_size:
+            raise ValueError(
+                "At least two agents with recorded bundle scores are required for evaluation"
+            )
+
+        common_task_ids = self._get_common_bundle_task_ids(task_scores_by_agent)
+        if not common_task_ids:
+            raise ValueError(
+                "No task-aligned bundle scores are shared across the agent population"
+            )
+
+        average_scores = {
+            agent_name: (
+                sum(task_scores[task_id] for task_id in common_task_ids) / len(common_task_ids)
+            )
+            for agent_name, task_scores in task_scores_by_agent.items()
+        }
+        percentiles = PercentileCalculator.compute_percentile_ranks(average_scores)
+        ranked_agents = sorted(
+            average_scores.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        entries = [
+            BundleRankingEntry(
+                rank=rank,
+                agent_name=agent_name,
+                average_score=round(score, 6),
+                percentile=round(percentiles.get(agent_name, 0.0), 2),
+                completed_tasks=len(common_task_ids),
+                total_tasks=len(common_task_ids),
+            )
+            for rank, (agent_name, score) in enumerate(ranked_agents, start=1)
+        ]
+        return BundleLeaderboardSnapshot(
+            bundle_id=bundle_id,
+            metric_name=metric_name,
+            task_ids=list(common_task_ids),
+            entries=entries,
+            population_size=len(entries),
+        )
 
     def get_latest_leaderboard(self) -> LeaderboardSnapshot | None:
         """Return the most recent leaderboard snapshot, or None."""
@@ -277,3 +390,32 @@ class ComparativeEvaluationService:
         self._snapshots.append(snapshot)
         if len(self._snapshots) > _MAX_SNAPSHOTS:
             self._snapshots = self._snapshots[-_MAX_SNAPSHOTS:]
+
+    def _get_bundle_task_scores(
+        self,
+        bundle_id: str,
+        metric_name: str,
+    ) -> dict[str, dict[str, float]]:
+        prefix = f"{bundle_id}{_BUNDLE_TASK_SEPARATOR}"
+        task_scores_by_agent: dict[str, dict[str, float]] = {}
+        for agent_name in sorted(self._population.agent_names):
+            task_scores = self._population.get_latest_task_scores(agent_name, metric_name)
+            bundle_scores = {
+                task_id[len(prefix) :]: value
+                for task_id, value in task_scores.items()
+                if task_id.startswith(prefix)
+            }
+            if bundle_scores:
+                task_scores_by_agent[agent_name] = bundle_scores
+        return task_scores_by_agent
+
+    @staticmethod
+    def _get_common_bundle_task_ids(
+        task_scores_by_agent: dict[str, dict[str, float]],
+    ) -> list[str]:
+        task_sets = [
+            set(task_scores) for task_scores in task_scores_by_agent.values() if task_scores
+        ]
+        if not task_sets:
+            return []
+        return sorted(set.intersection(*task_sets))

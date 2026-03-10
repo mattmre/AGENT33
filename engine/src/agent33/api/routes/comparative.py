@@ -10,6 +10,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agent33.evaluation.comparative.service import ComparativeEvaluationService
+from agent33.evaluation.synthetic_envs.models import SyntheticEnvironmentBundle
+from agent33.evaluation.synthetic_envs.service import SyntheticEnvironmentService
 from agent33.security.permissions import require_scope
 
 logger = structlog.get_logger()
@@ -39,6 +41,13 @@ def get_comparative_service() -> ComparativeEvaluationService:
     return _service
 
 
+def get_synthetic_environment_service() -> SyntheticEnvironmentService:
+    """Return the synthetic environment service singleton, raising 503 if absent."""
+    from agent33.api.routes.synthetic_envs import get_synthetic_environment_service as _get_service
+
+    return _get_service()
+
+
 # ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
@@ -62,6 +71,22 @@ class EvaluateRequest(BaseModel):
 class PairwiseRequest(BaseModel):
     agent_a: str
     agent_b: str
+    metric_name: str
+
+
+class BundleScoreInput(BaseModel):
+    agent_name: str
+    metric_name: str
+    task_id: str
+    environment_id: str = ""
+    value: float
+
+
+class RecordBundleScoresRequest(BaseModel):
+    scores: list[BundleScoreInput] = Field(min_length=1, max_length=1000)
+
+
+class EvaluateBundleRequest(BaseModel):
     metric_name: str
 
 
@@ -152,6 +177,74 @@ async def record_scores(body: RecordScoresRequest) -> dict[str, Any]:
     return {"recorded": len(scores), "population_size": svc.population_tracker.population_size}
 
 
+def _bundle_task_index(bundle: SyntheticEnvironmentBundle) -> tuple[set[str], dict[str, set[str]]]:
+    all_task_ids: set[str] = set()
+    environment_task_ids: dict[str, set[str]] = {}
+    for environment in bundle.environments:
+        task_ids = {task.task_id for task in environment.tasks}
+        environment_task_ids[environment.environment_id] = task_ids
+        all_task_ids.update(task_ids)
+    return all_task_ids, environment_task_ids
+
+
+@router.post(
+    "/bundles/{bundle_id}/scores",
+    status_code=201,
+    dependencies=[require_scope("tools:execute")],
+)
+async def record_bundle_scores(bundle_id: str, body: RecordBundleScoresRequest) -> dict[str, Any]:
+    """Record comparative scores for tasks belonging to one persisted synthetic bundle."""
+    synthetic_service = get_synthetic_environment_service()
+    bundle = synthetic_service.get_bundle(bundle_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"Bundle not found: {bundle_id}")
+
+    task_ids, environment_task_ids = _bundle_task_index(bundle)
+    for score in body.scores:
+        if score.environment_id and score.environment_id not in environment_task_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Environment '{score.environment_id}' is not part of bundle '{bundle_id}'",
+            )
+
+        environment_tasks = environment_task_ids.get(score.environment_id, set())
+        if score.environment_id and score.task_id not in environment_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Task '{score.task_id}' does not belong to environment "
+                    f"'{score.environment_id}' in bundle '{bundle_id}'"
+                ),
+            )
+
+    from agent33.evaluation.comparative.models import AgentScore
+
+    service = get_comparative_service()
+    try:
+        recorded_scores = service.record_bundle_scores(
+            bundle_id,
+            [
+                AgentScore(
+                    agent_name=score.agent_name,
+                    metric_name=score.metric_name,
+                    value=score.value,
+                    task_id=score.task_id,
+                )
+                for score in body.scores
+            ],
+            allowed_task_ids=task_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "recorded": len(recorded_scores),
+        "bundle_id": bundle_id,
+        "agents": sorted({score.agent_name for score in recorded_scores}),
+        "task_count": len(task_ids),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Pairwise comparison
 # ---------------------------------------------------------------------------
@@ -171,6 +264,31 @@ async def pairwise_compare(body: PairwiseRequest) -> dict[str, Any]:
             detail=f"Insufficient data for comparison: {body.agent_a} vs {body.agent_b}",
         )
     return result.model_dump(mode="json")
+
+
+@router.post(
+    "/bundles/{bundle_id}/evaluate",
+    dependencies=[require_scope("workflows:read")],
+)
+async def evaluate_bundle(bundle_id: str, body: EvaluateBundleRequest) -> dict[str, Any]:
+    """Run task-aligned comparative evaluation for one persisted synthetic bundle."""
+    synthetic_service = get_synthetic_environment_service()
+    if synthetic_service.get_bundle(bundle_id) is None:
+        raise HTTPException(status_code=404, detail=f"Bundle not found: {bundle_id}")
+
+    service = get_comparative_service()
+    try:
+        comparisons, leaderboard = service.run_bundle_round_robin(bundle_id, body.metric_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "bundle_id": bundle_id,
+        "metric_name": body.metric_name,
+        "common_task_count": len(leaderboard.task_ids),
+        "comparisons": [comparison.model_dump(mode="json") for comparison in comparisons],
+        "leaderboard": leaderboard.model_dump(mode="json"),
+    }
 
 
 # ---------------------------------------------------------------------------

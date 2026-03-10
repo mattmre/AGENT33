@@ -67,6 +67,11 @@ def tenant_b_writer() -> TestClient:
     return _client(["multimodal:read", "multimodal:write"], tenant_id="tenant-b")
 
 
+@pytest.fixture
+def admin_client() -> TestClient:
+    return _client(["admin"], tenant_id="tenant-a")
+
+
 def test_create_request_with_execute_now_false(writer_client: TestClient) -> None:
     response = writer_client.post(
         "/v1/multimodal/requests",
@@ -161,6 +166,66 @@ def test_policy_blocks_disallowed_modality(writer_client: TestClient) -> None:
     )
     assert response.status_code == 400
     assert "not allowed" in response.json()["detail"]
+
+
+def test_policy_route_rejects_cross_tenant_write_for_non_admin(
+    writer_client: TestClient,
+) -> None:
+    response = writer_client.post(
+        "/v1/multimodal/tenants/tenant-b/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 403
+    assert "Tenant mismatch" in response.json()["detail"]
+
+
+def test_create_request_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:read", "multimodal:write"], tenant_id="")
+    response = tenantless_client.post(
+        "/v1/multimodal/requests",
+        json={"modality": "text_to_speech", "input_text": "blocked"},
+    )
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
+def test_list_requests_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:read"], tenant_id="")
+    response = tenantless_client.get("/v1/multimodal/requests")
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
+def test_policy_route_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:write"], tenant_id="")
+    response = tenantless_client.post(
+        "/v1/multimodal/tenants/tenant-a/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
+def test_policy_route_allows_admin_cross_tenant_write(
+    admin_client: TestClient,
+    tenant_b_writer: TestClient,
+) -> None:
+    response = admin_client.post(
+        "/v1/multimodal/tenants/tenant-b/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 200
+
+    blocked = tenant_b_writer.post(
+        "/v1/multimodal/requests",
+        json={
+            "modality": "text_to_speech",
+            "input_text": "this is too long",
+            "execute_now": False,
+        },
+    )
+    assert blocked.status_code == 400
+    assert "max_text_chars" in blocked.json()["detail"]
 
 
 def test_list_requests_is_tenant_scoped(
@@ -336,6 +401,7 @@ def test_start_voice_session_returns_active_stub_session(writer_client: TestClie
     assert payload["transport"] == "stub"
     assert payload["daemon_health"] is True
     assert payload["requested_by"] == "operator"
+    assert payload["room_name"].startswith("agent33-voice-tenant-a-session-")
 
 
 def test_list_voice_sessions_is_tenant_scoped(
@@ -355,6 +421,66 @@ def test_list_voice_sessions_is_tenant_scoped(
     assert tenant_b_items[0]["tenant_id"] == "tenant-b"
 
 
+def test_admin_can_list_voice_sessions_across_tenants(
+    writer_client: TestClient,
+    tenant_b_writer: TestClient,
+    admin_client: TestClient,
+) -> None:
+    writer_client.post("/v1/multimodal/voice/sessions", json={})
+    tenant_b_writer.post("/v1/multimodal/voice/sessions", json={})
+
+    response = admin_client.get("/v1/multimodal/voice/sessions")
+
+    assert response.status_code == 200
+    assert {item["tenant_id"] for item in response.json()} == {"tenant-a", "tenant-b"}
+
+
+def test_voice_session_routes_reject_authenticated_user_without_tenant_context(
+    writer_client: TestClient,
+) -> None:
+    tenantless_client = _client(["multimodal:read", "multimodal:write"], tenant_id="")
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+
+    start_response = tenantless_client.post("/v1/multimodal/voice/sessions", json={})
+    list_response = tenantless_client.get("/v1/multimodal/voice/sessions")
+    detail_response = tenantless_client.get(f"/v1/multimodal/voice/sessions/{session_id}")
+    health_response = tenantless_client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+    stop_response = tenantless_client.post(f"/v1/multimodal/voice/sessions/{session_id}/stop")
+
+    assert start_response.status_code == 403
+    assert start_response.json()["detail"] == "Tenant context required for authenticated principal"
+    assert list_response.status_code == 403
+    assert list_response.json()["detail"] == "Tenant context required for authenticated principal"
+    assert detail_response.status_code == 403
+    assert (
+        detail_response.json()["detail"] == "Tenant context required for authenticated principal"
+    )
+    assert health_response.status_code == 403
+    assert (
+        health_response.json()["detail"] == "Tenant context required for authenticated principal"
+    )
+    assert stop_response.status_code == 403
+    assert stop_response.json()["detail"] == "Tenant context required for authenticated principal"
+
+
+def test_voice_session_sanitizes_room_name_components() -> None:
+    unsafe_tenant_client = _client(
+        ["multimodal:read", "multimodal:write"],
+        tenant_id="Tenant / Blue",
+    )
+    response = unsafe_tenant_client.post(
+        "/v1/multimodal/voice/sessions",
+        json={"room_name": "Launch Room!!!"},
+    )
+
+    assert response.status_code == 201
+    room_name = response.json()["room_name"]
+    assert room_name.startswith("agent33-voice-tenant-blue-launch-room-")
+    assert "!" not in room_name
+    assert "/" not in room_name
+
+
 def test_voice_session_health_and_stop_flow(writer_client: TestClient) -> None:
     create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
     session_id = create_response.json()["id"]
@@ -366,6 +492,19 @@ def test_voice_session_health_and_stop_flow(writer_client: TestClient) -> None:
     assert health_response.json()["healthy"] is True
     assert stop_response.status_code == 200
     assert stop_response.json()["state"] == "stopped"
+
+
+def test_voice_session_reads_do_not_mutate_stored_updated_at(writer_client: TestClient) -> None:
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+    original_updated_at = _service._voice_sessions[session_id].updated_at
+
+    detail_response = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}")
+    health_response = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+
+    assert detail_response.status_code == 200
+    assert health_response.status_code == 200
+    assert _service._voice_sessions[session_id].updated_at == original_updated_at
 
 
 def test_voice_session_enforces_concurrency_policy(writer_client: TestClient) -> None:
@@ -397,6 +536,43 @@ def test_voice_session_route_returns_503_when_runtime_disabled(writer_client: Te
 
     assert response.status_code == 503
     assert "disabled" in response.json()["detail"]
+
+
+def test_voice_session_route_redacts_runtime_start_errors(writer_client: TestClient) -> None:
+    class _FailingVoiceDaemon:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def start(self) -> None:
+            raise RuntimeError("raw secret failure from provider")
+
+        async def stop(self) -> None:
+            return None
+
+        def health_check(self) -> bool:
+            return False
+
+        def snapshot(self) -> dict[str, object]:
+            return {}
+
+    _service.configure_voice_runtime(
+        enabled=True,
+        transport="stub",
+        url="",
+        api_key="",
+        api_secret="",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+        daemon_factory=_FailingVoiceDaemon,
+    )
+
+    response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "voice runtime could not start session"
+    failed_session = next(iter(_service._voice_sessions.values()))
+    assert failed_session.state == VoiceSessionState.FAILED
+    assert failed_session.last_error == "voice runtime could not start session"
 
 
 def test_voice_session_detail_is_tenant_scoped(

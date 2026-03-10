@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from agent33.api.routes.tenant_access import require_tenant_context, tenant_filter_for_request
 from agent33.multimodal.models import (
     ModalityType,
     MultimodalPolicy,
@@ -18,7 +19,7 @@ from agent33.multimodal.service import (
     RequestNotFoundError,
     VoiceRuntimeUnavailableError,
 )
-from agent33.security.permissions import require_scope
+from agent33.security.permissions import check_permission, require_scope
 
 router = APIRouter(prefix="/v1/multimodal", tags=["multimodal"])
 _service = MultimodalService()
@@ -46,10 +47,19 @@ def get_multimodal_service() -> MultimodalService:
 
 
 def _tenant_id(request: Request) -> str:
-    user = getattr(request.state, "user", None)
-    if user is None:
-        return ""
-    return getattr(user, "tenant_id", "")
+    tenant_id, _ = require_tenant_context(request)
+    return tenant_id
+
+
+def _tenant_filter(request: Request) -> str | None:
+    return tenant_filter_for_request(request)
+
+
+def _voice_session_tenant_id(request: Request) -> str:
+    tenant_id, _ = require_tenant_context(request)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required for voice sessions")
+    return tenant_id
 
 
 @router.post("/requests", status_code=201, dependencies=[require_scope("multimodal:write")])
@@ -81,9 +91,8 @@ async def list_requests(
     state: RequestState | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    tenant_id = _tenant_id(request)
     requests = _service.list_requests(
-        tenant_id=tenant_id or None,
+        tenant_id=_tenant_filter(request),
         modality=modality,
         state=state,
         limit=limit,
@@ -93,9 +102,8 @@ async def list_requests(
 
 @router.get("/requests/{request_id}", dependencies=[require_scope("multimodal:read")])
 async def get_request(request_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        record = _service.get_request(request_id, tenant_id=tenant_id or None)
+        record = _service.get_request(request_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return record.model_dump(mode="json")
@@ -106,9 +114,8 @@ async def get_request(request_id: str, request: Request) -> dict[str, Any]:
     dependencies=[require_scope("multimodal:write")],
 )
 async def execute_request(request_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        record = await _service.execute_request(request_id, tenant_id=tenant_id or None)
+        record = await _service.execute_request(request_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidStateTransitionError as exc:
@@ -121,9 +128,8 @@ async def execute_request(request_id: str, request: Request) -> dict[str, Any]:
     dependencies=[require_scope("multimodal:read")],
 )
 async def get_result(request_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        result = _service.get_result(request_id, tenant_id=tenant_id or None)
+        result = _service.get_result(request_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return result.model_dump(mode="json")
@@ -134,9 +140,8 @@ async def get_result(request_id: str, request: Request) -> dict[str, Any]:
     dependencies=[require_scope("multimodal:write")],
 )
 async def cancel_request(request_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        record = _service.cancel_request(request_id, tenant_id=tenant_id or None)
+        record = _service.cancel_request(request_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidStateTransitionError as exc:
@@ -150,7 +155,7 @@ async def cancel_request(request_id: str, request: Request) -> dict[str, Any]:
     dependencies=[require_scope("multimodal:write")],
 )
 async def start_voice_session(body: CreateVoiceSessionBody, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _voice_session_tenant_id(request)
     try:
         session = await _service.start_voice_session(
             tenant_id=tenant_id,
@@ -171,16 +176,18 @@ async def list_voice_sessions(
     state: VoiceSessionState | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    tenant_id = _tenant_id(request)
-    sessions = _service.list_voice_sessions(tenant_id=tenant_id or None, state=state, limit=limit)
+    sessions = _service.list_voice_sessions(
+        tenant_id=_tenant_filter(request),
+        state=state,
+        limit=limit,
+    )
     return [session.model_dump(mode="json") for session in sessions]
 
 
 @router.get("/voice/sessions/{session_id}", dependencies=[require_scope("multimodal:read")])
 async def get_voice_session(session_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        session = _service.get_voice_session(session_id, tenant_id=tenant_id or None)
+        session = _service.get_voice_session(session_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return session.model_dump(mode="json")
@@ -191,9 +198,8 @@ async def get_voice_session(session_id: str, request: Request) -> dict[str, Any]
     dependencies=[require_scope("multimodal:read")],
 )
 async def get_voice_session_health(session_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        health = _service.get_voice_session_health(session_id, tenant_id=tenant_id or None)
+        health = _service.get_voice_session_health(session_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return health.model_dump(mode="json")
@@ -204,9 +210,8 @@ async def get_voice_session_health(session_id: str, request: Request) -> dict[st
     dependencies=[require_scope("multimodal:write")],
 )
 async def stop_voice_session(session_id: str, request: Request) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
     try:
-        session = await _service.stop_voice_session(session_id, tenant_id=tenant_id or None)
+        session = await _service.stop_voice_session(session_id, tenant_id=_tenant_filter(request))
     except RequestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return session.model_dump(mode="json")
@@ -216,7 +221,14 @@ async def stop_voice_session(session_id: str, request: Request) -> dict[str, Any
     "/tenants/{tenant_id}/policy",
     dependencies=[require_scope("multimodal:write")],
 )
-async def set_tenant_policy(tenant_id: str, policy: MultimodalPolicy) -> dict[str, Any]:
+async def set_tenant_policy(
+    tenant_id: str, policy: MultimodalPolicy, request: Request
+) -> dict[str, Any]:
     """Set policy guardrails for a tenant (Stage 1 helper endpoint)."""
-    _service.set_policy(tenant_id, policy)
+    request_tenant_id, request_scopes = require_tenant_context(request)
+    is_admin = check_permission("admin", request_scopes) if request_scopes else False
+    if request_tenant_id and not is_admin and tenant_id != request_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch for authenticated principal")
+    resolved_tenant_id = tenant_id or request_tenant_id
+    _service.set_policy(resolved_tenant_id, policy)
     return policy.model_dump(mode="json")

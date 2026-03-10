@@ -21,10 +21,19 @@ function extractError(data: unknown): string {
   if (typeof data === "string" && data.trim() !== "") {
     return data;
   }
+  if (data instanceof Error && data.message.trim() !== "") {
+    return data.message;
+  }
   if (data && typeof data === "object" && "detail" in data) {
     const detail = (data as { detail?: unknown }).detail;
     if (typeof detail === "string" && detail.trim() !== "") {
       return detail;
+    }
+  }
+  if (data && typeof data === "object" && "message" in data) {
+    const message = (data as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim() !== "") {
+      return message;
     }
   }
   return "Voice request failed.";
@@ -47,25 +56,38 @@ export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX
       }
 
       setIsHydrating(true);
-      const result = await apiRequest({
-        method: "GET",
-        path: "/v1/multimodal/voice/sessions",
-        token,
-        query: { state: "active", limit: "1" }
-      });
-      if (cancelled) {
-        return;
-      }
+      try {
+        const result = await apiRequest({
+          method: "GET",
+          path: "/v1/multimodal/voice/sessions",
+          token,
+          query: { state: "active", limit: "1" }
+        });
+        if (cancelled) {
+          return;
+        }
 
-      if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
-        setSession(result.data[0] as VoiceSession);
-        setError("");
-      } else if (result.ok) {
+        if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
+          setSession(result.data[0] as VoiceSession);
+          setError("");
+        } else if (result.ok) {
+          setSession(null);
+          setError("");
+        } else {
+          setSession(null);
+          setError(extractError(result.data));
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
         setSession(null);
-      } else {
-        setError(extractError(result.data));
+        setError(extractError(error));
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false);
+        }
       }
-      setIsHydrating(false);
     }
 
     void loadActiveSession();
@@ -81,19 +103,24 @@ export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX
     setIsBusy(true);
     setError("");
 
-    const result = await apiRequest({
-      method: "POST",
-      path: "/v1/multimodal/voice/sessions",
-      token,
-      body: JSON.stringify({ requested_by: "frontend-live-voice" })
-    });
+    try {
+      const result = await apiRequest({
+        method: "POST",
+        path: "/v1/multimodal/voice/sessions",
+        token,
+        body: JSON.stringify({ requested_by: "frontend-live-voice" })
+      });
 
-    if (result.ok && result.data && typeof result.data === "object") {
-      setSession(result.data as VoiceSession);
-    } else {
-      setError(extractError(result.data));
+      if (result.ok && result.data && typeof result.data === "object") {
+        setSession(result.data as VoiceSession);
+      } else {
+        setError(extractError(result.data));
+      }
+    } catch (error) {
+      setError(extractError(error));
+    } finally {
+      setIsBusy(false);
     }
-    setIsBusy(false);
   }
 
   async function stopSession() {
@@ -103,19 +130,24 @@ export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX
     setIsBusy(true);
     setError("");
 
-    const result = await apiRequest({
-      method: "POST",
-      path: "/v1/multimodal/voice/sessions/{session_id}/stop",
-      token,
-      pathParams: { session_id: session.id }
-    });
+    try {
+      const result = await apiRequest({
+        method: "POST",
+        path: "/v1/multimodal/voice/sessions/{session_id}/stop",
+        token,
+        pathParams: { session_id: session.id }
+      });
 
-    if (result.ok) {
-      setSession(null);
-    } else {
-      setError(extractError(result.data));
+      if (result.ok) {
+        setSession(null);
+      } else {
+        setError(extractError(result.data));
+      }
+    } catch (error) {
+      setError(extractError(error));
+    } finally {
+      setIsBusy(false);
     }
-    setIsBusy(false);
   }
 
   const isActive = session !== null && session.state === "active";

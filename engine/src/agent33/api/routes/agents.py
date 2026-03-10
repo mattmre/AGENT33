@@ -86,6 +86,18 @@ def _resolve_domain_context(request: Request, body_domain: str | None) -> str:
     return host.split(":", 1)[0].strip().lower() if host else ""
 
 
+def _resolve_runtime_session_id(request: Request) -> str:
+    for candidate in (
+        request.headers.get("x-agent-session-id", ""),
+        request.headers.get("x-session-id", ""),
+        getattr(request.state, "session_id", ""),
+    ):
+        normalized = str(candidate).strip()
+        if normalized:
+            return normalized
+    return ""
+
+
 def _build_skill_match_query(definition: AgentDefinition, inputs: dict[str, Any]) -> str:
     """Build a compact query for skill matching from agent + request context."""
     user_payload = json.dumps(inputs, ensure_ascii=False)
@@ -416,8 +428,11 @@ async def invoke_agent(
         router=model_router,
         model=body.model,
         temperature=body.temperature,
+        session_id=_resolve_runtime_session_id(request),
+        invocation_mode="invoke",
         effort=body.effort,
         effort_router=effort_router,
+        routing_metrics_emitter=_record_effort_routing_metrics,
         skill_injector=skill_injector,
         active_skills=active_skills,
         progressive_recall=progressive_recall,
@@ -437,8 +452,6 @@ async def invoke_agent(
         if type(exc).__name__ == "HookAbortError":
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         raise
-
-    _record_effort_routing_metrics(result.routing_decision)
 
     return InvokeResponse(
         agent=name,
@@ -543,8 +556,11 @@ async def invoke_agent_iterative(
         router=model_router,
         model=body.model,
         temperature=body.temperature,
+        session_id=_resolve_runtime_session_id(request),
+        invocation_mode="iterative",
         effort=body.effort,
         effort_router=effort_router,
+        routing_metrics_emitter=_record_effort_routing_metrics,
         skill_injector=skill_injector,
         active_skills=active_skills,
         progressive_recall=progressive_recall,
@@ -563,8 +579,6 @@ async def invoke_agent_iterative(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    _record_effort_routing_metrics(result.routing_decision)
 
     return InvokeIterativeResponse(
         agent=name,
@@ -619,6 +633,24 @@ async def invoke_agent_iterative_stream(
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
     observation_capture = getattr(request.app.state, "observation_capture", None)
     context_manager = getattr(request.app.state, "context_manager", None)
+    hook_registry = getattr(request.app.state, "hook_registry", None)
+    token_payload = _get_token_payload(request)
+    domain = _resolve_domain_context(request, body.domain)
+    active_skills = await _resolve_active_skills(
+        request=request,
+        definition=definition,
+        model_router=model_router,
+        inputs=body.inputs,
+    )
+
+    from agent33.tools.base import ToolContext
+
+    tool_context = ToolContext(
+        user_scopes=token_payload.scopes,
+        tool_policies=definition.governance.tool_policies if definition.governance else {},
+        requested_by=token_payload.sub,
+        tenant_id=token_payload.tenant_id or "",
+    )
 
     from agent33.agents.tool_loop import ToolLoopConfig
 
@@ -634,14 +666,22 @@ async def invoke_agent_iterative_stream(
         router=model_router,
         model=body.model,
         temperature=body.temperature,
+        observation_capture=observation_capture,
+        session_id=_resolve_runtime_session_id(request),
+        invocation_mode="iterative_stream",
         effort=body.effort,
         effort_router=effort_router,
+        routing_metrics_emitter=_record_effort_routing_metrics,
         skill_injector=skill_injector,
+        active_skills=active_skills,
         progressive_recall=progressive_recall,
         tool_registry=tool_registry,
         tool_governance=tool_governance,
-        observation_capture=observation_capture,
+        tool_context=tool_context,
         context_manager=context_manager,
+        tenant_id=token_payload.tenant_id or "",
+        domain=domain,
+        hook_registry=hook_registry,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -649,6 +689,18 @@ async def invoke_agent_iterative_stream(
             async for event in runtime.invoke_iterative_stream(body.inputs, config=loop_config):
                 if await request.is_disconnected():
                     break
+                if event.event_type == "completed":
+                    try:
+                        _record_effort_routing_metrics(runtime.routing_decision_metadata)
+                    except HTTPException as exc:
+                        error_payload = {
+                            "event_type": "error",
+                            "iteration": event.iteration,
+                            "timestamp": time.time(),
+                            "data": {"error": exc.detail, "phase": "telemetry_export"},
+                        }
+                        yield f"data: {json.dumps(error_payload)}\n\n"
+                        return
                 yield event.to_sse()
         except asyncio.CancelledError:
             pass

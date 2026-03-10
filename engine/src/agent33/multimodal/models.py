@@ -109,9 +109,9 @@ class MultimodalPolicy(BaseModel):
         default=1800,
         ge=1,
         description=(
-            "Maximum allowed duration for a live voice session before the operator "
-            "must reconnect. 30 minutes bounds resource usage while still allowing "
-            "substantial conversations."
+            "Recorded voice-session duration budget for operator guidance and future "
+            "runtime enforcement. The current stub runtime stores this value on the "
+            "session record but does not auto-expire active sessions yet."
         ),
     )
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +25,13 @@ from agent33.multimodal.models import (
     VoiceSessionState,
 )
 from agent33.multimodal.voice_daemon import LiveVoiceDaemon
+
+logger = logging.getLogger(__name__)
+
+_ROOM_COMPONENT_PATTERN = re.compile(r"[^a-z0-9-]+")
+_ROOM_DASH_PATTERN = re.compile(r"-+")
+_ROOM_COMPONENT_LIMIT = 48
+_VOICE_START_FAILURE_MESSAGE = "voice runtime could not start session"
 
 
 class PolicyViolationError(Exception):
@@ -85,8 +94,7 @@ class MultimodalService:
         self._voice_api_secret = api_secret
         self._voice_room_prefix = room_prefix or "agent33-voice"
         self._voice_max_sessions = max_sessions
-        if daemon_factory is not None:
-            self._voice_daemon_factory = daemon_factory
+        self._voice_daemon_factory = daemon_factory or LiveVoiceDaemon
 
     def set_policy(self, tenant_id: str, policy: MultimodalPolicy) -> None:
         self._policies[tenant_id] = policy
@@ -228,13 +236,16 @@ class MultimodalService:
         metadata: dict[str, Any] | None = None,
     ) -> VoiceSession:
         async with self._voice_lock:
-            policy = self.get_policy(tenant_id)
-            self._validate_voice_runtime(policy=policy, tenant_id=tenant_id)
+            resolved_tenant_id = tenant_id.strip()
+            if not resolved_tenant_id:
+                raise PolicyViolationError("voice sessions require tenant context")
+            policy = self.get_policy(resolved_tenant_id)
+            self._validate_voice_runtime(policy=policy, tenant_id=resolved_tenant_id)
 
             active_sessions = [
                 session
                 for session in self._voice_sessions.values()
-                if session.tenant_id == tenant_id
+                if session.tenant_id == resolved_tenant_id
                 and session.state in {VoiceSessionState.STARTING, VoiceSessionState.ACTIVE}
             ]
             if len(active_sessions) >= policy.max_voice_concurrent_sessions:
@@ -246,8 +257,8 @@ class MultimodalService:
                 raise VoiceRuntimeUnavailableError("voice runtime is at global capacity")
 
             session = VoiceSession(
-                tenant_id=tenant_id,
-                room_name=room_name or self._build_room_name(tenant_id),
+                tenant_id=resolved_tenant_id,
+                room_name=self._build_room_name(resolved_tenant_id, room_name),
                 requested_by=requested_by,
                 transport=self._voice_transport,
                 max_duration_seconds=policy.max_voice_session_seconds,
@@ -265,10 +276,15 @@ class MultimodalService:
             try:
                 await daemon.start()
             except Exception as exc:
+                logger.exception(
+                    "voice session start failed for tenant %s room %s",
+                    resolved_tenant_id,
+                    session.room_name,
+                )
                 session.state = VoiceSessionState.FAILED
-                session.last_error = str(exc)
+                session.last_error = _VOICE_START_FAILURE_MESSAGE
                 session.updated_at = datetime.now(UTC)
-                raise VoiceRuntimeUnavailableError(str(exc)) from exc
+                raise VoiceRuntimeUnavailableError(_VOICE_START_FAILURE_MESSAGE) from exc
 
             self._voice_daemons[session.id] = daemon
             session.state = VoiceSessionState.ACTIVE
@@ -298,15 +314,8 @@ class MultimodalService:
         *,
         tenant_id: str | None = None,
     ) -> VoiceSession:
-        session = self._voice_sessions.get(session_id)
-        if session is None:
-            raise RequestNotFoundError(f"Voice session not found: {session_id}")
-        if tenant_id is not None and session.tenant_id != tenant_id:
-            raise RequestNotFoundError(f"Voice session not found: {session_id}")
-        daemon = self._voice_daemons.get(session_id)
-        session.daemon_health = daemon.health_check() if daemon is not None else False
-        session.updated_at = datetime.now(UTC)
-        return session
+        session = self._require_voice_session(session_id, tenant_id=tenant_id)
+        return session.model_copy(update={"daemon_health": self._voice_session_health(session_id)})
 
     def get_voice_session_health(
         self,
@@ -314,7 +323,7 @@ class MultimodalService:
         *,
         tenant_id: str | None = None,
     ) -> VoiceSessionHealth:
-        session = self.get_voice_session(session_id, tenant_id=tenant_id)
+        session = self._require_voice_session(session_id, tenant_id=tenant_id)
         daemon = self._voice_daemons.get(session_id)
         healthy = daemon.health_check() if daemon is not None else False
         details = daemon.snapshot() if daemon is not None else {}
@@ -334,7 +343,7 @@ class MultimodalService:
         tenant_id: str | None = None,
     ) -> VoiceSession:
         async with self._voice_lock:
-            session = self.get_voice_session(session_id, tenant_id=tenant_id)
+            session = self._require_voice_session(session_id, tenant_id=tenant_id)
             if session.state == VoiceSessionState.STOPPED:
                 return session
 
@@ -397,10 +406,39 @@ class MultimodalService:
                 "livekit transport is configured without complete runtime credentials"
             )
 
-    def _build_room_name(self, tenant_id: str) -> str:
-        sanitized_tenant = tenant_id or "public"
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-        return f"{self._voice_room_prefix}-{sanitized_tenant}-{timestamp}"
+    def _require_voice_session(
+        self,
+        session_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> VoiceSession:
+        session = self._voice_sessions.get(session_id)
+        if session is None:
+            raise RequestNotFoundError(f"Voice session not found: {session_id}")
+        if tenant_id is not None and session.tenant_id != tenant_id:
+            raise RequestNotFoundError(f"Voice session not found: {session_id}")
+        return session
+
+    def _voice_session_health(self, session_id: str) -> bool:
+        daemon = self._voice_daemons.get(session_id)
+        return daemon.health_check() if daemon is not None else False
+
+    def _build_room_name(self, tenant_id: str, requested_room_name: str = "") -> str:
+        prefix = self._normalize_room_component(self._voice_room_prefix, fallback="agent33-voice")
+        sanitized_tenant = self._normalize_room_component(tenant_id, fallback="tenant")
+        label = self._normalize_room_component(requested_room_name, fallback="session")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+        return f"{prefix}-{sanitized_tenant}-{label}-{timestamp}"
+
+    @staticmethod
+    def _normalize_room_component(value: str, *, fallback: str) -> str:
+        normalized = value.strip().lower()
+        normalized = _ROOM_COMPONENT_PATTERN.sub("-", normalized)
+        normalized = _ROOM_DASH_PATTERN.sub("-", normalized).strip("-")
+        if not normalized:
+            return fallback
+        truncated = normalized[:_ROOM_COMPONENT_LIMIT].strip("-")
+        return truncated or fallback
 
     @staticmethod
     def _artifact_size(input_artifact_base64: str) -> int:

@@ -5,9 +5,8 @@ Covers: models, checklists, metrics, service, and API routes.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
+from fastapi.testclient import TestClient
 
 from agent33.improvement.checklists import (
     ChecklistEvaluator,
@@ -38,10 +37,8 @@ from agent33.improvement.models import (
     RoadmapRefresh,
 )
 from agent33.improvement.service import ImprovementService
-
-if TYPE_CHECKING:
-    from starlette.testclient import TestClient
-
+from agent33.main import app
+from agent33.security.auth import create_access_token
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -61,6 +58,11 @@ def _reset_routes():
     _reset_service()
     yield
     _reset_service()
+
+
+def _tenant_client(tenant_id: str) -> TestClient:
+    token = create_access_token("improvements-user", scopes=[], tenant_id=tenant_id)
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
 # ===========================================================================
@@ -566,6 +568,24 @@ class TestImprovementAPI:
         assert data["content"]["title"] == "API Test"
         assert data["disposition"]["status"] == "submitted"
 
+    def test_submit_intake_rejects_cross_tenant_override_for_authenticated_user(self):
+        tenant_client = _tenant_client("tenant-a")
+        resp = tenant_client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Cross tenant", "tenant_id": "tenant-b"},
+        )
+        assert resp.status_code == 403
+        assert "Tenant mismatch" in resp.json()["detail"]
+
+    def test_submit_intake_rejects_authenticated_user_without_tenant_context(self):
+        tenantless_client = _tenant_client("")
+        resp = tenantless_client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenantless auth"},
+        )
+        assert resp.status_code == 403
+        assert "Tenant context required" in resp.json()["detail"]
+
     def test_list_intakes(self, client: TestClient):
         client.post(
             "/v1/improvements/intakes",
@@ -578,6 +598,20 @@ class TestImprovementAPI:
         resp = client.get("/v1/improvements/intakes")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
+
+    def test_list_intakes_rejects_cross_tenant_filter_for_authenticated_user(self):
+        tenant_client = _tenant_client("tenant-a")
+        tenant_client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenant A intake", "tenant_id": "tenant-a"},
+        )
+
+        resp = tenant_client.get(
+            "/v1/improvements/intakes",
+            params={"tenant_id": "tenant-b"},
+        )
+        assert resp.status_code == 403
+        assert "Tenant mismatch" in resp.json()["detail"]
 
     def test_submit_competitive_repo_intakes_batch(self, client: TestClient):
         resp = client.post(
@@ -685,6 +719,36 @@ class TestImprovementAPI:
         assert resp.status_code == 200
         assert resp.json()["content"]["title"] == "Get Test"
 
+    def test_get_intake_is_tenant_scoped(self):
+        tenant_a = _tenant_client("tenant-a")
+        tenant_b = _tenant_client("tenant-b")
+
+        created = tenant_a.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenant A only", "tenant_id": "tenant-a"},
+        )
+        intake_id = created.json()["intake_id"]
+
+        allowed = tenant_a.get(f"/v1/improvements/intakes/{intake_id}")
+        denied = tenant_b.get(f"/v1/improvements/intakes/{intake_id}")
+
+        assert allowed.status_code == 200
+        assert denied.status_code == 404
+
+    def test_get_intake_rejects_authenticated_user_without_tenant_context(
+        self, client: TestClient
+    ):
+        created = client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenant-protected intake"},
+        )
+        intake_id = created.json()["intake_id"]
+        tenantless_client = _tenant_client("")
+
+        denied = tenantless_client.get(f"/v1/improvements/intakes/{intake_id}")
+        assert denied.status_code == 403
+        assert "Tenant context required" in denied.json()["detail"]
+
     def test_get_intake_not_found(self, client: TestClient):
         resp = client.get("/v1/improvements/intakes/nonexistent")
         assert resp.status_code == 404
@@ -713,6 +777,22 @@ class TestImprovementAPI:
             json={"new_status": "accepted"},
         )
         assert resp.status_code == 400
+
+    def test_transition_intake_is_tenant_scoped(self):
+        tenant_a = _tenant_client("tenant-a")
+        tenant_b = _tenant_client("tenant-b")
+
+        created = tenant_a.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenant transition", "tenant_id": "tenant-a"},
+        )
+        intake_id = created.json()["intake_id"]
+
+        denied = tenant_b.post(
+            f"/v1/improvements/intakes/{intake_id}/transition",
+            json={"new_status": "triaged"},
+        )
+        assert denied.status_code == 404
 
     # ----- Lesson routes ---------------------------------------------------
 

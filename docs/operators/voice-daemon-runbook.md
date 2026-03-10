@@ -36,6 +36,10 @@ Use the multimodal tenant policy endpoint to tune voice access:
 - `max_voice_concurrent_sessions`
 - `max_voice_session_seconds`
 
+`max_voice_session_seconds` is currently recorded on each session for operator budgeting,
+but the stub runtime does not auto-expire sessions yet. Stop or reconnect sessions
+manually when they exceed the expected duration.
+
 Example:
 
 ```json
@@ -47,6 +51,26 @@ Example:
 ```
 
 ## Operator Actions
+
+### List sessions
+
+`GET /v1/multimodal/voice/sessions`
+
+Use this to:
+
+- find currently active tenant-scoped sessions
+- locate a `session_id` before deeper inspection or stop requests
+
+### Get session details
+
+`GET /v1/multimodal/voice/sessions/{session_id}`
+
+Use this to inspect:
+
+- session state
+- room name
+- transport mode
+- last recorded startup error, if any
 
 ### Start a session
 
@@ -90,14 +114,27 @@ Resolution:
 
 - enable the runtime or leave the voice tab disabled for the environment
 
-### `503 ... livekit-agents runtime ... not yet installed`
+### `503 livekit transport is configured without complete runtime credentials`
 
 Cause:
 
-- `VOICE_DAEMON_TRANSPORT=livekit` without the future dependency wave
+- `VOICE_DAEMON_TRANSPORT=livekit` without `VOICE_DAEMON_URL`, `VOICE_DAEMON_API_KEY`,
+  or `VOICE_DAEMON_API_SECRET`
 
 Resolution:
 
+- complete the runtime settings or switch back to `stub`
+
+### `503 voice runtime could not start session`
+
+Cause:
+
+- the configured transport failed during daemon startup
+- `livekit` was selected before the runtime dependency wave was installed
+
+Resolution:
+
+- inspect engine logs for the specific startup failure
 - switch back to `stub` until the LiveKit runtime lands
 
 ### `400 voice session limit exceeded`

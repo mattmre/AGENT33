@@ -40,7 +40,9 @@ This avoids shipping an interface that pretends media transport works when it do
 - `max_voice_concurrent_sessions`
 - `max_voice_session_seconds`
 
-These settings are enforced before daemon startup.
+`voice_enabled` and `max_voice_concurrent_sessions` are enforced before daemon startup.
+`max_voice_session_seconds` is recorded on the session for operator budgeting, but the
+stub runtime does not auto-expire active sessions yet.
 
 ### 3. Multimodal service owns voice lifecycle
 
