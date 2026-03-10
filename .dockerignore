@@ -5,8 +5,23 @@ node_modules
 test-results
 worktrees
 
+.env
+.env.*
+!.env.example
+!**/.env.example
+
 frontend/dist
 frontend/node_modules
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+htmlcov/
+.pytest_cache/
+.nox/
+.tox/
 
 engine/.coverage
 engine/.mypy_cache

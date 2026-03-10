@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
-COPY core ../core
+COPY ["core/workflows/improvement-cycle/retrospective.workflow.yaml", "core/workflows/improvement-cycle/metrics-review.workflow.yaml", "../core/workflows/improvement-cycle/"]
 RUN npm run build
 
 FROM nginx:1.27-alpine
