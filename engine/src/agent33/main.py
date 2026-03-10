@@ -52,6 +52,9 @@ from agent33.api.routes import (
 from agent33.api.routes import (
     plugins as plugins_routes,
 )
+from agent33.api.routes import (
+    tool_catalog as tool_catalog_routes,
+)
 from agent33.config import settings
 from agent33.hooks.middleware import HookMiddleware
 from agent33.memory.long_term import LongTermMemory
@@ -519,6 +522,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.plugin_registry = plugin_registry
 
+    # -- Tool catalog service (aggregates all tool sources) -----------------
+    from agent33.tools.catalog import ToolCatalogService
+
+    tool_catalog_service = ToolCatalogService(
+        tool_registry=tool_registry,
+        skill_registry=skill_registry,
+        plugin_registry=plugin_registry,
+    )
+    app.state.tool_catalog_service = tool_catalog_service
+    tool_catalog_routes.set_catalog_service(tool_catalog_service)
+    logger.info("tool_catalog_service_initialized")
+
     # -- Agent-workflow bridge (with subsystem injection) -------------------
     _register_agent_runtime_bridge(
         model_router,
@@ -826,3 +841,4 @@ app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_ws.router)
+app.include_router(tool_catalog_routes.router)
