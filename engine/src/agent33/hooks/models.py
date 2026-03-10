@@ -34,6 +34,12 @@ class HookEventType(StrEnum):
     REQUEST_PRE = "request.pre"
     REQUEST_POST = "request.post"
 
+    # CLI session lifecycle (Phase 44)
+    SESSION_START = "session.start"
+    SESSION_END = "session.end"
+    SESSION_CHECKPOINT = "session.checkpoint"
+    SESSION_RESUME = "session.resume"
+
 
 # ---------------------------------------------------------------------------
 # Context Dataclasses
