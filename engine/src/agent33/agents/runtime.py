@@ -353,6 +353,41 @@ class AgentRuntime:
         except Exception:
             logger.debug("failed to emit routing metrics", exc_info=True)
 
+    def _validate_required_inputs(self, inputs: dict[str, Any]) -> None:
+        for name, param in self._definition.inputs.items():
+            if param.required and name not in inputs:
+                raise ValueError(f"Missing required input: {name}")
+
+    async def _run_pre_invoke_hook(
+        self,
+        *,
+        inputs: dict[str, Any],
+        system_prompt: str,
+    ) -> tuple[dict[str, Any], str]:
+        if self._hook_registry is None:
+            return inputs, system_prompt
+
+        from agent33.hooks.models import AgentHookContext, HookEventType
+        from agent33.hooks.protocol import HookAbortError
+
+        pre_runner = self._hook_registry.get_chain_runner(
+            HookEventType.AGENT_INVOKE_PRE, self._tenant_id
+        )
+        hook_ctx = AgentHookContext(
+            event_type=HookEventType.AGENT_INVOKE_PRE,
+            tenant_id=self._tenant_id,
+            metadata={},
+            agent_name=self._definition.name,
+            agent_definition=self._definition,
+            inputs=inputs,
+            system_prompt=system_prompt,
+            model=self._model,
+        )
+        hook_ctx = await pre_runner.run(hook_ctx)
+        if hook_ctx.abort:
+            raise HookAbortError(hook_ctx.abort_reason)
+        return hook_ctx.inputs, hook_ctx.system_prompt
+
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
         system_prompt = _build_system_prompt(self._definition)
@@ -385,35 +420,11 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
-        # Validate required inputs
-        for name, param in self._definition.inputs.items():
-            if param.required and name not in inputs:
-                raise ValueError(f"Missing required input: {name}")
-
-        # --- Hook: agent.invoke.pre ---
-        if self._hook_registry is not None:
-            from agent33.hooks.models import AgentHookContext, HookEventType
-            from agent33.hooks.protocol import HookAbortError
-
-            pre_runner = self._hook_registry.get_chain_runner(
-                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
-            )
-            hook_ctx = AgentHookContext(
-                event_type=HookEventType.AGENT_INVOKE_PRE,
-                tenant_id=self._tenant_id,
-                metadata={},
-                agent_name=self._definition.name,
-                agent_definition=self._definition,
-                inputs=inputs,
-                system_prompt=system_prompt,
-                model=self._model,
-            )
-            hook_ctx = await pre_runner.run(hook_ctx)
-            if hook_ctx.abort:
-                raise HookAbortError(hook_ctx.abort_reason)
-            # Allow hooks to modify inputs and system prompt
-            inputs = hook_ctx.inputs
-            system_prompt = hook_ctx.system_prompt
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
 
         user_content = json.dumps(inputs, indent=2)
 
@@ -551,40 +562,44 @@ class AgentRuntime:
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
 
+        # Inject skill context if injector is available
+        if self._skill_injector is not None:
+            if self._definition.skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
+                    self._definition.skills
+                )
+            for skill_name in self._active_skills:
+                system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
+                    skill_name
+                )
+
+        # Inject memory context if progressive recall is available
+        if self._progressive_recall is not None:
+            try:
+                user_query = json.dumps(inputs) if inputs else ""
+                recall_results = await self._progressive_recall.search(
+                    user_query, level="index", top_k=5
+                )
+                if recall_results:
+                    memory_lines = ["\n# Prior Context (from memory)"]
+                    for rr in recall_results:
+                        memory_lines.append(f"- {rr.content}")
+                    system_prompt += "\n" + "\n".join(memory_lines)
+            except Exception:
+                logger.debug("failed to retrieve memory context", exc_info=True)
+
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
+
+        loop_config = config or ToolLoopConfig()
+        routed_model: str | None = None
+        routed_max_tokens: int | None = None
+
         # --- Reasoning protocol path (Phase 29.1) ---
         if self._reasoning_protocol is not None:
-            # Inject skill context
-            if self._skill_injector is not None:
-                if self._definition.skills:
-                    system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
-                        self._definition.skills
-                    )
-                for skill_name in self._active_skills:
-                    system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
-                        skill_name
-                    )
-
-            # Inject memory context
-            if self._progressive_recall is not None:
-                try:
-                    user_query = json.dumps(inputs) if inputs else ""
-                    recall_results = await self._progressive_recall.search(
-                        user_query, level="index", top_k=5
-                    )
-                    if recall_results:
-                        memory_lines = ["\n# Prior Context (from memory)"]
-                        for rr in recall_results:
-                            memory_lines.append(f"- {rr.content}")
-                        system_prompt += "\n" + "\n".join(memory_lines)
-                except Exception:
-                    logger.debug("failed to retrieve memory context", exc_info=True)
-
-            # Validate required inputs
-            for name, param in self._definition.inputs.items():
-                if param.required and name not in inputs:
-                    raise ValueError(f"Missing required input: {name}")
-
-            loop_config = config or ToolLoopConfig()
             routed_model, routed_max_tokens = self._resolve_execution_parameters(
                 inputs=inputs,
                 iterative=True,
@@ -643,66 +658,12 @@ class AgentRuntime:
                 self._definition.name,
             )
 
-        # Inject skill context if injector is available
-        if self._skill_injector is not None:
-            if self._definition.skills:
-                system_prompt += "\n\n" + self._skill_injector.build_skill_metadata_block(
-                    self._definition.skills
-                )
-            for skill_name in self._active_skills:
-                system_prompt += "\n\n" + self._skill_injector.build_skill_instructions_block(
-                    skill_name
-                )
-
-        # Inject memory context if progressive recall is available
-        if self._progressive_recall is not None:
-            try:
-                user_query = json.dumps(inputs) if inputs else ""
-                recall_results = await self._progressive_recall.search(
-                    user_query, level="index", top_k=5
-                )
-                if recall_results:
-                    memory_lines = ["\n# Prior Context (from memory)"]
-                    for rr in recall_results:
-                        memory_lines.append(f"- {rr.content}")
-                    system_prompt += "\n" + "\n".join(memory_lines)
-            except Exception:
-                logger.debug("failed to retrieve memory context", exc_info=True)
-
-        # Validate required inputs
-        for name, param in self._definition.inputs.items():
-            if param.required and name not in inputs:
-                raise ValueError(f"Missing required input: {name}")
-
-        # --- Hook: agent.invoke.pre (iterative) ---
-        if self._hook_registry is not None:
-            from agent33.hooks.models import AgentHookContext, HookEventType
-            from agent33.hooks.protocol import HookAbortError
-
-            pre_runner = self._hook_registry.get_chain_runner(
-                HookEventType.AGENT_INVOKE_PRE, self._tenant_id
-            )
-            hook_ctx = AgentHookContext(
-                event_type=HookEventType.AGENT_INVOKE_PRE,
-                tenant_id=self._tenant_id,
-                metadata={},
-                agent_name=self._definition.name,
-                agent_definition=self._definition,
+        if routed_model is None or routed_max_tokens is None:
+            routed_model, routed_max_tokens = self._resolve_execution_parameters(
                 inputs=inputs,
-                system_prompt=system_prompt,
-                model=self._model,
+                iterative=True,
+                max_iterations=loop_config.max_iterations,
             )
-            hook_ctx = await pre_runner.run(hook_ctx)
-            if hook_ctx.abort:
-                raise HookAbortError(hook_ctx.abort_reason)
-            inputs = hook_ctx.inputs
-            system_prompt = hook_ctx.system_prompt
-
-        routed_model, routed_max_tokens = self._resolve_execution_parameters(
-            inputs=inputs,
-            iterative=True,
-            max_iterations=(config.max_iterations if config is not None else None),
-        )
 
         user_content = json.dumps(inputs, indent=2)
         messages = [
@@ -711,7 +672,6 @@ class AgentRuntime:
         ]
 
         # --- Create and run the tool loop ---
-        loop_config = config or ToolLoopConfig()
         loop = ToolLoop(
             router=self._router,
             tool_registry=self._tool_registry,
@@ -858,6 +818,12 @@ class AgentRuntime:
                     system_prompt += "\n" + "\n".join(memory_lines)
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
+
+        inputs, system_prompt = await self._run_pre_invoke_hook(
+            inputs=inputs,
+            system_prompt=system_prompt,
+        )
+        self._validate_required_inputs(inputs)
 
         # Build messages
         user_content = json.dumps(inputs, indent=2)
