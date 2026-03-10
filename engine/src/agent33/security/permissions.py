@@ -33,6 +33,8 @@ SCOPES: set[str] = {
     "hooks:admin",
     "plugins:read",
     "plugins:write",
+    "operator:read",
+    "operator:write",
 }
 
 

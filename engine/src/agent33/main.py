@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,7 @@ from agent33.api.routes import (
     memory_search,
     multimodal,
     operations_hub,
+    operator,
     outcomes,
     packs,
     reasoning,
@@ -74,6 +76,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     All resources are stored on ``app.state`` for access by route handlers.
     """
     logger.info("agent33_starting")
+
+    # Record startup time for uptime calculation
+    _start_time = time.time()
 
     # Warn about insecure defaults
     secret_warnings = settings.check_production_secrets()
@@ -613,6 +618,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         room_prefix=settings.voice_daemon_room_prefix,
     )
 
+    # --- Operator control plane ---
+    from agent33.operator.service import OperatorService
+
+    operator_service = OperatorService(
+        app_state=app.state,
+        settings=settings,
+        start_time=_start_time,
+    )
+    app.state.operator_service = operator_service
+    logger.info("operator_service_initialized")
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -824,5 +840,6 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(operator.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_ws.router)
