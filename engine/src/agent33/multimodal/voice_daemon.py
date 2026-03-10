@@ -10,6 +10,8 @@ SDK wiring is deferred until the dependency is added to the project.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import structlog
 
 logger = structlog.get_logger()
@@ -29,12 +31,25 @@ class LiveVoiceDaemon:
     Use ``health_check()`` at any point to query liveness.
     """
 
-    def __init__(self, room_name: str, url: str, api_key: str, api_secret: str) -> None:
+    def __init__(
+        self,
+        room_name: str,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        *,
+        transport: str = "stub",
+    ) -> None:
         self._room_name = room_name
         self._url = url
         self._api_key = api_key
         self._api_secret = api_secret
+        self._transport = transport
         self._active = False
+        self._started_at: datetime | None = None
+        self._stopped_at: datetime | None = None
+        self._processed_chunks = 0
+        self._synthesized_utterances = 0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -49,9 +64,23 @@ class LiveVoiceDaemon:
             "voice_daemon.starting",
             room=self._room_name,
             url=self._url,
+            transport=self._transport,
         )
+        if self._active:
+            logger.debug("voice_daemon.start_skipped", room=self._room_name)
+            return
+        if self._transport == "livekit":
+            raise RuntimeError(
+                "LiveKit transport requires the livekit-agents runtime, which is not yet "
+                "installed in this repository. Use the default stub transport until the "
+                "dependency lands."
+            )
+        if self._transport != "stub":
+            raise ValueError(f"Unsupported voice daemon transport: {self._transport}")
         self._active = True
-        logger.info("voice_daemon.started", room=self._room_name)
+        self._started_at = datetime.now(UTC)
+        self._stopped_at = None
+        logger.info("voice_daemon.started", room=self._room_name, transport=self._transport)
 
     async def stop(self) -> None:
         """Disconnect the daemon from the WebRTC session.
@@ -59,7 +88,11 @@ class LiveVoiceDaemon:
         # TODO: Wire LiveKit SDK when dependency is added
         """
         logger.info("voice_daemon.stopping", room=self._room_name)
+        if not self._active:
+            logger.debug("voice_daemon.stop_skipped", room=self._room_name)
+            return
         self._active = False
+        self._stopped_at = datetime.now(UTC)
         logger.info("voice_daemon.stopped", room=self._room_name)
 
     def health_check(self) -> bool:
@@ -86,6 +119,9 @@ class LiveVoiceDaemon:
 
         # TODO: Wire LiveKit SDK when dependency is added
         """
+        if not self._active:
+            raise RuntimeError("Voice daemon is not active")
+        self._processed_chunks += 1
         logger.debug(
             "voice_daemon.process_audio_chunk",
             chunk_bytes=len(chunk),
@@ -104,9 +140,24 @@ class LiveVoiceDaemon:
 
         # TODO: Wire LiveKit SDK when dependency is added
         """
+        if not self._active:
+            raise RuntimeError("Voice daemon is not active")
+        self._synthesized_utterances += 1
         logger.debug(
             "voice_daemon.synthesize_speech",
             text_length=len(text),
             room=self._room_name,
         )
         return None
+
+    def snapshot(self) -> dict[str, object]:
+        """Return deterministic daemon status for API/session management."""
+        return {
+            "room_name": self._room_name,
+            "transport": self._transport,
+            "active": self._active,
+            "started_at": self._started_at.isoformat() if self._started_at else None,
+            "stopped_at": self._stopped_at.isoformat() if self._stopped_at else None,
+            "processed_chunks": self._processed_chunks,
+            "synthesized_utterances": self._synthesized_utterances,
+        }

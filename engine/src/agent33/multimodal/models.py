@@ -32,6 +32,16 @@ class RequestState(StrEnum):
     CANCELLED = "cancelled"
 
 
+class VoiceSessionState(StrEnum):
+    """Lifecycle state for a live voice daemon session."""
+
+    STARTING = "starting"
+    ACTIVE = "active"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    FAILED = "failed"
+
+
 class MultimodalPolicy(BaseModel):
     """Per-tenant multimodal policy limits.
 
@@ -79,6 +89,31 @@ class MultimodalPolicy(BaseModel):
             "compliance reasons."
         ),
     )
+    voice_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the tenant may start long-lived live voice daemon sessions. "
+            "Enabled by default for the built-in stub transport so operators can "
+            "exercise the control plane without external media infrastructure."
+        ),
+    )
+    max_voice_concurrent_sessions: int = Field(
+        default=1,
+        ge=0,
+        description=(
+            "Upper bound on simultaneously active live voice sessions for a tenant. "
+            "Defaulting to one avoids accidental fan-out of long-lived audio workers."
+        ),
+    )
+    max_voice_session_seconds: int = Field(
+        default=1800,
+        ge=1,
+        description=(
+            "Maximum allowed duration for a live voice session before the operator "
+            "must reconnect. 30 minutes bounds resource usage while still allowing "
+            "substantial conversations."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +143,18 @@ RECOMMENDED_POLICIES: dict[str, MultimodalPolicy] = {
         max_artifact_bytes=20_000_000,
         max_timeout_seconds=300,
         allowed_modalities={ModalityType.VISION},
+    ),
+    "voice": MultimodalPolicy(
+        max_text_chars=10_000,
+        max_artifact_bytes=10_000_000,
+        max_timeout_seconds=120,
+        allowed_modalities={
+            ModalityType.SPEECH_TO_TEXT,
+            ModalityType.TEXT_TO_SPEECH,
+        },
+        voice_enabled=True,
+        max_voice_concurrent_sessions=1,
+        max_voice_session_seconds=1800,
     ),
 }
 
@@ -142,3 +189,34 @@ class MultimodalResult(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class VoiceSession(BaseModel):
+    """Tenant-scoped live voice session tracked by the multimodal service."""
+
+    id: str = Field(default_factory=lambda: _id("vcs"))
+    tenant_id: str = ""
+    room_name: str
+    requested_by: str = ""
+    state: VoiceSessionState = VoiceSessionState.STARTING
+    transport: str = "stub"
+    daemon_health: bool = False
+    max_duration_seconds: int = 1800
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    stopped_at: datetime | None = None
+    last_error: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class VoiceSessionHealth(BaseModel):
+    """Health probe result for a live voice session."""
+
+    session_id: str
+    room_name: str
+    state: VoiceSessionState
+    transport: str
+    healthy: bool
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    details: dict[str, Any] = Field(default_factory=dict)

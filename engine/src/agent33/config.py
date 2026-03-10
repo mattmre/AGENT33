@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     elevenlabs_api_key: SecretStr = SecretStr("")
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    voice_daemon_enabled: bool = True
+    voice_daemon_transport: str = "stub"  # stub | livekit
+    voice_daemon_url: str = ""
+    voice_daemon_api_key: SecretStr = SecretStr("")
+    voice_daemon_api_secret: SecretStr = SecretStr("")
+    voice_daemon_room_prefix: str = "agent33-voice"
+    voice_daemon_max_sessions: int = 25
 
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
@@ -277,11 +284,20 @@ class Settings(BaseSettings):
             raise ValueError("jupyter kernel mode must be one of: local, docker")
         return normalized
 
+    @field_validator("voice_daemon_transport")
+    @classmethod
+    def _validate_voice_daemon_transport(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"stub", "livekit"}:
+            raise ValueError("voice_daemon_transport must be one of: stub, livekit")
+        return normalized
+
     @field_validator(
         "improvement_learning_dedupe_window_minutes",
         "improvement_learning_retention_days",
         "improvement_learning_max_signals",
         "improvement_learning_max_generated_intakes",
+        "voice_daemon_max_sessions",
     )
     @classmethod
     def _validate_learning_non_negative(cls, value: int) -> int:

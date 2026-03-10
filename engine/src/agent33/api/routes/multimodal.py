@@ -5,12 +5,18 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from agent33.multimodal.models import ModalityType, MultimodalPolicy, RequestState
+from agent33.multimodal.models import (
+    ModalityType,
+    MultimodalPolicy,
+    RequestState,
+    VoiceSessionState,
+)
 from agent33.multimodal.service import (
     InvalidStateTransitionError,
     MultimodalService,
     PolicyViolationError,
     RequestNotFoundError,
+    VoiceRuntimeUnavailableError,
 )
 from agent33.security.permissions import require_scope
 
@@ -26,6 +32,12 @@ class CreateRequestBody(BaseModel):
     requested_timeout_seconds: int = Field(default=60, ge=1)
     requested_by: str = ""
     execute_now: bool = True
+
+
+class CreateVoiceSessionBody(BaseModel):
+    requested_by: str = ""
+    room_name: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def get_multimodal_service() -> MultimodalService:
@@ -130,6 +142,74 @@ async def cancel_request(request_id: str, request: Request) -> dict[str, Any]:
     except InvalidStateTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return record.model_dump(mode="json")
+
+
+@router.post(
+    "/voice/sessions",
+    status_code=201,
+    dependencies=[require_scope("multimodal:write")],
+)
+async def start_voice_session(body: CreateVoiceSessionBody, request: Request) -> dict[str, Any]:
+    tenant_id = _tenant_id(request)
+    try:
+        session = await _service.start_voice_session(
+            tenant_id=tenant_id,
+            requested_by=body.requested_by,
+            room_name=body.room_name,
+            metadata=body.metadata,
+        )
+    except PolicyViolationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except VoiceRuntimeUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return session.model_dump(mode="json")
+
+
+@router.get("/voice/sessions", dependencies=[require_scope("multimodal:read")])
+async def list_voice_sessions(
+    request: Request,
+    state: VoiceSessionState | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    tenant_id = _tenant_id(request)
+    sessions = _service.list_voice_sessions(tenant_id=tenant_id or None, state=state, limit=limit)
+    return [session.model_dump(mode="json") for session in sessions]
+
+
+@router.get("/voice/sessions/{session_id}", dependencies=[require_scope("multimodal:read")])
+async def get_voice_session(session_id: str, request: Request) -> dict[str, Any]:
+    tenant_id = _tenant_id(request)
+    try:
+        session = _service.get_voice_session(session_id, tenant_id=tenant_id or None)
+    except RequestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return session.model_dump(mode="json")
+
+
+@router.get(
+    "/voice/sessions/{session_id}/health",
+    dependencies=[require_scope("multimodal:read")],
+)
+async def get_voice_session_health(session_id: str, request: Request) -> dict[str, Any]:
+    tenant_id = _tenant_id(request)
+    try:
+        health = _service.get_voice_session_health(session_id, tenant_id=tenant_id or None)
+    except RequestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return health.model_dump(mode="json")
+
+
+@router.post(
+    "/voice/sessions/{session_id}/stop",
+    dependencies=[require_scope("multimodal:write")],
+)
+async def stop_voice_session(session_id: str, request: Request) -> dict[str, Any]:
+    tenant_id = _tenant_id(request)
+    try:
+        session = await _service.stop_voice_session(session_id, tenant_id=tenant_id or None)
+    except RequestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return session.model_dump(mode="json")
 
 
 @router.post(
