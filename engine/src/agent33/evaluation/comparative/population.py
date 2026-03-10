@@ -32,6 +32,9 @@ class PopulationTracker:
     def __init__(self, max_scores_per_agent_metric: int = _MAX_SCORES_PER_AGENT_METRIC) -> None:
         # {metric_name: {agent_name: [scores]}}
         self._scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        self._records: dict[str, dict[str, list[AgentScore]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         self._max_scores = max_scores_per_agent_metric
         self._last_updated: datetime | None = None
 
@@ -63,9 +66,13 @@ class PopulationTracker:
         """
         agent_scores = self._scores[score.metric_name][score.agent_name]
         agent_scores.append(score.value)
+        agent_records = self._records[score.metric_name][score.agent_name]
+        agent_records.append(score)
         # Bounded retention
         if len(agent_scores) > self._max_scores:
             del agent_scores[: len(agent_scores) - self._max_scores]
+        if len(agent_records) > self._max_scores:
+            del agent_records[: len(agent_records) - self._max_scores]
         self._last_updated = datetime.now(UTC)
 
     def add_scores(self, scores: list[AgentScore]) -> None:
@@ -82,6 +89,30 @@ class PopulationTracker:
         if not scores:
             return None
         return sum(scores) / len(scores)
+
+    def get_agent_score_records(self, agent_name: str, metric_name: str) -> list[AgentScore]:
+        """Return full score records for an agent/metric pair."""
+        records = self._records.get(metric_name, {}).get(agent_name)
+        if not records:
+            return []
+        return list(records)
+
+    def get_latest_task_scores(
+        self,
+        agent_name: str,
+        metric_name: str,
+        *,
+        task_ids: set[str] | None = None,
+    ) -> dict[str, float]:
+        """Return the latest score value for each task ID for an agent/metric pair."""
+        latest: dict[str, float] = {}
+        for record in self.get_agent_score_records(agent_name, metric_name):
+            if record.task_id is None:
+                continue
+            if task_ids is not None and record.task_id not in task_ids:
+                continue
+            latest[record.task_id] = record.value
+        return latest
 
     def get_agent_latest(self, agent_name: str, metric_name: str) -> float | None:
         """Get the most recent score for a specific agent on a specific metric."""
@@ -156,4 +187,5 @@ class PopulationTracker:
     def clear(self) -> None:
         """Remove all tracked scores."""
         self._scores.clear()
+        self._records.clear()
         self._last_updated = None

@@ -34,6 +34,7 @@ from agent33.packs.provenance import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from agent33.packs.marketplace import LocalPackMarketplace
     from agent33.packs.models import PackSource
     from agent33.skills.definition import SkillDefinition
     from agent33.skills.registry import SkillRegistry
@@ -54,12 +55,14 @@ class PackRegistry:
         packs_dir: Path,
         skill_registry: SkillRegistry,
         *,
+        marketplace: LocalPackMarketplace | None = None,
         trust_policy: PackTrustPolicy | None = None,
     ) -> None:
         self._packs_dir = packs_dir
         self._skill_registry = skill_registry
         self._installed: dict[str, InstalledPack] = {}
         self._enabled: dict[str, set[str]] = {}  # tenant_id -> set of enabled pack names
+        self._marketplace = marketplace
         self._trust_policy = trust_policy or PackTrustPolicy()
 
     # ------------------------------------------------------------------
@@ -207,7 +210,7 @@ class PackRegistry:
         provenance: PackProvenance | None = None,
         verification_key: str = "",
     ) -> InstallResult:
-        """Install a pack from a local path.
+        """Install a pack from a local path or marketplace source.
 
         Steps:
         1. Validate the directory
@@ -217,8 +220,6 @@ class PackRegistry:
         5. Load skills into SkillRegistry
         6. Register in installed packs
 
-        Marketplace sources are not yet supported.
-
         Args:
             source: Pack source descriptor.
             provenance: Optional provenance metadata for the pack.
@@ -226,19 +227,43 @@ class PackRegistry:
         """
         from pathlib import Path as _Path
 
-        if source.source_type != "local":
+        pack_path: _Path
+        install_source = source.source_type
+        if source.source_type == "local":
+            pack_path = _Path(source.path)
+            if not pack_path.is_dir():
+                return InstallResult(
+                    success=False,
+                    pack_name=source.name or "unknown",
+                    errors=[f"Pack directory not found: {source.path}"],
+                )
+        elif source.source_type == "marketplace":
+            if self._marketplace is None:
+                return InstallResult(
+                    success=False,
+                    pack_name=source.name or "unknown",
+                    errors=["Marketplace registry is not configured"],
+                )
+            if not source.name:
+                return InstallResult(
+                    success=False,
+                    pack_name="unknown",
+                    errors=["Marketplace installs require a pack name"],
+                )
+            resolved_path = self._marketplace.resolve(source.name, source.version)
+            if resolved_path is None:
+                version_suffix = f" version '{source.version}'" if source.version else ""
+                return InstallResult(
+                    success=False,
+                    pack_name=source.name,
+                    errors=[f"Marketplace pack '{source.name}'{version_suffix} was not found"],
+                )
+            pack_path = resolved_path
+        else:
             return InstallResult(
                 success=False,
                 pack_name=source.name or "unknown",
                 errors=[f"Unsupported source type: {source.source_type}"],
-            )
-
-        pack_path = _Path(source.path)
-        if not pack_path.is_dir():
-            return InstallResult(
-                success=False,
-                pack_name=source.name or "unknown",
-                errors=[f"Pack directory not found: {source.path}"],
             )
 
         # Validate structure
@@ -291,7 +316,7 @@ class PackRegistry:
                 ],
             )
 
-        self._installed[pack.name] = pack
+        self._installed[pack.name] = pack.model_copy(update={"source": install_source})
 
         return InstallResult(
             success=True,
@@ -398,6 +423,11 @@ class PackRegistry:
     def list_installed(self) -> list[InstalledPack]:
         """List all installed packs sorted by name."""
         return [self._installed[k] for k in sorted(self._installed)]
+
+    @property
+    def has_marketplace(self) -> bool:
+        """Return whether marketplace-backed installs are configured."""
+        return self._marketplace is not None
 
     @property
     def count(self) -> int:

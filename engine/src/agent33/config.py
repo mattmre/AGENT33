@@ -163,6 +163,7 @@ class Settings(BaseSettings):
 
     # Skill Packs
     pack_definitions_dir: str = "packs"
+    pack_marketplace_dir: str = "pack-marketplace"
     pack_auto_enable: bool = False
     pack_max_size_mb: int = 50
     pack_checksums_required: bool = False

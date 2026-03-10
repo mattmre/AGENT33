@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from agent33.config import settings
@@ -21,17 +22,18 @@ from agent33.improvement.models import (
 )
 from agent33.improvement.persistence import (
     FileLearningSignalStore,
+    InMemoryLearningSignalStore,
     SQLiteLearningSignalStore,
     backup_learning_state,
     migrate_file_learning_state_to_db,
     restore_learning_state,
 )
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
+from agent33.main import app
+from agent33.security.auth import create_access_token
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from starlette.testclient import TestClient
 
 
 @pytest.fixture()
@@ -72,6 +74,15 @@ def _reset_learning_route_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 3)
     yield
     _reset_service()
+
+
+def _tenant_client(tenant_id: str, scopes: list[str] | None = None) -> TestClient:
+    token = create_access_token(
+        "learning-user",
+        scopes=scopes or [],
+        tenant_id=tenant_id,
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
 def test_settings_reject_invalid_learning_corruption_behavior() -> None:
@@ -215,7 +226,7 @@ def test_file_to_db_migration_path_creates_backup_when_requested(tmp_path: Path)
     assert len(migrated.signals) == 1
     assert backup_path.exists()
     backup_payload = json.loads(backup_path.read_text(encoding="utf-8"))
-    assert len(backup_payload["signals"]) == 1
+    assert len(backup_payload["state"]["signals"]) == 1
 
 
 def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
@@ -245,6 +256,159 @@ def test_backup_and_restore_persisted_learning_state(tmp_path: Path):
     restored_signals = restored_service.list_learning_signals(tenant_id="tenant-backup", limit=10)
     assert len(restored_signals) == 1
     assert restored_signals[0].summary == "Needs backup"
+
+
+def test_backup_file_uses_versioned_envelope(tmp_path: Path):
+    source_path = tmp_path / "source_learning.json"
+    backup_path = tmp_path / "backup_learning.json"
+
+    source_store = FileLearningSignalStore(str(source_path))
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Versioned backup",
+            tenant_id="tenant-envelope",
+        )
+    )
+
+    backup_learning_state(source_store, str(backup_path))
+
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    assert payload["format_version"] == 1
+    assert payload["signal_count"] == 1
+    assert payload["intake_count"] == 0
+    assert payload["signal_intake_map_count"] == 0
+    assert payload["checksum_sha256"]
+    assert payload["state"]["signals"][0]["summary"] == "Versioned backup"
+
+
+def test_restore_learning_state_accepts_legacy_raw_backup(tmp_path: Path):
+    backup_path = tmp_path / "legacy_backup.json"
+    target_store = SQLiteLearningSignalStore(str(tmp_path / "restored.sqlite3"))
+
+    backup_path.write_text(
+        json.dumps(
+            {
+                "signals": [
+                    {
+                        "signal_id": "SIG-legacy",
+                        "signal_type": "bug",
+                        "severity": "high",
+                        "summary": "Legacy backup payload",
+                        "tenant_id": "tenant-legacy",
+                    }
+                ],
+                "generated_intakes": [],
+                "signal_intake_map": {},
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    restored = restore_learning_state(target_store, str(backup_path))
+
+    assert len(restored.signals) == 1
+    assert restored.signals[0].summary == "Legacy backup payload"
+
+
+def test_restore_learning_state_rejects_checksum_mismatch(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Checksum mismatch",
+            tenant_id="tenant-checksum",
+        )
+    )
+    backup_path = tmp_path / "checksum_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["state"]["signals"][0]["summary"] = "Tampered backup"
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Backup checksum validation failed"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
+def test_restore_learning_state_rejects_count_mismatch(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Count mismatch",
+            tenant_id="tenant-count",
+        )
+    )
+    backup_path = tmp_path / "count_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["signal_count"] = 2
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Backup metadata signal_count does not match payload"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
+def test_restore_learning_state_rejects_unsupported_backup_format_version(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Unsupported version",
+            tenant_id="tenant-version",
+        )
+    )
+    backup_path = tmp_path / "unsupported_version_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    payload["format_version"] = 99
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported backup format version: 99"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
+
+
+def test_restore_learning_state_requires_format_version_in_envelope(tmp_path: Path):
+    source_store = InMemoryLearningSignalStore()
+    source_service = ImprovementService(learning_store=source_store)
+    source_service.record_learning_signal(
+        LearningSignal(
+            signal_type=LearningSignalType.BUG,
+            severity=LearningSignalSeverity.HIGH,
+            summary="Missing version",
+            tenant_id="tenant-version",
+        )
+    )
+    backup_path = tmp_path / "missing_version_backup.json"
+    backup_learning_state(source_store, str(backup_path))
+    payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    del payload["format_version"]
+    backup_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid backup envelope"):
+        restore_learning_state(
+            SQLiteLearningSignalStore(str(tmp_path / "target.sqlite3")),
+            str(backup_path),
+        )
 
 
 def test_file_store_corruption_recovery_is_deterministic(tmp_path: Path):
@@ -897,6 +1061,54 @@ def test_summary_is_tenant_scoped_in_route(client: TestClient, monkeypatch: pyte
     assert payload["counts_by_tenant"] == {"tenant-1": 1}
 
 
+def test_learning_routes_reject_cross_tenant_override_for_authenticated_user(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    tenant_client = _tenant_client("tenant-1")
+
+    create_resp = tenant_client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "high",
+            "summary": "cross-tenant attempt",
+            "tenant_id": "tenant-2",
+        },
+    )
+    assert create_resp.status_code == 403
+    assert "Tenant mismatch" in create_resp.json()["detail"]
+
+    summary_resp = tenant_client.get(
+        "/v1/improvements/learning/summary",
+        params={"tenant_id": "tenant-2"},
+    )
+    assert summary_resp.status_code == 403
+    assert "Tenant mismatch" in summary_resp.json()["detail"]
+
+
+def test_learning_routes_reject_authenticated_user_without_tenant_context(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    tenantless_client = _tenant_client("")
+
+    create_resp = tenantless_client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "high",
+            "summary": "tenantless attempt",
+        },
+    )
+    assert create_resp.status_code == 403
+    assert "Tenant context required" in create_resp.json()["detail"]
+
+    summary_resp = tenantless_client.get("/v1/improvements/learning/summary")
+    assert summary_resp.status_code == 403
+    assert "Tenant context required" in summary_resp.json()["detail"]
+
+
 def test_trends_route_returns_dimension_report(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1195,8 +1407,35 @@ def test_backup_endpoint_creates_portable_backup(
     assert backup_path.exists()
 
     backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
-    assert len(backup_data["signals"]) == 1
-    assert backup_data["signals"][0]["summary"] == "Signal for backup test"
+    assert len(backup_data["state"]["signals"]) == 1
+    assert backup_data["state"]["signals"][0]["summary"] == "Signal for backup test"
+
+
+def test_backup_restore_routes_require_admin_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent33.api.routes.improvements import _reset_service
+
+    file_path = tmp_path / "learning_state.json"
+    backup_path = tmp_path / "operator_backup.json"
+
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_persistence_backend", "file")
+    monkeypatch.setattr(settings, "improvement_learning_persistence_path", str(file_path))
+    _reset_service()
+
+    tenant_client = _tenant_client("tenant-a")
+    backup_resp = tenant_client.post(
+        "/v1/improvements/learning/backup",
+        json={"backup_path": str(backup_path)},
+    )
+    assert backup_resp.status_code == 403
+
+    restore_resp = tenant_client.post(
+        "/v1/improvements/learning/restore",
+        json={"backup_path": str(backup_path)},
+    )
+    assert restore_resp.status_code == 403
 
 
 def test_backup_endpoint_uses_default_path_when_omitted(

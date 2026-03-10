@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from agent33.agents.definition import (
@@ -421,6 +423,13 @@ class TestAgentRuntimeEffortRouting:
         assert result.routing_decision["effort_source"] == EffortSelectionSource.HEURISTIC.value
         assert result.routing_decision["heuristic_reasons"]
         assert result.routing_decision["routed_max_tokens"] == 120
+        assert result.routing_decision["agent_name"] == "phase30-agent"
+        assert result.routing_decision["invocation_mode"] == "invoke"
+        assert result.routing_decision["completion_status"] == "completed"
+        assert result.routing_decision["tokens_used"] == 15
+        assert result.routing_decision["input_field_count"] == 1
+        assert result.routing_decision["input_char_count"] > 0
+        assert result.routing_decision["invocation_id"]
 
     async def test_invoke_uses_routed_model_and_max_tokens(self) -> None:
         definition = _make_definition(max_tokens=100)
@@ -503,6 +512,130 @@ class TestAgentRuntimeEffortRouting:
         assert result.routing_decision is not None
         assert result.routing_decision["estimated_token_budget"] == 180
 
+    async def test_invoke_iterative_routes_after_pre_hook_input_mutation(self) -> None:
+        from agent33.hooks.protocol import BaseHook
+        from agent33.hooks.registry import HookRegistry
+
+        class InputExpansionHook(BaseHook):
+            async def execute(self, context, call_next):
+                context.inputs["task"] = (
+                    "Analyze architecture tradeoffs for routing strategy and " + ("context " * 180)
+                )
+                context.inputs["evidence"] = "hook-added"
+                return await call_next(context)
+
+        definition = _make_definition(max_tokens=120)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="high-model"))
+        tool_registry = MagicMock()
+        tool_registry.list_all.return_value = []
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            low_model="low-model",
+            medium_model="medium-model",
+            high_model="high-model",
+            low_token_multiplier=0.75,
+            medium_token_multiplier=1.0,
+            high_token_multiplier=1.5,
+            heuristic_enabled=True,
+        )
+        registry = HookRegistry()
+        registry.register(
+            InputExpansionHook(
+                name="expand-inputs",
+                event_type="agent.invoke.pre",
+                priority=100,
+            )
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=None,
+            effort_router=effort_router,
+            tool_registry=tool_registry,
+            hook_registry=registry,
+        )
+
+        result = await runtime.invoke_iterative(
+            {"task": "brief"},
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        call_kwargs = model_router.complete.call_args.kwargs
+        assert call_kwargs["model"] == "high-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.HIGH.value
+        assert result.routing_decision["input_field_count"] == 2
+        assert result.routing_decision["input_char_count"] > len('{"task": "brief"}')
+
+    async def test_reasoning_protocol_routes_after_pre_hook_input_mutation(self) -> None:
+        from agent33.hooks.protocol import BaseHook
+        from agent33.hooks.registry import HookRegistry
+
+        class InputExpansionHook(BaseHook):
+            async def execute(self, context, call_next):
+                context.inputs["task"] = (
+                    "Analyze architecture tradeoffs for routing strategy and " + ("context " * 180)
+                )
+                context.inputs["evidence"] = "hook-added"
+                return await call_next(context)
+
+        definition = _make_definition(max_tokens=120)
+        model_router = MagicMock()
+        tool_registry = MagicMock()
+        tool_registry.list_all.return_value = []
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            low_model="low-model",
+            medium_model="medium-model",
+            high_model="high-model",
+            low_token_multiplier=0.75,
+            medium_token_multiplier=1.0,
+            high_token_multiplier=1.5,
+            heuristic_enabled=True,
+        )
+        reasoning_protocol = MagicMock()
+        reasoning_protocol.run = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output={"result": "ok"},
+                termination_reason="natural",
+                total_steps=2,
+            )
+        )
+        registry = HookRegistry()
+        registry.register(
+            InputExpansionHook(
+                name="expand-inputs",
+                event_type="agent.invoke.pre",
+                priority=100,
+            )
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=None,
+            effort_router=effort_router,
+            tool_registry=tool_registry,
+            reasoning_protocol=reasoning_protocol,
+            hook_registry=registry,
+        )
+
+        result = await runtime.invoke_iterative(
+            {"task": "brief"},
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        call_kwargs = reasoning_protocol.run.call_args.kwargs
+        assert call_kwargs["model"] == "high-model"
+        assert '"evidence": "hook-added"' in call_kwargs["task_input"]
+        assert result.model == "high-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.HIGH.value
+        assert result.routing_decision["input_field_count"] == 2
+        assert result.routing_decision["input_char_count"] > len('{"task": "brief"}')
+
     async def test_invoke_includes_heuristic_calibration_metadata(self) -> None:
         definition = _make_definition(max_tokens=100)
         model_router = MagicMock()
@@ -526,6 +659,110 @@ class TestAgentRuntimeEffortRouting:
         assert result.routing_decision["heuristic_score"] == 1
         assert result.routing_decision["heuristic_low_threshold"] == 0
         assert result.routing_decision["heuristic_high_threshold"] == 1
+
+    async def test_invoke_iterative_stream_tracks_completion_metadata(self) -> None:
+        from agent33.agents.events import ToolLoopEvent
+
+        definition = _make_definition(max_tokens=100)
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.HIGH,
+            high_model="stream-model",
+            high_token_multiplier=1.5,
+        )
+        runtime = AgentRuntime(
+            definition=definition,
+            router=MagicMock(),
+            effort_router=effort_router,
+            tool_registry=MagicMock(),
+            tenant_id="tenant-stream",
+            domain="ops",
+            session_id="session-stream",
+            invocation_mode="iterative_stream",
+        )
+
+        async def _fake_run_stream(self, messages, model, temperature=0.7, max_tokens=None):
+            del self, messages, model, temperature, max_tokens
+            yield ToolLoopEvent(
+                event_type="completed",
+                iteration=2,
+                data={
+                    "termination_reason": "natural",
+                    "total_tokens": 33,
+                    "tool_calls_made": 1,
+                    "tools_used": ["shell"],
+                    "output": {"result": "ok"},
+                },
+            )
+
+        with patch("agent33.agents.tool_loop.ToolLoop.run_stream", new=_fake_run_stream):
+            events = [
+                event
+                async for event in runtime.invoke_iterative_stream(
+                    {"task": "stream telemetry"},
+                    config=ToolLoopConfig(enable_double_confirmation=False),
+                )
+            ]
+
+        assert [event.event_type for event in events] == ["completed"]
+        assert runtime.routing_decision_metadata is not None
+        assert runtime.routing_decision_metadata["agent_name"] == "phase30-agent"
+        assert runtime.routing_decision_metadata["invocation_mode"] == "iterative_stream"
+        assert runtime.routing_decision_metadata["session_id"] == "session-stream"
+        assert runtime.routing_decision_metadata["tenant_id"] == "tenant-stream"
+        assert runtime.routing_decision_metadata["domain"] == "ops"
+        assert runtime.routing_decision_metadata["tokens_used"] == 33
+        assert runtime.routing_decision_metadata["iterations"] == 2
+        assert runtime.routing_decision_metadata["tool_calls_made"] == 1
+        assert runtime.routing_decision_metadata["termination_reason"] == "natural"
+
+    async def test_invoke_ignores_unexpected_routing_metrics_emitter_failures(self) -> None:
+        definition = _make_definition(max_tokens=100)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="safe-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            high_model="safe-model",
+            high_token_multiplier=1.5,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+            routing_metrics_emitter=lambda _routing: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+
+        result = await runtime.invoke({"task": "stay fail-open"})
+
+        assert result.model == "safe-model"
+        assert result.routing_decision is not None
+        assert result.routing_decision["effort"] == AgentEffort.HIGH.value
+
+    async def test_invoke_propagates_fail_closed_routing_metrics_errors(self) -> None:
+        definition = _make_definition(max_tokens=100)
+        model_router = MagicMock()
+        model_router.complete = AsyncMock(return_value=_text_response(model="safe-model"))
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            high_model="safe-model",
+            high_token_multiplier=1.5,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+            routing_metrics_emitter=lambda _routing: (_ for _ in ()).throw(
+                HTTPException(status_code=503, detail="Effort telemetry export failed")
+            ),
+        )
+
+        with pytest.raises(HTTPException, match="Effort telemetry export failed"):
+            await runtime.invoke({"task": "fail closed"})
 
 
 class TestEffortRoutingObservabilityAPI:
@@ -559,7 +796,14 @@ class TestEffortRoutingObservabilityAPI:
         )
         with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_runtime_cls:
             mock_instance = MagicMock()
-            mock_instance.invoke = AsyncMock(return_value=mock_result)
+
+            async def _invoke(*_args, **_kwargs):
+                mock_runtime_cls.call_args.kwargs["routing_metrics_emitter"](
+                    mock_result.routing_decision
+                )
+                return mock_result
+
+            mock_instance.invoke = AsyncMock(side_effect=_invoke)
             mock_runtime_cls.return_value = mock_instance
 
             response = client.post(
@@ -940,6 +1184,68 @@ class TestEffortAPIRouting:
         assert data["routing"]["effort"] == "medium"
         assert data["routing"]["effort_source"] == "request"
         assert "estimated_token_budget" in data["routing"]
+
+    def test_iterative_stream_passes_context_and_exports_metrics(self, client) -> None:
+        from agent33.agents.events import ToolLoopEvent
+        from agent33.agents.registry import AgentRegistry
+        from agent33.api.routes import agents as agents_route
+        from agent33.main import app
+
+        metrics = MetricsCollector()
+        agents_route.set_metrics(metrics)
+
+        definition = _make_definition()
+        definition.name = "effort-stream-agent"
+        app.state.agent_registry = AgentRegistry()
+        app.state.agent_registry.register(definition)
+        app.state.model_router = MagicMock()
+        app.state.tool_registry = MagicMock()
+
+        async def _stream(*_args, **_kwargs):
+            yield ToolLoopEvent(
+                event_type="completed",
+                iteration=1,
+                data={
+                    "termination_reason": "natural",
+                    "total_tokens": 12,
+                    "tool_calls_made": 0,
+                    "tools_used": [],
+                    "output": {"result": "ok"},
+                },
+            )
+
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.invoke_iterative_stream = _stream
+            mock_instance.routing_decision_metadata = {
+                "effort": "high",
+                "effort_source": "policy",
+                "estimated_token_budget": 200,
+                "estimated_cost": 0.5,
+                "agent_name": "effort-stream-agent",
+                "invocation_mode": "iterative_stream",
+                "session_id": "session-123",
+            }
+            mock_cls.return_value = mock_instance
+
+            response = client.post(
+                "/v1/agents/effort-stream-agent/invoke-iterative/stream",
+                json={"inputs": {"task": "stream it"}},
+                headers={
+                    "x-agent-session-id": "session-123",
+                    "x-agent-domain": "security",
+                },
+            )
+
+        assert response.status_code == 200
+        construct_kwargs = mock_cls.call_args.kwargs
+        assert construct_kwargs["invocation_mode"] == "iterative_stream"
+        assert construct_kwargs["session_id"] == "session-123"
+        assert construct_kwargs["domain"] == "security"
+        assert construct_kwargs["routing_metrics_emitter"] is not None
+
+        summary = metrics.get_summary()
+        assert summary["effort_routing_decisions_total"]["effort=high,source=policy"] == 1
 
 
 class TestEffortConfigValidation:

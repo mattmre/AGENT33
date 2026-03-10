@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent33.api.routes.packs import router
+from agent33.packs.marketplace import LocalPackMarketplace
 from agent33.packs.registry import PackRegistry
 from agent33.skills.registry import SkillRegistry
 
@@ -99,23 +100,35 @@ class TestPackRoutesWithoutRegistry:
 class TestPackRoutesWithRegistry:
     """Test endpoints with a functioning pack registry."""
 
-    def _setup(self, tmp_path: Path) -> tuple[TestClient, PackRegistry, Path]:
+    def _setup(
+        self,
+        tmp_path: Path,
+        *,
+        configure_marketplace: bool = True,
+    ) -> tuple[TestClient, PackRegistry, Path, Path]:
         packs_dir = tmp_path / "packs"
         packs_dir.mkdir()
+        marketplace_dir = tmp_path / "marketplace"
+        marketplace_dir.mkdir()
         skill_reg = SkillRegistry()
-        pack_reg = PackRegistry(packs_dir=packs_dir, skill_registry=skill_reg)
+        marketplace = LocalPackMarketplace(marketplace_dir) if configure_marketplace else None
+        pack_reg = PackRegistry(
+            packs_dir=packs_dir,
+            skill_registry=skill_reg,
+            marketplace=marketplace,
+        )
         app = _create_test_app(pack_registry=pack_reg)
         client = TestClient(app)
-        return client, pack_reg, packs_dir
+        return client, pack_reg, packs_dir, marketplace_dir
 
     def test_list_packs_empty(self, tmp_path: Path) -> None:
-        client, _, _ = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         resp = client.get("/v1/packs")
         assert resp.status_code == 200
         assert resp.json()["count"] == 0
 
     def test_list_packs_with_installed(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="my-pack")
         pack_reg.discover()
 
@@ -126,7 +139,7 @@ class TestPackRoutesWithRegistry:
         assert data["packs"][0]["name"] == "my-pack"
 
     def test_get_pack_found(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="detail-pack")
         pack_reg.discover()
 
@@ -139,12 +152,12 @@ class TestPackRoutesWithRegistry:
         assert data["enabled_for_tenant"] is False
 
     def test_get_pack_not_found(self, tmp_path: Path) -> None:
-        client, _, _ = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         resp = client.get("/v1/packs/nonexistent")
         assert resp.status_code == 404
 
     def test_install_pack(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         pack_path = _write_pack(tmp_path / "source", name="new-pack")
 
         resp = client.post(
@@ -158,15 +171,60 @@ class TestPackRoutesWithRegistry:
         assert data["skills_loaded"] == 1
 
     def test_install_invalid_path(self, tmp_path: Path) -> None:
-        client, _, _ = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         resp = client.post(
             "/v1/packs/install",
             json={"source_type": "local", "path": "/nonexistent/path"},
         )
         assert resp.status_code == 400
 
+    def test_install_marketplace_pack(self, tmp_path: Path) -> None:
+        client, pack_reg, _, marketplace_dir = self._setup(tmp_path)
+        _write_pack(marketplace_dir / "v1", name="market-pack")
+
+        resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace", "name": "market-pack"},
+        )
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["success"] is True
+        assert data["pack_name"] == "market-pack"
+        assert pack_reg.get("market-pack") is not None
+
+    def test_install_marketplace_pack_requires_configured_marketplace(
+        self, tmp_path: Path
+    ) -> None:
+        client, _, _, _ = self._setup(tmp_path, configure_marketplace=False)
+
+        resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace", "name": "market-pack"},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == {
+            "message": "Failed to install pack 'market-pack'",
+            "errors": ["Marketplace registry is not configured"],
+        }
+
+    def test_install_marketplace_pack_requires_name(self, tmp_path: Path) -> None:
+        client, _, _, _ = self._setup(tmp_path)
+
+        resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace"},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == {
+            "message": "Failed to install pack 'unknown'",
+            "errors": ["Marketplace installs require a pack name"],
+        }
+
     def test_uninstall_pack(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="removable")
         pack_reg.discover()
 
@@ -174,12 +232,12 @@ class TestPackRoutesWithRegistry:
         assert resp.status_code == 204
 
     def test_uninstall_not_found(self, tmp_path: Path) -> None:
-        client, _, _ = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         resp = client.delete("/v1/packs/ghost")
         assert resp.status_code == 404
 
     def test_enable_pack(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="enableable")
         pack_reg.discover()
 
@@ -191,12 +249,12 @@ class TestPackRoutesWithRegistry:
         assert data["pack_name"] == "enableable"
 
     def test_enable_not_installed(self, tmp_path: Path) -> None:
-        client, _, _ = self._setup(tmp_path)
+        client, _, _, _ = self._setup(tmp_path)
         resp = client.post("/v1/packs/ghost/enable")
         assert resp.status_code == 404
 
     def test_disable_pack(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="disableable")
         pack_reg.discover()
         pack_reg.enable("disableable", "test-tenant")
@@ -207,7 +265,7 @@ class TestPackRoutesWithRegistry:
         assert data["action"] == "disabled"
 
     def test_search_packs(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="kubernetes-ops")
         _write_pack(packs_dir, name="data-analysis")
         pack_reg.discover()
@@ -219,7 +277,7 @@ class TestPackRoutesWithRegistry:
         assert data["results"][0]["name"] == "kubernetes-ops"
 
     def test_list_enabled_packs(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="enabled-pack")
         pack_reg.discover()
         pack_reg.enable("enabled-pack", "test-tenant")
@@ -231,7 +289,7 @@ class TestPackRoutesWithRegistry:
         assert data["tenant_id"] == "test-tenant"
 
     def test_sync_pack(self, tmp_path: Path) -> None:
-        client, pack_reg, packs_dir = self._setup(tmp_path)
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         _write_pack(packs_dir, name="syncable")
         pack_reg.discover()
 
