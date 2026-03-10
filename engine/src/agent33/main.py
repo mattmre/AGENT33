@@ -595,6 +595,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         workflow_count=len(synthetic_environment_service.list_workflows()),
     )
 
+    configured_multimodal_service = multimodal.get_multimodal_service()
+    configured_multimodal_service.configure_voice_runtime(
+        enabled=settings.voice_daemon_enabled,
+        transport=settings.voice_daemon_transport,
+        url=settings.voice_daemon_url,
+        api_key=settings.voice_daemon_api_key.get_secret_value(),
+        api_secret=settings.voice_daemon_api_secret.get_secret_value(),
+        room_prefix=settings.voice_daemon_room_prefix,
+        max_sessions=settings.voice_daemon_max_sessions,
+    )
+    app.state.multimodal_service = configured_multimodal_service
+    logger.info(
+        "voice_runtime_configured",
+        enabled=settings.voice_daemon_enabled,
+        transport=settings.voice_daemon_transport,
+        room_prefix=settings.voice_daemon_room_prefix,
+    )
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -613,6 +631,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("agent33_stopping")
 
     workflows.set_ws_manager(None)
+
+    shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
+    if shutdown_multimodal_service is not None:
+        await shutdown_multimodal_service.shutdown_voice_sessions()
+        logger.info("voice_runtime_shutdown")
 
     _plugin_reg: Any = getattr(app.state, "plugin_registry", None)
     if _plugin_reg is not None:

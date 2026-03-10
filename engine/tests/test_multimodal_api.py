@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 
 from agent33.api.routes.multimodal import _service
 from agent33.main import app
-from agent33.multimodal.models import ModalityType, MultimodalPolicy, RequestState
+from agent33.multimodal.models import (
+    ModalityType,
+    MultimodalPolicy,
+    RequestState,
+    VoiceSessionState,
+)
 from agent33.security.auth import create_access_token
 
 
@@ -18,10 +23,23 @@ def reset_multimodal_service() -> None:
     _service._requests.clear()
     _service._results.clear()
     _service._policies.clear()
+    _service._voice_sessions.clear()
+    _service._voice_daemons.clear()
+    _service.configure_voice_runtime(
+        enabled=True,
+        transport="stub",
+        url="",
+        api_key="",
+        api_secret="",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+    )
     yield
     _service._requests.clear()
     _service._results.clear()
     _service._policies.clear()
+    _service._voice_sessions.clear()
+    _service._voice_daemons.clear()
 
 
 def _client(scopes: list[str], *, tenant_id: str = "tenant-a") -> TestClient:
@@ -369,3 +387,203 @@ async def test_service_policy_and_lifecycle_contracts() -> None:
     assert request.state == RequestState.PENDING
     request = await _service.execute_request(request.id, tenant_id="tenant-a")
     assert request.state == RequestState.COMPLETED
+
+
+def test_start_voice_session_returns_active_stub_session(writer_client: TestClient) -> None:
+    response = writer_client.post(
+        "/v1/multimodal/voice/sessions",
+        json={"requested_by": "operator"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["state"] == "active"
+    assert payload["transport"] == "stub"
+    assert payload["daemon_health"] is True
+    assert payload["requested_by"] == "operator"
+    assert payload["room_name"].startswith("agent33-voice-tenant-a-session-")
+
+
+def test_list_voice_sessions_is_tenant_scoped(
+    writer_client: TestClient, tenant_b_writer: TestClient
+) -> None:
+    session_a = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_b = tenant_b_writer.post("/v1/multimodal/voice/sessions", json={})
+
+    tenant_a_items = writer_client.get("/v1/multimodal/voice/sessions").json()
+    tenant_b_items = tenant_b_writer.get("/v1/multimodal/voice/sessions").json()
+
+    assert session_a.status_code == 201
+    assert session_b.status_code == 201
+    assert len(tenant_a_items) == 1
+    assert len(tenant_b_items) == 1
+    assert tenant_a_items[0]["tenant_id"] == "tenant-a"
+    assert tenant_b_items[0]["tenant_id"] == "tenant-b"
+
+
+def test_admin_can_list_voice_sessions_across_tenants(
+    writer_client: TestClient,
+    tenant_b_writer: TestClient,
+    admin_client: TestClient,
+) -> None:
+    writer_client.post("/v1/multimodal/voice/sessions", json={})
+    tenant_b_writer.post("/v1/multimodal/voice/sessions", json={})
+
+    response = admin_client.get("/v1/multimodal/voice/sessions")
+
+    assert response.status_code == 200
+    assert {item["tenant_id"] for item in response.json()} == {"tenant-a", "tenant-b"}
+
+
+def test_voice_session_routes_reject_authenticated_user_without_tenant_context(
+    writer_client: TestClient,
+) -> None:
+    tenantless_client = _client(["multimodal:read", "multimodal:write"], tenant_id="")
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+
+    start_response = tenantless_client.post("/v1/multimodal/voice/sessions", json={})
+    list_response = tenantless_client.get("/v1/multimodal/voice/sessions")
+    detail_response = tenantless_client.get(f"/v1/multimodal/voice/sessions/{session_id}")
+    health_response = tenantless_client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+    stop_response = tenantless_client.post(f"/v1/multimodal/voice/sessions/{session_id}/stop")
+
+    assert start_response.status_code == 403
+    assert start_response.json()["detail"] == "Tenant context required for authenticated principal"
+    assert list_response.status_code == 403
+    assert list_response.json()["detail"] == "Tenant context required for authenticated principal"
+    assert detail_response.status_code == 403
+    assert (
+        detail_response.json()["detail"] == "Tenant context required for authenticated principal"
+    )
+    assert health_response.status_code == 403
+    assert (
+        health_response.json()["detail"] == "Tenant context required for authenticated principal"
+    )
+    assert stop_response.status_code == 403
+    assert stop_response.json()["detail"] == "Tenant context required for authenticated principal"
+
+
+def test_voice_session_sanitizes_room_name_components() -> None:
+    unsafe_tenant_client = _client(
+        ["multimodal:read", "multimodal:write"],
+        tenant_id="Tenant / Blue",
+    )
+    response = unsafe_tenant_client.post(
+        "/v1/multimodal/voice/sessions",
+        json={"room_name": "Launch Room!!!"},
+    )
+
+    assert response.status_code == 201
+    room_name = response.json()["room_name"]
+    assert room_name.startswith("agent33-voice-tenant-blue-launch-room-")
+    assert "!" not in room_name
+    assert "/" not in room_name
+
+
+def test_voice_session_health_and_stop_flow(writer_client: TestClient) -> None:
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+
+    health_response = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+    stop_response = writer_client.post(f"/v1/multimodal/voice/sessions/{session_id}/stop")
+
+    assert health_response.status_code == 200
+    assert health_response.json()["healthy"] is True
+    assert stop_response.status_code == 200
+    assert stop_response.json()["state"] == "stopped"
+
+
+def test_voice_session_reads_do_not_mutate_stored_updated_at(writer_client: TestClient) -> None:
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+    original_updated_at = _service._voice_sessions[session_id].updated_at
+
+    detail_response = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}")
+    health_response = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+
+    assert detail_response.status_code == 200
+    assert health_response.status_code == 200
+    assert _service._voice_sessions[session_id].updated_at == original_updated_at
+
+
+def test_voice_session_enforces_concurrency_policy(writer_client: TestClient) -> None:
+    writer_client.post(
+        "/v1/multimodal/tenants/tenant-a/policy",
+        json={"max_voice_concurrent_sessions": 1},
+    )
+
+    first = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    second = writer_client.post("/v1/multimodal/voice/sessions", json={})
+
+    assert first.status_code == 201
+    assert second.status_code == 400
+    assert "voice session limit exceeded" in second.json()["detail"]
+
+
+def test_voice_session_route_returns_503_when_runtime_disabled(writer_client: TestClient) -> None:
+    _service.configure_voice_runtime(
+        enabled=False,
+        transport="stub",
+        url="",
+        api_key="",
+        api_secret="",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+    )
+
+    response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+
+    assert response.status_code == 503
+    assert "disabled" in response.json()["detail"]
+
+
+def test_voice_session_route_redacts_runtime_start_errors(writer_client: TestClient) -> None:
+    class _FailingVoiceDaemon:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def start(self) -> None:
+            raise RuntimeError("raw secret failure from provider")
+
+        async def stop(self) -> None:
+            return None
+
+        def health_check(self) -> bool:
+            return False
+
+        def snapshot(self) -> dict[str, object]:
+            return {}
+
+    _service.configure_voice_runtime(
+        enabled=True,
+        transport="stub",
+        url="",
+        api_key="",
+        api_secret="",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+        daemon_factory=_FailingVoiceDaemon,
+    )
+
+    response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "voice runtime could not start session"
+    failed_session = next(iter(_service._voice_sessions.values()))
+    assert failed_session.state == VoiceSessionState.FAILED
+    assert failed_session.last_error == "voice runtime could not start session"
+
+
+def test_voice_session_detail_is_tenant_scoped(
+    writer_client: TestClient, tenant_b_writer: TestClient
+) -> None:
+    create_response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+    session_id = create_response.json()["id"]
+
+    allowed = writer_client.get(f"/v1/multimodal/voice/sessions/{session_id}")
+    denied = tenant_b_writer.get(f"/v1/multimodal/voice/sessions/{session_id}")
+
+    assert allowed.status_code == 200
+    assert allowed.json()["state"] == VoiceSessionState.ACTIVE
+    assert denied.status_code == 404

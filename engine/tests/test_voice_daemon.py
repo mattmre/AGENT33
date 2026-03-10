@@ -103,3 +103,42 @@ async def test_synthesize_speech_empty_text(daemon: LiveVoiceDaemon) -> None:
     await daemon.start()
     result = await daemon.synthesize_speech("")
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_process_audio_chunk_requires_active_daemon(daemon: LiveVoiceDaemon) -> None:
+    with pytest.raises(RuntimeError, match="not active"):
+        await daemon.process_audio_chunk(b"\x00")
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_requires_active_daemon(daemon: LiveVoiceDaemon) -> None:
+    with pytest.raises(RuntimeError, match="not active"):
+        await daemon.synthesize_speech("hello")
+
+
+@pytest.mark.asyncio
+async def test_livekit_transport_raises_dependency_gap() -> None:
+    daemon = LiveVoiceDaemon(
+        room_name="livekit-room",
+        url="wss://livekit.example.com",
+        api_key="livekit-key",
+        api_secret="livekit-secret",
+        transport="livekit",
+    )
+    with pytest.raises(RuntimeError, match="livekit-agents"):
+        await daemon.start()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_tracks_stub_runtime_state(daemon: LiveVoiceDaemon) -> None:
+    await daemon.start()
+    await daemon.process_audio_chunk(b"\x00\x01")
+    await daemon.synthesize_speech("hello")
+
+    snapshot = daemon.snapshot()
+
+    assert snapshot["active"] is True
+    assert snapshot["transport"] == "stub"
+    assert snapshot["processed_chunks"] == 1
+    assert snapshot["synthesized_utterances"] == 1

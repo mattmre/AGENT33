@@ -90,6 +90,7 @@ curl -X POST http://localhost:8000/v1/workflows/hello-flow/execute \
 For the live workflow execution and review surfaces added on the Phase 25-27 stack, use the dedicated guide:
 
 - [`phase25-26-live-review-walkthrough.md`](phase25-26-live-review-walkthrough.md)
+- [`operator-improvement-cycle-and-jupyter.md`](operator-improvement-cycle-and-jupyter.md)
 
 ## 3. Memory Search and Session Queries
 
