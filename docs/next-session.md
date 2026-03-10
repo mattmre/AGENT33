@@ -1,18 +1,21 @@
 # Next Session Briefing
 
-Last updated: 2026-03-10T00:00:01Z
+Last updated: 2026-03-10T00:28:08Z
 
 ## Current State
 
-- `main` now includes the Session 64/65 review-and-merge wave:
-  - PR `#163` — frontend Docker build-context fix for canonical workflow presets
-  - PR `#157` — A5/A6 bundle-scoped comparative evaluation
-  - PR `#160` — Phase 30 invoke/stream routing telemetry correlation
-  - PR `#161` — Phase 31 backup/restore validation hardening
-  - PR `#158` — Phase 32 cross-service tenant verification foundation
-  - PR `#162` — Phase 33 pack marketplace integration
-- The Session 64 review queue is now cleared; PR `#159` remains the wrap/handoff docs slice.
-- `docs/next-session.md` has been refreshed after the merge wave so the next operator starts from the real `main` baseline instead of the stale review stack.
+- The active open PR queue on March 10, 2026 is:
+  - `#157` Add bundle-scoped comparative evaluation
+  - `#158` Harden tenant verification across routes
+  - `#159` Refresh session handoff after PR wave
+  - `#160` Correlate effort routing telemetry across invoke modes
+  - `#161` Harden learning backup restore validation
+  - `#162` `feat(phase33): add pack marketplace integration`
+  - `#163` Fix frontend Docker build context for workflow presets
+  - `#164` `docs(session64): add operator guide for wizard and docker kernels`
+  - `#165` `feat(phase35): add tenant-scoped voice daemon runtime`
+- The original seven-item Session 64 priority queue is now fully implemented and packaged into reviewable PR slices.
+- The remaining work before choosing the next roadmap wave is review, merge ordering, and a post-merge handoff refresh.
 
 ## Validation Snapshot
 
@@ -20,47 +23,51 @@ Last updated: 2026-03-10T00:00:01Z
   - `npm run build` passed
   - `docker compose build frontend` passed
 - PR `#157`
-  - comparative review-fix suite passed (`36 passed`)
-  - targeted `mypy`, `ruff check`, and `ruff format --check` passed
+  - comparative route + bundle evaluation suite passed
+  - targeted `ruff check`, `ruff format --check`, and `mypy` passed
 - PR `#158`
-  - improvements + learning + observability + multimodal suite passed (`208 passed`)
-  - targeted `mypy`, `ruff check`, and `ruff format --check` passed
+  - improvements + learning + observability + multimodal route suite passed
+  - targeted `ruff check`, `ruff format --check`, and `mypy` passed
 - PR `#160`
-  - effort-routing telemetry suite passed (`43 passed`)
-  - targeted `mypy`, `ruff check`, and `ruff format --check` passed
+  - effort-routing telemetry suite passed
+  - targeted `ruff check`, `ruff format --check`, and `mypy` passed
 - PR `#161`
-  - learning backup/restore suite passed (`48 passed`)
-  - targeted `mypy`, `ruff check`, and `ruff format --check` passed
+  - learning backup/restore suite passed
+  - targeted `ruff check`, `ruff format --check`, and `mypy` passed
 - PR `#162`
-  - marketplace route + registry suite passed (`61 passed`)
-  - targeted `mypy`, `ruff check`, and `ruff format --check` passed
+  - marketplace route + registry suite passed
+  - targeted `ruff check`, `ruff format --check`, and `mypy` passed
+- PR `#165`
+  - `pytest` on `test_voice_daemon.py` + `test_multimodal_api.py` passed
+  - targeted `ruff check` passed
+  - targeted `mypy` passed
+  - frontend `vitest`, `tsc --noEmit`, and `vite build` passed
+- PR `#164`
+  - docs path/link sanity check passed for all newly referenced docs and workflow templates
 
 ## Next Priorities
 
-1. Phase 35 voice daemon implementation and policy tuning.
-2. Refresh user-facing docs for the merged wizard, workflow presets, Docker kernel flow, comparative evaluation, tenant hardening, and marketplace surfaces.
-3. Continue late-phase refinement and verification work from `docs/phases/README.md`.
-4. Prefer worktree-local `engine/.venv` environments for future long-lived worktrees; use `PYTHONPATH=<active-worktree>\engine\src` only as a fallback.
+1. Merge PR `#163` first so the shared frontend build blocker is removed from the rest of the stack.
+2. Review and merge PRs `#157`, `#158`, `#160`, `#161`, and `#162`.
+3. Review and merge PR `#165` for the Phase 35 voice runtime.
+4. Review and merge PR `#164` for the operator docs refresh.
+5. Refresh PR `#159` again after the merge wave lands so `docs/next-session.md` reflects the true `main` baseline.
+6. Once the queue is merged, re-evaluate the next roadmap wave from `docs/phases/README.md` instead of assuming the older pre-merge priority list still applies.
 
 ## Notes
 
-- The root checkout remained dirty/stale during the merge wave; all review fixes and merge rehearsal work were executed from isolated worktrees.
-- The system Python environment can still import `agent33` from another editable worktree. Prefer a worktree-local venv to avoid validating the wrong branch.
-- Frontend Docker builds that need canonical assets under `core/` must use the repository root as the build context, not `frontend/` alone.
+- The root checkout remained dirty/stale during this wave; implementation work continued from isolated worktrees only.
+- Preferred backend validation path remains a worktree-local `engine/.venv`. If you cannot do that, set `PYTHONPATH=<active-worktree>\\engine\\src` so Python imports the correct checkout.
+- Fresh frontend worktrees may not have local dev dependencies installed. Run `npm install` in that worktree before `npm run test`, `npm run lint`, or `npm run build`.
+- Phase 35 now has a real tenant-scoped voice session control plane on `stub` transport. `livekit` transport remains an explicit dependency gap until `livekit-agents` is added.
+- Frontend builds that import canonical workflow YAML from `core/` must use the repository root as the Docker build context.
 
 ## Key Paths
 
 - Session 64 log: `docs/sessions/session-64-2026-03-09.md`
 - Session 65 log: `docs/sessions/session-65-2026-03-09.md`
-- Session 65 build-fix research:
-  `docs/research/session65-frontend-docker-build-context-fix.md`
-- A5/A6 design:
-  `docs/research/session64-a5-a6-bundle-comparative-evaluation-design.md`
-- Phase 30 design:
-  `docs/research/session64-phase30-production-trace-tuning.md`
-- Phase 31 design:
-  `docs/research/session64-phase31-backup-restore-validation-matrix.md`
-- Phase 32 design:
-  `docs/research/session64-phase32-cross-service-tenant-verification.md`
-- Phase 33 design:
-  `docs/research/session64-phase33-marketplace-integration.md`
+- Session 66 log: `docs/sessions/session-66-2026-03-10.md`
+- Phase 35 runtime research: `docs/research/session64-phase35-live-voice-runtime.md`
+- Phase 35 runbook: `docs/operators/voice-daemon-runbook.md`
+- Operator docs refresh note: `docs/research/session64-docs-refresh-operator-guides.md`
+- Operator guide: `docs/operator-improvement-cycle-and-jupyter.md`
