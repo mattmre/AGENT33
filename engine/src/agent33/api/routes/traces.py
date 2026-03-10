@@ -9,6 +9,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from agent33.api.routes.tenant_access import require_tenant_context, tenant_filter_for_request
 from agent33.observability.failure import FailureCategory, FailureSeverity
 from agent33.observability.trace_collector import TraceCollector, TraceNotFoundError
 from agent33.observability.trace_models import ActionStatus, TraceStatus
@@ -86,10 +87,12 @@ class TraceSummary(BaseModel):
 
 
 def _get_tenant_id(request: Request) -> str:
-    user = getattr(request.state, "user", None)
-    if user is not None:
-        return getattr(user, "tenant_id", "")
-    return ""
+    tenant_id, _ = require_tenant_context(request)
+    return tenant_id
+
+
+def _tenant_filter(request: Request) -> str | None:
+    return tenant_filter_for_request(request)
 
 
 # ---------------------------------------------------------------------------
@@ -121,10 +124,9 @@ async def list_traces(
     limit: int = 100,
 ) -> list[TraceSummary]:
     """List traces with optional filters."""
-    tenant_id = _get_tenant_id(request)
     status_filter = TraceStatus(status) if status else None
     traces = _collector.list_traces(
-        tenant_id=tenant_id if tenant_id else None,
+        tenant_id=_tenant_filter(request),
         status=status_filter,
         task_id=task_id,
         limit=limit,
@@ -143,17 +145,17 @@ async def list_traces(
 
 
 @router.get("/{trace_id}", dependencies=[require_scope("workflows:read")])
-async def get_trace(trace_id: str) -> dict[str, Any]:
+async def get_trace(trace_id: str, request: Request) -> dict[str, Any]:
     """Get a trace record by ID."""
     try:
-        trace = _collector.get_trace(trace_id)
+        trace = _collector.get_trace_for_tenant(trace_id, tenant_id=_tenant_filter(request))
     except TraceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return trace.model_dump(mode="json")
 
 
 @router.post("/{trace_id}/actions", dependencies=[require_scope("tools:execute")])
-async def add_action(trace_id: str, body: AddActionRequest) -> dict[str, Any]:
+async def add_action(trace_id: str, body: AddActionRequest, request: Request) -> dict[str, Any]:
     """Add an action to a trace step."""
     try:
         action = _collector.add_action(
@@ -166,6 +168,7 @@ async def add_action(trace_id: str, body: AddActionRequest) -> dict[str, Any]:
             exit_code=body.exit_code,
             duration_ms=body.duration_ms,
             status=body.status,
+            tenant_id=_tenant_filter(request),
         )
     except TraceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -173,7 +176,9 @@ async def add_action(trace_id: str, body: AddActionRequest) -> dict[str, Any]:
 
 
 @router.post("/{trace_id}/complete", dependencies=[require_scope("tools:execute")])
-async def complete_trace(trace_id: str, body: CompleteTraceRequest) -> dict[str, Any]:
+async def complete_trace(
+    trace_id: str, body: CompleteTraceRequest, request: Request
+) -> dict[str, Any]:
     """Mark a trace as completed."""
     try:
         trace = _collector.complete_trace(
@@ -181,6 +186,7 @@ async def complete_trace(trace_id: str, body: CompleteTraceRequest) -> dict[str,
             status=body.status,
             failure_code=body.failure_code,
             failure_message=body.failure_message,
+            tenant_id=_tenant_filter(request),
         )
     except TraceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -201,15 +207,21 @@ async def complete_trace(trace_id: str, body: CompleteTraceRequest) -> dict[str,
     status_code=201,
     dependencies=[require_scope("tools:execute")],
 )
-async def record_failure(trace_id: str, body: RecordFailureRequest) -> dict[str, Any]:
+async def record_failure(
+    trace_id: str, body: RecordFailureRequest, request: Request
+) -> dict[str, Any]:
     """Record a failure against a trace."""
-    failure = _collector.record_failure(
-        trace_id=trace_id,
-        message=body.message,
-        category=body.category,
-        severity=body.severity,
-        subcode=body.subcode,
-    )
+    try:
+        failure = _collector.record_failure(
+            trace_id=trace_id,
+            message=body.message,
+            category=body.category,
+            severity=body.severity,
+            subcode=body.subcode,
+            tenant_id=_tenant_filter(request),
+        )
+    except TraceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {
         "failure_id": failure.failure_id,
         "category": failure.classification.category.value,
@@ -222,9 +234,17 @@ async def record_failure(trace_id: str, body: RecordFailureRequest) -> dict[str,
 )
 async def list_failures(
     trace_id: str,
+    request: Request,
     category: str | None = None,
 ) -> list[dict[str, Any]]:
     """List failures for a trace."""
     cat_filter = FailureCategory(category) if category else None
-    failures = _collector.list_failures(trace_id=trace_id, category=cat_filter)
+    try:
+        failures = _collector.list_failures(
+            trace_id=trace_id,
+            category=cat_filter,
+            tenant_id=_tenant_filter(request),
+        )
+    except TraceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [f.model_dump(mode="json") for f in failures]
