@@ -71,6 +71,15 @@ class ApproveRequest(BaseModel):
     conditions: list[str] = Field(default_factory=list)
 
 
+class ApproveWithRationaleRequest(BaseModel):
+    approver_id: str
+    decision: str  # "approved" | "changes_requested" | "escalated" | "deferred"
+    rationale: str = ""
+    modification_summary: str = ""
+    conditions: list[str] = Field(default_factory=list)
+    linked_intake_id: str | None = None
+
+
 class ReviewSummary(BaseModel):
     id: str
     task_id: str
@@ -281,6 +290,44 @@ async def approve_review(review_id: str, body: ApproveRequest) -> dict[str, Any]
         "state": record.state.value,
         "approved_by": record.final_signoff.approved_by,
         "approval_type": record.final_signoff.approval_type,
+    }
+
+
+@router.post(
+    "/{review_id}/approve-with-rationale",
+    dependencies=[require_scope("workflows:write")],
+)
+async def approve_with_rationale(
+    review_id: str, body: ApproveWithRationaleRequest
+) -> dict[str, Any]:
+    """Record a structured approval decision with rationale and conditions."""
+    valid_decisions = {"approved", "changes_requested", "escalated", "deferred"}
+    if body.decision not in valid_decisions:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid decision '{body.decision}'. "
+            f"Must be one of: {sorted(valid_decisions)}",
+        )
+    try:
+        record = _service.approve_with_rationale(
+            review_id,
+            approver_id=body.approver_id,
+            decision=body.decision,
+            rationale=body.rationale,
+            modification_summary=body.modification_summary,
+            conditions=body.conditions or None,
+            linked_intake_id=body.linked_intake_id,
+        )
+    except ReviewNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ReviewStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "id": record.id,
+        "state": record.state.value,
+        "decision": body.decision,
+        "approved_by": record.final_signoff.approved_by,
+        "rationale": record.final_signoff.rationale,
     }
 
 

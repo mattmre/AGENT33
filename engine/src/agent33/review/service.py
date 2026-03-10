@@ -277,6 +277,67 @@ class ReviewService:
         )
         return record
 
+    def approve_with_rationale(
+        self,
+        review_id: str,
+        approver_id: str,
+        decision: str,
+        rationale: str = "",
+        modification_summary: str = "",
+        conditions: list[str] | None = None,
+        linked_intake_id: str | None = None,
+    ) -> ReviewRecord:
+        """Record a structured approval decision with rationale.
+
+        Supports ``approved``, ``changes_requested``, ``escalated``, and
+        ``deferred`` decisions. The review must be in APPROVED state.
+        For ``changes_requested`` and ``deferred``, the review transitions
+        to the corresponding state; for ``approved``, it stays in APPROVED
+        (the caller should then call ``merge``).
+        """
+        record = self.get(review_id)
+
+        if record.state != SignoffState.APPROVED:
+            raise ReviewStateError(
+                f"Cannot apply rationale approval in state {record.state.value}"
+            )
+
+        # Determine approval type
+        if record.l2_review.decision is not None:
+            if record.l2_review.reviewer_id == "HUMAN":
+                approval_type = "l1_l2_human"
+            else:
+                approval_type = "l1_l2_agent"
+        else:
+            approval_type = "l1_only"
+
+        record.final_signoff = FinalSignoff(
+            approved_by=approver_id,
+            approved_at=datetime.now(UTC),
+            approval_type=approval_type,
+            conditions=conditions or [],
+            rationale=rationale,
+            modification_summary=modification_summary,
+            linked_intake_id=linked_intake_id,
+        )
+
+        # Apply state transition based on decision
+        if decision == "changes_requested":
+            self._transition(record, SignoffState.CHANGES_REQUESTED)
+        elif decision == "deferred":
+            self._transition(record, SignoffState.DEFERRED)
+        else:
+            # "approved" and "escalated" keep the record in APPROVED state
+            record.touch()
+
+        logger.info(
+            "review_approved_with_rationale id=%s by=%s decision=%s",
+            review_id,
+            approver_id,
+            decision,
+        )
+        return record
+
     def merge(self, review_id: str) -> ReviewRecord:
         """Mark a review as MERGED (final state)."""
         record = self.get(review_id)

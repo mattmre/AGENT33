@@ -46,6 +46,7 @@ from agent33.api.routes import (
     visualizations,
     webhooks,
     workflow_sse,
+    workflow_templates,
     workflow_ws,
     workflows,
 )
@@ -625,6 +626,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("training_store_init_failed", exc_info=True)
 
+    # -- Template catalog --------------------------------------------------
+    from agent33.workflows.template_catalog import TemplateCatalog
+
+    _template_dir = Path(settings.agent_definitions_dir).parent / "..core"
+    # Resolve the core/workflows directory relative to the engine root
+    _core_workflows_dir = Path(settings.agent_definitions_dir).parent.parent / "core" / "workflows"
+    if not _core_workflows_dir.is_dir():
+        # Fallback: try relative to CWD
+        _core_workflows_dir = Path("core/workflows")
+    template_catalog = TemplateCatalog(_core_workflows_dir)
+    template_catalog.refresh()
+    app.state.template_catalog = template_catalog
+    workflow_templates.set_template_catalog(template_catalog)
+    logger.info(
+        "template_catalog_initialized",
+        count=len(template_catalog.list_templates()),
+        path=str(_core_workflows_dir),
+    )
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
@@ -825,4 +845,5 @@ app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
 app.include_router(workflow_sse.router)
+app.include_router(workflow_templates.router)
 app.include_router(workflow_ws.router)
