@@ -1,21 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-03-10T00:28:08Z
+Last updated: 2026-03-10T01:11:55Z
 
 ## Current State
 
-- The active open PR queue on March 10, 2026 is:
-  - `#157` Add bundle-scoped comparative evaluation
-  - `#158` Harden tenant verification across routes
-  - `#159` Refresh session handoff after PR wave
-  - `#160` Correlate effort routing telemetry across invoke modes
-  - `#161` Harden learning backup restore validation
-  - `#162` `feat(phase33): add pack marketplace integration`
-  - `#163` Fix frontend Docker build context for workflow presets
-  - `#164` `docs(session64): add operator guide for wizard and docker kernels`
-  - `#165` `feat(phase35): add tenant-scoped voice daemon runtime`
-- The original seven-item Session 64 priority queue is now fully implemented and packaged into reviewable PR slices.
-- The remaining work before choosing the next roadmap wave is review, merge ordering, and a post-merge handoff refresh.
+- PRs `#157` through `#165` are now merged on `main`, including the Phase 35 voice runtime and
+  the operator docs refresh.
+- PR `#159` is intentionally the last remaining open PR from this wave so the handoff snapshot can
+  land after the functional/code PR queue has settled.
+- Once this wrap PR lands, the review-fix/merge wave is complete and the next step is to choose the
+  next roadmap track from the refreshed `main` baseline.
 
 ## Validation Snapshot
 
@@ -40,6 +34,7 @@ Last updated: 2026-03-10T00:28:08Z
 - PR `#165`
   - `pytest` on `test_voice_daemon.py` + `test_multimodal_api.py` passed
   - targeted `ruff check` passed
+  - targeted `ruff format --check` passed
   - targeted `mypy` passed
   - frontend `vitest`, `tsc --noEmit`, and `vite build` passed
 - PR `#164`
@@ -47,12 +42,11 @@ Last updated: 2026-03-10T00:28:08Z
 
 ## Next Priorities
 
-1. Merge PR `#163` first so the shared frontend build blocker is removed from the rest of the stack.
-2. Review and merge PRs `#157`, `#158`, `#160`, `#161`, and `#162`.
-3. Review and merge PR `#165` for the Phase 35 voice runtime.
-4. Review and merge PR `#164` for the operator docs refresh.
-5. Refresh PR `#159` again after the merge wave lands so `docs/next-session.md` reflects the true `main` baseline.
-6. Once the queue is merged, re-evaluate the next roadmap wave from `docs/phases/README.md` instead of assuming the older pre-merge priority list still applies.
+1. Merge PR `#159` so the handoff docs match the settled `main` baseline instead of the earlier
+   pre-merge queue snapshot.
+2. Re-evaluate the next roadmap wave from `docs/phases/README.md` and the active parity roadmaps
+   rather than assuming the older pre-merge priority list still applies.
+3. Verify post-merge branch health on `main` and then resume from the updated queue.
 
 ## Notes
 
@@ -61,6 +55,7 @@ Last updated: 2026-03-10T00:28:08Z
 - Fresh frontend worktrees may not have local dev dependencies installed. Run `npm install` in that worktree before `npm run test`, `npm run lint`, or `npm run build`.
 - Phase 35 now has a real tenant-scoped voice session control plane on `stub` transport. `livekit` transport remains an explicit dependency gap until `livekit-agents` is added.
 - Frontend builds that import canonical workflow YAML from `core/` must use the repository root as the Docker build context.
+- The Phase 35 route layer now reuses the shared tenant-context guardrails, so tenantless authenticated callers are rejected while admin operators can still inspect cross-tenant session state when needed.
 
 ## Key Paths
 
