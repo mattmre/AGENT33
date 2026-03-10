@@ -102,24 +102,24 @@ class ComparativeEvaluationService:
     ) -> list[AgentScore]:
         """Validate and record bundle-scoped scores against persisted task IDs."""
         canonical_scores: list[AgentScore] = []
-        invalid_task_ids = sorted(
-            {
-                score.task_id or ""
-                for score in scores
-                if score.task_id is None or score.task_id not in allowed_task_ids
-            }
-        )
+        invalid_task_ids: set[str] = set()
+        for score in scores:
+            task_id = score.task_id
+            if task_id is None:
+                invalid_task_ids.add("<missing>")
+            elif task_id not in allowed_task_ids:
+                invalid_task_ids.add(task_id)
+
         if invalid_task_ids:
-            invalid_summary = ", ".join(task_id or "<missing>" for task_id in invalid_task_ids)
+            invalid_summary = ", ".join(sorted(invalid_task_ids))
             raise ValueError("Unknown bundle task IDs: " + invalid_summary)
 
         for score in scores:
-            if score.task_id is None:
+            task_id = score.task_id
+            if task_id is None:
                 raise ValueError("Unknown bundle task IDs: <missing>")
             canonical_scores.append(
-                score.model_copy(
-                    update={"task_id": self.build_bundle_task_id(bundle_id, score.task_id)}
-                )
+                score.model_copy(update={"task_id": self.build_bundle_task_id(bundle_id, task_id)})
             )
 
         self.record_scores(canonical_scores)
