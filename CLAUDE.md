@@ -38,10 +38,11 @@ agent33 status                                      # health check
 
 When working from a git worktree, prefer a local environment:
 
-```bash
+```powershell
+cd engine
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\Activate.ps1
 ```
 
 This repo has had editable-install drift across sibling worktrees. A local `engine/.venv`
@@ -211,6 +212,7 @@ written. Do not present "X new tests" as evidence of completeness.
 - **Editable Install Drift Across Worktrees:** This environment can have an editable `agent33` install pointing at a different worktree than the branch under test. Preferred fix: create and activate a worktree-local `engine/.venv` and install `-e ".[dev]"` there. Fallback only: set `PYTHONPATH=<active-worktree>\\engine\\src` so pytest and ad-hoc imports execute the code from the current worktree instead of a stale sibling checkout.
 - **Parallel Git Dependencies:** Do not parallelize dependent git commands such as `git add` and `git commit`. They can race each other and leave a pushed branch that exists remotely but does not yet contain the intended commit.
 - **Frontend Docker Build Context:** The frontend now imports canonical workflow YAML from repo-level `core/workflows/...`. Any Docker/Compose build that targets the frontend must use the repo root as the build context and point at `frontend/Dockerfile`; building with `frontend/` as the context breaks Vite raw imports in CI.
+- **Fresh Frontend Worktrees Need Local NPM Install:** A newly created git worktree does not automatically have `frontend/node_modules`. Before running `npm run test`, `npm run lint`, or `npm run build` in a fresh worktree, run `npm install` inside that worktree's `frontend/` directory.
 - **Iterative Routing After Hooks:** In `AgentRuntime.invoke_iterative()`, resolve effort-routing parameters only after pre-hooks run. Hooks can mutate inputs, and routing/model-selection metadata goes stale if `_resolve_execution_parameters()` runs first.
 - **Backup Envelope Versioning:** `LearningStateBackupEnvelope.format_version` must be explicit and validated on restore. Defaulting the field masks malformed backup envelopes and weakens compatibility checks.
 
