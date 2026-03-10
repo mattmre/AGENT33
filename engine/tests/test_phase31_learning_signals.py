@@ -933,6 +933,28 @@ def test_learning_routes_reject_cross_tenant_override_for_authenticated_user(
     assert "Tenant mismatch" in summary_resp.json()["detail"]
 
 
+def test_learning_routes_reject_authenticated_user_without_tenant_context(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    tenantless_client = _tenant_client("")
+
+    create_resp = tenantless_client.post(
+        "/v1/improvements/learning/signals",
+        json={
+            "signal_type": "incident",
+            "severity": "high",
+            "summary": "tenantless attempt",
+        },
+    )
+    assert create_resp.status_code == 403
+    assert "Tenant context required" in create_resp.json()["detail"]
+
+    summary_resp = tenantless_client.get("/v1/improvements/learning/summary")
+    assert summary_resp.status_code == 403
+    assert "Tenant context required" in summary_resp.json()["detail"]
+
+
 def test_trends_route_returns_dimension_report(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):

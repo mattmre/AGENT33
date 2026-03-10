@@ -161,6 +161,33 @@ def test_policy_route_rejects_cross_tenant_write_for_non_admin(
     assert "Tenant mismatch" in response.json()["detail"]
 
 
+def test_create_request_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:read", "multimodal:write"], tenant_id="")
+    response = tenantless_client.post(
+        "/v1/multimodal/requests",
+        json={"modality": "text_to_speech", "input_text": "blocked"},
+    )
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
+def test_list_requests_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:read"], tenant_id="")
+    response = tenantless_client.get("/v1/multimodal/requests")
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
+def test_policy_route_rejects_authenticated_user_without_tenant_context() -> None:
+    tenantless_client = _client(["multimodal:write"], tenant_id="")
+    response = tenantless_client.post(
+        "/v1/multimodal/tenants/tenant-a/policy",
+        json={"max_text_chars": 4},
+    )
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["detail"]
+
+
 def test_policy_route_allows_admin_cross_tenant_write(
     admin_client: TestClient,
     tenant_b_writer: TestClient,

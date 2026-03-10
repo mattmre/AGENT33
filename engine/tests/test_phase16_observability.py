@@ -476,6 +476,28 @@ class TestTraceAPI:
         assert tenant_a.get(f"/v1/traces/{trace_id}").status_code == 200
         assert tenant_b.get(f"/v1/traces/{trace_id}").status_code == 404
 
+    def test_start_trace_rejects_authenticated_user_without_tenant_context(self):
+        tenantless = self._tenant_client("")
+        resp = tenantless.post(
+            "/v1/traces/",
+            json={"task_id": "T-TENANTLESS", "agent_id": "AGT-006"},
+        )
+        assert resp.status_code == 403
+        assert "Tenant context required" in resp.json()["detail"]
+
+    def test_get_trace_rejects_authenticated_user_without_tenant_context(self):
+        tenant_a = self._tenant_client("tenant-a")
+        tenantless = self._tenant_client("")
+        created = tenant_a.post(
+            "/v1/traces/",
+            json={"task_id": "T-TENANTLESS-READ", "agent_id": "AGT-006"},
+        )
+        trace_id = created.json()["trace_id"]
+
+        denied = tenantless.get(f"/v1/traces/{trace_id}")
+        assert denied.status_code == 403
+        assert "Tenant context required" in denied.json()["detail"]
+
     def test_get_trace_not_found(self):
         resp = self.client.get("/v1/traces/TRC-doesnotexist")
         assert resp.status_code == 404

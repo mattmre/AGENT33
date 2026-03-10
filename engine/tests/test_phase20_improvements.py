@@ -577,6 +577,15 @@ class TestImprovementAPI:
         assert resp.status_code == 403
         assert "Tenant mismatch" in resp.json()["detail"]
 
+    def test_submit_intake_rejects_authenticated_user_without_tenant_context(self):
+        tenantless_client = _tenant_client("")
+        resp = tenantless_client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenantless auth"},
+        )
+        assert resp.status_code == 403
+        assert "Tenant context required" in resp.json()["detail"]
+
     def test_list_intakes(self, client: TestClient):
         client.post(
             "/v1/improvements/intakes",
@@ -725,6 +734,20 @@ class TestImprovementAPI:
 
         assert allowed.status_code == 200
         assert denied.status_code == 404
+
+    def test_get_intake_rejects_authenticated_user_without_tenant_context(
+        self, client: TestClient
+    ):
+        created = client.post(
+            "/v1/improvements/intakes",
+            json={"title": "Tenant-protected intake"},
+        )
+        intake_id = created.json()["intake_id"]
+        tenantless_client = _tenant_client("")
+
+        denied = tenantless_client.get(f"/v1/improvements/intakes/{intake_id}")
+        assert denied.status_code == 403
+        assert "Tenant context required" in denied.json()["detail"]
 
     def test_get_intake_not_found(self, client: TestClient):
         resp = client.get("/v1/improvements/intakes/nonexistent")

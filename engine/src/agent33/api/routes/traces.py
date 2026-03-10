@@ -9,10 +9,11 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from agent33.api.routes.tenant_access import require_tenant_context, tenant_filter_for_request
 from agent33.observability.failure import FailureCategory, FailureSeverity
 from agent33.observability.trace_collector import TraceCollector, TraceNotFoundError
 from agent33.observability.trace_models import ActionStatus, TraceStatus
-from agent33.security.permissions import check_permission, require_scope
+from agent33.security.permissions import require_scope
 
 logger = structlog.get_logger()
 
@@ -86,21 +87,12 @@ class TraceSummary(BaseModel):
 
 
 def _get_tenant_id(request: Request) -> str:
-    user = getattr(request.state, "user", None)
-    if user is not None:
-        return getattr(user, "tenant_id", "")
-    return ""
+    tenant_id, _ = require_tenant_context(request)
+    return tenant_id
 
 
 def _tenant_filter(request: Request) -> str | None:
-    user = getattr(request.state, "user", None)
-    if user is None:
-        return None
-    scopes = list(getattr(user, "scopes", []))
-    if check_permission("admin", scopes):
-        return None
-    tenant_id = getattr(user, "tenant_id", "")
-    return tenant_id or None
+    return tenant_filter_for_request(request)
 
 
 # ---------------------------------------------------------------------------
@@ -132,10 +124,9 @@ async def list_traces(
     limit: int = 100,
 ) -> list[TraceSummary]:
     """List traces with optional filters."""
-    tenant_id = _get_tenant_id(request)
     status_filter = TraceStatus(status) if status else None
     traces = _collector.list_traces(
-        tenant_id=tenant_id if tenant_id else None,
+        tenant_id=_tenant_filter(request),
         status=status_filter,
         task_id=task_id,
         limit=limit,

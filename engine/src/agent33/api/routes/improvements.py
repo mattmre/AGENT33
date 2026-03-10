@@ -1,11 +1,12 @@
 """REST endpoints for continuous improvement, research intake, and lessons learned."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from agent33.api.routes.tenant_access import require_tenant_context
 from agent33.config import settings
 from agent33.improvement.models import (
     ChecklistPeriod,
@@ -223,10 +224,26 @@ def _ensure_learning_enabled() -> None:
 
 
 def _request_tenant_context(request: Request) -> tuple[str, list[str]]:
-    user = getattr(request.state, "user", None)
-    if user is None:
-        return "", []
-    return getattr(user, "tenant_id", ""), list(getattr(user, "scopes", []))
+    tenant_id, scopes = require_tenant_context(request)
+    return tenant_id, scopes
+
+
+@overload
+def _resolve_tenant_id(
+    request: Request,
+    requested_tenant_id: str | None,
+    *,
+    default: str,
+) -> str: ...
+
+
+@overload
+def _resolve_tenant_id(
+    request: Request,
+    requested_tenant_id: str | None,
+    *,
+    default: str | None = None,
+) -> str | None: ...
 
 
 def _resolve_tenant_id(
