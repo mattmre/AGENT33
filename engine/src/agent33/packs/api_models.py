@@ -65,7 +65,7 @@ class InstallRequest(BaseModel):
     )
     name: str = Field(
         default="",
-        description="Pack name (for marketplace, not yet supported)",
+        description="Pack name for marketplace lookup",
     )
     version: str = Field(
         default="",
@@ -108,3 +108,45 @@ class PackSearchResult(BaseModel):
     author: str = ""
     tags: list[str] = Field(default_factory=list)
     match_score: float = 0.0
+
+
+class MarketplacePackVersionInfo(BaseModel):
+    """Marketplace version metadata."""
+
+    version: str
+    description: str = ""
+    author: str = ""
+    tags: list[str] = Field(default_factory=list)
+    category: str = ""
+    skills_count: int = 0
+
+
+class MarketplacePackSummary(BaseModel):
+    """Marketplace pack summary for listing/search."""
+
+    name: str
+    description: str = ""
+    author: str = ""
+    tags: list[str] = Field(default_factory=list)
+    category: str = ""
+    latest_version: str
+    versions_count: int = 0
+
+
+class MarketplacePackDetail(BaseModel):
+    """Marketplace pack detail with all available versions."""
+
+    name: str
+    description: str = ""
+    author: str = ""
+    tags: list[str] = Field(default_factory=list)
+    category: str = ""
+    latest_version: str
+    versions: list[MarketplacePackVersionInfo] = Field(default_factory=list)
+
+
+class MarketplaceInstallRequest(BaseModel):
+    """Request body for marketplace installs."""
+
+    name: str = Field(..., min_length=1, description="Marketplace pack name")
+    version: str = Field(default="", description="Target version (empty = latest)")

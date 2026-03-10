@@ -18,6 +18,11 @@ from agent33.packs.conflicts import (
     resolve_conflicts,
 )
 from agent33.packs.manifest import PackManifest
+from agent33.packs.marketplace import (
+    LocalPackMarketplace,
+    MarketplacePackRecord,
+    MarketplacePackVersion,
+)
 from agent33.packs.models import (
     InstalledPack,
     InstallResult,
@@ -41,10 +46,13 @@ __all__ = [
     "ConflictKind",
     "InstalledPack",
     "InstallResult",
+    "LocalPackMarketplace",
     "PackDependency",
     "PackGovernance",
     "PackManifest",
     "PackProvenance",
+    "MarketplacePackRecord",
+    "MarketplacePackVersion",
     "PackSkillEntry",
     "PackSource",
     "PackStatus",
