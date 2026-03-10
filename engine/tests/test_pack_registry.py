@@ -15,6 +15,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from agent33.packs import marketplace as marketplace_module
 from agent33.packs.marketplace import LocalPackMarketplace
 from agent33.packs.models import PackSource
 from agent33.packs.registry import PackRegistry
@@ -174,6 +175,16 @@ class TestPackRegistryInstall:
         assert result.success is False
         assert "not found" in result.errors[0]
 
+    def test_install_marketplace_requires_configured_marketplace(self, tmp_path: Path) -> None:
+        skill_reg = SkillRegistry()
+        pack_reg = PackRegistry(packs_dir=tmp_path / "packs", skill_registry=skill_reg)
+
+        result = pack_reg.install(PackSource(source_type="marketplace", name="cloud-pack"))
+
+        assert result.success is False
+        assert result.pack_name == "cloud-pack"
+        assert result.errors == ["Marketplace registry is not configured"]
+
     def test_install_marketplace_latest_version(self, tmp_path: Path) -> None:
         skill_reg = SkillRegistry()
         marketplace_dir = tmp_path / "marketplace"
@@ -241,6 +252,60 @@ class TestPackRegistryInstall:
         assert result.success is False
         assert result.pack_name == "unknown"
         assert result.errors == ["Marketplace installs require a pack name"]
+
+
+class TestLocalPackMarketplace:
+    """Test the filesystem-backed marketplace catalog."""
+
+    def test_catalog_reads_are_cached_until_refresh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        marketplace_dir = tmp_path / "marketplace"
+        _write_pack(marketplace_dir / "v1", name="alpha-pack", version="1.0.0")
+        _write_pack(marketplace_dir / "v2", name="alpha-pack", version="2.0.0")
+        marketplace = LocalPackMarketplace(marketplace_dir)
+
+        call_count = 0
+        original_loader = marketplace_module.load_pack_manifest
+
+        def _counting_loader(pack_dir: Path):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            return original_loader(pack_dir)
+
+        monkeypatch.setattr(marketplace_module, "load_pack_manifest", _counting_loader)
+
+        assert [pack.name for pack in marketplace.list_packs()] == ["alpha-pack"]
+        assert call_count == 2
+
+        assert [pack.name for pack in marketplace.search("alpha")] == ["alpha-pack"]
+        assert marketplace.get_pack("alpha-pack") is not None
+        assert [item.version for item in marketplace.list_versions("alpha-pack")] == [
+            "2.0.0",
+            "1.0.0",
+        ]
+        assert marketplace.resolve("alpha-pack", "1.0.0") is not None
+        assert call_count == 2
+
+        _write_pack(marketplace_dir / "v3", name="beta-pack", version="1.0.0")
+        assert [pack.name for pack in marketplace.list_packs()] == ["alpha-pack"]
+
+        marketplace.refresh()
+
+        assert [pack.name for pack in marketplace.list_packs()] == ["alpha-pack", "beta-pack"]
+        assert call_count == 5
+
+    def test_invalidate_forces_reload_on_next_read(self, tmp_path: Path) -> None:
+        marketplace_dir = tmp_path / "marketplace"
+        _write_pack(marketplace_dir / "v1", name="alpha-pack", version="1.0.0")
+        marketplace = LocalPackMarketplace(marketplace_dir)
+
+        assert [pack.name for pack in marketplace.list_packs()] == ["alpha-pack"]
+
+        _write_pack(marketplace_dir / "v2", name="beta-pack", version="1.0.0")
+        marketplace.invalidate()
+
+        assert [pack.name for pack in marketplace.list_packs()] == ["alpha-pack", "beta-pack"]
 
 
 class TestPackRegistryUninstall:

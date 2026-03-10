@@ -425,6 +425,11 @@ class PackRegistry:
         return [self._installed[k] for k in sorted(self._installed)]
 
     @property
+    def has_marketplace(self) -> bool:
+        """Return whether marketplace-backed installs are configured."""
+        return self._marketplace is not None
+
+    @property
     def count(self) -> int:
         """Number of installed packs."""
         return len(self._installed)

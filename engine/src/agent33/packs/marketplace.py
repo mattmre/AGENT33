@@ -45,9 +45,10 @@ class LocalPackMarketplace:
     def __init__(self, root_dir: Path) -> None:
         self._root_dir = root_dir
         self._records: dict[str, MarketplacePackRecord] = {}
+        self._catalog_loaded = False
 
-    def refresh(self) -> None:
-        """Rebuild the marketplace catalog from disk."""
+    def _build_records(self) -> dict[str, MarketplacePackRecord]:
+        """Scan the marketplace directory and return the current catalog."""
         grouped: dict[str, list[MarketplacePackVersion]] = {}
         manifest_dirs: set[Path] = set()
         if self._root_dir.is_dir():
@@ -80,7 +81,11 @@ class LocalPackMarketplace:
 
         records: dict[str, MarketplacePackRecord] = {}
         for name, versions in grouped.items():
-            ordered = sorted(versions, key=lambda item: Version.parse(item.version), reverse=True)
+            ordered = sorted(
+                versions,
+                key=lambda item: Version.parse(item.version),
+                reverse=True,
+            )
             latest = ordered[0]
             records[name] = MarketplacePackRecord(
                 name=name,
@@ -92,11 +97,26 @@ class LocalPackMarketplace:
                 versions=ordered,
             )
 
-        self._records = records
+        return records
+
+    def invalidate(self) -> None:
+        """Discard the cached catalog so the next read performs a fresh scan."""
+        self._records = {}
+        self._catalog_loaded = False
+
+    def _ensure_loaded(self) -> None:
+        """Populate the catalog on first use."""
+        if not self._catalog_loaded:
+            self.refresh()
+
+    def refresh(self) -> None:
+        """Rebuild the marketplace catalog from disk."""
+        self._records = self._build_records()
+        self._catalog_loaded = True
 
     def list_packs(self) -> list[MarketplacePackRecord]:
         """List marketplace packs sorted by name."""
-        self.refresh()
+        self._ensure_loaded()
         return [self._records[name] for name in sorted(self._records)]
 
     def search(self, query: str) -> list[MarketplacePackRecord]:
@@ -112,7 +132,7 @@ class LocalPackMarketplace:
 
     def get_pack(self, name: str) -> MarketplacePackRecord | None:
         """Return a single marketplace pack by name."""
-        self.refresh()
+        self._ensure_loaded()
         return self._records.get(name)
 
     def list_versions(self, name: str) -> list[MarketplacePackVersion]:

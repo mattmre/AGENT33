@@ -100,13 +100,23 @@ class TestPackRoutesWithoutRegistry:
 class TestPackRoutesWithRegistry:
     """Test endpoints with a functioning pack registry."""
 
-    def _setup(self, tmp_path: Path) -> tuple[TestClient, PackRegistry, Path, Path]:
+    def _setup(
+        self,
+        tmp_path: Path,
+        *,
+        configure_marketplace: bool = True,
+    ) -> tuple[TestClient, PackRegistry, Path, Path]:
         packs_dir = tmp_path / "packs"
         packs_dir.mkdir()
         marketplace_dir = tmp_path / "marketplace"
         marketplace_dir.mkdir()
         skill_reg = SkillRegistry()
-        pack_reg = PackRegistry(packs_dir=packs_dir, skill_registry=skill_reg)
+        marketplace = LocalPackMarketplace(marketplace_dir) if configure_marketplace else None
+        pack_reg = PackRegistry(
+            packs_dir=packs_dir,
+            skill_registry=skill_reg,
+            marketplace=marketplace,
+        )
         app = _create_test_app(pack_registry=pack_reg)
         client = TestClient(app)
         return client, pack_reg, packs_dir, marketplace_dir
@@ -171,7 +181,6 @@ class TestPackRoutesWithRegistry:
     def test_install_marketplace_pack(self, tmp_path: Path) -> None:
         client, pack_reg, _, marketplace_dir = self._setup(tmp_path)
         _write_pack(marketplace_dir / "v1", name="market-pack")
-        pack_reg._marketplace = LocalPackMarketplace(marketplace_dir)  # noqa: SLF001
 
         resp = client.post(
             "/v1/packs/install",
@@ -183,6 +192,36 @@ class TestPackRoutesWithRegistry:
         assert data["success"] is True
         assert data["pack_name"] == "market-pack"
         assert pack_reg.get("market-pack") is not None
+
+    def test_install_marketplace_pack_requires_configured_marketplace(
+        self, tmp_path: Path
+    ) -> None:
+        client, _, _, _ = self._setup(tmp_path, configure_marketplace=False)
+
+        resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace", "name": "market-pack"},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == {
+            "message": "Failed to install pack 'market-pack'",
+            "errors": ["Marketplace registry is not configured"],
+        }
+
+    def test_install_marketplace_pack_requires_name(self, tmp_path: Path) -> None:
+        client, _, _, _ = self._setup(tmp_path)
+
+        resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace"},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == {
+            "message": "Failed to install pack 'unknown'",
+            "errors": ["Marketplace installs require a pack name"],
+        }
 
     def test_uninstall_pack(self, tmp_path: Path) -> None:
         client, pack_reg, packs_dir, _ = self._setup(tmp_path)

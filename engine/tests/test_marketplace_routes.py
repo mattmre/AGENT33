@@ -46,12 +46,19 @@ def _write_pack(base: Path, *, name: str, version: str) -> Path:
     return pack_dir
 
 
-def _create_test_app(tmp_path: Path, *, configure_marketplace: bool = True) -> TestClient:
+def _create_test_app(
+    tmp_path: Path,
+    *,
+    configure_marketplace: bool = True,
+    configure_registry_marketplace: bool | None = None,
+) -> TestClient:
     """Create a minimal FastAPI app with the marketplace router."""
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
     marketplace_dir = tmp_path / "marketplace"
     marketplace_dir.mkdir()
+    if configure_registry_marketplace is None:
+        configure_registry_marketplace = configure_marketplace
     if configure_marketplace:
         _write_pack(marketplace_dir, name="analytics-pack", version="1.0.0")
         _write_pack(marketplace_dir, name="analytics-pack", version="2.0.0")
@@ -60,12 +67,13 @@ def _create_test_app(tmp_path: Path, *, configure_marketplace: bool = True) -> T
     skill_registry = SkillRegistry()
     app = FastAPI()
     app.include_router(router)
+    marketplace = LocalPackMarketplace(marketplace_dir) if configure_marketplace else None
     if configure_marketplace:
-        app.state.pack_marketplace = LocalPackMarketplace(marketplace_dir)
+        app.state.pack_marketplace = marketplace
     app.state.pack_registry = PackRegistry(
         packs_dir=packs_dir,
         skill_registry=skill_registry,
-        marketplace=getattr(app.state, "pack_marketplace", None),
+        marketplace=marketplace if configure_registry_marketplace else None,
     )
 
     from starlette.middleware.base import BaseHTTPMiddleware
@@ -144,6 +152,23 @@ class TestMarketplaceRoutes:
         self, tmp_path: Path
     ) -> None:
         client = _create_test_app(tmp_path, configure_marketplace=False)
+
+        response = client.post(
+            "/v1/marketplace/install",
+            json={"name": "analytics-pack", "version": "1.0.0"},
+        )
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Marketplace catalog not initialized"
+
+    def test_install_marketplace_pack_requires_marketplace_on_registry(
+        self, tmp_path: Path
+    ) -> None:
+        client = _create_test_app(
+            tmp_path,
+            configure_marketplace=True,
+            configure_registry_marketplace=False,
+        )
 
         response = client.post(
             "/v1/marketplace/install",

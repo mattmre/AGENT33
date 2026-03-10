@@ -141,13 +141,15 @@ async def install_marketplace_pack(
     request: Request,
 ) -> dict[str, Any]:
     """Install a pack from the configured marketplace."""
-    marketplace = _get_pack_marketplace(request)
-    if marketplace is None:
-        raise HTTPException(status_code=503, detail="Marketplace catalog not initialized")
-
     registry = _get_pack_registry(request)
     if registry is None:
         raise HTTPException(status_code=503, detail="Pack registry not initialized")
+    if not getattr(registry, "has_marketplace", False):
+        raise HTTPException(status_code=503, detail="Marketplace catalog not initialized")
+
+    marketplace = _get_pack_marketplace(request)
+    if marketplace is None:
+        raise HTTPException(status_code=503, detail="Marketplace catalog not initialized")
 
     result = registry.install(PackSource(source_type="marketplace", **body.model_dump()))
     response = InstallResponse(
