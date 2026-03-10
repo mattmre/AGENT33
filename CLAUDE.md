@@ -38,10 +38,11 @@ agent33 status                                      # health check
 
 When working from a git worktree, prefer a local environment:
 
-```bash
+```powershell
+cd engine
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\Activate.ps1
 ```
 
 This repo has had editable-install drift across sibling worktrees. A local `engine/.venv`
