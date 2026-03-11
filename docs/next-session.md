@@ -1,51 +1,53 @@
 # Next Session Briefing
 
-Last updated: 2026-03-11 (Session 69 — PR queue continuation)
+Last updated: 2026-03-11 (Session 69 — merge wave completed)
 
 ## Current State
 
-- The Session 59 continuation queue is now reduced to **five open implementation PRs**:
-  - **PR #169** — Phase 44 hooks/session safety follow-ups pushed at `90ae1f1`
-  - **PR #167** — OpenClaw Track 1 operator follow-ups pushed at `6cc8cd8`
-  - **PR #168** — Stage 3 review/approval hardening pushed at `a2844b6`
-  - **PR #170** — Phase 45 MCP fabric runtime wiring and approval-token hardening
-  - **PR #171** — OpenClaw Track 2 tool catalog with tenant-scoped plugin data
-- PRs `#170` and `#171` were created from fully validated branches during Session 69.
-- The root checkout at `D:\GITHUB\AGENT33` remains dirty/shared; continue implementation from dedicated worktrees only.
-- The next session should start from this live PR queue, not from the older pre-validation branch list.
+- The Session 59 continuation implementation queue is now **fully merged to `main`**:
+  - **PR #169** — Phase 44 hooks/session safety follow-ups merged
+  - **PR #167** — OpenClaw Track 1 operator shell merged
+  - **PR #168** — Stage 3 review/approval hardening merged
+  - **PR #170** — Phase 45 MCP fabric runtime wiring and approval-token hardening merged
+  - **PR #171** — OpenClaw Track 2 tool catalog with tenant-scoped plugin data merged
+- PR `#166` remains open only as the wrap/handoff PR and should be refreshed/merged from the merged `main` state, not from the older open-queue snapshot.
+- The root checkout at `D:\GITHUB\AGENT33` remains dirty/shared; if new implementation work starts, create a fresh worktree from current `main`.
+- The next session should start from merged `main`, not from the older PR worktrees.
 
 ## Validation Snapshot
 
 - PR `#169`
   - targeted Phase 44/session/hooks pytest suite passed
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed
+  - targeted `ruff format --check`, `ruff check`, and `mypy` passed before merge
 - PR `#167`
-  - targeted operator pytest suite passed
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed
+  - targeted operator pytest suite passed before merge
+  - after restacking on merged `main`, `python -m pytest --no-cov tests/test_operator_api.py tests/test_operator_service.py tests/test_phase44_session_api.py tests/test_phase44_integration.py -q` passed (`103 passed`)
+  - GitHub check suite reran green before merge
 - PR `#168`
   - backend review pytest suite passed
   - frontend `tsc --noEmit`, targeted `vitest`, and `vite build` passed
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed
+  - targeted `ruff format --check`, `ruff check`, and `mypy` passed before merge
 - PR `#170`
   - `191` focused backend tests passed across HITL approvals, MCP proxy/sync, resources, server wiring, and integration wiring
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed
+  - follow-up CI fix replaced legacy event-loop usage in `tests/test_phase45_mcp_proxy_routes.py`
+  - targeted `ruff format --check`, `ruff check`, and `python -m pytest --no-cov tests/test_phase45_mcp_proxy_routes.py -q` passed before merge
+  - GitHub check suite reran green before merge
 - PR `#171`
-  - backend `pytest --no-cov tests/test_tool_catalog_service.py tests/test_tool_catalog_routes.py -q` passed (`62 passed`)
+  - backend `pytest --no-cov tests/test_tool_catalog_service.py tests/test_tool_catalog_routes.py -q` passed (`62 passed`) during initial PR prep
   - frontend `tsc --noEmit`, `vitest run`, and `vite build` passed (`15` files / `104` tests)
-  - backend `ruff format --check`, `ruff check`, and targeted `mypy` passed
+  - follow-up CI fixes removed leaky `PropertyMock`/stub patterns and made route tests prefer explicit service overrides over stale `app.state`
+  - targeted `ruff format`, `ruff check`, and `python -m pytest --no-cov tests/test_tool_catalog_routes.py tests/test_tool_catalog_service.py -q` passed (`63 passed`) before merge
+  - GitHub check suite reran green before merge
 
 ## Immediate Priorities
 
-1. Review and merge PR `#169` (Phase 44 foundation)
-2. Review and merge PR `#167` (OpenClaw Track 1)
-3. Review and merge PR `#168` (Stage 3 wizard/review hardening)
-4. Review and merge PR `#170` (Phase 45 MCP fabric)
-5. Review and merge PR `#171` (OpenClaw Track 2 tool catalog)
-6. After the merge wave settles, refresh `docs/next-session.md` again from `main` and prune superseded worktrees/stash state
+1. Refresh and merge PR `#166` from the merged `main` state so the handoff matches reality again.
+2. Prune superseded worktrees/branch leftovers from merged PRs `#167` through `#171`.
+3. Start the next implementation wave from a fresh `main`-based worktree.
 
 ## Next Implementation
 
-After the current PR queue is merged, resume the remaining Session 59 follow-ons:
+Now that the current PR queue is merged, resume the remaining Session 59 follow-ons:
 
 1. Phase 46 — dynamic tool catalog / semantic skill resolution
 2. OpenClaw Tracks 3-4 — plugin lifecycle control plane + pack marketplace/provenance
@@ -58,6 +60,7 @@ After the current PR queue is merged, resume the remaining Session 59 follow-ons
 - Frontend builds that import canonical workflow YAML from `core/` must use the repository root as the Docker build context.
 - Phase 35 voice runtime is still `stub` transport only; do not assume `voice_daemon_transport=livekit` works yet.
 - Recent GitHub Copilot Agent workflow failures have been infra noise unless they point to an actual product regression.
+- Tool catalog route tests should use `set_catalog_service()` as the authoritative override; stale `app.state.tool_catalog_service` can otherwise leak across broader test runs.
 
 ## Key Paths
 
