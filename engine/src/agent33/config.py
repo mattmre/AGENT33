@@ -266,6 +266,21 @@ class Settings(BaseSettings):
     comparative_min_population_size: int = 2  # min agents for round-robin
     comparative_confidence_level: float = 0.95  # stat. significance threshold
 
+    # Phase 44: Operator session
+    operator_session_enabled: bool = True
+    operator_session_base_dir: str = ""  # default: ~/.agent33/sessions/
+    operator_session_checkpoint_interval_seconds: float = 60.0
+    operator_session_max_replay_file_mb: int = 50
+    operator_session_max_retained: int = 100
+    operator_session_crash_recovery_enabled: bool = True
+
+    # Phase 44: Script hooks
+    script_hooks_enabled: bool = True
+    script_hooks_project_dir: str = ""  # default: <cwd>/.claude/hooks/
+    script_hooks_user_dir: str = ""  # default: ~/.agent33/hooks/
+    script_hooks_default_timeout_ms: float = 5000.0
+    script_hooks_max_timeout_ms: float = 30000.0
+
     @field_validator(
         "improvement_learning_file_corruption_behavior",
         "improvement_learning_db_corruption_behavior",

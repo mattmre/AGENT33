@@ -223,10 +223,14 @@ class HookRegistry:
         updated = defn.model_copy(update={"enabled": enabled})
         self._definitions[hook_id] = updated
         # Also update the runtime hook instance if present
-        for hooks in self._hooks.values():
-            for h in hooks:
-                if h.name == defn.name and hasattr(h, "_enabled"):
-                    h._enabled = enabled  # noqa: SLF001
+        runtime_event_type = defn.event_type.value
+        for hook in self._hooks.get(runtime_event_type, []):
+            if (
+                hook.name == defn.name
+                and hook.tenant_id == defn.tenant_id
+                and hasattr(hook, "_enabled")
+            ):
+                hook._enabled = enabled  # noqa: SLF001
         return updated
 
     def delete_definition(self, hook_id: str, *, tenant_id: str = "") -> bool:
@@ -241,7 +245,12 @@ class HookRegistry:
             return False
         self._check_tenant_write(tenant_id, defn.tenant_id, "delete", hook_id)
         del self._definitions[hook_id]
-        self.deregister(defn.name)
+        event_type = defn.event_type.value
+        self._hooks[event_type] = [
+            hook
+            for hook in self._hooks.get(event_type, [])
+            if not (hook.name == defn.name and hook.tenant_id == defn.tenant_id)
+        ]
         return True
 
     # ------------------------------------------------------------------

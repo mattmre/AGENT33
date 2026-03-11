@@ -39,6 +39,7 @@ from agent33.api.routes import (
     reasoning,
     releases,
     reviews,
+    sessions,
     synthetic_envs,
     tool_approvals,
     traces,
@@ -419,6 +420,71 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.hook_registry = hook_registry
         logger.info("hook_registry_initialized", hook_count=hook_registry.count())
 
+    # -- Script hook discovery (Phase 44) ----------------------------------
+    script_hook_discovery = None
+    if settings.script_hooks_enabled and hook_registry is not None:
+        from agent33.hooks.script_discovery import ScriptHookDiscovery
+
+        project_hooks = (
+            Path(settings.script_hooks_project_dir)
+            if settings.script_hooks_project_dir.strip()
+            else Path.cwd() / ".claude" / "hooks"
+        )
+        user_hooks = (
+            Path(settings.script_hooks_user_dir)
+            if settings.script_hooks_user_dir.strip()
+            else Path.home() / ".agent33" / "hooks"
+        )
+        script_hook_discovery = ScriptHookDiscovery(
+            hook_registry=hook_registry,
+            project_hooks_dir=project_hooks,
+            user_hooks_dir=user_hooks,
+            default_timeout_ms=settings.script_hooks_default_timeout_ms,
+            max_timeout_ms=settings.script_hooks_max_timeout_ms,
+        )
+        discovered = script_hook_discovery.discover()
+        app.state.script_hook_discovery = script_hook_discovery
+        logger.info("script_hook_discovery_complete", count=discovered)
+
+    # -- Operator session service (Phase 44) -------------------------------
+    operator_session_service = None
+    if settings.operator_session_enabled:
+        from agent33.sessions.service import OperatorSessionService
+        from agent33.sessions.storage import FileSessionStorage
+
+        base_dir = (
+            Path(settings.operator_session_base_dir)
+            if settings.operator_session_base_dir.strip()
+            else Path.home() / ".agent33" / "sessions"
+        )
+        session_storage = FileSessionStorage(
+            base_dir=base_dir,
+            max_replay_file_bytes=settings.operator_session_max_replay_file_mb * 1024 * 1024,
+        )
+        operator_session_service = OperatorSessionService(
+            storage=session_storage,
+            hook_registry=hook_registry,
+            checkpoint_interval_seconds=settings.operator_session_checkpoint_interval_seconds,
+            max_sessions_retained=settings.operator_session_max_retained,
+        )
+        app.state.operator_session_service = operator_session_service
+        sessions.set_session_service(operator_session_service)
+
+        # Crash detection on startup
+        if settings.operator_session_crash_recovery_enabled:
+            try:
+                crashed = await operator_session_service.detect_incomplete_sessions()
+                if crashed:
+                    logger.warning(
+                        "incomplete_sessions_found",
+                        count=len(crashed),
+                        session_ids=[s.session_id for s in crashed],
+                    )
+            except Exception:
+                logger.warning("crash_detection_failed", exc_info=True)
+
+        logger.info("operator_session_service_initialized", base_dir=str(base_dir))
+
     # -- WebSocket manager for workflow events ------------------------------
     from agent33.workflows.ws_manager import WorkflowWSManager
 
@@ -630,6 +696,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Shutdown ----------------------------------------------------------
     logger.info("agent33_stopping")
 
+    # Flush operator sessions before other subsystems shut down
+    _session_svc: Any = getattr(app.state, "operator_session_service", None)
+    if _session_svc is not None:
+        try:
+            await _session_svc.shutdown()
+            logger.info("operator_session_service_shutdown")
+        except Exception:
+            logger.warning("operator_session_service_shutdown_failed", exc_info=True)
+
     workflows.set_ws_manager(None)
 
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
@@ -824,5 +899,6 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(sessions.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_ws.router)
