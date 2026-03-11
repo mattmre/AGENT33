@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 from agent33.tools.catalog import (
     CatalogSearchRequest,
@@ -17,35 +17,36 @@ from agent33.tools.registry_entry import ToolRegistryEntry, ToolStatus
 # ---------------------------------------------------------------------------
 
 
-def _make_tool(name: str, description: str = "A tool") -> MagicMock:
-    """Create a mock Tool object."""
-    tool = MagicMock()
-    type(tool).name = PropertyMock(return_value=name)
-    type(tool).description = PropertyMock(return_value=description)
-    return tool
+class _ToolStub:
+    def __init__(self, name: str, description: str = "A tool") -> None:
+        self.name = name
+        self.description = description
+
+
+class _SchemaToolStub(_ToolStub):
+    def __init__(
+        self,
+        name: str,
+        description: str = "Schema tool",
+        schema: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(name=name, description=description)
+        self.parameters_schema = schema or {"type": "object", "properties": {}}
+
+    async def execute(self, params: dict[str, Any], context: Any) -> None:  # noqa: ARG002
+        return None
+
+
+def _make_tool(name: str, description: str = "A tool") -> Any:
+    """Create a lightweight Tool object."""
+    return _ToolStub(name=name, description=description)
 
 
 def _make_schema_tool(
     name: str, description: str = "Schema tool", schema: dict[str, Any] | None = None
-) -> MagicMock:
-    """Create a mock SchemaAwareTool."""
-    tool = MagicMock()
-    type(tool).name = PropertyMock(return_value=name)
-    type(tool).description = PropertyMock(return_value=description)
-    # Make isinstance(tool, SchemaAwareTool) return True
-    tool.__class__ = type(
-        "FakeSchemaAwareTool",
-        (),
-        {
-            "name": property(lambda self: name),
-            "description": property(lambda self: description),
-            "parameters_schema": property(
-                lambda self: schema or {"type": "object", "properties": {}}
-            ),
-            "execute": lambda self, params, ctx: None,
-        },
-    )
-    return tool
+) -> Any:
+    """Create a lightweight SchemaAwareTool."""
+    return _SchemaToolStub(name=name, description=description, schema=schema)
 
 
 def _make_entry(
@@ -70,7 +71,7 @@ def _make_entry(
 
 
 def _mock_tool_registry(
-    tools: list[MagicMock] | None = None,
+    tools: list[Any] | None = None,
     entries: list[ToolRegistryEntry] | None = None,
 ) -> MagicMock:
     reg = MagicMock()
