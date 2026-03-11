@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,11 +47,8 @@ def anon_client() -> TestClient:
     return TestClient(app)
 
 
-def _make_tool(name: str, description: str = "A tool") -> MagicMock:
-    tool = MagicMock()
-    type(tool).name = PropertyMock(return_value=name)
-    type(tool).description = PropertyMock(return_value=description)
-    return tool
+def _make_tool(name: str, description: str = "A tool") -> Any:
+    return SimpleNamespace(name=name, description=description)
 
 
 def _make_entry(
