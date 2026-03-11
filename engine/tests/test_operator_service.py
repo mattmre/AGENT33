@@ -175,6 +175,7 @@ class TestRunDoctor:
         svc = _build_service()
         result = await svc.run_doctor()
         assert result.timestamp is not None
+        assert result.timestamp.tzinfo is not None
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,14 @@ class TestReset:
         targets = {a.target for a in result.actions}
         assert "agent_registry" in targets
         assert "embedding_cache" not in targets
+
+    async def test_skills_missing_dir_reports_failure(self, tmp_path) -> None:
+        svc = _build_service()
+        svc._settings.skill_definitions_dir = str(tmp_path / "missing-skills")
+        result = await svc.reset([ResetTarget.REGISTRIES])
+        skill_actions = [a for a in result.actions if a.target == "skill_registry"]
+        assert len(skill_actions) == 1
+        assert skill_actions[0].success is False
 
 
 # ---------------------------------------------------------------------------

@@ -395,7 +395,7 @@ class OperatorService:
                     actions.append(
                         ResetAction(
                             target="skill_registry",
-                            success=True,
+                            success=False,
                             detail=f"Skills dir not found: {skills_dir} (nothing to rediscover)",
                         )
                     )

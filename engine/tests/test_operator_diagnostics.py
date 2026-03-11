@@ -9,6 +9,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+from pydantic import SecretStr
+
+import agent33.config as config_module
+from agent33.config import Settings
 from agent33.operator.diagnostics import (
     check_agents,
     check_config,
@@ -246,13 +250,18 @@ class TestCheckPacks:
 
 
 class TestCheckSecurity:
-    async def test_warns_on_default_jwt(self) -> None:
+    async def test_warns_on_default_jwt(self, monkeypatch) -> None:
+        default_jwt_secret = Settings.model_fields["jwt_secret"].default
+        monkeypatch.setattr(
+            config_module.settings,
+            "jwt_secret",
+            SecretStr(default_jwt_secret.get_secret_value()),
+        )
         state = SimpleNamespace()
         result = await check_security(state)
         assert result.id == "DOC-09"
-        # Default test settings use "change-me-in-production"
         assert result.status == CheckStatus.WARNING
-        assert "JWT" in result.message
+        assert "JWT secret" in result.message
         assert result.remediation is not None
 
 
@@ -292,3 +301,17 @@ class TestRunAllChecks:
         for i in range(1, 11):
             expected_id = f"DOC-{i:02d}"
             assert expected_id in ids, f"Missing check {expected_id}"
+
+    async def test_exception_uses_explicit_check_id(self, monkeypatch) -> None:
+        async def broken_check(state: SimpleNamespace) -> CheckStatus:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            "agent33.operator.diagnostics.ALL_CHECKS",
+            [("DOC-99", broken_check)],
+        )
+
+        results = await run_all_checks(SimpleNamespace())
+        assert len(results) == 1
+        assert results[0].id == "DOC-99"
+        assert results[0].status == CheckStatus.ERROR

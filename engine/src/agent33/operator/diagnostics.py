@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent33.operator.models import CheckStatus, DiagnosticCheck
 
 logger = logging.getLogger(__name__)
+
+DiagnosticCheckFn = Callable[[Any], Awaitable[DiagnosticCheck]]
 
 
 async def check_database(app_state: Any) -> DiagnosticCheck:
@@ -305,12 +308,14 @@ async def check_packs(app_state: Any) -> DiagnosticCheck:
 
 async def check_security(app_state: Any) -> DiagnosticCheck:
     """DOC-09: Security configuration (JWT secret, DB credentials)."""
-    from agent33.config import settings
+    from agent33.config import Settings, settings
 
     issues: list[str] = []
     remediations: list[str] = []
+    default_jwt_secret = Settings.model_fields["jwt_secret"].default
+    default_api_secret = Settings.model_fields["api_secret_key"].default
 
-    if settings.jwt_secret.get_secret_value() == "change-me-in-production":
+    if settings.jwt_secret.get_secret_value() == default_jwt_secret.get_secret_value():
         issues.append("JWT secret is using default value")
         remediations.append(
             "Set JWT_SECRET environment variable to a cryptographically random value"
@@ -320,7 +325,7 @@ async def check_security(app_state: Any) -> DiagnosticCheck:
         issues.append("Database credentials are using defaults")
         remediations.append("Set DATABASE_URL with rotated credentials")
 
-    if settings.api_secret_key.get_secret_value() == "change-me-in-production":
+    if settings.api_secret_key.get_secret_value() == default_api_secret.get_secret_value():
         issues.append("API secret key is using default value")
         remediations.append("Set API_SECRET_KEY to a strong random value")
 
@@ -369,24 +374,24 @@ async def check_config(app_state: Any) -> DiagnosticCheck:
     )
 
 
-ALL_CHECKS = [
-    check_database,
-    check_redis,
-    check_nats,
-    check_llm,
-    check_agents,
-    check_skills,
-    check_plugins,
-    check_packs,
-    check_security,
-    check_config,
+ALL_CHECKS: list[tuple[str, DiagnosticCheckFn]] = [
+    ("DOC-01", check_database),
+    ("DOC-02", check_redis),
+    ("DOC-03", check_nats),
+    ("DOC-04", check_llm),
+    ("DOC-05", check_agents),
+    ("DOC-06", check_skills),
+    ("DOC-07", check_plugins),
+    ("DOC-08", check_packs),
+    ("DOC-09", check_security),
+    ("DOC-10", check_config),
 ]
 
 
 async def run_all_checks(app_state: Any) -> list[DiagnosticCheck]:
     """Run every diagnostic check and return results."""
     results: list[DiagnosticCheck] = []
-    for check_fn in ALL_CHECKS:
+    for check_id, check_fn in ALL_CHECKS:
         try:
             result = await check_fn(app_state)
             results.append(result)
@@ -394,7 +399,7 @@ async def run_all_checks(app_state: Any) -> list[DiagnosticCheck]:
             logger.exception("Diagnostic check %s raised unexpectedly", check_fn.__name__)
             results.append(
                 DiagnosticCheck(
-                    id=check_fn.__doc__.split(":")[0] if check_fn.__doc__ else "UNKNOWN",
+                    id=check_id,
                     category="internal",
                     status=CheckStatus.ERROR,
                     message=f"Check raised unexpectedly: {exc}",

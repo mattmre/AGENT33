@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from agent33.operator.models import (
     BackupListResponse,
@@ -16,15 +16,13 @@ from agent33.operator.models import (
     SystemStatus,
     ToolSummaryResponse,
 )
+from agent33.operator.service import OperatorService
 from agent33.security.permissions import require_scope
-
-if TYPE_CHECKING:
-    from agent33.operator.service import OperatorService
 
 router = APIRouter(prefix="/v1/operator", tags=["operator"])
 
 
-def _get_operator_service(request: Request) -> OperatorService:
+def get_operator_service(request: Request) -> OperatorService:
     """Extract the OperatorService from app.state."""
     svc: OperatorService | None = getattr(request.app.state, "operator_service", None)
     if svc is None:
@@ -33,6 +31,9 @@ def _get_operator_service(request: Request) -> OperatorService:
             detail="Operator service not initialized",
         )
     return svc
+
+
+OperatorServiceDependency = Annotated[OperatorService, Depends(get_operator_service)]
 
 
 # ---------------------------------------------------------------------------
@@ -45,9 +46,10 @@ def _get_operator_service(request: Request) -> OperatorService:
     response_model=SystemStatus,
     dependencies=[require_scope("operator:read")],
 )
-async def operator_status(request: Request) -> SystemStatus:
+async def operator_status(
+    svc: OperatorServiceDependency,
+) -> SystemStatus:
     """Aggregated system health, subsystem inventories, and runtime info."""
-    svc = _get_operator_service(request)
     return await svc.get_status()
 
 
@@ -61,9 +63,10 @@ async def operator_status(request: Request) -> SystemStatus:
     response_model=OperatorConfig,
     dependencies=[require_scope("operator:read")],
 )
-async def operator_config(request: Request) -> OperatorConfig:
+async def operator_config(
+    svc: OperatorServiceDependency,
+) -> OperatorConfig:
     """Effective runtime configuration with secrets redacted."""
-    svc = _get_operator_service(request)
     return svc.get_config()
 
 
@@ -77,9 +80,10 @@ async def operator_config(request: Request) -> OperatorConfig:
     response_model=DiagnosticResult,
     dependencies=[require_scope("operator:read")],
 )
-async def operator_doctor(request: Request) -> DiagnosticResult:
+async def operator_doctor(
+    svc: OperatorServiceDependency,
+) -> DiagnosticResult:
     """Run diagnostic checks and return results with severity and remediation."""
-    svc = _get_operator_service(request)
     return await svc.run_doctor()
 
 
@@ -93,9 +97,11 @@ async def operator_doctor(request: Request) -> DiagnosticResult:
     response_model=ResetResult,
     dependencies=[require_scope("operator:write")],
 )
-async def operator_reset(request: Request, body: ResetRequest) -> ResetResult:
+async def operator_reset(
+    svc: OperatorServiceDependency,
+    body: ResetRequest,
+) -> ResetResult:
     """Reset specified operator state (clear caches, re-discover registries)."""
-    svc = _get_operator_service(request)
     return await svc.reset(body.targets)
 
 
@@ -109,9 +115,10 @@ async def operator_reset(request: Request, body: ResetRequest) -> ResetResult:
     response_model=ToolSummaryResponse,
     dependencies=[require_scope("operator:read")],
 )
-async def operator_tools_summary(request: Request) -> ToolSummaryResponse:
+async def operator_tools_summary(
+    svc: OperatorServiceDependency,
+) -> ToolSummaryResponse:
     """Lightweight listing of registered tools."""
-    svc = _get_operator_service(request)
     return svc.get_tools_summary()
 
 
@@ -126,13 +133,12 @@ async def operator_tools_summary(request: Request) -> ToolSummaryResponse:
     dependencies=[require_scope("operator:read")],
 )
 async def operator_sessions(
-    request: Request,
+    svc: OperatorServiceDependency,
     status_filter: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> SessionListResponse:
     """Session catalog (lightweight, full management in Track Phase 8)."""
-    svc = _get_operator_service(request)
     return await svc.get_sessions(
         status_filter=status_filter,
         limit=limit,
@@ -150,7 +156,8 @@ async def operator_sessions(
     response_model=BackupListResponse,
     dependencies=[require_scope("operator:read")],
 )
-async def operator_backups(request: Request) -> BackupListResponse:
+async def operator_backups(
+    svc: OperatorServiceDependency,
+) -> BackupListResponse:
     """Backup catalog (skeleton until Track Phase 6)."""
-    svc = _get_operator_service(request)
     return svc.get_backups()
