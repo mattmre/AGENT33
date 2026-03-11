@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -47,6 +48,10 @@ def client(proxy_manager: ProxyManager) -> TestClient:
     return TestClient(app)
 
 
+def _run(awaitable: Any) -> Any:
+    return asyncio.run(awaitable)
+
+
 class TestListServers:
     """GET /v1/mcp/proxy/servers."""
 
@@ -59,11 +64,7 @@ class TestListServers:
         assert data["healthy"] == 0
 
     def test_with_servers(self, client: TestClient, proxy_manager: ProxyManager) -> None:
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(
-            proxy_manager.add_server(ProxyServerConfig(id="s1", command="echo"))
-        )
+        _run(proxy_manager.add_server(ProxyServerConfig(id="s1", command="echo")))
         resp = client.get("/v1/mcp/proxy/servers")
         assert resp.status_code == 200
         data = resp.json()
@@ -77,11 +78,7 @@ class TestGetServer:
     """GET /v1/mcp/proxy/servers/{server_id}."""
 
     def test_existing_server(self, client: TestClient, proxy_manager: ProxyManager) -> None:
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(
-            proxy_manager.add_server(ProxyServerConfig(id="s1", command="echo"))
-        )
+        _run(proxy_manager.add_server(ProxyServerConfig(id="s1", command="echo")))
         resp = client.get("/v1/mcp/proxy/servers/s1")
         assert resp.status_code == 200
         assert resp.json()["id"] == "s1"
@@ -107,11 +104,7 @@ class TestAddServer:
     def test_add_duplicate_returns_conflict(
         self, client: TestClient, proxy_manager: ProxyManager
     ) -> None:
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(
-            proxy_manager.add_server(ProxyServerConfig(id="dup", command="echo"))
-        )
+        _run(proxy_manager.add_server(ProxyServerConfig(id="dup", command="echo")))
         resp = client.post(
             "/v1/mcp/proxy/servers",
             json={"id": "dup", "command": "echo"},
@@ -123,11 +116,7 @@ class TestRemoveServer:
     """DELETE /v1/mcp/proxy/servers/{server_id}."""
 
     def test_remove_existing(self, client: TestClient, proxy_manager: ProxyManager) -> None:
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(
-            proxy_manager.add_server(ProxyServerConfig(id="rm-me", command="echo"))
-        )
+        _run(proxy_manager.add_server(ProxyServerConfig(id="rm-me", command="echo")))
         resp = client.delete("/v1/mcp/proxy/servers/rm-me")
         assert resp.status_code == 200
         assert resp.json()["status"] == "removed"
@@ -141,11 +130,7 @@ class TestRestartServer:
     """POST /v1/mcp/proxy/servers/{server_id}/restart."""
 
     def test_restart_existing(self, client: TestClient, proxy_manager: ProxyManager) -> None:
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(
-            proxy_manager.add_server(ProxyServerConfig(id="restart-me", command="echo"))
-        )
+        _run(proxy_manager.add_server(ProxyServerConfig(id="restart-me", command="echo")))
         resp = client.post("/v1/mcp/proxy/servers/restart-me/restart")
         assert resp.status_code == 200
         assert resp.json()["state"] == "healthy"
@@ -159,9 +144,7 @@ class TestListProxyTools:
     """GET /v1/mcp/proxy/tools."""
 
     def test_lists_aggregated_tools(self, client: TestClient, proxy_manager: ProxyManager) -> None:
-        import asyncio
-
-        handle = asyncio.get_event_loop().run_until_complete(
+        handle = _run(
             proxy_manager.add_server(ProxyServerConfig(id="fs", command="echo", tool_prefix="fs"))
         )
         handle.register_tools(
