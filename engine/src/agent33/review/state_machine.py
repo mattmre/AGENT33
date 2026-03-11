@@ -36,7 +36,15 @@ _VALID_TRANSITIONS: dict[SignoffState, frozenset[SignoffState]] = {
     ),
     SignoffState.L2_CHANGES_REQUESTED: frozenset({SignoffState.DRAFT}),
     SignoffState.L2_APPROVED: frozenset({SignoffState.APPROVED}),
-    SignoffState.APPROVED: frozenset({SignoffState.MERGED}),
+    SignoffState.APPROVED: frozenset(
+        {
+            SignoffState.MERGED,
+            SignoffState.CHANGES_REQUESTED,
+            SignoffState.DEFERRED,
+        }
+    ),
+    SignoffState.CHANGES_REQUESTED: frozenset({SignoffState.READY}),
+    SignoffState.DEFERRED: frozenset({SignoffState.READY}),
     SignoffState.MERGED: frozenset(),
 }
 

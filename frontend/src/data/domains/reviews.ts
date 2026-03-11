@@ -141,7 +141,6 @@ export const reviewsDomain: DomainConfig = {
       },
       defaultBody: JSON.stringify(
         {
-          approver_id: "release-manager",
           conditions: []
         },
         null,
