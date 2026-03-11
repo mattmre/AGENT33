@@ -31,6 +31,8 @@ from agent33.api.routes import (
     improvements,
     marketplace,
     mcp,
+    mcp_proxy,
+    mcp_sync,
     memory_search,
     multimodal,
     operations_hub,
@@ -278,6 +280,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("model_router_initialized")
 
     # -- Tool registry + governance ----------------------------------------
+    from agent33.security.approval_tokens import ApprovalTokenManager
     from agent33.tools.approvals import ToolApprovalService
     from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
@@ -290,7 +293,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    tool_governance = ToolGovernance(approval_service=tool_approval_service)
+    approval_token_manager = None
+    if settings.approval_token_enabled:
+        approval_token_manager = ApprovalTokenManager(
+            secret=settings.jwt_secret.get_secret_value(),
+            algorithm=settings.jwt_algorithm,
+            default_ttl_seconds=settings.approval_token_ttl_seconds,
+            state_store=orchestration_state_store,
+        )
+    app.state.approval_token_manager = approval_token_manager
+
+    tool_governance = ToolGovernance(
+        approval_service=tool_approval_service,
+        approval_token_manager=approval_token_manager,
+    )
     app.state.tool_governance = tool_governance
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
@@ -429,7 +445,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- MCP bridge / server / transport ------------------------------------
     from agent33.mcp_server.bridge import MCPServiceBridge
+    from agent33.mcp_server.proxy_manager import ProxyManager
+    from agent33.mcp_server.proxy_models import ProxyFleetConfig
     from agent33.mcp_server.server import create_mcp_server
+
+    proxy_config = ProxyFleetConfig()
+    if settings.mcp_proxy_config_path.strip():
+        proxy_config_path = Path(settings.mcp_proxy_config_path)
+        try:
+            if proxy_config_path.exists():
+                proxy_config = ProxyFleetConfig.model_validate_json(
+                    proxy_config_path.read_text(encoding="utf-8")
+                )
+            else:
+                logger.warning("mcp_proxy_config_not_found", path=str(proxy_config_path))
+        except Exception as exc:
+            logger.warning(
+                "mcp_proxy_config_invalid",
+                path=str(proxy_config_path),
+                error=str(exc),
+                exc_info=True,
+            )
+
+    proxy_manager = ProxyManager(
+        config=proxy_config,
+        tool_separator=settings.mcp_proxy_tool_separator,
+    )
+    proxy_manager.set_native_tool_names({tool.name for tool in tool_registry.list_all()})
+    if settings.mcp_proxy_enabled:
+        await proxy_manager.start_all()
+    app.state.proxy_manager = proxy_manager
+    mcp_proxy.set_proxy_manager(proxy_manager)
 
     mcp_bridge = MCPServiceBridge(
         agent_registry=agent_registry,
@@ -438,6 +484,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rag_pipeline=rag_pipeline,
         skill_registry=skill_registry,
         workflow_registry=workflows.get_workflow_registry(),
+        proxy_manager=proxy_manager,
     )
     mcp_server = create_mcp_server(mcp_bridge)
     mcp_transport = None
@@ -649,6 +696,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _training_store is not None:
         await _training_store.close()
 
+    _proxy_manager: Any = getattr(app.state, "proxy_manager", None)
+    if _proxy_manager is not None:
+        await _proxy_manager.stop_all()
+        logger.info("mcp_proxy_manager_stopped")
+
     scheduler = getattr(app.state, "training_scheduler", None)
     if scheduler is not None:
         await scheduler.stop()
@@ -817,6 +869,8 @@ app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(marketplace.router)
 app.include_router(mcp.router)
+app.include_router(mcp_proxy.router)
+app.include_router(mcp_sync.router)
 app.include_router(plugins_routes.router)
 app.include_router(packs.router)
 app.include_router(reasoning.router)

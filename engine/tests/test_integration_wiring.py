@@ -135,6 +135,26 @@ class TestSecurityMiddleware:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_mcp_proxy_router_is_mounted(self, patched_app):
+        """MCP proxy router should be reachable through the main app."""
+        _app, client, _ = patched_app
+        resp = client.get(
+            "/v1/mcp/proxy/health",
+            headers={"Authorization": "Bearer " + _make_test_token()},
+        )
+        assert resp.status_code == 200
+        assert "total" in resp.json()
+
+    def test_mcp_sync_router_is_mounted(self, patched_app):
+        """MCP sync router should be reachable through the main app."""
+        _app, client, _ = patched_app
+        resp = client.get(
+            "/v1/mcp/sync/targets",
+            headers={"Authorization": "Bearer " + _make_test_token()},
+        )
+        assert resp.status_code == 200
+        assert "targets" in resp.json()
+
 
 class TestLifespanState:
     """Verify that lifespan populates app.state with expected attributes."""
@@ -168,6 +188,8 @@ class TestLifespanState:
         assert hasattr(app.state, "mcp_bridge")
         assert hasattr(app.state, "mcp_server")
         assert hasattr(app.state, "mcp_transport")
+        assert hasattr(app.state, "proxy_manager")
+        assert hasattr(app.state, "approval_token_manager")
 
 
 class TestEmbeddingSubsystem:

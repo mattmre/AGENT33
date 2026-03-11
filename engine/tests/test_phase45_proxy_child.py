@@ -219,6 +219,15 @@ class TestChildServerToolExecution:
             await handle.call_tool("dangerous", {})
 
     @pytest.mark.asyncio
+    async def test_call_tool_ask_policy_requires_approval(self) -> None:
+        gov = ProxyServerGovernance(policy="ask")
+        handle = _make_handle(governance=gov)
+        await handle.start()
+        handle.register_tools([ProxyToolDefinition(name="guarded")])
+        with pytest.raises(PermissionError, match="requires explicit approval"):
+            await handle.call_tool("guarded", {})
+
+    @pytest.mark.asyncio
     async def test_call_tool_blocked_raises(self) -> None:
         gov = ProxyServerGovernance(blocked_tools=["blocked_tool"])
         handle = _make_handle(governance=gov)

@@ -15,6 +15,10 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 
+class SyncConfigError(Exception):
+    """Raised when an MCP CLI config cannot be read safely."""
+
+
 class CLITarget(StrEnum):
     """Supported CLI environments for MCP sync."""
 
@@ -76,6 +80,7 @@ class DiffEntry(BaseModel):
     matches: bool = False
     current: dict[str, Any] | None = None
     expected: dict[str, Any] | None = None
+    error: str = ""
 
 
 class PullResult(BaseModel):
@@ -141,7 +146,7 @@ def _read_config(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("sync_config_read_error: path=%s error=%s", path, exc)
-        return {}
+        raise SyncConfigError(f"Unable to read config '{path}': {exc}") from exc
 
 
 def _write_config(path: Path, data: dict[str, Any], backup: bool = True) -> None:
@@ -180,10 +185,30 @@ def push_sync(config: SyncConfig, backup: bool = True) -> list[SyncResult]:
             )
             continue
 
-        data = _read_config(path)
+        try:
+            data = _read_config(path)
+        except SyncConfigError as exc:
+            results.append(
+                SyncResult(
+                    target=target.value,
+                    config_path=str(path),
+                    status="error",
+                    message=str(exc),
+                )
+            )
+            continue
+
         mcp_servers = data.get("mcpServers", {})
-        if not isinstance(mcp_servers, dict):
-            mcp_servers = {}
+        if "mcpServers" in data and not isinstance(mcp_servers, dict):
+            results.append(
+                SyncResult(
+                    target=target.value,
+                    config_path=str(path),
+                    status="error",
+                    message="mcpServers is not a valid object",
+                )
+            )
+            continue
 
         existing = mcp_servers.get(entry_name)
         if existing is not None and not config.force:
@@ -224,7 +249,14 @@ def pull_sync(target: CLITarget) -> PullResult:
             error=f"Cannot resolve config path for {target.value}",
         )
 
-    data = _read_config(path)
+    try:
+        data = _read_config(path)
+    except SyncConfigError as exc:
+        return PullResult(
+            target=target.value,
+            config_path=str(path),
+            error=str(exc),
+        )
     mcp_servers = data.get("mcpServers", {})
     if not isinstance(mcp_servers, dict):
         return PullResult(
@@ -271,8 +303,34 @@ def diff_sync(entry: NormalizedMCPEntry | None = None) -> list[DiffEntry]:
             )
             continue
 
-        data = _read_config(path)
+        try:
+            data = _read_config(path)
+        except SyncConfigError as exc:
+            results.append(
+                DiffEntry(
+                    target=target.value,
+                    config_path=str(path),
+                    present=False,
+                    matches=False,
+                    expected=expected_dict,
+                    error=str(exc),
+                )
+            )
+            continue
         mcp_servers = data.get("mcpServers", {})
+        if "mcpServers" in data and not isinstance(mcp_servers, dict):
+            results.append(
+                DiffEntry(
+                    target=target.value,
+                    config_path=str(path),
+                    present=False,
+                    matches=False,
+                    expected=expected_dict,
+                    error="mcpServers is not a valid object",
+                )
+            )
+            continue
+
         current = mcp_servers.get(entry.name) if isinstance(mcp_servers, dict) else None
 
         results.append(

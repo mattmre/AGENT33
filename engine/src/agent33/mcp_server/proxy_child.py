@@ -193,6 +193,10 @@ class ChildServerHandle:
         gov = self.config.governance
         if gov.policy == "deny":
             raise PermissionError(f"Proxy server '{self.config.id}' has deny policy")
+        if gov.policy == "ask":
+            raise PermissionError(
+                f"Proxy server '{self.config.id}' requires explicit approval before tool execution"
+            )
         if tool_name in gov.blocked_tools:
             raise PermissionError(
                 f"Tool '{tool_name}' is blocked on proxy server '{self.config.id}'"

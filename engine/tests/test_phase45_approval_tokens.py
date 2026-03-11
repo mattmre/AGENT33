@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 import jwt
 import pytest
@@ -12,7 +13,11 @@ from agent33.security.approval_tokens import (
     ApprovalTokenManager,
     ApprovalTokenPayload,
 )
+from agent33.services.orchestration_state import OrchestrationStateStore
 from agent33.tools.approvals import ApprovalReason, ApprovalStatus, ToolApprovalRequest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _make_approved_request(
@@ -180,6 +185,19 @@ class TestApprovalTokenValidation:
         mgr.validate(token, "shell", args, tenant_id="tenant-001")
         mgr.validate(token, "shell", args, tenant_id="tenant-001")
 
+    def test_validate_without_consuming_allows_explicit_consume_later(self) -> None:
+        mgr = ApprovalTokenManager(secret="test-secret")
+        approval = _make_approved_request()
+        args = {"command": "ls"}
+        token = mgr.issue(approval, arguments=args, one_time=True)
+
+        payload = mgr.validate(token, "shell", args, tenant_id="tenant-001", consume=False)
+        assert payload.jti == approval.approval_id
+
+        assert mgr.consume(payload.jti) is True
+        with pytest.raises(ApprovalTokenError, match="already been consumed"):
+            mgr.validate(token, "shell", args, tenant_id="tenant-001")
+
     def test_wrong_secret_rejected(self) -> None:
         mgr = ApprovalTokenManager(secret="correct-secret")
         approval = _make_approved_request()
@@ -233,6 +251,32 @@ class TestApprovalTokenRevocation:
         assert mgr.is_revoked("APR-abc") is False
         mgr.revoke("APR-abc")
         assert mgr.is_revoked("APR-abc") is True
+
+    def test_consumed_tokens_persist_across_manager_instances(self, tmp_path: Path) -> None:
+        store = OrchestrationStateStore(str(tmp_path / "approval-state.json"))
+        approval = _make_approved_request()
+        args = {"command": "ls"}
+
+        mgr = ApprovalTokenManager(secret="test-secret", state_store=store)
+        token = mgr.issue(approval, arguments=args)
+        mgr.validate(token, "shell", args, tenant_id="tenant-001")
+
+        reloaded = ApprovalTokenManager(secret="test-secret", state_store=store)
+        with pytest.raises(ApprovalTokenError, match="already been consumed"):
+            reloaded.validate(token, "shell", args, tenant_id="tenant-001")
+
+    def test_revoked_tokens_persist_across_manager_instances(self, tmp_path: Path) -> None:
+        store = OrchestrationStateStore(str(tmp_path / "approval-state.json"))
+        approval = _make_approved_request()
+        args = {"command": "ls"}
+
+        mgr = ApprovalTokenManager(secret="test-secret", state_store=store)
+        token = mgr.issue(approval, arguments=args)
+        mgr.revoke(approval.approval_id)
+
+        reloaded = ApprovalTokenManager(secret="test-secret", state_store=store)
+        with pytest.raises(ApprovalTokenError, match="revoked"):
+            reloaded.validate(token, "shell", args, tenant_id="tenant-001")
 
 
 class TestApprovalTokenPruning:

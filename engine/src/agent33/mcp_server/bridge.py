@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agent33.agents.registry import AgentRegistry
     from agent33.llm.router import ModelRouter
+    from agent33.mcp_server.proxy_manager import ProxyManager
     from agent33.memory.rag import RAGPipeline
     from agent33.skills.registry import SkillRegistry
     from agent33.tools.registry import ToolRegistry
@@ -27,6 +28,7 @@ class MCPServiceBridge:
         rag_pipeline: RAGPipeline | None = None,
         skill_registry: SkillRegistry | None = None,
         workflow_registry: dict[str, WorkflowDefinition] | None = None,
+        proxy_manager: ProxyManager | None = None,
     ) -> None:
         self.agent_registry = agent_registry
         self.tool_registry = tool_registry
@@ -34,6 +36,7 @@ class MCPServiceBridge:
         self.rag_pipeline = rag_pipeline
         self.skill_registry = skill_registry
         self.workflow_registry = workflow_registry
+        self.proxy_manager = proxy_manager
 
     def get_system_status(self) -> dict[str, Any]:
         """Return system status summary."""
@@ -43,6 +46,9 @@ class MCPServiceBridge:
             "tools_loaded": (len(self.tool_registry.list_all()) if self.tool_registry else 0),
             "skills_loaded": (len(self.skill_registry.list_all()) if self.skill_registry else 0),
             "workflows_loaded": len(self.workflow_registry or {}),
+            "proxy_servers_loaded": (
+                len(self.proxy_manager.list_servers()) if self.proxy_manager is not None else 0
+            ),
             "model_router_ready": self.model_router is not None,
             "rag_pipeline_ready": self.rag_pipeline is not None,
         }

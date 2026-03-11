@@ -148,6 +148,18 @@ class TestPushSync:
             results = push_sync(config, backup=False)
         assert results[0].status == "error"
 
+    def test_push_invalid_existing_config_returns_error(self, tmp_config_dir: Path) -> None:
+        config_path = tmp_config_dir / ".claude.json"
+        config_path.write_text("{", encoding="utf-8")
+
+        with patch("agent33.mcp_server.sync._get_config_path", return_value=config_path):
+            config = SyncConfig(targets=[CLITarget.CLAUDE_CODE])
+            results = push_sync(config, backup=False)
+
+        assert results[0].status == "error"
+        assert "Unable to read config" in results[0].message
+        assert config_path.read_text(encoding="utf-8") == "{"
+
 
 class TestPullSync:
     """Pull: read MCP servers from CLI config."""
@@ -190,6 +202,15 @@ class TestPullSync:
             result = pull_sync(CLITarget.GEMINI)
         assert result.error != ""
 
+    def test_pull_invalid_config_reports_error(self, tmp_config_dir: Path) -> None:
+        config_path = tmp_config_dir / ".claude.json"
+        config_path.write_text("{", encoding="utf-8")
+
+        with patch("agent33.mcp_server.sync._get_config_path", return_value=config_path):
+            result = pull_sync(CLITarget.CLAUDE_CODE)
+
+        assert "Unable to read config" in result.error
+
 
 class TestDiffSync:
     """Diff: compare AGENT-33 registration across CLIs."""
@@ -230,6 +251,17 @@ class TestDiffSync:
         assert claude_results[0].present is True
         assert claude_results[0].matches is False
         assert claude_results[0].current == {"command": "old-cmd"}
+
+    def test_diff_invalid_config_reports_error(self, tmp_config_dir: Path) -> None:
+        config_path = tmp_config_dir / ".claude.json"
+        config_path.write_text("{", encoding="utf-8")
+
+        with patch("agent33.mcp_server.sync._get_config_path", return_value=config_path):
+            results = diff_sync()
+
+        claude_results = [r for r in results if r.target == "claude_code"]
+        assert claude_results[0].error != ""
+        assert claude_results[0].present is False
 
 
 class TestTargetPaths:
