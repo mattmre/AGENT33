@@ -179,6 +179,20 @@ class Settings(BaseSettings):
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
     mcp_auto_discover: bool = True
+
+    # MCP Proxy (Phase 45)
+    mcp_proxy_config_path: str = ""  # path to mcp.config.json
+    mcp_proxy_enabled: bool = False
+    mcp_proxy_tool_separator: str = "__"
+    mcp_proxy_health_check_enabled: bool = True
+
+    # Approval Tokens (Phase 45)
+    approval_token_ttl_seconds: int = 300  # 5 minutes
+    approval_token_enabled: bool = True
+    approval_token_one_time_default: bool = True
+
+    # MCP Sync (Phase 45)
+    mcp_sync_backup_enabled: bool = True  # create .bak before writing CLI configs
     connector_boundary_enabled: bool = False
     connector_policy_pack: str = "default"
     connector_governance_blocked_connectors: str = ""  # comma-separated
@@ -265,6 +279,21 @@ class Settings(BaseSettings):
     comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates
     comparative_min_population_size: int = 2  # min agents for round-robin
     comparative_confidence_level: float = 0.95  # stat. significance threshold
+
+    # Phase 44: Operator session
+    operator_session_enabled: bool = True
+    operator_session_base_dir: str = ""  # default: ~/.agent33/sessions/
+    operator_session_checkpoint_interval_seconds: float = 60.0
+    operator_session_max_replay_file_mb: int = 50
+    operator_session_max_retained: int = 100
+    operator_session_crash_recovery_enabled: bool = True
+
+    # Phase 44: Script hooks
+    script_hooks_enabled: bool = True
+    script_hooks_project_dir: str = ""  # default: <cwd>/.claude/hooks/
+    script_hooks_user_dir: str = ""  # default: ~/.agent33/hooks/
+    script_hooks_default_timeout_ms: float = 5000.0
+    script_hooks_max_timeout_ms: float = 30000.0
 
     @field_validator(
         "improvement_learning_file_corruption_behavior",

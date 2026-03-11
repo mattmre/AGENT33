@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -31,14 +32,18 @@ from agent33.api.routes import (
     improvements,
     marketplace,
     mcp,
+    mcp_proxy,
+    mcp_sync,
     memory_search,
     multimodal,
     operations_hub,
+    operator,
     outcomes,
     packs,
     reasoning,
     releases,
     reviews,
+    sessions,
     synthetic_envs,
     tool_approvals,
     traces,
@@ -46,11 +51,15 @@ from agent33.api.routes import (
     visualizations,
     webhooks,
     workflow_sse,
+    workflow_templates,
     workflow_ws,
     workflows,
 )
 from agent33.api.routes import (
     plugins as plugins_routes,
+)
+from agent33.api.routes import (
+    tool_catalog as tool_catalog_routes,
 )
 from agent33.config import settings
 from agent33.hooks.middleware import HookMiddleware
@@ -74,6 +83,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     All resources are stored on ``app.state`` for access by route handlers.
     """
     logger.info("agent33_starting")
+
+    # Record startup time for uptime calculation
+    _start_time = time.time()
 
     # Warn about insecure defaults
     secret_warnings = settings.check_production_secrets()
@@ -278,6 +290,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("model_router_initialized")
 
     # -- Tool registry + governance ----------------------------------------
+    from agent33.security.approval_tokens import ApprovalTokenManager
     from agent33.tools.approvals import ToolApprovalService
     from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
@@ -290,7 +303,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    tool_governance = ToolGovernance(approval_service=tool_approval_service)
+    approval_token_manager = None
+    if settings.approval_token_enabled:
+        approval_token_manager = ApprovalTokenManager(
+            secret=settings.jwt_secret.get_secret_value(),
+            algorithm=settings.jwt_algorithm,
+            default_ttl_seconds=settings.approval_token_ttl_seconds,
+            state_store=orchestration_state_store,
+        )
+    app.state.approval_token_manager = approval_token_manager
+
+    tool_governance = ToolGovernance(
+        approval_service=tool_approval_service,
+        approval_token_manager=approval_token_manager,
+    )
     app.state.tool_governance = tool_governance
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
@@ -419,6 +445,71 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.hook_registry = hook_registry
         logger.info("hook_registry_initialized", hook_count=hook_registry.count())
 
+    # -- Script hook discovery (Phase 44) ----------------------------------
+    script_hook_discovery = None
+    if settings.script_hooks_enabled and hook_registry is not None:
+        from agent33.hooks.script_discovery import ScriptHookDiscovery
+
+        project_hooks = (
+            Path(settings.script_hooks_project_dir)
+            if settings.script_hooks_project_dir.strip()
+            else Path.cwd() / ".claude" / "hooks"
+        )
+        user_hooks = (
+            Path(settings.script_hooks_user_dir)
+            if settings.script_hooks_user_dir.strip()
+            else Path.home() / ".agent33" / "hooks"
+        )
+        script_hook_discovery = ScriptHookDiscovery(
+            hook_registry=hook_registry,
+            project_hooks_dir=project_hooks,
+            user_hooks_dir=user_hooks,
+            default_timeout_ms=settings.script_hooks_default_timeout_ms,
+            max_timeout_ms=settings.script_hooks_max_timeout_ms,
+        )
+        discovered = script_hook_discovery.discover()
+        app.state.script_hook_discovery = script_hook_discovery
+        logger.info("script_hook_discovery_complete", count=discovered)
+
+    # -- Operator session service (Phase 44) -------------------------------
+    operator_session_service = None
+    if settings.operator_session_enabled:
+        from agent33.sessions.service import OperatorSessionService
+        from agent33.sessions.storage import FileSessionStorage
+
+        base_dir = (
+            Path(settings.operator_session_base_dir)
+            if settings.operator_session_base_dir.strip()
+            else Path.home() / ".agent33" / "sessions"
+        )
+        session_storage = FileSessionStorage(
+            base_dir=base_dir,
+            max_replay_file_bytes=settings.operator_session_max_replay_file_mb * 1024 * 1024,
+        )
+        operator_session_service = OperatorSessionService(
+            storage=session_storage,
+            hook_registry=hook_registry,
+            checkpoint_interval_seconds=settings.operator_session_checkpoint_interval_seconds,
+            max_sessions_retained=settings.operator_session_max_retained,
+        )
+        app.state.operator_session_service = operator_session_service
+        sessions.set_session_service(operator_session_service)
+
+        # Crash detection on startup
+        if settings.operator_session_crash_recovery_enabled:
+            try:
+                crashed = await operator_session_service.detect_incomplete_sessions()
+                if crashed:
+                    logger.warning(
+                        "incomplete_sessions_found",
+                        count=len(crashed),
+                        session_ids=[s.session_id for s in crashed],
+                    )
+            except Exception:
+                logger.warning("crash_detection_failed", exc_info=True)
+
+        logger.info("operator_session_service_initialized", base_dir=str(base_dir))
+
     # -- WebSocket manager for workflow events ------------------------------
     from agent33.workflows.ws_manager import WorkflowWSManager
 
@@ -429,7 +520,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- MCP bridge / server / transport ------------------------------------
     from agent33.mcp_server.bridge import MCPServiceBridge
+    from agent33.mcp_server.proxy_manager import ProxyManager
+    from agent33.mcp_server.proxy_models import ProxyFleetConfig
     from agent33.mcp_server.server import create_mcp_server
+
+    proxy_config = ProxyFleetConfig()
+    if settings.mcp_proxy_config_path.strip():
+        proxy_config_path = Path(settings.mcp_proxy_config_path)
+        try:
+            if proxy_config_path.exists():
+                proxy_config = ProxyFleetConfig.model_validate_json(
+                    proxy_config_path.read_text(encoding="utf-8")
+                )
+            else:
+                logger.warning("mcp_proxy_config_not_found", path=str(proxy_config_path))
+        except Exception as exc:
+            logger.warning(
+                "mcp_proxy_config_invalid",
+                path=str(proxy_config_path),
+                error=str(exc),
+                exc_info=True,
+            )
+
+    proxy_manager = ProxyManager(
+        config=proxy_config,
+        tool_separator=settings.mcp_proxy_tool_separator,
+    )
+    proxy_manager.set_native_tool_names({tool.name for tool in tool_registry.list_all()})
+    if settings.mcp_proxy_enabled:
+        await proxy_manager.start_all()
+    app.state.proxy_manager = proxy_manager
+    mcp_proxy.set_proxy_manager(proxy_manager)
 
     mcp_bridge = MCPServiceBridge(
         agent_registry=agent_registry,
@@ -438,6 +559,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rag_pipeline=rag_pipeline,
         skill_registry=skill_registry,
         workflow_registry=workflows.get_workflow_registry(),
+        proxy_manager=proxy_manager,
     )
     mcp_server = create_mcp_server(mcp_bridge)
     mcp_transport = None
@@ -518,6 +640,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.debug("plugin_definitions_dir_not_found", path=str(plugins_dir))
 
     app.state.plugin_registry = plugin_registry
+
+    # -- Tool catalog service (aggregates all tool sources) -----------------
+    from agent33.tools.catalog import ToolCatalogService
+
+    tool_catalog_service = ToolCatalogService(
+        tool_registry=tool_registry,
+        skill_registry=skill_registry,
+        plugin_registry=plugin_registry,
+    )
+    app.state.tool_catalog_service = tool_catalog_service
+    tool_catalog_routes.set_catalog_service(tool_catalog_service)
+    logger.info("tool_catalog_service_initialized")
 
     # -- Agent-workflow bridge (with subsystem injection) -------------------
     _register_agent_runtime_bridge(
@@ -613,6 +747,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         room_prefix=settings.voice_daemon_room_prefix,
     )
 
+    # --- Operator control plane ---
+    from agent33.operator.service import OperatorService
+
+    operator_service = OperatorService(
+        app_state=app.state,
+        settings=settings,
+        start_time=_start_time,
+    )
+    app.state.operator_service = operator_service
+    logger.info("operator_service_initialized")
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -625,10 +770,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("training_store_init_failed", exc_info=True)
 
+    # -- Template catalog --------------------------------------------------
+    from agent33.workflows.template_catalog import TemplateCatalog
+
+    _template_dir = Path(settings.agent_definitions_dir).parent / "..core"
+    # Resolve the core/workflows directory relative to the engine root
+    _core_workflows_dir = Path(settings.agent_definitions_dir).parent.parent / "core" / "workflows"
+    if not _core_workflows_dir.is_dir():
+        # Fallback: try relative to CWD
+        _core_workflows_dir = Path("core/workflows")
+    template_catalog = TemplateCatalog(_core_workflows_dir)
+    template_catalog.refresh()
+    app.state.template_catalog = template_catalog
+    workflow_templates.set_template_catalog(template_catalog)
+    logger.info(
+        "template_catalog_initialized",
+        count=len(template_catalog.list_templates()),
+        path=str(_core_workflows_dir),
+    )
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
     logger.info("agent33_stopping")
+
+    # Flush operator sessions before other subsystems shut down
+    _session_svc: Any = getattr(app.state, "operator_session_service", None)
+    if _session_svc is not None:
+        try:
+            await _session_svc.shutdown()
+            logger.info("operator_session_service_shutdown")
+        except Exception:
+            logger.warning("operator_session_service_shutdown_failed", exc_info=True)
 
     workflows.set_ws_manager(None)
 
@@ -648,6 +821,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _training_store: Any = getattr(app.state, "training_store", None)
     if _training_store is not None:
         await _training_store.close()
+
+    _proxy_manager: Any = getattr(app.state, "proxy_manager", None)
+    if _proxy_manager is not None:
+        await _proxy_manager.stop_all()
+        logger.info("mcp_proxy_manager_stopped")
 
     scheduler = getattr(app.state, "training_scheduler", None)
     if scheduler is not None:
@@ -817,6 +995,8 @@ app.include_router(multimodal.router)
 app.include_router(operations_hub.router)
 app.include_router(marketplace.router)
 app.include_router(mcp.router)
+app.include_router(mcp_proxy.router)
+app.include_router(mcp_sync.router)
 app.include_router(plugins_routes.router)
 app.include_router(packs.router)
 app.include_router(reasoning.router)
@@ -824,5 +1004,9 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(sessions.router)
+app.include_router(operator.router)
 app.include_router(workflow_sse.router)
+app.include_router(workflow_templates.router)
 app.include_router(workflow_ws.router)
+app.include_router(tool_catalog_routes.router)

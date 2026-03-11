@@ -234,9 +234,9 @@ class TestDiscovery:
     def test_discover_builtins(self) -> None:
         reg = HookRegistry()
         count = reg.discover_builtins()
-        # 8 event types * 2 builtins (metrics + audit) = 16
-        assert count == 16
-        assert reg.count() == 16
+        expected = len(HookEventType) * 2
+        assert count == expected
+        assert reg.count() == expected
 
     def test_resolve_handler_valid(self) -> None:
         reg = HookRegistry()

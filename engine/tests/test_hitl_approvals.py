@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agent33.agents.definition import AutonomyLevel
+from agent33.security.approval_tokens import ApprovalTokenManager
 from agent33.tools.approvals import ApprovalReason, ApprovalStatus, ToolApprovalService
 from agent33.tools.base import ToolContext
 from agent33.tools.governance import ToolGovernance
@@ -62,6 +63,54 @@ def test_supervised_destructive_flow_consumes_approved_token() -> None:
             "operation": "write",
             "path": "src/file.py",
             "__approval_id": request.approval_id,
+        },
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert second_allowed is True
+    assert approvals.get_request(request.approval_id).status == ApprovalStatus.CONSUMED
+
+
+def test_supervised_destructive_flow_consumes_approval_token() -> None:
+    approvals = ToolApprovalService()
+    token_manager = ApprovalTokenManager(secret="test-secret")
+    governance = ToolGovernance(
+        approval_service=approvals,
+        approval_token_manager=token_manager,
+    )
+    context = ToolContext(
+        user_scopes=["tools:execute"],
+        requested_by="requester-2",
+        tenant_id="tenant-a",
+    )
+
+    allowed = governance.pre_execute_check(
+        "file_ops",
+        {"operation": "write", "path": "src/file.py"},
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert allowed is False
+
+    request = approvals.list_requests()[0]
+    approved = approvals.decide(
+        request.approval_id,
+        approved=True,
+        reviewed_by="operator",
+        review_note="approved for one execution",
+    )
+    assert approved is not None
+
+    token = token_manager.issue(
+        approved,
+        arguments={"operation": "write", "path": "src/file.py"},
+    )
+    second_allowed = governance.pre_execute_check(
+        "file_ops",
+        {
+            "operation": "write",
+            "path": "src/file.py",
+            "__approval_token": token,
         },
         context,
         autonomy_level=AutonomyLevel.SUPERVISED,

@@ -262,6 +262,24 @@ class TestToggleTenantIsolation:
         with pytest.raises(PermissionError, match="cannot toggle"):
             reg.toggle("d1", False, tenant_id="other")
 
+    def test_toggle_only_updates_matching_tenant_runtime_hook(self) -> None:
+        reg = HookRegistry()
+        acme_hook = _make_hook(name="shared", tenant_id="acme")
+        other_hook = _make_hook(name="shared", tenant_id="other")
+        reg.register(
+            acme_hook,
+            _make_definition(name="shared", hook_id="d1", tenant_id="acme"),
+        )
+        reg.register(
+            other_hook,
+            _make_definition(name="shared", hook_id="d2", tenant_id="other"),
+        )
+
+        reg.toggle("d1", False, tenant_id="acme")
+
+        assert acme_hook.enabled is False
+        assert other_hook.enabled is True
+
 
 # ---------------------------------------------------------------------------
 # delete_definition tenant isolation
@@ -296,3 +314,23 @@ class TestDeleteDefinitionTenantIsolation:
             reg.delete_definition("d1", tenant_id="other")
         # Definition should still exist
         assert reg.get_definition("d1") is not None
+
+    def test_delete_only_removes_matching_tenant_runtime_hook(self) -> None:
+        reg = HookRegistry()
+        acme_hook = _make_hook(name="shared", tenant_id="acme")
+        other_hook = _make_hook(name="shared", tenant_id="other")
+        reg.register(
+            acme_hook,
+            _make_definition(name="shared", hook_id="d1", tenant_id="acme"),
+        )
+        reg.register(
+            other_hook,
+            _make_definition(name="shared", hook_id="d2", tenant_id="other"),
+        )
+
+        assert reg.delete_definition("d1", tenant_id="acme") is True
+
+        other_hooks = reg.get_hooks("agent.invoke.pre", "other")
+        assert len(other_hooks) == 1
+        assert other_hooks[0].tenant_id == "other"
+        assert reg.get_definition("d2", tenant_id="other") is not None

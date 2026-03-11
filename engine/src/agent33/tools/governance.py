@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agent33.config import settings
+from agent33.security.approval_tokens import ApprovalTokenError, ApprovalTokenManager
 from agent33.security.permissions import check_permission
 from agent33.tools.approvals import ApprovalReason, ToolApprovalService
 
@@ -72,16 +73,27 @@ class ToolGovernance:
     # Tools not listed here default to ``tools:execute``.
     TOOL_SCOPE_MAP: dict[str, str] = {}
 
-    def __init__(self, approval_service: ToolApprovalService | None = None) -> None:
+    def __init__(
+        self,
+        approval_service: ToolApprovalService | None = None,
+        approval_token_manager: ApprovalTokenManager | None = None,
+    ) -> None:
         self._rate_limiter = _RateLimiter(
             per_minute=settings.rate_limit_per_minute,
             burst=settings.rate_limit_burst,
         )
         self._approval_service = approval_service
+        self._approval_token_manager = approval_token_manager
 
     def set_approval_service(self, approval_service: ToolApprovalService | None) -> None:
         """Set or clear the approval service used for ask/supervised policies."""
         self._approval_service = approval_service
+
+    def set_approval_token_manager(
+        self, approval_token_manager: ApprovalTokenManager | None
+    ) -> None:
+        """Set or clear the approval-token manager used for governed execution."""
+        self._approval_token_manager = approval_token_manager
 
     def pre_execute_check(
         self,
@@ -115,6 +127,7 @@ class ToolGovernance:
                         params=params,
                         tool_name=tool_name,
                         operation=operation,
+                        tenant_id=context.tenant_id,
                     ):
                         return True
                     if self._approval_service is not None:
@@ -163,6 +176,7 @@ class ToolGovernance:
                     params=params,
                     tool_name=tool_name,
                     operation=operation,
+                    tenant_id=context.tenant_id,
                 ):
                     return True
                 if self._approval_service is not None:
@@ -237,9 +251,43 @@ class ToolGovernance:
         return True
 
     def _try_consume_approval(
-        self, params: dict[str, Any], tool_name: str, operation: str
+        self, params: dict[str, Any], tool_name: str, operation: str, tenant_id: str
     ) -> bool:
-        """Consume a matching approved request if an approval token is supplied."""
+        """Consume a matching approved request via approval token or approval ID."""
+        sanitized_params = {
+            key: value
+            for key, value in params.items()
+            if key not in {"__approval_id", "__approval_token"}
+        }
+        approval_token = params.get("__approval_token")
+        if (
+            isinstance(approval_token, str)
+            and approval_token
+            and self._approval_token_manager is not None
+        ):
+            try:
+                payload = self._approval_token_manager.validate(
+                    approval_token,
+                    tool_name,
+                    sanitized_params,
+                    tenant_id=tenant_id,
+                    consume=False,
+                )
+            except ApprovalTokenError as exc:
+                logger.info("Approval token rejected: tool=%s error=%s", tool_name, exc)
+                return False
+            if self._approval_service is None:
+                return (not payload.one_time) or self._approval_token_manager.consume(payload.jti)
+            consumed = self._approval_service.consume_if_approved(
+                payload.jti,
+                tool_name=tool_name,
+                operation=operation,
+                tenant_id=tenant_id,
+            )
+            if not consumed:
+                return False
+            return (not payload.one_time) or self._approval_token_manager.consume(payload.jti)
+
         if self._approval_service is None:
             return False
         approval_id = params.get("__approval_id")
@@ -249,6 +297,7 @@ class ToolGovernance:
             approval_id,
             tool_name=tool_name,
             operation=operation,
+            tenant_id=tenant_id,
         )
 
     def _check_tool_policy(

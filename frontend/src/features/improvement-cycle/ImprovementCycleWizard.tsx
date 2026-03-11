@@ -100,7 +100,6 @@ const DEFAULT_ENTITY_TYPE = "workflow";
 const DEFAULT_ENTITY_ID = "improvement-cycle-session58";
 const DEFAULT_TASK_ID = "session58-phase26-review";
 const DEFAULT_BRANCH = "codex/session58-phase26-wizard";
-const DEFAULT_APPROVER_ID = "operator";
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -261,7 +260,6 @@ export function ImprovementCycleWizard({
 3. Record the signoff path and any required approvals.`);
   const [taskId, setTaskId] = useState(DEFAULT_TASK_ID);
   const [branch, setBranch] = useState(DEFAULT_BRANCH);
-  const [approverId, setApproverId] = useState(DEFAULT_APPROVER_ID);
   const [approvalNote, setApprovalNote] = useState("");
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>([]);
   const [l1Decision, setL1Decision] = useState<ReviewDecision>("approved");
@@ -713,10 +711,11 @@ export function ImprovementCycleWizard({
             <button
               disabled={isBusy || review === null}
               onClick={() =>
-                void handleReviewAction("Improvement Cycle - Approve Review", "/v1/reviews/{review_id}/approve", {
-                  approver_id: approverId,
-                  conditions: []
-                })
+                void handleReviewAction(
+                  "Improvement Cycle - Approve Review",
+                  "/v1/reviews/{review_id}/approve",
+                  { conditions: [] }
+                )
               }
             >
               Final approval
@@ -750,11 +749,10 @@ export function ImprovementCycleWizard({
                 <option value="escalated">Escalated</option>
               </select>
             </label>
-            <label>
-              Final approver
-              <input value={approverId} onChange={(event) => setApproverId(event.target.value)} />
-            </label>
           </div>
+          <p className="wizard-help-text">
+            Final approval is recorded for the authenticated user automatically.
+          </p>
           {review ? (
             <div className="wizard-signoff-state">
               <p>

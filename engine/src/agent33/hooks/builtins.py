@@ -144,6 +144,11 @@ _PHASE1_EVENT_TYPES = [
     HookEventType.WORKFLOW_STEP_POST,
     HookEventType.REQUEST_PRE,
     HookEventType.REQUEST_POST,
+    # Phase 44: CLI session lifecycle
+    HookEventType.SESSION_START,
+    HookEventType.SESSION_END,
+    HookEventType.SESSION_CHECKPOINT,
+    HookEventType.SESSION_RESUME,
 ]
 
 

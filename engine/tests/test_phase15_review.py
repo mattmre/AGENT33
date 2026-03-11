@@ -672,9 +672,10 @@ class TestReviewAPI:
         # Final approve
         resp = self.client.post(
             f"/v1/reviews/{rid}/approve",
-            json={"approver_id": "test-user"},
+            json={"conditions": []},
         )
         assert resp.status_code == 200
+        assert resp.json()["approved_by"] == "test-user"
         assert resp.json()["approval_type"] == "l1_only"
 
         # Merge
@@ -716,7 +717,7 @@ class TestReviewAPI:
         # Approve + merge
         self.client.post(
             f"/v1/reviews/{rid}/approve",
-            json={"approver_id": "admin"},
+            json={"conditions": []},
         )
         resp = self.client.post(f"/v1/reviews/{rid}/merge")
         assert resp.json()["state"] == "merged"
@@ -759,7 +760,7 @@ class TestReviewAPI:
         created = self._create_review()
         resp = self.client.post(
             f"/v1/reviews/{created['id']}/approve",
-            json={"approver_id": "user"},
+            json={"conditions": []},
         )
         assert resp.status_code == 409
 

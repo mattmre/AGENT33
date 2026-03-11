@@ -57,6 +57,8 @@ class SignoffState(StrEnum):
     L2_CHANGES_REQUESTED = "l2-changes-requested"
     L2_APPROVED = "l2-approved"
     APPROVED = "approved"
+    CHANGES_REQUESTED = "changes-requested"
+    DEFERRED = "deferred"
     MERGED = "merged"
 
 
@@ -128,6 +130,9 @@ class FinalSignoff(BaseModel):
     approved_at: datetime | None = None
     approval_type: str = ""  # l1_only | l1_l2_agent | l1_l2_human
     conditions: list[str] = Field(default_factory=list)
+    rationale: str = ""
+    modification_summary: str = ""
+    linked_intake_id: str | None = None
 
 
 class ReviewEvidence(BaseModel):
