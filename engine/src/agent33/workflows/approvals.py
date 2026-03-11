@@ -26,7 +26,6 @@ class ApproveWithRationaleRequest(BaseModel):
     Used by ``POST /v1/reviews/{review_id}/approve-with-rationale``.
     """
 
-    approver_id: str
     decision: ApprovalDecisionType
     rationale: str = ""
     modification_summary: str = ""

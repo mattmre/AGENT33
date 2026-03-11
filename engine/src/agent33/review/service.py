@@ -26,6 +26,11 @@ from agent33.review.state_machine import InvalidTransitionError, SignoffStateMac
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_log_value(value: str) -> str:
+    """Escape line breaks in user-controlled values before logging."""
+    return value.replace("\r", "\\r").replace("\n", "\\n")
+
+
 class ReviewNotFoundError(Exception):
     """Raised when a review record is not found."""
 
@@ -68,7 +73,7 @@ class ReviewService:
             artifacts=artifacts or [],
         )
         self._reviews[record.id] = record
-        logger.info("review_created id=%s task=%s", record.id, task_id)
+        logger.info("review_created id=%s task=%s", record.id, _sanitize_log_value(task_id))
         return record
 
     def get(self, review_id: str) -> ReviewRecord:
@@ -272,7 +277,7 @@ class ReviewService:
         logger.info(
             "review_approved id=%s by=%s type=%s",
             review_id,
-            approver_id,
+            _sanitize_log_value(approver_id),
             approval_type,
         )
         return record
@@ -333,7 +338,7 @@ class ReviewService:
         logger.info(
             "review_approved_with_rationale id=%s by=%s decision=%s",
             review_id,
-            approver_id,
+            _sanitize_log_value(approver_id),
             decision,
         )
         return record

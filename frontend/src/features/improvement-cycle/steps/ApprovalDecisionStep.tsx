@@ -32,7 +32,6 @@ export function ApprovalDecisionStep({
   const [rationale, setRationale] = useState("");
   const [modificationSummary, setModificationSummary] = useState("");
   const [conditions, setConditions] = useState("");
-  const [approverId, setApproverId] = useState("operator");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -58,7 +57,6 @@ export function ApprovalDecisionStep({
         token,
         apiKey,
         body: JSON.stringify({
-          approver_id: approverId,
           decision,
           rationale,
           modification_summary: modificationSummary,
@@ -126,17 +124,11 @@ export function ApprovalDecisionStep({
             ))}
           </select>
         </label>
-
-        <label>
-          Approver ID
-          <input
-            aria-label="Approver ID"
-            value={approverId}
-            disabled={!isEnabled}
-            onChange={(e) => setApproverId(e.target.value)}
-          />
-        </label>
       </div>
+
+      <p className="wizard-help-text">
+        The approval identity is derived from the authenticated user.
+      </p>
 
       <label className="wizard-textarea">
         Rationale {rationaleRequired && <span className="wizard-required">*</span>}

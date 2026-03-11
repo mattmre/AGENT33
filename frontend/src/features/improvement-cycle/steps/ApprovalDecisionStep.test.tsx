@@ -117,7 +117,7 @@ describe("ApprovalDecisionStep", () => {
     expect(callArgs.pathParams).toEqual({ review_id: "rev-1" });
     const body = JSON.parse(callArgs.body);
     expect(body.decision).toBe("approved");
-    expect(body.approver_id).toBe("operator");
+    expect(body).not.toHaveProperty("approver_id");
   });
 
   it("requires rationale for changes_requested decision", async () => {

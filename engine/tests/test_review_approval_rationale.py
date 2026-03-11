@@ -35,9 +35,16 @@ def _reset_state() -> None:
     auth._api_keys.clear()
 
 
-def _auth_headers() -> dict[str, str]:
+def _auth_headers(
+    *,
+    subject: str = "test-user",
+    tenant_id: str = "t1",
+    scopes: list[str] | None = None,
+) -> dict[str, str]:
     token = create_access_token(
-        "test-user", scopes=["workflows:read", "workflows:write"], tenant_id="t1"
+        subject,
+        scopes=scopes or ["workflows:read", "workflows:write"],
+        tenant_id=tenant_id,
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -273,7 +280,6 @@ class TestApproveWithRationaleAPI:
         resp = client.post(
             f"/v1/reviews/{review_id}/approve-with-rationale",
             json={
-                "approver_id": "operator-1",
                 "decision": "approved",
                 "rationale": "Ship it.",
                 "conditions": ["Run smoke tests"],
@@ -284,7 +290,7 @@ class TestApproveWithRationaleAPI:
         body = resp.json()
         assert body["state"] == "approved"
         assert body["decision"] == "approved"
-        assert body["approved_by"] == "operator-1"
+        assert body["approved_by"] == "test-user"
         assert body["rationale"] == "Ship it."
 
     def test_changes_requested_via_api(self) -> None:
@@ -294,7 +300,6 @@ class TestApproveWithRationaleAPI:
         resp = client.post(
             f"/v1/reviews/{review_id}/approve-with-rationale",
             json={
-                "approver_id": "operator-1",
                 "decision": "changes_requested",
                 "rationale": "Missing tests.",
                 "modification_summary": "Add coverage for edge cases.",
@@ -312,7 +317,6 @@ class TestApproveWithRationaleAPI:
         resp = client.post(
             f"/v1/reviews/{review_id}/approve-with-rationale",
             json={
-                "approver_id": "operator-1",
                 "decision": "deferred",
                 "rationale": "Waiting on external dependency.",
             },
@@ -328,13 +332,11 @@ class TestApproveWithRationaleAPI:
         resp = client.post(
             f"/v1/reviews/{review_id}/approve-with-rationale",
             json={
-                "approver_id": "operator-1",
                 "decision": "yolo",
             },
             headers=_auth_headers(),
         )
         assert resp.status_code == 422
-        assert "Invalid decision" in resp.json()["detail"]
 
     def test_wrong_state_returns_409(self) -> None:
         client = TestClient(app)
@@ -348,7 +350,7 @@ class TestApproveWithRationaleAPI:
 
         resp = client.post(
             f"/v1/reviews/{review_id}/approve-with-rationale",
-            json={"approver_id": "op-1", "decision": "approved"},
+            json={"decision": "approved"},
             headers=headers,
         )
         assert resp.status_code == 409
@@ -357,7 +359,7 @@ class TestApproveWithRationaleAPI:
         client = TestClient(app)
         resp = client.post(
             "/v1/reviews/nonexistent-id/approve-with-rationale",
-            json={"approver_id": "op-1", "decision": "approved"},
+            json={"decision": "approved"},
             headers=_auth_headers(),
         )
         assert resp.status_code == 404
@@ -366,6 +368,57 @@ class TestApproveWithRationaleAPI:
         client = TestClient(app)
         resp = client.post(
             "/v1/reviews/some-id/approve-with-rationale",
-            json={"approver_id": "op-1", "decision": "approved"},
+            json={"decision": "approved"},
         )
         assert resp.status_code == 401
+
+    def test_request_approver_id_is_ignored(self) -> None:
+        client = TestClient(app)
+        review_id = self._create_and_advance_review(client)
+
+        resp = client.post(
+            f"/v1/reviews/{review_id}/approve-with-rationale",
+            json={
+                "approver_id": "impersonated-user",
+                "decision": "approved",
+                "rationale": "Ship it.",
+            },
+            headers=_auth_headers(subject="actual-user"),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["approved_by"] == "actual-user"
+
+    def test_cross_tenant_review_access_returns_404(self) -> None:
+        client = TestClient(app)
+        review_id = self._create_and_advance_review(client)
+
+        get_resp = client.get(
+            f"/v1/reviews/{review_id}",
+            headers=_auth_headers(subject="other-user", tenant_id="t2"),
+        )
+        assert get_resp.status_code == 404
+
+        approve_resp = client.post(
+            f"/v1/reviews/{review_id}/approve-with-rationale",
+            json={"decision": "approved", "rationale": "Ship it."},
+            headers=_auth_headers(subject="other-user", tenant_id="t2"),
+        )
+        assert approve_resp.status_code == 404
+
+    def test_admin_with_tenant_creates_tenant_scoped_review(self) -> None:
+        client = TestClient(app)
+
+        create_resp = client.post(
+            "/v1/reviews/",
+            json={"task_id": "tenant-admin-task", "branch": "main"},
+            headers=_auth_headers(subject="tenant-admin", tenant_id="t1", scopes=["admin"]),
+        )
+        assert create_resp.status_code == 201
+        review_id = create_resp.json()["id"]
+
+        get_resp = client.get(
+            f"/v1/reviews/{review_id}",
+            headers=_auth_headers(subject="tenant-user", tenant_id="t1"),
+        )
+        assert get_resp.status_code == 200
