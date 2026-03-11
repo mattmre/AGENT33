@@ -33,12 +33,12 @@ def set_catalog_service(service: ToolCatalogService | None) -> None:
 
 
 def _get_catalog_service(request: Request) -> ToolCatalogService:
-    """Resolve the catalog service from app state or module-level."""
+    """Resolve the catalog service from the test override or app state."""
+    if _catalog_service is not None:
+        return _catalog_service
     svc: Any = getattr(request.app.state, "tool_catalog_service", None)
     if svc is not None:
         return svc  # type: ignore[no-any-return]
-    if _catalog_service is not None:
-        return _catalog_service
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Tool catalog service not initialized",

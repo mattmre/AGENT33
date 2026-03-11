@@ -212,6 +212,35 @@ class TestListTools:
             tenant_id="tenant-a",
         )
 
+    def test_route_prefers_test_override_over_app_state_service(self) -> None:
+        previous_service = getattr(app.state, "tool_catalog_service", None)
+        stale_service = MagicMock(spec=ToolCatalogService)
+        stale_service.list_tools.side_effect = AssertionError("stale app.state service used")
+        app.state.tool_catalog_service = stale_service
+
+        service = MagicMock(spec=ToolCatalogService)
+        service.list_tools.return_value = ToolCatalogService().list_tools()
+        set_catalog_service(service)
+        client = _client(["tools:execute"], tenant_id="tenant-a")
+
+        try:
+            resp = client.get("/v1/catalog/tools")
+        finally:
+            if previous_service is None:
+                delattr(app.state, "tool_catalog_service")
+            else:
+                app.state.tool_catalog_service = previous_service
+
+        assert resp.status_code == 200
+        service.list_tools.assert_called_once_with(
+            category=None,
+            provider=None,
+            search=None,
+            limit=50,
+            offset=0,
+            tenant_id="tenant-a",
+        )
+
 
 # ---------------------------------------------------------------------------
 # GET /v1/catalog/tools/{name}
