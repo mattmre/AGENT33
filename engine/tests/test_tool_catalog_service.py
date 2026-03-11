@@ -105,8 +105,9 @@ def _mock_plugin_registry(
     plugins: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
     reg = MagicMock()
+    plugin_list = plugins or []
     mock_manifests = []
-    for p in plugins or []:
+    for p in plugin_list:
         manifest = MagicMock()
         manifest.name = p["name"]
         manifest.version = p.get("version", "1.0.0")
@@ -115,13 +116,14 @@ def _mock_plugin_registry(
         manifest.contributions.tools = p.get("tools", [])
         mock_manifests.append(manifest)
     reg.list_all.return_value = mock_manifests
-    for p in plugins or []:
-        state = MagicMock()
-        state.value = p.get("state", "active")
-        reg.get_state.side_effect = lambda name, _plugins=plugins or []: next(
-            (MagicMock(value=pp.get("state", "active")) for pp in _plugins if pp["name"] == name),
-            None,
-        )
+
+    def _get_state(name: str, *, tenant_id: str = "") -> Any:  # noqa: ARG001
+        for plugin in plugin_list:
+            if plugin["name"] == name:
+                return MagicMock(value=plugin.get("state", "active"))
+        return None
+
+    reg.get_state.side_effect = _get_state
     return reg
 
 
@@ -220,6 +222,24 @@ class TestAggregation:
         names = {t.name for t in result.tools}
         assert "plugin:acme-plugin:acme-lint" in names
         assert "plugin:acme-plugin:acme-format" in names
+
+    def test_plugin_registry_is_tenant_scoped(self) -> None:
+        plugin_reg = _mock_plugin_registry(
+            plugins=[
+                {
+                    "name": "tenant-plugin",
+                    "tools": ["tenant-tool"],
+                    "state": "active",
+                },
+            ]
+        )
+        svc = ToolCatalogService(plugin_registry=plugin_reg)
+
+        result = svc.list_tools(tenant_id="tenant-a")
+
+        assert result.total == 1
+        plugin_reg.list_all.assert_called_once_with(tenant_id="tenant-a")
+        plugin_reg.get_state.assert_called_once_with("tenant-plugin", tenant_id="tenant-a")
 
     def test_all_sources_combined(self) -> None:
         tool_reg = _mock_tool_registry(tools=[_make_tool("shell")])

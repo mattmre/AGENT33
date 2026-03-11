@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 
+from agent33.api.routes.tenant_access import tenant_filter_for_request
 from agent33.security.permissions import require_scope
 from agent33.tools.catalog import (
     CatalogEntry,
@@ -44,6 +45,11 @@ def _get_catalog_service(request: Request) -> ToolCatalogService:
     )
 
 
+def _catalog_tenant_id(request: Request) -> str:
+    tenant_filter = tenant_filter_for_request(request)
+    return tenant_filter or ""
+
+
 @router.get(
     "/tools",
     response_model=CatalogPage,
@@ -61,12 +67,14 @@ async def list_tools(
     svc = _get_catalog_service(request)
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
+    tenant_id = _catalog_tenant_id(request)
     return svc.list_tools(
         category=category,
         provider=provider,
         search=search,
         limit=limit,
         offset=offset,
+        tenant_id=tenant_id,
     )
 
 
@@ -77,9 +85,10 @@ async def list_tools(
 async def get_tool_schema(request: Request, name: str) -> dict[str, Any]:
     """Get just the JSON Schema for a tool by name."""
     svc = _get_catalog_service(request)
-    schema = svc.get_schema(name)
+    tenant_id = _catalog_tenant_id(request)
+    schema = svc.get_schema(name, tenant_id=tenant_id)
     if schema is None:
-        entry = svc.get_tool(name)
+        entry = svc.get_tool(name, tenant_id=tenant_id)
         if entry is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -100,7 +109,7 @@ async def get_tool_schema(request: Request, name: str) -> dict[str, Any]:
 async def get_tool_detail(request: Request, name: str) -> CatalogEntry:
     """Get full detail for a single tool by name."""
     svc = _get_catalog_service(request)
-    entry = svc.get_tool(name)
+    entry = svc.get_tool(name, tenant_id=_catalog_tenant_id(request))
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -117,7 +126,7 @@ async def get_tool_detail(request: Request, name: str) -> CatalogEntry:
 async def list_categories(request: Request) -> list[CategoryCount]:
     """List all tool categories with counts."""
     svc = _get_catalog_service(request)
-    return svc.list_categories()
+    return svc.list_categories(tenant_id=_catalog_tenant_id(request))
 
 
 @router.get(
@@ -128,7 +137,7 @@ async def list_categories(request: Request) -> list[CategoryCount]:
 async def list_providers(request: Request) -> list[ProviderCount]:
     """List all tool providers with counts."""
     svc = _get_catalog_service(request)
-    return svc.list_providers()
+    return svc.list_providers(tenant_id=_catalog_tenant_id(request))
 
 
 @router.post(
@@ -142,4 +151,4 @@ async def search_catalog(
 ) -> CatalogPage:
     """Search across tools with multiple filter criteria."""
     svc = _get_catalog_service(request)
-    return svc.search(body)
+    return svc.search(body, tenant_id=_catalog_tenant_id(request))

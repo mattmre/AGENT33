@@ -21,14 +21,14 @@ from agent33.tools.registry_entry import ToolRegistryEntry
 # ---------------------------------------------------------------------------
 
 
-def _client(scopes: list[str]) -> TestClient:
-    token = create_access_token("test-user", scopes=scopes)
+def _client(scopes: list[str], tenant_id: str = "") -> TestClient:
+    token = create_access_token("test-user", scopes=scopes, tenant_id=tenant_id)
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
 @pytest.fixture()
 def tools_client() -> TestClient:
-    return _client(["tools:execute"])
+    return _client(["tools:execute"], tenant_id="tenant-a")
 
 
 @pytest.fixture()
@@ -38,7 +38,7 @@ def admin_client() -> TestClient:
 
 @pytest.fixture()
 def no_scope_client() -> TestClient:
-    return _client([])
+    return _client([], tenant_id="tenant-a")
 
 
 @pytest.fixture()
@@ -125,6 +125,11 @@ class TestAuth:
         resp = tools_client.get("/v1/catalog/tools")
         assert resp.status_code == 200
 
+    def test_tools_scope_without_tenant_gets_403(self) -> None:
+        resp = _client(["tools:execute"]).get("/v1/catalog/tools")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Tenant context required for authenticated principal"
+
     def test_admin_allowed(self, admin_client: TestClient) -> None:
         resp = admin_client.get("/v1/catalog/tools")
         assert resp.status_code == 200
@@ -190,6 +195,24 @@ class TestListTools:
         body = resp.json()
         assert body["total"] == 2
         assert len(body["tools"]) == 1
+
+    def test_route_passes_tenant_filter_to_service(self) -> None:
+        service = MagicMock(spec=ToolCatalogService)
+        service.list_tools.return_value = ToolCatalogService().list_tools()
+        set_catalog_service(service)
+        client = _client(["tools:execute"], tenant_id="tenant-a")
+
+        resp = client.get("/v1/catalog/tools")
+
+        assert resp.status_code == 200
+        service.list_tools.assert_called_once_with(
+            category=None,
+            provider=None,
+            search=None,
+            limit=50,
+            offset=0,
+            tenant_id="tenant-a",
+        )
 
 
 # ---------------------------------------------------------------------------

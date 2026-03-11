@@ -99,7 +99,7 @@ class ToolCatalogService:
         self._skill_registry = skill_registry
         self._plugin_registry = plugin_registry
 
-    def _aggregate_entries(self) -> list[CatalogEntry]:
+    def _aggregate_entries(self, *, tenant_id: str = "") -> list[CatalogEntry]:
         """Collect catalog entries from all sources."""
         entries: list[CatalogEntry] = []
 
@@ -186,8 +186,8 @@ class ToolCatalogService:
 
         # -- Plugin contributions -------------------------------------------
         if self._plugin_registry is not None:
-            for manifest in self._plugin_registry.list_all():
-                state = self._plugin_registry.get_state(manifest.name)
+            for manifest in self._plugin_registry.list_all(tenant_id=tenant_id):
+                state = self._plugin_registry.get_state(manifest.name, tenant_id=tenant_id)
                 is_active = state is not None and state.value == "active"
                 for tool_name in manifest.contributions.tools:
                     entries.append(
@@ -214,9 +214,10 @@ class ToolCatalogService:
         search: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        tenant_id: str = "",
     ) -> CatalogPage:
         """List tools with optional filtering and pagination."""
-        entries = self._aggregate_entries()
+        entries = self._aggregate_entries(tenant_id=tenant_id)
 
         if category:
             entries = [e for e in entries if e.category == category]
@@ -240,39 +241,39 @@ class ToolCatalogService:
 
         return CatalogPage(tools=page, total=total, limit=limit, offset=offset)
 
-    def get_tool(self, name: str) -> CatalogEntry | None:
+    def get_tool(self, name: str, *, tenant_id: str = "") -> CatalogEntry | None:
         """Get a single tool by name."""
-        for entry in self._aggregate_entries():
+        for entry in self._aggregate_entries(tenant_id=tenant_id):
             if entry.name == name:
                 return entry
         return None
 
-    def get_schema(self, name: str) -> dict[str, Any] | None:
+    def get_schema(self, name: str, *, tenant_id: str = "") -> dict[str, Any] | None:
         """Get the JSON Schema for a tool by name.
 
         Returns the parameters_schema if available, or None.
         """
-        entry = self.get_tool(name)
+        entry = self.get_tool(name, tenant_id=tenant_id)
         if entry is None:
             return None
         if entry.parameters_schema:
             return entry.parameters_schema
         return None
 
-    def list_categories(self) -> list[CategoryCount]:
+    def list_categories(self, *, tenant_id: str = "") -> list[CategoryCount]:
         """List all categories with tool counts."""
         counts: dict[str, int] = {}
-        for entry in self._aggregate_entries():
+        for entry in self._aggregate_entries(tenant_id=tenant_id):
             counts[entry.category] = counts.get(entry.category, 0) + 1
         return sorted(
             [CategoryCount(category=k, count=v) for k, v in counts.items()],
             key=lambda c: (-c.count, c.category),
         )
 
-    def list_providers(self) -> list[ProviderCount]:
+    def list_providers(self, *, tenant_id: str = "") -> list[ProviderCount]:
         """List all providers with tool counts."""
         counts: dict[str, int] = {}
-        for entry in self._aggregate_entries():
+        for entry in self._aggregate_entries(tenant_id=tenant_id):
             prov = entry.provider.value
             counts[prov] = counts.get(prov, 0) + 1
         return sorted(
@@ -280,9 +281,9 @@ class ToolCatalogService:
             key=lambda c: (-c.count, c.provider),
         )
 
-    def search(self, request: CatalogSearchRequest) -> CatalogPage:
+    def search(self, request: CatalogSearchRequest, *, tenant_id: str = "") -> CatalogPage:
         """Full search with multiple filter criteria."""
-        entries = self._aggregate_entries()
+        entries = self._aggregate_entries(tenant_id=tenant_id)
 
         if request.query:
             q = request.query.lower()
