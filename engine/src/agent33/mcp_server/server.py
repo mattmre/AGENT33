@@ -92,6 +92,25 @@ _MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "discover_tools",
+        "description": "Discover relevant runtime tools for a task",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Task or search query",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of matches",
+                    "default": 10,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "execute_tool",
         "description": "Execute a registered tool",
         "inputSchema": {
@@ -113,6 +132,44 @@ _MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "name": "list_skills",
         "description": "List registered skills",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "discover_skills",
+        "description": "Discover relevant skills for a task",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Task or search query",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of matches",
+                    "default": 10,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "resolve_workflow",
+        "description": "Resolve a workflow or template for a task",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Task or search query",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of matches",
+                    "default": 10,
+                },
+            },
+            "required": ["query"],
+        },
     },
     {
         "name": "get_system_status",
@@ -185,6 +242,12 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
             )
         elif name == "list_tools":
             result = await mcp_tools.handle_list_tools(bridge)
+        elif name == "discover_tools":
+            result = await mcp_tools.handle_discover_tools(
+                bridge,
+                query=args.get("query", ""),
+                limit=args.get("limit", 10),
+            )
         elif name == "execute_tool":
             enforce_registry_tool_access(server, bridge, str(args.get("tool_name", "")))
             result = await mcp_tools.handle_execute_tool(
@@ -195,6 +258,27 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
             )
         elif name == "list_skills":
             result = await mcp_tools.handle_list_skills(bridge)
+        elif name == "discover_skills":
+            from agent33.security.permissions import check_permission
+
+            context = _build_tool_context(server)
+            tenant_id = (
+                None
+                if check_permission("admin", context.user_scopes)
+                else (context.tenant_id or None)
+            )
+            result = await mcp_tools.handle_discover_skills(
+                bridge,
+                query=args.get("query", ""),
+                limit=args.get("limit", 10),
+                tenant_id=tenant_id,
+            )
+        elif name == "resolve_workflow":
+            result = await mcp_tools.handle_resolve_workflow(
+                bridge,
+                query=args.get("query", ""),
+                limit=args.get("limit", 10),
+            )
         elif name == "get_system_status":
             result = await mcp_tools.handle_get_system_status(bridge)
         elif proxy_manager is not None and proxy_manager.resolve_server_for_tool(name):
