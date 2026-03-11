@@ -10,6 +10,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent33.api.routes.mcp import router
+from agent33.mcp_server.proxy_child import ChildServerHandle, ChildServerState, ProxyToolDefinition
+from agent33.mcp_server.proxy_manager import ProxyManager
+from agent33.mcp_server.proxy_models import ProxyServerConfig
 from agent33.security.auth import create_access_token
 from agent33.security.middleware import AuthMiddleware
 
@@ -307,6 +310,42 @@ class TestMCPServerCreation:
         assert "list_agents" in tool_names
         assert "execute_tool" not in tool_names
 
+    async def test_list_tools_includes_proxy_tools_for_tools_execute_scope(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(user=TokenPayload(sub="executor", scopes=["tools:execute"]))
+        )
+        fake_server = _RecordingServer(request=request)
+        proxy_manager = ProxyManager()
+        handle = ChildServerHandle(ProxyServerConfig(id="fs", command="echo", tool_prefix="fs"))
+        handle.state = ChildServerState.HEALTHY
+        handle.register_tools([ProxyToolDefinition(name="read_file", description="Read file")])
+        proxy_manager._children["fs"] = handle
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(proxy_manager=proxy_manager))
+
+        tools = await fake_server.handlers["list_tools"]()
+        tool_names = {tool.name for tool in tools}
+        assert "fs__read_file" in tool_names
+
     async def test_execute_tool_rejects_unknown_registry_tool(self) -> None:
         from agent33.mcp_server.bridge import MCPServiceBridge
         from agent33.mcp_server.server import create_mcp_server
@@ -342,3 +381,39 @@ class TestMCPServerCreation:
                 "execute_tool",
                 {"tool_name": "missing-tool", "arguments": {}},
             )
+
+    async def test_call_tool_routes_proxy_tools(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(user=TokenPayload(sub="executor", scopes=["tools:execute"]))
+        )
+        fake_server = _RecordingServer(request=request)
+        proxy_manager = ProxyManager()
+        handle = ChildServerHandle(ProxyServerConfig(id="fs", command="echo", tool_prefix="fs"))
+        handle.state = ChildServerState.HEALTHY
+        handle.register_tools([ProxyToolDefinition(name="read_file", description="Read file")])
+        handle._call_handler = AsyncMock(return_value={"status": "ok", "source": "proxy"})
+        proxy_manager._children["fs"] = handle
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(proxy_manager=proxy_manager))
+
+        result = await fake_server.handlers["call_tool"]("fs__read_file", {"path": "/tmp/x"})
+        assert result[0].text == '{"status": "ok", "source": "proxy"}'

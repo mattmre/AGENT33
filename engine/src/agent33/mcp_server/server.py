@@ -138,13 +138,24 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
     server = server_cls("agent33-core")
 
     async def list_tools() -> list[Any]:
+        mcp_tools = list(_MCP_TOOL_DEFINITIONS)
+        proxy_manager = getattr(bridge, "proxy_manager", None)
+        proxy_tools = proxy_manager.list_aggregated_tools() if proxy_manager is not None else []
         allowed = set(
             filter_allowed_tools(
                 server,
-                (tool["name"] for tool in _MCP_TOOL_DEFINITIONS),
+                [tool["name"] for tool in mcp_tools] + [tool["name"] for tool in proxy_tools],
             )
         )
-        return [tool_cls(**tool) for tool in _MCP_TOOL_DEFINITIONS if tool["name"] in allowed]
+        return [tool_cls(**tool) for tool in mcp_tools if tool["name"] in allowed] + [
+            tool_cls(
+                name=tool["name"],
+                description=tool.get("description", ""),
+                inputSchema=tool.get("inputSchema", {}),
+            )
+            for tool in proxy_tools
+            if tool["name"] in allowed
+        ]
 
     _register_handler(server.list_tools(), list_tools)
 
@@ -155,6 +166,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
 
         args = arguments or {}
         result: Any
+        proxy_manager = getattr(bridge, "proxy_manager", None)
 
         if name == "list_agents":
             result = await mcp_tools.handle_list_agents(bridge)
@@ -185,6 +197,8 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
             result = await mcp_tools.handle_list_skills(bridge)
         elif name == "get_system_status":
             result = await mcp_tools.handle_get_system_status(bridge)
+        elif proxy_manager is not None and proxy_manager.resolve_server_for_tool(name):
+            result = await proxy_manager.call_proxy_tool(name, args)
         else:
             raise PermissionError(f"MCP tool '{name}' is not allowed")
 

@@ -42,6 +42,12 @@ STATIC_RESOURCES: list[dict[str, str]] = [
         "mimeType": "application/json",
     },
     {
+        "uri": "agent33://proxy-servers",
+        "name": "Proxy Servers",
+        "description": "Configured MCP proxy servers and aggregated tool inventory.",
+        "mimeType": "application/json",
+    },
+    {
         "uri": "agent33://policy-pack",
         "name": "Policy Pack",
         "description": "Configured and effective connector-boundary policy data.",
@@ -97,6 +103,8 @@ async def handle_read_resource(bridge: MCPServiceBridge, uri: str) -> str:
         payload = _read_agent_registry(bridge)
     elif uri == "agent33://tool-catalog":
         payload = _read_tool_catalog(bridge)
+    elif uri == "agent33://proxy-servers":
+        payload = _read_proxy_servers(bridge)
     elif uri == "agent33://policy-pack":
         payload = _read_policy_pack()
     elif uri == "agent33://schema-index":
@@ -186,6 +194,17 @@ def _read_tool_catalog(bridge: MCPServiceBridge) -> dict[str, Any]:
     return {
         "count": len(tools),
         "tools": [_serialize_tool_summary(bridge, tool.name) for tool in tools],
+    }
+
+
+def _read_proxy_servers(bridge: MCPServiceBridge) -> dict[str, Any]:
+    if bridge.proxy_manager is None:
+        return {"error": "Proxy manager not available"}
+
+    return {
+        "servers": bridge.proxy_manager.list_servers(),
+        "tools": bridge.proxy_manager.list_aggregated_tools(),
+        **bridge.proxy_manager.health_summary(),
     }
 
 

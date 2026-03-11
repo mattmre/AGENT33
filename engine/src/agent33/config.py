@@ -179,6 +179,20 @@ class Settings(BaseSettings):
     mcp_servers: str = ""  # Comma-separated server URLs
     mcp_timeout_seconds: float = 30.0
     mcp_auto_discover: bool = True
+
+    # MCP Proxy (Phase 45)
+    mcp_proxy_config_path: str = ""  # path to mcp.config.json
+    mcp_proxy_enabled: bool = False
+    mcp_proxy_tool_separator: str = "__"
+    mcp_proxy_health_check_enabled: bool = True
+
+    # Approval Tokens (Phase 45)
+    approval_token_ttl_seconds: int = 300  # 5 minutes
+    approval_token_enabled: bool = True
+    approval_token_one_time_default: bool = True
+
+    # MCP Sync (Phase 45)
+    mcp_sync_backup_enabled: bool = True  # create .bak before writing CLI configs
     connector_boundary_enabled: bool = False
     connector_policy_pack: str = "default"
     connector_governance_blocked_connectors: str = ""  # comma-separated

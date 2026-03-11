@@ -9,6 +9,9 @@ from unittest.mock import patch
 from agent33.agents.definition import AgentCapability, AgentDefinition, AgentRole
 from agent33.agents.registry import AgentRegistry
 from agent33.mcp_server.bridge import MCPServiceBridge
+from agent33.mcp_server.proxy_child import ChildServerHandle, ChildServerState, ProxyToolDefinition
+from agent33.mcp_server.proxy_manager import ProxyManager
+from agent33.mcp_server.proxy_models import ProxyServerConfig
 from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.registry import ToolRegistry
 from agent33.tools.registry_entry import ToolRegistryEntry
@@ -113,6 +116,17 @@ def _make_bridge() -> MCPServiceBridge:
     )
 
 
+def _make_bridge_with_proxy() -> MCPServiceBridge:
+    bridge = _make_bridge()
+    proxy_manager = ProxyManager()
+    handle = ChildServerHandle(ProxyServerConfig(id="fs", command="echo", tool_prefix="fs"))
+    handle.state = ChildServerState.HEALTHY
+    handle.register_tools([ProxyToolDefinition(name="read_file", description="Read file")])
+    proxy_manager._children["fs"] = handle
+    bridge.proxy_manager = proxy_manager
+    return bridge
+
+
 class TestMCPResourceContract:
     async def test_list_resources_matches_documented_contract(self) -> None:
         from agent33.mcp_server.resources import handle_list_resources
@@ -121,6 +135,7 @@ class TestMCPResourceContract:
         assert [entry["uri"] for entry in result] == [
             "agent33://agent-registry",
             "agent33://tool-catalog",
+            "agent33://proxy-servers",
             "agent33://policy-pack",
             "agent33://schema-index",
         ]
@@ -203,6 +218,16 @@ class TestMCPResourceContract:
         assert payload["name"] == "release"
         assert payload["steps"][0]["id"] == "build"
 
+    async def test_proxy_servers_resource_returns_proxy_fleet_data(self) -> None:
+        from agent33.mcp_server.resources import handle_read_resource
+
+        payload = json.loads(
+            await handle_read_resource(_make_bridge_with_proxy(), "agent33://proxy-servers")
+        )
+        assert payload["total"] == 1
+        assert payload["servers"][0]["id"] == "fs"
+        assert payload["tools"][0]["name"] == "fs__read_file"
+
 
 class TestResourceRegistration:
     async def test_register_resources_uses_single_canonical_handler_path(self) -> None:
@@ -233,6 +258,7 @@ class TestResourceRegistration:
         assert [str(resource.uri) for resource in resources] == [
             "agent33://agent-registry",
             "agent33://tool-catalog",
+            "agent33://proxy-servers",
             "agent33://policy-pack",
             "agent33://schema-index",
         ]

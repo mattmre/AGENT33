@@ -17,6 +17,10 @@ TOOL_SCOPES: dict[str, str] = {
     "execute_tool": "tools:execute",
     "list_skills": "agents:read",
     "get_system_status": "agents:read",
+    # Phase 45: proxy admin tools
+    "proxy_list_servers": "agents:read",
+    "proxy_add_server": "admin",
+    "proxy_remove_server": "admin",
 }
 
 RESOURCE_SCOPES: dict[str, str] = {
@@ -27,6 +31,8 @@ RESOURCE_SCOPES: dict[str, str] = {
     "agent33://agents/": "agents:read",
     "agent33://tools/": "agents:read",
     "agent33://workflows/": "workflows:read",
+    # Phase 45: proxy resource
+    "agent33://proxy-servers": "agents:read",
 }
 
 
@@ -53,8 +59,19 @@ def get_authenticated_scopes(server: Any) -> list[str]:
 
 
 def get_required_scope_for_tool(tool_name: str) -> str | None:
-    """Return the scope required to invoke an MCP tool."""
-    return TOOL_SCOPES.get(tool_name)
+    """Return the scope required to invoke an MCP tool.
+
+    Proxy tools (containing ``__``) that are not explicitly scoped
+    default to ``tools:execute`` rather than ``None``, so they are
+    routable through the proxy dispatch path.
+    """
+    scope = TOOL_SCOPES.get(tool_name)
+    if scope is not None:
+        return scope
+    # Phase 45: proxy tools use tools:execute by default
+    if "__" in tool_name:
+        return "tools:execute"
+    return None
 
 
 def get_required_scope_for_resource(uri: str) -> str | None:
