@@ -34,8 +34,8 @@ class TestHookEventType:
         assert HookEventType.REQUEST_PRE == "request.pre"
         assert HookEventType.REQUEST_POST == "request.post"
 
-    def test_phase1_has_8_event_types(self) -> None:
-        assert len(HookEventType) == 8
+    def test_phase44_has_12_event_types(self) -> None:
+        assert len(HookEventType) == 12
 
 
 class TestHookContext:

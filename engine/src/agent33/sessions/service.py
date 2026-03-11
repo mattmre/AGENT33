@@ -357,11 +357,7 @@ class OperatorSessionService:
 
         by_type: dict[str, int] = {}
         for ev in events:
-            key = (
-                ev.event_type.value
-                if isinstance(ev.event_type, SessionEventType)
-                else str(ev.event_type)
-            )
+            key = ev.event_type.value
             by_type[key] = by_type.get(key, 0) + 1
 
         first_ts = events[0].timestamp
@@ -390,15 +386,19 @@ class OperatorSessionService:
         self,
         status: OperatorSessionStatus | None = None,
         limit: int = 50,
+        tenant_id: str | None = None,
     ) -> list[OperatorSession]:
         """List sessions with optional status filter."""
-        return self._storage.list_sessions(status=status, limit=limit)
+        return self._storage.list_sessions(status=status, limit=limit, tenant_id=tenant_id)
 
     # ------------------------------------------------------------------
     # Crash detection
     # ------------------------------------------------------------------
 
-    async def detect_incomplete_sessions(self) -> list[OperatorSession]:
+    async def detect_incomplete_sessions(
+        self,
+        tenant_id: str | None = None,
+    ) -> list[OperatorSession]:
         """Scan for sessions with status=ACTIVE that have no live process.
 
         A session is considered crashed if:
@@ -411,6 +411,8 @@ class OperatorSessionService:
         for sid in self._storage.list_session_ids():
             session = self._storage.load_session(sid)
             if session is None:
+                continue
+            if tenant_id is not None and session.tenant_id != tenant_id:
                 continue
             if session.status != OperatorSessionStatus.ACTIVE:
                 continue

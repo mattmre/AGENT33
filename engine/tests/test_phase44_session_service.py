@@ -380,6 +380,27 @@ class TestCrashDetection:
         crashed = await svc.detect_incomplete_sessions()
         assert len(crashed) == 0
 
+    async def test_detect_incomplete_sessions_filters_by_tenant(self, tmp_path: Path) -> None:
+        svc = _make_service(tmp_path)
+        tenant_a = await svc.start_session(purpose="Tenant A", tenant_id="tenant-a")
+        tenant_b = await svc.start_session(purpose="Tenant B", tenant_id="tenant-b")
+
+        import json
+
+        for session in (tenant_a, tenant_b):
+            lock_file = tmp_path / session.session_id / "process.lock"
+            lock_data = {"pid": 999999999, "started_at": "2026-01-01T00:00:00", "hostname": "test"}
+            lock_file.write_text(json.dumps(lock_data), encoding="utf-8")
+
+        svc._active.clear()
+
+        crashed = await svc.detect_incomplete_sessions(tenant_id="tenant-a")
+        assert [session.session_id for session in crashed] == [tenant_a.session_id]
+
+        untouched = await svc.get_session(tenant_b.session_id)
+        assert untouched is not None
+        assert untouched.status == OperatorSessionStatus.ACTIVE
+
 
 class TestSessionQuery:
     """Tests for session querying."""
@@ -411,6 +432,15 @@ class TestSessionQuery:
 
         all_sessions = await svc.list_sessions()
         assert len(all_sessions) >= 2
+
+    async def test_list_sessions_filters_by_tenant(self, tmp_path: Path) -> None:
+        svc = _make_service(tmp_path)
+        await svc.start_session(purpose="Tenant A", tenant_id="tenant-a")
+        await svc.start_session(purpose="Tenant B", tenant_id="tenant-b")
+
+        tenant_a_sessions = await svc.list_sessions(tenant_id="tenant-a")
+        assert len(tenant_a_sessions) == 1
+        assert tenant_a_sessions[0].tenant_id == "tenant-a"
 
 
 class TestSessionHookFiring:

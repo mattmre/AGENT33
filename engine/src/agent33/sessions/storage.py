@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import platform
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,8 @@ from agent33.sessions.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class FileSessionStorage:
@@ -50,7 +53,7 @@ class FileSessionStorage:
 
     def session_dir(self, session_id: str) -> Path:
         """Return the directory for a specific session."""
-        return self._base_dir / session_id
+        return self._base_dir / self._validate_session_id(session_id)
 
     # ------------------------------------------------------------------
     # Session CRUD
@@ -96,16 +99,21 @@ class FileSessionStorage:
         """Return all session IDs on disk (directory names)."""
         if not self._base_dir.exists():
             return []
-        return [
-            d.name
-            for d in sorted(self._base_dir.iterdir(), key=lambda p: p.stat().st_mtime)
-            if d.is_dir() and (d / "session.json").exists()
-        ]
+        session_ids: list[str] = []
+        for directory in sorted(self._base_dir.iterdir(), key=lambda p: p.stat().st_mtime):
+            if not directory.is_dir() or not (directory / "session.json").exists():
+                continue
+            try:
+                session_ids.append(self._validate_session_id(directory.name))
+            except ValueError:
+                logger.warning("unsafe_session_id_skipped session_id=%s", directory.name)
+        return session_ids
 
     def list_sessions(
         self,
         status: OperatorSessionStatus | None = None,
         limit: int = 50,
+        tenant_id: str | None = None,
     ) -> list[OperatorSession]:
         """Load and return sessions with optional status filter."""
         sessions: list[OperatorSession] = []
@@ -113,12 +121,32 @@ class FileSessionStorage:
             s = self.load_session(sid)
             if s is None:
                 continue
+            if tenant_id is not None and s.tenant_id != tenant_id:
+                continue
             if status is not None and s.status != status:
                 continue
             sessions.append(s)
             if len(sessions) >= limit:
                 break
         return sessions
+
+    @staticmethod
+    def _validate_session_id(session_id: str) -> str:
+        """Reject session identifiers that could escape the storage root."""
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError("Invalid session ID")
+        if session_id.strip() != session_id:
+            raise ValueError("Invalid session ID")
+        separators = {"/", "\\"}
+        if os.sep:
+            separators.add(os.sep)
+        if os.altsep:
+            separators.add(os.altsep)
+        if any(separator in session_id for separator in separators):
+            raise ValueError("Invalid session ID")
+        if ".." in session_id or not _SAFE_SESSION_ID_RE.fullmatch(session_id):
+            raise ValueError("Invalid session ID")
+        return session_id
 
     # ------------------------------------------------------------------
     # Replay log
@@ -280,7 +308,10 @@ def _pid_is_alive(pid: int) -> bool:
         try:
             import ctypes
 
-            kernel32 = ctypes.windll.kernel32
+            windll = getattr(ctypes, "windll", None)
+            if windll is None:
+                return False
+            kernel32 = windll.kernel32
             process_query_limited = 0x1000
             handle = kernel32.OpenProcess(process_query_limited, False, pid)
             if handle:

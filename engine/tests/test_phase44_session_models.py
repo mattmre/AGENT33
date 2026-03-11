@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from agent33.sessions.models import (
     OperatorSession,
     OperatorSessionStatus,
@@ -60,6 +62,10 @@ class TestTaskEntry:
         assert task.status == "pending"
         assert task.metadata == {}
 
+    def test_from_dict_invalid_created_at_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="Invalid created_at"):
+            TaskEntry.from_dict({"created_at": "not-a-timestamp"})
+
 
 class TestSessionEvent:
     """Tests for SessionEvent serialization."""
@@ -100,6 +106,10 @@ class TestSessionEvent:
             d = event.to_dict()
             restored = SessionEvent.from_dict(d)
             assert restored.event_type == et
+
+    def test_from_dict_invalid_timestamp_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="Invalid timestamp"):
+            SessionEvent.from_dict({"event_type": "session.started", "timestamp": "bad"})
 
 
 class TestOperatorSession:
@@ -166,6 +176,10 @@ class TestOperatorSession:
         assert session.status == OperatorSessionStatus.ACTIVE
         assert session.tasks == []
         assert session.context == {}
+
+    def test_from_dict_invalid_started_at_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="Invalid started_at"):
+            OperatorSession.from_dict({"session_id": "s2", "started_at": "bad"})
 
     def test_status_enum_values(self) -> None:
         assert OperatorSessionStatus.ACTIVE.value == "active"

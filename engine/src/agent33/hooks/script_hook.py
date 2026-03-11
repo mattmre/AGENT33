@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from typing import TYPE_CHECKING, Any, Literal
@@ -97,9 +98,6 @@ class ScriptHook(BaseHook):
             }
         )
 
-        # Build command
-        cmd = _build_command(self._script_path)
-
         log_entry: dict[str, Any] = {
             "hook_name": self._name,
             "script_path": str(self._script_path),
@@ -107,6 +105,7 @@ class ScriptHook(BaseHook):
         }
 
         try:
+            cmd = _build_command(self._script_path)
             result = await asyncio.wait_for(
                 _run_subprocess(cmd, stdin_data, env),
                 timeout=self._timeout_ms / 1000.0,
@@ -114,14 +113,20 @@ class ScriptHook(BaseHook):
             stdout, stderr, returncode = result
 
             log_entry["returncode"] = returncode
-            log_entry["stderr"] = stderr[:500] if stderr else ""
+            log_entry["stderr"] = stderr or ""
+            if stderr:
+                logger.debug(
+                    "script_hook_stderr name=%s stderr=%s",
+                    self._name,
+                    stderr,
+                )
 
             if returncode != 0:
                 logger.warning(
                     "script_hook_failed name=%s exit=%d stderr=%s",
                     self._name,
                     returncode,
-                    stderr[:200] if stderr else "",
+                    _stderr_excerpt(stderr, limit=200),
                 )
                 log_entry["success"] = False
                 self._execution_log.append(log_entry)
@@ -200,13 +205,15 @@ def _build_command(script_path: Path) -> list[str]:
         return ["node", str(script_path)]
     elif suffix == ".sh":
         if sys.platform == "win32":
-            return ["bash", str(script_path)]
+            bash = shutil.which("bash")
+            if bash is None:
+                raise FileNotFoundError("bash is required to execute .sh hook scripts on Windows")
+            return [bash, str(script_path)]
         return [str(script_path)]
     elif suffix == ".ps1":
         return ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script_path)]
     else:
-        # Try to execute directly
-        return [str(script_path)]
+        raise ValueError(f"Unsupported script extension: {suffix or '<none>'}")
 
 
 async def _run_subprocess(
@@ -239,3 +246,10 @@ async def _run_subprocess(
     stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
     returncode = proc.returncode or 0
     return stdout, stderr, returncode
+
+
+def _stderr_excerpt(stderr: str, *, limit: int) -> str:
+    """Return a concise stderr preview for warning-level logs."""
+    if len(stderr) <= limit:
+        return stderr
+    return f"{stderr[:limit]}..."

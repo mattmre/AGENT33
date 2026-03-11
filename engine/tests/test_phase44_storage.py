@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -19,6 +21,15 @@ from agent33.sessions.storage import FileSessionStorage
 
 class TestFileSessionStorage:
     """Tests for FileSessionStorage CRUD operations."""
+
+    @pytest.mark.parametrize(
+        "unsafe_id",
+        ["../escape", "..\\escape", "nested/child", "nested\\child", ""],
+    )
+    def test_session_dir_rejects_unsafe_ids(self, tmp_path: Path, unsafe_id: str) -> None:
+        storage = FileSessionStorage(base_dir=tmp_path)
+        with pytest.raises(ValueError, match="Invalid session ID"):
+            storage.session_dir(unsafe_id)
 
     def test_save_and_load_session(self, tmp_path: Path) -> None:
         storage = FileSessionStorage(base_dir=tmp_path)

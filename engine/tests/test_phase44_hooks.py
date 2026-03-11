@@ -367,6 +367,36 @@ class TestScriptHook:
         assert hook.execution_log[0]["hook_name"] == "logged"
         assert hook.execution_log[0]["success"] is True
 
+    async def test_script_hook_missing_bash_on_windows_fails_open(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        script = self._make_script(tmp_path, "guard.sh", "echo ok\n")
+        hook = ScriptHook(
+            name="guard",
+            event_type="session.start",
+            script_path=script,
+            timeout_ms=5000,
+        )
+        ctx = HookContext(event_type="session.start", tenant_id="")
+
+        monkeypatch.setattr("agent33.hooks.script_hook.sys.platform", "win32")
+        monkeypatch.setattr("agent33.hooks.script_hook.shutil.which", lambda _cmd: None)
+
+        next_called = False
+
+        async def call_next(c: HookContext) -> HookContext:
+            nonlocal next_called
+            next_called = True
+            return c
+
+        result = await hook.execute(ctx, call_next)
+        assert next_called
+        assert not result.abort
+        assert hook.execution_log[0]["success"] is False
+        assert "bash is required" in hook.execution_log[0]["error"]
+
 
 class TestScriptHookInChain:
     """Tests for ScriptHook integration with HookChainRunner."""
@@ -476,6 +506,19 @@ class TestScriptHookDiscovery:
         )
         count = discovery.discover()
         assert count == 1
+
+    def test_parse_rejects_files_without_extension(self, tmp_path: Path) -> None:
+        hook_path = tmp_path / "session.start--no-extension"
+        hook_path.write_text("pass\n")
+
+        assert ScriptHookDiscovery._parse_hook_filename(hook_path) is None
+
+    def test_parse_allows_hyphenated_event_type_segments(self, tmp_path: Path) -> None:
+        hook_path = tmp_path / "tool-execute.pre-hook--guard.py"
+        hook_path.write_text("pass\n")
+
+        parsed = ScriptHookDiscovery._parse_hook_filename(hook_path)
+        assert parsed == ("tool-execute.pre-hook", "guard")
 
     def test_ignore_invalid_filenames(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "hooks"

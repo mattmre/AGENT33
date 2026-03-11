@@ -79,14 +79,8 @@ class TaskEntry:
             task_id=data.get("task_id", uuid4().hex[:12]),
             description=data.get("description", ""),
             status=data.get("status", "pending"),
-            created_at=(
-                datetime.fromisoformat(created) if isinstance(created, str) else datetime.now(UTC)
-            ),
-            completed_at=(
-                datetime.fromisoformat(completed)
-                if isinstance(completed, str) and completed
-                else None
-            ),
+            created_at=_parse_required_datetime(created, field_name="created_at"),
+            completed_at=_parse_optional_datetime(completed, field_name="completed_at"),
             metadata=data.get("metadata", {}),
         )
 
@@ -129,7 +123,7 @@ class SessionEvent:
         return cls(
             event_id=data.get("event_id", uuid4().hex),
             event_type=SessionEventType(data["event_type"]),
-            timestamp=(datetime.fromisoformat(ts) if isinstance(ts, str) else datetime.now(UTC)),
+            timestamp=_parse_required_datetime(ts, field_name="timestamp"),
             session_id=data.get("session_id", ""),
             data=data.get("data", {}),
             correlation_id=data.get("correlation_id", ""),
@@ -202,13 +196,9 @@ class OperatorSession:
             session_id=data.get("session_id", uuid4().hex),
             purpose=data.get("purpose", ""),
             status=OperatorSessionStatus(data.get("status", "active")),
-            started_at=(
-                datetime.fromisoformat(started) if isinstance(started, str) else datetime.now(UTC)
-            ),
-            updated_at=(
-                datetime.fromisoformat(updated) if isinstance(updated, str) else datetime.now(UTC)
-            ),
-            ended_at=(datetime.fromisoformat(ended) if isinstance(ended, str) and ended else None),
+            started_at=_parse_required_datetime(started, field_name="started_at"),
+            updated_at=_parse_required_datetime(updated, field_name="updated_at"),
+            ended_at=_parse_optional_datetime(ended, field_name="ended_at"),
             tenant_id=data.get("tenant_id", ""),
             tasks=[TaskEntry.from_dict(t) for t in tasks_raw],
             task_summary=data.get("task_summary", ""),
@@ -216,8 +206,9 @@ class OperatorSession:
             parent_session_id=data.get("parent_session_id"),
             cache=data.get("cache", {}),
             event_count=data.get("event_count", 0),
-            last_checkpoint_at=(
-                datetime.fromisoformat(last_cp) if isinstance(last_cp, str) and last_cp else None
+            last_checkpoint_at=_parse_optional_datetime(
+                last_cp,
+                field_name="last_checkpoint_at",
             ),
         )
 
@@ -230,3 +221,27 @@ class OperatorSession:
     def task_count(self) -> int:
         """Total number of tracked tasks."""
         return len(self.tasks)
+
+
+def _parse_required_datetime(value: Any, *, field_name: str) -> datetime:
+    """Parse required datetimes while surfacing malformed persisted data."""
+    if value is None:
+        return datetime.now(UTC)
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid {field_name}")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {field_name}") from exc
+
+
+def _parse_optional_datetime(value: Any, *, field_name: str) -> datetime | None:
+    """Parse optional datetimes while surfacing malformed persisted data."""
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid {field_name}")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {field_name}") from exc

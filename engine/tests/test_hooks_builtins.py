@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agent33.hooks.builtins import AuditLogHook, MetricsHook, get_builtin_hooks
-from agent33.hooks.models import AgentHookContext, HookContext, RequestHookContext
+from agent33.hooks.models import AgentHookContext, HookContext, HookEventType, RequestHookContext
 
 # ---------------------------------------------------------------------------
 # MetricsHook
@@ -144,8 +144,7 @@ class TestAuditLogHook:
 class TestGetBuiltinHooks:
     def test_returns_correct_count(self) -> None:
         builtins = get_builtin_hooks()
-        # 8 event types * 2 hooks (metrics + audit) = 16
-        assert len(builtins) == 16
+        assert len(builtins) == len(HookEventType) * 2
 
     def test_all_have_definitions(self) -> None:
         builtins = get_builtin_hooks()

@@ -12,7 +12,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from agent33.security.permissions import require_scope
+from agent33.api.routes.tenant_access import require_tenant_context, tenant_filter_for_request
+from agent33.security.permissions import check_permission, require_scope
 from agent33.sessions.models import OperatorSessionStatus
 
 router = APIRouter(prefix="/v1/sessions", tags=["sessions"])
@@ -34,10 +35,42 @@ def set_session_service(service: Any) -> None:
 
 def _get_session_service(request: Request) -> Any:
     """Extract session service from app state or module-level fallback."""
-    svc = getattr(request.app.state, "operator_session_service", None) or _session_service
+    if hasattr(request.app.state, "operator_session_service"):
+        svc = request.app.state.operator_session_service
+    else:
+        svc = _session_service
     if svc is None:
         raise HTTPException(status_code=503, detail="Operator session service not initialized")
     return svc
+
+
+def _tenant_id_for_create(request: Request) -> str:
+    """Return the tenant binding for newly created sessions."""
+    tenant_id, scopes = require_tenant_context(request)
+    is_admin = check_permission("admin", scopes) if scopes else False
+    if is_admin:
+        return ""
+    return tenant_id
+
+
+def _tenant_filter(request: Request) -> str | None:
+    """Return the effective tenant filter for the current caller."""
+    return tenant_filter_for_request(request)
+
+
+async def _get_accessible_session(request: Request, session_id: str) -> tuple[Any, Any]:
+    """Load a session and enforce tenant ownership for non-admin callers."""
+    svc = _get_session_service(request)
+    try:
+        session = await svc.get_session(session_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    tenant_id = _tenant_filter(request)
+    if tenant_id is not None and session.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch")
+    return svc, session
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +167,7 @@ def _session_to_response(session: Any) -> SessionResponse:
     return SessionResponse(
         session_id=session.session_id,
         purpose=session.purpose,
-        status=session.status.value if hasattr(session.status, "value") else str(session.status),
+        status=session.status.value,
         started_at=session.started_at,
         updated_at=session.updated_at,
         ended_at=session.ended_at,
@@ -172,6 +205,7 @@ async def create_session(
     session = await svc.start_session(
         purpose=body.purpose,
         context=body.context,
+        tenant_id=_tenant_id_for_create(request),
     )
     return _session_to_response(session)
 
@@ -185,7 +219,11 @@ async def list_sessions(
     """List operator sessions with optional filters."""
     svc = _get_session_service(request)
     status_enum = OperatorSessionStatus(status) if status else None
-    sessions = await svc.list_sessions(status=status_enum, limit=limit)
+    sessions = await svc.list_sessions(
+        status=status_enum,
+        limit=limit,
+        tenant_id=_tenant_filter(request),
+    )
     return [_session_to_response(s) for s in sessions]
 
 
@@ -193,8 +231,13 @@ async def list_sessions(
 async def list_incomplete_sessions(request: Request) -> list[SessionResponse]:
     """List sessions eligible for resume (crashed or suspended)."""
     svc = _get_session_service(request)
-    crashed = await svc.detect_incomplete_sessions()
-    suspended = await svc.list_sessions(status=OperatorSessionStatus.SUSPENDED, limit=50)
+    tenant_id = _tenant_filter(request)
+    crashed = await svc.detect_incomplete_sessions(tenant_id=tenant_id)
+    suspended = await svc.list_sessions(
+        status=OperatorSessionStatus.SUSPENDED,
+        limit=50,
+        tenant_id=tenant_id,
+    )
     all_incomplete = crashed + suspended
     return [_session_to_response(s) for s in all_incomplete]
 
@@ -202,10 +245,7 @@ async def list_incomplete_sessions(request: Request) -> list[SessionResponse]:
 @router.get("/{session_id}", dependencies=[require_scope("sessions:read")])
 async def get_session(session_id: str, request: Request) -> SessionResponse:
     """Get session details by ID."""
-    svc = _get_session_service(request)
-    session = await svc.get_session(session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    _svc, session = await _get_accessible_session(request, session_id)
     return _session_to_response(session)
 
 
@@ -215,7 +255,7 @@ async def get_session(session_id: str, request: Request) -> SessionResponse:
 )
 async def resume_session(session_id: str, request: Request) -> SessionResponse:
     """Resume an incomplete session."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     try:
         session = await svc.resume_session(session_id)
     except KeyError:
@@ -235,7 +275,7 @@ async def end_session(
     request: Request,
 ) -> SessionResponse:
     """End an active session."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     status_enum = OperatorSessionStatus(body.status)
     try:
         session = await svc.end_session(session_id, status=status_enum)
@@ -252,7 +292,7 @@ async def end_session(
 )
 async def checkpoint_session(session_id: str, request: Request) -> dict[str, str]:
     """Trigger a manual checkpoint for the session."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     try:
         await svc.checkpoint(session_id)
     except KeyError:
@@ -276,7 +316,7 @@ async def add_task(
     request: Request,
 ) -> TaskResponse:
     """Add a task to the session."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     try:
         task = await svc.add_task(session_id, description=body.description, metadata=body.metadata)
     except KeyError:
@@ -290,7 +330,7 @@ async def add_task(
 )
 async def list_tasks(session_id: str, request: Request) -> list[TaskResponse]:
     """List all tasks for a session."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     try:
         tasks = await svc.list_tasks(session_id)
     except KeyError:
@@ -309,7 +349,7 @@ async def update_task(
     request: Request,
 ) -> TaskResponse:
     """Update a task's status."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     try:
         task = await svc.update_task(session_id, task_id, status=body.status)
     except KeyError as exc:
@@ -335,14 +375,12 @@ async def get_replay(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> list[ReplayEventResponse]:
     """Get replay events with pagination."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     events = await svc.get_replay(session_id, offset=offset, limit=limit)
     return [
         ReplayEventResponse(
             event_id=e.event_id,
-            event_type=(
-                e.event_type.value if hasattr(e.event_type, "value") else str(e.event_type)
-            ),
+            event_type=e.event_type.value,
             timestamp=e.timestamp,
             session_id=e.session_id,
             data=e.data,
@@ -361,6 +399,6 @@ async def get_replay_summary(
     request: Request,
 ) -> ReplaySummaryResponse:
     """Get a summary of the session replay log."""
-    svc = _get_session_service(request)
+    svc, _session = await _get_accessible_session(request, session_id)
     summary = await svc.get_replay_summary(session_id)
     return ReplaySummaryResponse(**summary)

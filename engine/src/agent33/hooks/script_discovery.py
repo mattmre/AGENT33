@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from agent33.hooks.script_hook import ScriptHook
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Supported script extensions
 _SUPPORTED_EXTENSIONS = {".py", ".sh", ".ps1", ".js"}
+_EVENT_TYPE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class ScriptHookDiscovery:
@@ -129,7 +131,7 @@ class ScriptHookDiscovery:
         suffix = path.suffix.lower()
 
         # Check extension
-        if suffix and suffix not in _SUPPORTED_EXTENSIONS:
+        if suffix not in _SUPPORTED_EXTENSIONS:
             return None
 
         # Must contain '--' separator
@@ -147,7 +149,7 @@ class ScriptHookDiscovery:
             return None
 
         # Validate event type looks reasonable (dots-separated segments)
-        if not all(seg.isalpha() or seg == "_" for seg in event_type.split(".")):
+        if not all(_EVENT_TYPE_SEGMENT_RE.fullmatch(seg) for seg in event_type.split(".")):
             return None
 
         return event_type, hook_name
