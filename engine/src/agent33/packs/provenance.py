@@ -12,23 +12,28 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime
-from enum import StrEnum
 
 import structlog
-from pydantic import BaseModel, Field
 
 from agent33.packs.manifest import PackManifest, manifest_to_dict
+from agent33.packs.provenance_models import (
+    PackProvenance,
+    PackTrustPolicy,
+    TrustDecision,
+    TrustLevel,
+)
 
 logger = structlog.get_logger()
 
-
-class TrustLevel(StrEnum):
-    """Trust classification for a pack's provenance."""
-
-    UNTRUSTED = "untrusted"
-    COMMUNITY = "community"
-    VERIFIED = "verified"
-    OFFICIAL = "official"
+__all__ = [
+    "PackProvenance",
+    "PackTrustPolicy",
+    "TrustDecision",
+    "TrustLevel",
+    "evaluate_trust",
+    "sign_pack",
+    "verify_pack",
+]
 
 
 # Ordered for comparison: higher index = more trusted
@@ -43,57 +48,6 @@ _TRUST_ORDER: list[TrustLevel] = [
 def _trust_rank(level: TrustLevel) -> int:
     """Return numeric rank for a trust level (higher = more trusted)."""
     return _TRUST_ORDER.index(level)
-
-
-class PackProvenance(BaseModel):
-    """Provenance metadata attached to a signed pack."""
-
-    signer_id: str = Field(
-        ...,
-        min_length=1,
-        description="Identifier of the entity that signed the pack",
-    )
-    signature: str = Field(
-        ...,
-        min_length=1,
-        description="Hex-encoded HMAC-SHA256 signature of the manifest",
-    )
-    signed_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
-        description="UTC timestamp of when the pack was signed",
-    )
-    algorithm: str = Field(
-        default="sha256",
-        description="Hash algorithm used for signing (currently only sha256)",
-    )
-    trust_level: TrustLevel = Field(
-        default=TrustLevel.COMMUNITY,
-        description="Trust classification assigned by the signer",
-    )
-
-
-class PackTrustPolicy(BaseModel):
-    """Policy governing which packs are trusted for installation."""
-
-    require_signature: bool = Field(
-        default=False,
-        description="If True, packs without provenance metadata are rejected",
-    )
-    min_trust_level: TrustLevel = Field(
-        default=TrustLevel.UNTRUSTED,
-        description="Minimum trust level required for installation",
-    )
-    allowed_signers: list[str] = Field(
-        default_factory=list,
-        description="If non-empty, only these signer IDs are accepted",
-    )
-
-
-class TrustDecision(BaseModel):
-    """Result of evaluating provenance against a trust policy."""
-
-    allowed: bool
-    reason: str = ""
 
 
 def _canonical_manifest_bytes(manifest: PackManifest) -> bytes:

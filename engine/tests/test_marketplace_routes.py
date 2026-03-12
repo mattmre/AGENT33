@@ -102,6 +102,7 @@ class TestMarketplaceRoutes:
         data = response.json()
         assert data["count"] == 2
         assert [item["name"] for item in data["packs"]] == ["analytics-pack", "ops-pack"]
+        assert data["packs"][0]["sources"] == ["local"]
 
     def test_get_marketplace_pack_detail(self, tmp_path: Path) -> None:
         client = _create_test_app(tmp_path)
@@ -113,6 +114,7 @@ class TestMarketplaceRoutes:
         assert data["name"] == "analytics-pack"
         assert data["latest_version"] == "2.0.0"
         assert [item["version"] for item in data["versions"]] == ["2.0.0", "1.0.0"]
+        assert data["versions"][0]["source_name"] == "local"
 
     def test_list_marketplace_versions(self, tmp_path: Path) -> None:
         client = _create_test_app(tmp_path)
@@ -187,3 +189,11 @@ class TestMarketplaceRoutes:
         )
 
         assert response.status_code == 422
+
+    def test_refresh_marketplace(self, tmp_path: Path) -> None:
+        client = _create_test_app(tmp_path)
+
+        response = client.post("/v1/marketplace/refresh")
+
+        assert response.status_code == 200
+        assert response.json()["refreshed"] is True

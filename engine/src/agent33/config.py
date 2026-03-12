@@ -172,9 +172,12 @@ class Settings(BaseSettings):
     # Skill Packs
     pack_definitions_dir: str = "packs"
     pack_marketplace_dir: str = "pack-marketplace"
+    pack_marketplace_remote_sources: str = ""  # JSON array of remote source configs
+    pack_marketplace_cache_dir: str = "var/pack-marketplace-cache"
     pack_auto_enable: bool = False
     pack_max_size_mb: int = 50
     pack_checksums_required: bool = False
+    pack_rollback_archive_dir: str = "var/pack-rollback-archive"
 
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs

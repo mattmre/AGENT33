@@ -6,6 +6,12 @@ from datetime import datetime  # noqa: TC003 - Pydantic needs this at runtime
 
 from pydantic import BaseModel, Field
 
+from agent33.packs.provenance_models import (  # noqa: TC001
+    PackProvenance,
+    PackTrustPolicy,
+    TrustLevel,
+)
+
 
 class PackSummary(BaseModel):
     """Compact pack representation for list endpoints."""
@@ -35,8 +41,10 @@ class PackDetail(BaseModel):
     engine_min_version: str = ""
     installed_at: datetime | None = None
     source: str = "local"
+    source_reference: str = ""
     checksum: str = ""
     status: str = "installed"
+    provenance: PackProvenance | None = None
 
 
 class PackSkillInfo(BaseModel):
@@ -84,6 +92,28 @@ class InstallResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class PackUpgradeRequest(BaseModel):
+    """Request body for pack upgrades."""
+
+    source_type: str = Field(
+        default="marketplace",
+        description="Source type: 'local' or 'marketplace'",
+    )
+    path: str = Field(default="", description="Local filesystem path to a pack directory")
+    name: str = Field(default="", description="Marketplace pack name override")
+    version: str = Field(default="", description="Target version (empty = latest)")
+
+
+class PackRollbackResponse(BaseModel):
+    """Response for rollback operations."""
+
+    success: bool
+    pack_name: str
+    version: str = ""
+    restored_from_version: str = ""
+    errors: list[str] = Field(default_factory=list)
+
+
 class EnableDisableResponse(BaseModel):
     """Response for enable/disable operations."""
 
@@ -119,6 +149,9 @@ class MarketplacePackVersionInfo(BaseModel):
     tags: list[str] = Field(default_factory=list)
     category: str = ""
     skills_count: int = 0
+    source_name: str = ""
+    source_type: str = "local"
+    trust_level: TrustLevel | None = None
 
 
 class MarketplacePackSummary(BaseModel):
@@ -131,6 +164,7 @@ class MarketplacePackSummary(BaseModel):
     category: str = ""
     latest_version: str
     versions_count: int = 0
+    sources: list[str] = Field(default_factory=list)
 
 
 class MarketplacePackDetail(BaseModel):
@@ -143,6 +177,7 @@ class MarketplacePackDetail(BaseModel):
     category: str = ""
     latest_version: str
     versions: list[MarketplacePackVersionInfo] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
 
 
 class MarketplaceInstallRequest(BaseModel):
@@ -150,3 +185,44 @@ class MarketplaceInstallRequest(BaseModel):
 
     name: str = Field(..., min_length=1, description="Marketplace pack name")
     version: str = Field(default="", description="Target version (empty = latest)")
+
+
+class TrustPolicyUpdateRequest(BaseModel):
+    """Request body for trust-policy updates."""
+
+    require_signature: bool | None = None
+    min_trust_level: TrustLevel | None = None
+    allowed_signers: list[str] | None = None
+
+
+class TrustPolicyResponse(BaseModel):
+    """Current pack trust policy."""
+
+    policy: PackTrustPolicy
+
+
+class PackTrustResponse(BaseModel):
+    """Trust and provenance state for one installed pack."""
+
+    pack_name: str
+    installed_version: str = ""
+    source: str = ""
+    source_reference: str = ""
+    provenance: PackProvenance | None = None
+    policy: PackTrustPolicy
+    allowed: bool
+    reason: str = ""
+
+
+class EnablementMatrixResponse(BaseModel):
+    """Tenant enablement matrix for installed packs."""
+
+    packs: list[str] = Field(default_factory=list)
+    tenants: list[str] = Field(default_factory=list)
+    matrix: dict[str, dict[str, bool]] = Field(default_factory=dict)
+
+
+class EnablementMatrixUpdateRequest(BaseModel):
+    """Bulk enablement updates for installed packs."""
+
+    matrix: dict[str, dict[str, bool]] = Field(default_factory=dict)

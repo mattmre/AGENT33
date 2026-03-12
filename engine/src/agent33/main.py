@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
@@ -422,14 +423,54 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Pack registry (optional) ------------------------------------------
     from agent33.packs.marketplace import LocalPackMarketplace
+    from agent33.packs.marketplace_aggregator import MarketplaceAggregator
     from agent33.packs.registry import PackRegistry
+    from agent33.packs.remote_marketplace import RemoteMarketplaceConfig, RemotePackMarketplace
+    from agent33.packs.rollback import PackRollbackManager
+    from agent33.packs.trust_manager import TrustPolicyManager
 
     packs_dir = Path(settings.pack_definitions_dir)
-    pack_marketplace = LocalPackMarketplace(Path(settings.pack_marketplace_dir))
+    local_pack_marketplace = LocalPackMarketplace(Path(settings.pack_marketplace_dir))
+    remote_marketplaces: list[RemotePackMarketplace] = []
+    raw_remote_sources = settings.pack_marketplace_remote_sources.strip()
+    if raw_remote_sources:
+        try:
+            parsed_sources = json.loads(raw_remote_sources)
+        except json.JSONDecodeError:
+            parsed_sources = []
+            logger.warning("pack_marketplace_remote_sources_invalid")
+        if isinstance(parsed_sources, list):
+            for item in parsed_sources:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    config = RemoteMarketplaceConfig.model_validate(item)
+                except Exception:
+                    logger.warning(
+                        "pack_marketplace_remote_source_invalid",
+                        name=item.get("name"),
+                        index_url=item.get("index_url"),
+                    )
+                    continue
+                remote_marketplaces.append(
+                    RemotePackMarketplace(
+                        config,
+                        cache_dir=Path(settings.pack_marketplace_cache_dir),
+                        max_download_size_bytes=settings.pack_max_size_mb * 1024 * 1024,
+                    )
+                )
+    pack_marketplace = MarketplaceAggregator([local_pack_marketplace, *remote_marketplaces])
+    pack_trust_manager = TrustPolicyManager(orchestration_state_store)
     pack_registry = PackRegistry(
         packs_dir=packs_dir,
         skill_registry=skill_registry,
         marketplace=pack_marketplace,
+        trust_policy_manager=pack_trust_manager,
+    )
+    pack_rollback_manager = PackRollbackManager(
+        pack_registry,
+        archive_dir=Path(settings.pack_rollback_archive_dir),
+        state_store=orchestration_state_store,
     )
     if packs_dir.is_dir():
         pack_count = pack_registry.discover()
@@ -438,6 +479,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.debug("pack_definitions_dir_not_found", path=str(packs_dir))
     app.state.pack_registry = pack_registry
     app.state.pack_marketplace = pack_marketplace
+    app.state.pack_trust_manager = pack_trust_manager
+    app.state.pack_rollback_manager = pack_rollback_manager
 
     # -- Hook registry -----------------------------------------------------
     hook_registry = None

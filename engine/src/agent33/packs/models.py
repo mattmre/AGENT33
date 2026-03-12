@@ -12,6 +12,8 @@ from pathlib import Path  # noqa: TC003 -- Pydantic needs Path at runtime
 
 from pydantic import BaseModel, Field
 
+from agent33.packs.provenance_models import PackProvenance  # noqa: TC001
+
 
 class PackStatus(StrEnum):
     """Lifecycle status of an installed pack."""
@@ -111,8 +113,10 @@ class InstalledPack(BaseModel):
     # Installation metadata
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source: str = "local"
+    source_reference: str = ""
     checksum: str = ""
     pack_dir: Path
+    provenance: PackProvenance | None = None
 
     # Governance
     governance: PackGovernance = Field(default_factory=PackGovernance)
