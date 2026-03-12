@@ -21,12 +21,24 @@ class ProxyManager:
         self,
         config: ProxyFleetConfig | None = None,
         tool_separator: str = DEFAULT_TOOL_SEPARATOR,
+        health_check_enabled: bool = True,
     ) -> None:
         self._config = config or ProxyFleetConfig()
         self._tool_separator = tool_separator
+        self._health_check_enabled = health_check_enabled
         self._children: dict[str, ChildServerHandle] = {}
         # Native tool names that should never be shadowed by proxy tools
         self._native_tool_names: set[str] = set()
+
+    @property
+    def tool_separator(self) -> str:
+        """Return the configured proxy tool separator."""
+        return self._tool_separator
+
+    @property
+    def health_check_enabled(self) -> bool:
+        """Return whether on-demand health refreshes are enabled."""
+        return self._health_check_enabled
 
     # ------------------------------------------------------------------
     # Fleet lifecycle
@@ -81,6 +93,13 @@ class ProxyManager:
     def list_servers(self) -> list[dict[str, Any]]:
         """Return status summaries for all child servers."""
         return [h.status_summary() for h in self._children.values()]
+
+    async def refresh_health(self) -> None:
+        """Run on-demand health checks when enabled."""
+        if not self._health_check_enabled:
+            return
+        for handle in self._children.values():
+            await handle.health_check()
 
     # ------------------------------------------------------------------
     # Native tool registration (collision avoidance)

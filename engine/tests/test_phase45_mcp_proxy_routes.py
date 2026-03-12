@@ -169,6 +169,20 @@ class TestFleetHealth:
         assert "total" in data
         assert "healthy" in data
 
+    def test_health_skips_refresh_when_disabled(self) -> None:
+        async def _unexpected_refresh() -> None:
+            raise AssertionError("refresh_health should not be called when disabled")
+
+        manager = ProxyManager(health_check_enabled=False)
+        manager.refresh_health = _unexpected_refresh  # type: ignore[method-assign]
+        set_proxy_manager(manager)
+        app = _create_test_app()
+        client = TestClient(app)
+
+        resp = client.get("/v1/mcp/proxy/health")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+
 
 class TestManagerNotInitialized:
     """When proxy manager is None, endpoints return 503."""

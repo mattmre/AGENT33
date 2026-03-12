@@ -112,13 +112,11 @@ class ChildServerHandle:
             return False
 
         if self.state == ChildServerState.COOLDOWN:
-            elapsed = self._clock() - (self.circuit_breaker.opened_at or 0.0)
-            if elapsed < self.config.cooldown_seconds:
+            try:
+                self.circuit_breaker.before_call()
+            except CircuitOpenError:
                 return False
-            # Try recovery
             self.state = ChildServerState.DEGRADED
-            self.circuit_breaker.state = CircuitState.HALF_OPEN
-            self.circuit_breaker.half_open_successes = 0
 
         # In production this would ping the child process.
         # For now, healthy if state is not explicitly failed.

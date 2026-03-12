@@ -312,6 +312,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             secret=settings.jwt_secret.get_secret_value(),
             algorithm=settings.jwt_algorithm,
             default_ttl_seconds=settings.approval_token_ttl_seconds,
+            default_one_time=settings.approval_token_one_time_default,
             state_store=orchestration_state_store,
         )
     app.state.approval_token_manager = approval_token_manager
@@ -548,6 +549,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     proxy_manager = ProxyManager(
         config=proxy_config,
         tool_separator=settings.mcp_proxy_tool_separator,
+        health_check_enabled=settings.mcp_proxy_health_check_enabled,
     )
     proxy_manager.set_native_tool_names({tool.name for tool in tool_registry.list_all()})
     if settings.mcp_proxy_enabled:

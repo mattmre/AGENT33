@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from agent33.mcp_server.proxy_models import ProxyServerConfig  # noqa: TC001 (FastAPI body)
 from agent33.security.permissions import require_scope
@@ -34,24 +34,17 @@ def _require_manager() -> ProxyManager:
     return _proxy_manager
 
 
-def _get_token_payload(request: Request) -> Any:
-    """Extract token payload from auth middleware."""
-    payload = getattr(request.state, "user", None)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return payload
-
-
 # ---------------------------------------------------------------------------
 # Server management endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/servers", dependencies=[require_scope("agents:read")])
-async def list_proxy_servers(request: Request) -> dict[str, Any]:
+async def list_proxy_servers() -> dict[str, Any]:
     """List all registered proxy servers with health status."""
-    _get_token_payload(request)
     manager = _require_manager()
+    if manager.health_check_enabled:
+        await manager.refresh_health()
     servers = manager.list_servers()
     summary = manager.health_summary()
     return {
@@ -61,10 +54,11 @@ async def list_proxy_servers(request: Request) -> dict[str, Any]:
 
 
 @router.get("/servers/{server_id}", dependencies=[require_scope("agents:read")])
-async def get_proxy_server(request: Request, server_id: str) -> dict[str, Any]:
+async def get_proxy_server(server_id: str) -> dict[str, Any]:
     """Get details and health for a specific proxy server."""
-    _get_token_payload(request)
     manager = _require_manager()
+    if manager.health_check_enabled:
+        await manager.refresh_health()
     handle = manager.get_server(server_id)
     if handle is None:
         raise HTTPException(status_code=404, detail=f"Proxy server '{server_id}' not found")
@@ -72,9 +66,8 @@ async def get_proxy_server(request: Request, server_id: str) -> dict[str, Any]:
 
 
 @router.post("/servers", dependencies=[require_scope("admin")])
-async def add_proxy_server(request: Request, config: ProxyServerConfig) -> dict[str, Any]:
+async def add_proxy_server(config: ProxyServerConfig) -> dict[str, Any]:
     """Register and start a new proxy server."""
-    _get_token_payload(request)
     manager = _require_manager()
     try:
         handle = await manager.add_server(config)
@@ -84,9 +77,8 @@ async def add_proxy_server(request: Request, config: ProxyServerConfig) -> dict[
 
 
 @router.delete("/servers/{server_id}", dependencies=[require_scope("admin")])
-async def remove_proxy_server(request: Request, server_id: str) -> dict[str, Any]:
+async def remove_proxy_server(server_id: str) -> dict[str, Any]:
     """Stop and unregister a proxy server."""
-    _get_token_payload(request)
     manager = _require_manager()
     removed = await manager.remove_server(server_id)
     if not removed:
@@ -95,9 +87,8 @@ async def remove_proxy_server(request: Request, server_id: str) -> dict[str, Any
 
 
 @router.post("/servers/{server_id}/restart", dependencies=[require_scope("admin")])
-async def restart_proxy_server(request: Request, server_id: str) -> dict[str, Any]:
+async def restart_proxy_server(server_id: str) -> dict[str, Any]:
     """Restart a specific proxy server."""
-    _get_token_payload(request)
     manager = _require_manager()
     handle = manager.get_server(server_id)
     if handle is None:
@@ -113,10 +104,11 @@ async def restart_proxy_server(request: Request, server_id: str) -> dict[str, An
 
 
 @router.get("/tools", dependencies=[require_scope("agents:read")])
-async def list_proxy_tools(request: Request) -> dict[str, Any]:
+async def list_proxy_tools() -> dict[str, Any]:
     """List all aggregated proxy tools."""
-    _get_token_payload(request)
     manager = _require_manager()
+    if manager.health_check_enabled:
+        await manager.refresh_health()
     tools = manager.list_aggregated_tools()
     return {"tools": tools, "count": len(tools)}
 
@@ -125,4 +117,6 @@ async def list_proxy_tools(request: Request) -> dict[str, Any]:
 async def proxy_fleet_health() -> dict[str, Any]:
     """Fleet-level health summary (public)."""
     manager = _require_manager()
+    if manager.health_check_enabled:
+        await manager.refresh_health()
     return manager.health_summary()

@@ -208,10 +208,13 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
         return None
 
     server = server_cls("agent33-core")
+    proxy_manager = getattr(bridge, "proxy_manager", None)
+    server.proxy_tool_separator = (
+        proxy_manager.tool_separator if proxy_manager is not None else "__"
+    )
 
     async def list_tools() -> list[Any]:
         mcp_tools = list(_MCP_TOOL_DEFINITIONS)
-        proxy_manager = getattr(bridge, "proxy_manager", None)
         proxy_tools = proxy_manager.list_aggregated_tools() if proxy_manager is not None else []
         allowed = set(
             filter_allowed_tools(
@@ -238,7 +241,6 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
 
         args = arguments or {}
         result: Any
-        proxy_manager = getattr(bridge, "proxy_manager", None)
 
         if name == "list_agents":
             result = await mcp_tools.handle_list_agents(bridge)
