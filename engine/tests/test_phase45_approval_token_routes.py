@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent33.security.approval_tokens import ApprovalTokenManager
+from agent33.security.approval_tokens import ApprovalTokenError, ApprovalTokenManager
 from agent33.tools.approvals import (
     ApprovalReason,
     ApprovalStatus,
@@ -54,7 +54,7 @@ class TestApprovalTokenManagerIntegration:
         assert payload.jti == req.approval_id
 
         # 5. One-time token should be consumed
-        with pytest.raises(Exception, match="already been consumed"):
+        with pytest.raises(ApprovalTokenError, match="already been consumed"):
             mgr.validate(token, "shell", args, tenant_id="t-001")
 
     def test_revocation_lifecycle(self) -> None:
@@ -76,7 +76,7 @@ class TestApprovalTokenManagerIntegration:
         mgr.revoke(req.approval_id)
 
         # Validation should fail
-        with pytest.raises(Exception, match="revoked"):
+        with pytest.raises(ApprovalTokenError, match="revoked"):
             mgr.validate(token, "shell", args)
 
     def test_rejected_approval_cannot_issue_token(self) -> None:
@@ -93,7 +93,7 @@ class TestApprovalTokenManagerIntegration:
         assert rejected is not None
         assert rejected.status == ApprovalStatus.REJECTED
 
-        with pytest.raises(Exception, match="Cannot issue token"):
+        with pytest.raises(ApprovalTokenError, match="Cannot issue token"):
             mgr.issue(rejected, arguments={})
 
     def test_expired_approval_cannot_issue_token(self) -> None:
@@ -112,7 +112,7 @@ class TestApprovalTokenManagerIntegration:
         req.expires_at = datetime(2020, 1, 1, tzinfo=UTC)
         service._expire_pending()
 
-        with pytest.raises(Exception, match="Cannot issue token"):
+        with pytest.raises(ApprovalTokenError, match="Cannot issue token"):
             mgr.issue(req, arguments={})
 
     def test_token_validate_without_consuming(self) -> None:

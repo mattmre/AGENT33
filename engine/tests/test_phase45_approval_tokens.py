@@ -110,6 +110,13 @@ class TestApprovalTokenIssuance:
         data = jwt.decode(token, "test-secret", algorithms=["HS256"])
         assert data["op"] == "write"
 
+    def test_issue_uses_configured_default_one_time(self) -> None:
+        mgr = ApprovalTokenManager(secret="test-secret", default_one_time=False)
+        approval = _make_approved_request()
+        token = mgr.issue(approval, arguments={})
+        data = jwt.decode(token, "test-secret", algorithms=["HS256"])
+        assert data["one_time"] is False
+
 
 class TestApprovalTokenValidation:
     """Token validation: scope enforcement, arg hash, expiry, one-time."""

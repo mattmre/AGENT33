@@ -61,10 +61,10 @@ def get_authenticated_scopes(server: Any) -> list[str]:
     return list(getattr(user, "scopes", []))
 
 
-def get_required_scope_for_tool(tool_name: str) -> str | None:
+def get_required_scope_for_tool(tool_name: str, *, tool_separator: str = "__") -> str | None:
     """Return the scope required to invoke an MCP tool.
 
-    Proxy tools (containing ``__``) that are not explicitly scoped
+    Proxy tools (containing the configured separator) that are not explicitly scoped
     default to ``tools:execute`` rather than ``None``, so they are
     routable through the proxy dispatch path.
     """
@@ -72,7 +72,7 @@ def get_required_scope_for_tool(tool_name: str) -> str | None:
     if scope is not None:
         return scope
     # Phase 45: proxy tools use tools:execute by default
-    if "__" in tool_name:
+    if tool_separator and tool_separator in tool_name:
         return "tools:execute"
     return None
 
@@ -95,7 +95,10 @@ def get_required_scope_for_resource(uri: str) -> str | None:
 
 def enforce_tool_scope(server: Any, tool_name: str) -> None:
     """Raise when the current request lacks scope for an MCP tool."""
-    required_scope = get_required_scope_for_tool(tool_name)
+    required_scope = get_required_scope_for_tool(
+        tool_name,
+        tool_separator=_get_proxy_tool_separator(server),
+    )
     if required_scope is None:
         raise PermissionError(f"MCP tool '{tool_name}' is not allowed")
     _enforce_scope(server, required_scope)
@@ -145,3 +148,10 @@ def _enforce_scope(server: Any, required_scope: str) -> None:
 
     if not check_permission(required_scope, list(getattr(user, "scopes", []))):
         raise PermissionError(f"Missing required scope: {required_scope}")
+
+
+def _get_proxy_tool_separator(server: Any) -> str:
+    separator = getattr(server, "proxy_tool_separator", "__")
+    if isinstance(separator, str) and separator:
+        return separator
+    return "__"

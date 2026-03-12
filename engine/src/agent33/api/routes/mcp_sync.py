@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agent33.mcp_server.sync import (
@@ -19,15 +19,6 @@ from agent33.mcp_server.sync import (
 from agent33.security.permissions import require_scope
 
 router = APIRouter(prefix="/v1/mcp/sync", tags=["mcp-sync"])
-
-
-def _get_token_payload(request: Request) -> Any:
-    """Extract token payload from auth middleware."""
-    payload = getattr(request.state, "user", None)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return payload
-
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -54,9 +45,8 @@ class PullRequest(BaseModel):
 
 
 @router.post("/push", dependencies=[require_scope("admin")])
-async def push_mcp_config(request: Request, body: PushRequest) -> dict[str, Any]:
+async def push_mcp_config(body: PushRequest) -> dict[str, Any]:
     """Push AGENT-33 MCP registration to CLI configs."""
-    _get_token_payload(request)
     try:
         targets = [CLITarget(t) for t in body.targets]
     except ValueError as exc:
@@ -70,9 +60,8 @@ async def push_mcp_config(request: Request, body: PushRequest) -> dict[str, Any]
 
 
 @router.post("/pull", dependencies=[require_scope("admin")])
-async def pull_mcp_config(request: Request, body: PullRequest) -> dict[str, Any]:
+async def pull_mcp_config(body: PullRequest) -> dict[str, Any]:
     """Pull MCP server registrations from a CLI config."""
-    _get_token_payload(request)
     try:
         target = CLITarget(body.target)
     except ValueError as exc:
@@ -85,15 +74,13 @@ async def pull_mcp_config(request: Request, body: PullRequest) -> dict[str, Any]
 
 
 @router.get("/diff", dependencies=[require_scope("agents:read")])
-async def diff_mcp_config(request: Request) -> dict[str, Any]:
+async def diff_mcp_config() -> dict[str, Any]:
     """Diff AGENT-33 registration across all CLI targets."""
-    _get_token_payload(request)
     entries = diff_sync()
     return {"entries": [e.model_dump(mode="json") for e in entries]}
 
 
 @router.get("/targets", dependencies=[require_scope("agents:read")])
-async def list_sync_targets(request: Request) -> dict[str, Any]:
+async def list_sync_targets() -> dict[str, Any]:
     """List supported CLI targets and their config file paths."""
-    _get_token_payload(request)
     return {"targets": get_target_paths()}

@@ -28,6 +28,11 @@ class TestMCPAuthMappings:
         assert get_required_scope_for_tool("resolve_workflow") == "workflows:read"
         assert get_required_scope_for_tool("execute_tool") == "tools:execute"
 
+    def test_proxy_tool_mapping_honors_custom_separator(self) -> None:
+        from agent33.mcp_server.auth import get_required_scope_for_tool
+
+        assert get_required_scope_for_tool("fs.read_file", tool_separator=".") == "tools:execute"
+
     def test_resource_scope_mapping_covers_documented_contract(self) -> None:
         from agent33.mcp_server.auth import get_required_scope_for_resource
 

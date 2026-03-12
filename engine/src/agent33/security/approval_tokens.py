@@ -51,12 +51,14 @@ class ApprovalTokenManager:
         secret: str,
         algorithm: str = "HS256",
         default_ttl_seconds: int = 300,
+        default_one_time: bool = True,
         clock: Any | None = None,
         state_store: OrchestrationStateStore | None = None,
     ) -> None:
         self._secret = secret
         self._algorithm = algorithm
         self._default_ttl_seconds = default_ttl_seconds
+        self._default_one_time = default_one_time
         self._clock = clock or time.time
         self._state_store = state_store
         self._lock = threading.RLock()
@@ -75,7 +77,7 @@ class ApprovalTokenManager:
         approval: ToolApprovalRequest,
         arguments: dict[str, Any] | None = None,
         ttl_seconds: int | None = None,
-        one_time: bool = True,
+        one_time: bool | None = None,
     ) -> str:
         """Issue a signed approval token for an already-approved request.
 
@@ -91,6 +93,7 @@ class ApprovalTokenManager:
 
         now = int(self._clock())
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl_seconds
+        one_time_value = self._default_one_time if one_time is None else one_time
         arg_hash = canonical_arg_hash(approval.tool_name, arguments or {})
 
         claims: dict[str, Any] = {
@@ -105,7 +108,7 @@ class ApprovalTokenManager:
             "arg_hash": arg_hash,
             "tenant_id": approval.tenant_id,
             "scope": "tools:execute",
-            "one_time": one_time,
+            "one_time": one_time_value,
         }
         return jwt.encode(claims, self._secret, algorithm=self._algorithm)
 
