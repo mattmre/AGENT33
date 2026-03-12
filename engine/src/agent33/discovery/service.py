@@ -17,6 +17,8 @@ from agent33.skills.definition import SkillDefinition, SkillStatus
 from agent33.skills.matching import _tokenize
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from agent33.packs.registry import PackRegistry
     from agent33.skills.registry import SkillRegistry
     from agent33.tools.registry import ToolRegistry
@@ -54,10 +56,11 @@ class WorkflowResolutionMatch(BaseModel):
     name: str
     description: str = ""
     score: float
-    source: Literal["runtime", "template"]
+    source: Literal["runtime", "template", "skill"]
     version: str = ""
     tags: list[str] = Field(default_factory=list)
     source_path: str = ""
+    pack: str | None = None
 
 
 class ToolDiscoveryResponse(BaseModel):
@@ -143,54 +146,29 @@ class DiscoveryService:
         tenant_id: str | None = None,
     ) -> list[SkillDiscoveryMatch]:
         """Return ranked skills relevant to a task description."""
-        if self._skill_registry is None:
-            return []
-
-        deduped: dict[str, SkillDiscoveryMatch] = {}
-        for skill in self._skill_registry.list_all():
-            if skill.status == SkillStatus.DEPRECATED:
-                continue
-
-            pack_name = self._resolve_skill_pack(skill)
-            if (
-                pack_name is not None
-                and tenant_id is not None
-                and (
-                    self._pack_registry is None
-                    or not self._pack_registry.is_enabled(pack_name, tenant_id)
-                )
-            ):
-                continue
-
-            canonical_name = self._canonical_skill_name(skill, pack_name)
-            if canonical_name != skill.name and "/" in skill.name:
-                continue
-
-            score = _score_candidate(
-                query,
-                canonical_name,
-                skill.description,
-                [*skill.tags, *skill.allowed_tools],
-            )
-            if score <= 0:
-                continue
-
-            match = SkillDiscoveryMatch(
+        matches = [
+            SkillDiscoveryMatch(
                 name=canonical_name,
                 description=skill.description,
-                score=round(score, 4),
+                score=score,
                 version=skill.version,
                 tags=list(skill.tags),
                 pack=pack_name,
             )
-            existing = deduped.get(canonical_name)
-            if existing is None or match.score > existing.score:
-                deduped[canonical_name] = match
-
-        matches = sorted(deduped.values(), key=lambda match: (-match.score, match.name))
+            for skill, canonical_name, pack_name, score in self._rank_skills(
+                query,
+                tenant_id=tenant_id,
+            )
+        ]
         return matches[: max(limit, 1)]
 
-    def resolve_workflow(self, query: str, *, limit: int = 10) -> list[WorkflowResolutionMatch]:
+    def resolve_workflow(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        tenant_id: str | None = None,
+    ) -> list[WorkflowResolutionMatch]:
         """Return ranked runtime workflows and templates relevant to a query."""
         matches: list[WorkflowResolutionMatch] = []
 
@@ -238,8 +216,76 @@ class DiscoveryService:
                     )
                 )
 
-        matches.sort(key=lambda match: (-match.score, match.source != "runtime", match.name))
+        for skill, canonical_name, pack_name, score in self._rank_skills(
+            query,
+            tenant_id=tenant_id,
+        ):
+            matches.append(
+                WorkflowResolutionMatch(
+                    name=canonical_name,
+                    description=skill.description,
+                    score=score,
+                    source="skill",
+                    version=skill.version,
+                    tags=list(skill.tags),
+                    source_path=_skill_source_path(skill.base_path),
+                    pack=pack_name,
+                )
+            )
+
+        source_priority = {"runtime": 0, "skill": 1, "template": 2}
+        matches.sort(
+            key=lambda match: (-match.score, source_priority.get(match.source, 99), match.name)
+        )
         return matches[: max(limit, 1)]
+
+    def _rank_skills(
+        self,
+        query: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> list[tuple[SkillDefinition, str, str | None, float]]:
+        """Return ranked visible skills with canonical names and scores."""
+        if self._skill_registry is None:
+            return []
+
+        deduped: dict[str, tuple[SkillDefinition, str, str | None, float]] = {}
+        for skill in self._skill_registry.list_all():
+            if skill.status == SkillStatus.DEPRECATED:
+                continue
+
+            pack_name = self._resolve_skill_pack(skill)
+            if (
+                pack_name is not None
+                and tenant_id is not None
+                and (
+                    self._pack_registry is None
+                    or not self._pack_registry.is_enabled(pack_name, tenant_id)
+                )
+            ):
+                continue
+
+            canonical_name = self._canonical_skill_name(skill, pack_name)
+            if canonical_name != skill.name and "/" in skill.name:
+                continue
+
+            score = _score_skill_candidate(
+                query,
+                canonical_name=canonical_name,
+                description=skill.description,
+                tags=[*skill.tags, *skill.allowed_tools],
+                instructions=skill.instructions,
+                category_terms=_skill_category_terms(skill, pack_name),
+            )
+            if score <= 0:
+                continue
+
+            ranked = (skill, canonical_name, pack_name, round(score, 4))
+            existing = deduped.get(canonical_name)
+            if existing is None or ranked[3] > existing[3]:
+                deduped[canonical_name] = ranked
+
+        return sorted(deduped.values(), key=lambda item: (-item[3], item[1]))
 
     def _resolve_skill_pack(self, skill: SkillDefinition) -> str | None:
         """Return the owning pack name for a skill, if any."""
@@ -315,3 +361,77 @@ def _score_candidate(query: str, primary_name: str, description: str, tags: list
         score += covered / len(query_tokens)
 
     return score
+
+
+def _score_skill_candidate(
+    query: str,
+    *,
+    canonical_name: str,
+    description: str,
+    tags: list[str],
+    instructions: str,
+    category_terms: list[str],
+) -> float:
+    """Return a weighted lexical score for skills using richer content signals."""
+    score = _score_candidate(query, canonical_name, description, [*tags, *category_terms])
+    if score <= 0:
+        score = _score_secondary_text(query, " ".join([*tags, *category_terms]))
+        if score <= 0:
+            return 0.0
+
+    instruction_excerpt = instructions[:600]
+    if instruction_excerpt:
+        score += min(_score_secondary_text(query, instruction_excerpt) * 0.4, 3.0)
+
+    return score
+
+
+def _score_secondary_text(query: str, text: str) -> float:
+    """Return a lower-weight lexical score for supporting text sections."""
+    query_lower = query.strip().lower()
+    if not query_lower or not text.strip():
+        return 0.0
+
+    text_lower = text.lower()
+    text_tokens = set(_tokenize(text))
+    query_tokens = _tokenize(query)
+
+    score = 0.0
+    if query_lower in text_lower:
+        score += 2.0
+
+    covered = 0
+    for token in query_tokens:
+        if token in text_tokens:
+            covered += 1
+            score += 0.6
+
+    if covered == 0 and query_lower not in text_lower:
+        return 0.0
+
+    if query_tokens:
+        score += covered / len(query_tokens)
+
+    return score
+
+
+def _skill_category_terms(skill: SkillDefinition, pack_name: str | None) -> list[str]:
+    """Build extra searchable terms from pack and path metadata."""
+    terms: list[str] = []
+    if pack_name:
+        terms.append(pack_name)
+
+    if skill.base_path is not None:
+        terms.extend(part for part in skill.base_path.parts if part not in {"."})
+
+    return terms
+
+
+def _skill_source_path(base_path: Path | None) -> str:
+    """Return a stable relative-ish source path for a skill when available."""
+    if base_path is None:
+        return ""
+    try:
+        return base_path.as_posix()
+    except Exception:
+        return str(base_path)

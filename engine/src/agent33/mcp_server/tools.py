@@ -246,13 +246,23 @@ async def handle_resolve_workflow(
     bridge: MCPServiceBridge,
     query: str,
     limit: int = 10,
+    context: Any | None = None,
 ) -> dict[str, Any]:
     """Resolve workflows and canonical templates for a task."""
     discovery_service = getattr(bridge, "discovery_service", None)
     if discovery_service is None:
         return {"query": query, "matches": [], "error": "Discovery service not available"}
 
-    matches = discovery_service.resolve_workflow(query, limit=limit)
+    from agent33.security.permissions import check_permission
+    from agent33.tools.base import ToolContext
+
+    tool_context = context if isinstance(context, ToolContext) else ToolContext()
+    tenant_id = (
+        None
+        if check_permission("admin", tool_context.user_scopes)
+        else (tool_context.tenant_id or None)
+    )
+    matches = discovery_service.resolve_workflow(query, limit=limit, tenant_id=tenant_id)
     return {
         "query": query,
         "matches": [match.model_dump(mode="json") for match in matches],

@@ -92,8 +92,32 @@ class TestDiscoveryRoutes:
         service.discover_skills.assert_called_once_with("deploy", limit=10, tenant_id=None)
 
     def test_resolve_workflow_returns_matches(self) -> None:
-        response = _client(["workflows:read"]).get("/v1/discovery/workflows/resolve?q=release")
+        response = _client(["workflows:read"], tenant_id="tenant-a").get(
+            "/v1/discovery/workflows/resolve?q=release"
+        )
         assert response.status_code == 200
         body = response.json()
         assert body["query"] == "release"
         assert body["matches"][0]["source"] == "runtime"
+
+    def test_resolve_workflow_passes_tenant_filter(self) -> None:
+        service = MagicMock()
+        service.resolve_workflow.return_value = []
+        set_discovery_service(service)
+
+        response = _client(["workflows:read"], tenant_id="tenant-a").get(
+            "/v1/discovery/workflows/resolve?q=deploy"
+        )
+
+        assert response.status_code == 200
+        service.resolve_workflow.assert_called_once_with("deploy", limit=10, tenant_id="tenant-a")
+
+    def test_resolve_workflow_allows_admin_without_tenant_filter(self) -> None:
+        service = MagicMock()
+        service.resolve_workflow.return_value = []
+        set_discovery_service(service)
+
+        response = _client(["admin"]).get("/v1/discovery/workflows/resolve?q=deploy")
+
+        assert response.status_code == 200
+        service.resolve_workflow.assert_called_once_with("deploy", limit=10, tenant_id=None)

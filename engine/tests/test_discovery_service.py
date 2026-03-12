@@ -172,6 +172,28 @@ class TestDiscoveryService:
         assert [match.name for match in enabled_matches] == ["deploy-safely"]
         assert enabled_matches[0].pack == "alpha"
 
+    def test_discover_skills_scores_instruction_content_and_path_terms(
+        self, tmp_path: Path
+    ) -> None:
+        skill_registry = SkillRegistry()
+        skill_dir = tmp_path / "skills" / "incident" / "runbook"
+        skill_dir.mkdir(parents=True)
+        skill_registry.register(
+            SkillDefinition(
+                name="incident-runbook",
+                description="Handle incidents",
+                instructions="Follow the pager escalation policy and on-call runbook carefully.",
+                tags=["operations"],
+                base_path=skill_dir,
+            )
+        )
+
+        service = DiscoveryService(skill_registry=skill_registry)
+        matches = service.discover_skills("pager escalation runbook", limit=5)
+
+        assert [match.name for match in matches] == ["incident-runbook"]
+        assert matches[0].score > 0
+
     def test_resolve_workflow_prefers_runtime_exact_match_over_template(
         self, tmp_path: Path
     ) -> None:
@@ -195,3 +217,38 @@ class TestDiscoveryService:
         assert matches[0].name == "release"
         assert matches[0].source == "runtime"
         assert any(match.source == "template" and match.name == "release" for match in matches)
+
+    def test_resolve_workflow_includes_skill_matches_with_tenant_filter(
+        self, tmp_path: Path
+    ) -> None:
+        skill_registry = SkillRegistry()
+        packs_dir = tmp_path / "packs"
+        packs_dir.mkdir()
+        _write_pack(packs_dir, name="alpha", skills=["deploy-safely"])
+        pack_registry = PackRegistry(packs_dir=packs_dir, skill_registry=skill_registry)
+        assert pack_registry.discover() == 1
+
+        service = DiscoveryService(
+            skill_registry=skill_registry,
+            pack_registry=pack_registry,
+            workflow_registry={"quality-check": _workflow_definition("quality-check", "quality")},
+        )
+
+        disabled_matches = service.resolve_workflow(
+            "deploy safely to production",
+            limit=5,
+            tenant_id="tenant-a",
+        )
+        assert all(match.source != "skill" for match in disabled_matches)
+
+        pack_registry.enable("alpha", "tenant-a")
+        enabled_matches = service.resolve_workflow(
+            "deploy safely to production",
+            limit=5,
+            tenant_id="tenant-a",
+        )
+
+        skill_matches = [match for match in enabled_matches if match.source == "skill"]
+        assert skill_matches
+        assert skill_matches[0].name == "deploy-safely"
+        assert skill_matches[0].pack == "alpha"

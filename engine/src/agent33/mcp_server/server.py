@@ -298,6 +298,7 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                 bridge,
                 query=args.get("query", ""),
                 limit=args.get("limit", 10),
+                context=_build_tool_context(server),
             )
         elif name == "get_system_status":
             result = await mcp_tools.handle_get_system_status(bridge)

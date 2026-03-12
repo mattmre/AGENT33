@@ -1,6 +1,6 @@
 # Next Session Briefing
 
-Last updated: 2026-03-11 (Session 69 — merge wave completed)
+Last updated: 2026-03-12 (Session 71 — Phase 46 closeout in progress)
 
 ## Current State
 
@@ -10,9 +10,13 @@ Last updated: 2026-03-11 (Session 69 — merge wave completed)
   - **PR #168** — Stage 3 review/approval hardening merged
   - **PR #170** — Phase 45 MCP fabric runtime wiring and approval-token hardening merged
   - **PR #171** — OpenClaw Track 2 tool catalog with tenant-scoped plugin data merged
-- PR `#166` remains open only as the wrap/handoff PR and should be refreshed/merged from the merged `main` state, not from the older open-queue snapshot.
 - The root checkout at `D:\GITHUB\AGENT33` remains dirty/shared; if new implementation work starts, create a fresh worktree from current `main`.
 - The next session should start from merged `main`, not from the older PR worktrees.
+- The current implementation slice is Phase 46 closeout, focused on better skill-aware discovery and tenant-aware workflow resolution.
+- Every new slice should begin with fresh context:
+  - create a fresh worktree from `origin/main`
+  - read `task_plan.md`, `findings.md`, and `progress.md`
+  - execute one slice only per worktree
 
 ## Validation Snapshot
 
@@ -41,17 +45,21 @@ Last updated: 2026-03-11 (Session 69 — merge wave completed)
 
 ## Immediate Priorities
 
-1. Refresh and merge PR `#166` from the merged `main` state so the handoff matches reality again.
-2. Prune superseded worktrees/branch leftovers from merged PRs `#167` through `#171`.
-3. Start the next implementation wave from a fresh `main`-based worktree.
+1. Finish and merge the current Phase 46 closeout slice from a fresh `origin/main` worktree.
+2. Start the next slice from fresh context only after that merge:
+   - OpenClaw Track 3 plugin lifecycle platform
+3. Continue the remaining roadmap sequentially to minimize PR drift:
+   - OpenClaw Track 4
+   - OpenClaw Tracks 5-6
 
-## Next Implementation
+## Current Implementation Focus
 
-Now that the current PR queue is merged, resume the remaining Session 59 follow-ons:
+The active slice is Phase 46 closeout, scoped to:
 
-1. Phase 46 — dynamic tool catalog / semantic skill resolution
-2. OpenClaw Tracks 3-4 — plugin lifecycle control plane + pack marketplace/provenance
-3. OpenClaw Tracks 5-6 — safe mutation/process control + backup/restore
+- richer skill-aware discovery ranking
+- `resolve_workflow` returning workflow-oriented skill matches in addition to runtime workflows/templates
+- tenant-aware workflow resolution for pack-provided skills
+- tests and status reconciliation
 
 ## Notes
 
@@ -61,11 +69,13 @@ Now that the current PR queue is merged, resume the remaining Session 59 follow-
 - Phase 35 voice runtime is still `stub` transport only; do not assume `voice_daemon_transport=livekit` works yet.
 - Recent GitHub Copilot Agent workflow failures have been infra noise unless they point to an actual product regression.
 - Tool catalog route tests should use `set_catalog_service()` as the authoritative override; stale `app.state.tool_catalog_service` can otherwise leak across broader test runs.
+- Discovery/Phase 46 verification should use a worktree-local `engine/.venv` when available, or `PYTHONPATH=<active-worktree>\\engine\\src` as the fallback so tests execute the current slice rather than a stale editable install.
 
 ## Key Paths
 
 - Session 67 log: `docs/sessions/session-67-2026-03-10.md`
 - Session 69 log: `docs/sessions/session-69-2026-03-11.md`
+- Session 71 Phase 46 audit: `docs/research/session71-phase46-closeout-audit.md`
 - Session 60 crash-recovery baseline: `docs/sessions/session-60-2026-03-10.md`
 - Session 59 research set: `docs/research/session59-*.md`
 - Phase roadmaps: `docs/phases/PHASE-44-48-EVOKORE-INTEGRATION-ROADMAP.md`, `docs/phases/OPENCLAW-PARITY-10-PHASE-ROADMAP.md`
