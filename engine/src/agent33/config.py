@@ -157,6 +157,7 @@ class Settings(BaseSettings):
     # Plugins (Phase 32.8 — Plugin SDK)
     plugin_definitions_dir: str = "plugins"
     plugin_auto_enable: bool = True  # Auto-enable plugins after loading
+    plugin_state_store_path: str = "var/plugin_lifecycle_state.json"
 
     # Skills
     skill_definitions_dir: str = "skills"

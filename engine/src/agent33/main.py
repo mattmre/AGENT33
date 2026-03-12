@@ -591,22 +591,39 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Plugin registry (Phase 32.8 — Plugin SDK) -------------------------
     from agent33.plugins.capabilities import CapabilityGrant
+    from agent33.plugins.config_store import PluginConfigStore
     from agent33.plugins.context import PluginContext
+    from agent33.plugins.doctor import PluginDoctor
+    from agent33.plugins.events import PluginEventStore
+    from agent33.plugins.installer import PluginInstaller
     from agent33.plugins.registry import PluginRegistry
     from agent33.plugins.scoped import (
         ReadOnlySettingsProxy,
         ScopedSkillRegistry,
         ScopedToolRegistry,
     )
+    from agent33.services.orchestration_state import OrchestrationStateStore
 
-    plugin_registry = PluginRegistry()
+    plugin_state_store = OrchestrationStateStore(settings.plugin_state_store_path)
+    plugin_event_store = PluginEventStore(plugin_state_store)
+    plugin_config_store = PluginConfigStore(plugin_state_store)
+    plugin_registry = PluginRegistry(event_store=plugin_event_store)
     plugins_dir = Path(settings.plugin_definitions_dir)
 
     def _plugin_context_factory(manifest: Any, plugin_dir: Path) -> PluginContext:
         """Build a scoped context for a plugin."""
+        entry = plugin_registry.get(manifest.name)
+        owner_tenant_id = entry.tenant_id if entry is not None else ""
+        requested_permissions = [p.value for p in manifest.permissions]
         grants = CapabilityGrant(
-            manifest_permissions=[p.value for p in manifest.permissions],
+            manifest_permissions=requested_permissions,
+            tenant_grants=plugin_config_store.granted_permissions(
+                manifest.name,
+                tenant_id=owner_tenant_id,
+                manifest_permissions=requested_permissions,
+            ),
         )
+        stored_config = plugin_config_store.get(manifest.name, tenant_id=owner_tenant_id)
         return PluginContext(
             plugin_name=manifest.name,
             plugin_dir=plugin_dir,
@@ -615,13 +632,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             tool_registry=ScopedToolRegistry(tool_registry, grants),
             agent_registry=agent_registry,
             hook_registry=getattr(app.state, "hook_registry", None),
-            plugin_config={},
+            plugin_config=(
+                dict(stored_config.config_overrides) if stored_config is not None else {}
+            ),
             settings_reader=(
                 ReadOnlySettingsProxy(settings) if grants.check("config:read") else None
             ),
         )
 
     app.state.plugin_context_factory = _plugin_context_factory
+    app.state.plugin_state_store = plugin_state_store
+    app.state.plugin_event_store = plugin_event_store
+    app.state.plugin_config_store = plugin_config_store
 
     if plugins_dir.is_dir():
         plugin_count = plugin_registry.discover(plugins_dir)
@@ -645,6 +667,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.debug("plugin_definitions_dir_not_found", path=str(plugins_dir))
 
     app.state.plugin_registry = plugin_registry
+    app.state.plugin_installer = PluginInstaller(
+        plugin_registry,
+        plugins_dir=plugins_dir,
+        context_factory=_plugin_context_factory,
+        event_store=plugin_event_store,
+        state_store=plugin_state_store,
+        auto_enable=settings.plugin_auto_enable,
+    )
+    app.state.plugin_doctor = PluginDoctor(
+        plugin_registry,
+        config_store=plugin_config_store,
+        installer=app.state.plugin_installer,
+    )
 
     # -- Tool catalog service (aggregates all tool sources) -----------------
     from agent33.tools.catalog import ToolCatalogService
