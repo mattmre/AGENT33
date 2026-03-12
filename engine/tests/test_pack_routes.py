@@ -18,7 +18,11 @@ from fastapi.testclient import TestClient
 
 from agent33.api.routes.packs import router
 from agent33.packs.marketplace import LocalPackMarketplace
+from agent33.packs.models import PackSource
 from agent33.packs.registry import PackRegistry
+from agent33.packs.rollback import PackRollbackManager
+from agent33.packs.trust_manager import TrustPolicyManager
+from agent33.services.orchestration_state import OrchestrationStateStore
 from agent33.skills.registry import SkillRegistry
 
 
@@ -110,14 +114,24 @@ class TestPackRoutesWithRegistry:
         packs_dir.mkdir()
         marketplace_dir = tmp_path / "marketplace"
         marketplace_dir.mkdir()
+        state_store = OrchestrationStateStore(str(tmp_path / "pack-state.json"))
         skill_reg = SkillRegistry()
         marketplace = LocalPackMarketplace(marketplace_dir) if configure_marketplace else None
+        trust_manager = TrustPolicyManager(state_store)
         pack_reg = PackRegistry(
             packs_dir=packs_dir,
             skill_registry=skill_reg,
             marketplace=marketplace,
+            trust_policy_manager=trust_manager,
+        )
+        rollback_manager = PackRollbackManager(
+            pack_reg,
+            archive_dir=tmp_path / "rollback-archive",
+            state_store=state_store,
         )
         app = _create_test_app(pack_registry=pack_reg)
+        app.state.pack_trust_manager = trust_manager
+        app.state.pack_rollback_manager = rollback_manager
         client = TestClient(app)
         return client, pack_reg, packs_dir, marketplace_dir
 
@@ -298,3 +312,91 @@ class TestPackRoutesWithRegistry:
         data = resp.json()
         assert data["success"] is True
         assert data["pack_name"] == "syncable"
+
+    def test_get_pack_trust_policy(self, tmp_path: Path) -> None:
+        client, _, _, _ = self._setup(tmp_path)
+
+        resp = client.get("/v1/packs/trust/policy")
+
+        assert resp.status_code == 200
+        assert resp.json()["policy"]["require_signature"] is False
+
+    def test_update_pack_trust_policy(self, tmp_path: Path) -> None:
+        client, _, _, _ = self._setup(tmp_path)
+
+        resp = client.put(
+            "/v1/packs/trust/policy",
+            json={"require_signature": True, "allowed_signers": ["ops-team"]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["policy"]["require_signature"] is True
+        assert resp.json()["policy"]["allowed_signers"] == ["ops-team"]
+
+    def test_get_pack_trust_for_installed_pack(self, tmp_path: Path) -> None:
+        client, pack_reg, _, marketplace_dir = self._setup(tmp_path)
+        _write_pack(marketplace_dir / "v1", name="trusted-pack")
+        pack_reg.install(PackSource(source_type="marketplace", name="trusted-pack"))
+
+        resp = client.get("/v1/packs/trusted-pack/trust")
+
+        assert resp.status_code == 200
+        assert resp.json()["pack_name"] == "trusted-pack"
+        assert resp.json()["allowed"] is True
+
+    def test_get_enablement_matrix(self, tmp_path: Path) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        _write_pack(packs_dir, name="matrix-pack")
+        pack_reg.discover()
+        pack_reg.enable("matrix-pack", "test-tenant")
+
+        resp = client.get("/v1/packs/enablement/matrix")
+
+        assert resp.status_code == 200
+        assert resp.json()["matrix"]["matrix-pack"]["test-tenant"] is True
+
+    def test_update_enablement_matrix(self, tmp_path: Path) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        _write_pack(packs_dir, name="matrix-pack")
+        pack_reg.discover()
+
+        resp = client.put(
+            "/v1/packs/enablement/matrix",
+            json={"matrix": {"matrix-pack": {"tenant-b": True}}},
+        )
+
+        assert resp.status_code == 200
+        assert pack_reg.is_enabled("matrix-pack", "tenant-b") is True
+
+    def test_upgrade_and_rollback_pack(self, tmp_path: Path) -> None:
+        client, pack_reg, _, marketplace_dir = self._setup(tmp_path)
+        _write_pack(marketplace_dir / "v1", name="upgrade-pack")
+        _write_pack(marketplace_dir / "v2", name="upgrade-pack")
+        version_file = marketplace_dir / "v2" / "upgrade-pack" / "PACK.yaml"
+        version_file.write_text(
+            version_file.read_text(encoding="utf-8").replace("1.0.0", "2.0.0"),
+            encoding="utf-8",
+        )
+
+        install_resp = client.post(
+            "/v1/packs/install",
+            json={"source_type": "marketplace", "name": "upgrade-pack", "version": "1.0.0"},
+        )
+        assert install_resp.status_code == 201
+        pack_reg.enable("upgrade-pack", "test-tenant")
+
+        upgrade_resp = client.post(
+            "/v1/packs/upgrade-pack/upgrade",
+            json={"source_type": "marketplace", "version": "2.0.0"},
+        )
+
+        assert upgrade_resp.status_code == 200
+        assert pack_reg.get("upgrade-pack").version == "2.0.0"  # type: ignore[union-attr]
+        assert pack_reg.is_enabled("upgrade-pack", "test-tenant") is True
+
+        rollback_resp = client.post("/v1/packs/upgrade-pack/rollback?version=1.0.0")
+
+        assert rollback_resp.status_code == 200
+        assert rollback_resp.json()["restored_from_version"] == "1.0.0"
+        assert pack_reg.get("upgrade-pack").version == "1.0.0"  # type: ignore[union-attr]
+        assert pack_reg.is_enabled("upgrade-pack", "test-tenant") is True

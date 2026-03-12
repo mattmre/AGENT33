@@ -8,6 +8,7 @@ SkillRegistry (where individual skills are registered).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
@@ -19,6 +20,7 @@ from agent33.packs.loader import (
     validate_pack_directory,
     verify_checksums,
 )
+from agent33.packs.marketplace import MarketplaceResolvedPack  # noqa: TC001
 from agent33.packs.models import (
     InstalledPack,
     InstallResult,
@@ -32,10 +34,9 @@ from agent33.packs.provenance import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
-    from agent33.packs.marketplace import LocalPackMarketplace
+    from agent33.packs.marketplace import PackMarketplace
     from agent33.packs.models import PackSource
+    from agent33.packs.trust_manager import TrustPolicyManager
     from agent33.skills.definition import SkillDefinition
     from agent33.skills.registry import SkillRegistry
 
@@ -55,8 +56,9 @@ class PackRegistry:
         packs_dir: Path,
         skill_registry: SkillRegistry,
         *,
-        marketplace: LocalPackMarketplace | None = None,
+        marketplace: PackMarketplace | None = None,
         trust_policy: PackTrustPolicy | None = None,
+        trust_policy_manager: TrustPolicyManager | None = None,
     ) -> None:
         self._packs_dir = packs_dir
         self._skill_registry = skill_registry
@@ -64,6 +66,7 @@ class PackRegistry:
         self._enabled: dict[str, set[str]] = {}  # tenant_id -> set of enabled pack names
         self._marketplace = marketplace
         self._trust_policy = trust_policy or PackTrustPolicy()
+        self._trust_policy_manager = trust_policy_manager
 
     # ------------------------------------------------------------------
     # Discovery & Loading
@@ -225,45 +228,18 @@ class PackRegistry:
             provenance: Optional provenance metadata for the pack.
             verification_key: Key used to verify the provenance signature.
         """
-        from pathlib import Path as _Path
-
-        pack_path: _Path
-        install_source = source.source_type
-        if source.source_type == "local":
-            pack_path = _Path(source.path)
-            if not pack_path.is_dir():
-                return InstallResult(
-                    success=False,
-                    pack_name=source.name or "unknown",
-                    errors=[f"Pack directory not found: {source.path}"],
-                )
-        elif source.source_type == "marketplace":
-            if self._marketplace is None:
-                return InstallResult(
-                    success=False,
-                    pack_name=source.name or "unknown",
-                    errors=["Marketplace registry is not configured"],
-                )
-            if not source.name:
-                return InstallResult(
-                    success=False,
-                    pack_name="unknown",
-                    errors=["Marketplace installs require a pack name"],
-                )
-            resolved_path = self._marketplace.resolve(source.name, source.version)
-            if resolved_path is None:
-                version_suffix = f" version '{source.version}'" if source.version else ""
-                return InstallResult(
-                    success=False,
-                    pack_name=source.name,
-                    errors=[f"Marketplace pack '{source.name}'{version_suffix} was not found"],
-                )
-            pack_path = resolved_path
-        else:
+        try:
+            (
+                pack_path,
+                install_source,
+                source_reference,
+                effective_provenance,
+            ) = self._resolve_source(source, provenance=provenance)
+        except ValueError as exc:
             return InstallResult(
                 success=False,
                 pack_name=source.name or "unknown",
-                errors=[f"Unsupported source type: {source.source_type}"],
+                errors=[str(exc)],
             )
 
         # Validate structure
@@ -276,7 +252,7 @@ class PackRegistry:
             )
 
         # --- Provenance / trust check ---
-        trust_decision = evaluate_trust(provenance, self._trust_policy)
+        trust_decision = evaluate_trust(effective_provenance, self.trust_policy)
         if not trust_decision.allowed:
             return InstallResult(
                 success=False,
@@ -285,9 +261,9 @@ class PackRegistry:
             )
 
         # If provenance is present and a verification key is provided, verify the signature
-        if provenance is not None and verification_key:
+        if effective_provenance is not None and verification_key:
             manifest = load_pack_manifest(pack_path)
-            if not verify_pack(manifest, provenance, verification_key):
+            if not verify_pack(manifest, effective_provenance, verification_key):
                 return InstallResult(
                     success=False,
                     pack_name=manifest.name,
@@ -316,7 +292,13 @@ class PackRegistry:
                 ],
             )
 
-        self._installed[pack.name] = pack.model_copy(update={"source": install_source})
+        self._installed[pack.name] = pack.model_copy(
+            update={
+                "source": install_source,
+                "source_reference": source_reference,
+                "provenance": effective_provenance,
+            }
+        )
 
         return InstallResult(
             success=True,
@@ -412,6 +394,33 @@ class PackRegistry:
         enabled_names = self._enabled.get(tenant_id, set())
         return [self._installed[name] for name in sorted(enabled_names) if name in self._installed]
 
+    def enabled_tenants(self, name: str) -> list[str]:
+        """List tenants that currently have the pack enabled."""
+        return sorted(tenant_id for tenant_id, names in self._enabled.items() if name in names)
+
+    def get_enablement_matrix(self) -> dict[str, dict[str, bool]]:
+        """Return a full pack -> tenant -> enabled matrix."""
+        packs = sorted(self._installed)
+        tenants = sorted(self._enabled)
+        return {
+            pack_name: {
+                tenant_id: pack_name in self._enabled.get(tenant_id, set())
+                for tenant_id in tenants
+            }
+            for pack_name in packs
+        }
+
+    def apply_enablement_matrix(self, matrix: dict[str, dict[str, bool]]) -> None:
+        """Apply bulk pack enablement updates."""
+        for pack_name, tenant_map in matrix.items():
+            if pack_name not in self._installed:
+                raise ValueError(f"Pack '{pack_name}' is not installed")
+            for tenant_id, enabled in tenant_map.items():
+                if enabled:
+                    self.enable(pack_name, tenant_id)
+                else:
+                    self.disable(pack_name, tenant_id)
+
     # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
@@ -446,6 +455,17 @@ class PackRegistry:
             ):
                 results.append(pack)
         return sorted(results, key=lambda p: p.name)
+
+    @property
+    def trust_policy(self) -> PackTrustPolicy:
+        """Return the active trust policy."""
+        if self._trust_policy_manager is not None:
+            return self._trust_policy_manager.get_policy()
+        return self._trust_policy.model_copy(deep=True)
+
+    def set_trust_policy(self, policy: PackTrustPolicy) -> None:
+        """Update the active trust policy."""
+        self._trust_policy = policy
 
     # ------------------------------------------------------------------
     # Upgrade / Downgrade
@@ -497,7 +517,13 @@ class PackRegistry:
         self._unregister_pack_skills(old_pack)
 
         # Install new version
-        self._installed[name] = new_pack
+        self._installed[name] = new_pack.model_copy(
+            update={
+                "source": old_pack.source,
+                "source_reference": old_pack.source_reference,
+                "provenance": old_pack.provenance,
+            }
+        )
 
         logger.info(
             "pack_upgraded",
@@ -519,3 +545,114 @@ class PackRegistry:
         Functionally identical to upgrade but semantically signals intent.
         """
         return self.upgrade(name, old_pack_dir)
+
+    def upgrade_from_source(
+        self,
+        name: str,
+        source: PackSource,
+        *,
+        provenance: PackProvenance | None = None,
+        verification_key: str = "",
+    ) -> InstallResult:
+        """Upgrade an installed pack from a local or marketplace source."""
+        current = self._installed.get(name)
+        if current is None:
+            return InstallResult(
+                success=False,
+                pack_name=name,
+                errors=[f"Pack '{name}' is not installed"],
+            )
+        normalized_source = source.model_copy(update={"name": source.name or current.name})
+        try:
+            (
+                pack_path,
+                install_source,
+                source_reference,
+                effective_provenance,
+            ) = self._resolve_source(normalized_source, provenance=provenance)
+        except ValueError as exc:
+            return InstallResult(
+                success=False,
+                pack_name=name,
+                errors=[str(exc)],
+            )
+
+        trust_decision = evaluate_trust(effective_provenance, self.trust_policy)
+        if not trust_decision.allowed:
+            return InstallResult(
+                success=False,
+                pack_name=name,
+                errors=[f"Trust policy violation: {trust_decision.reason}"],
+            )
+
+        if effective_provenance is not None and verification_key:
+            manifest = load_pack_manifest(pack_path)
+            if not verify_pack(manifest, effective_provenance, verification_key):
+                return InstallResult(
+                    success=False,
+                    pack_name=manifest.name,
+                    errors=["Provenance signature verification failed"],
+                )
+
+        result = self.upgrade(name, pack_path, normalized_source.version or None)
+        if result.success:
+            upgraded = self._installed[name]
+            self._installed[name] = upgraded.model_copy(
+                update={
+                    "source": install_source,
+                    "source_reference": source_reference,
+                    "provenance": effective_provenance,
+                }
+            )
+        return result
+
+    def _resolve_source(
+        self,
+        source: PackSource,
+        *,
+        provenance: PackProvenance | None = None,
+    ) -> tuple[Path, str, str, PackProvenance | None]:
+        pack_path: Path
+        install_source = source.source_type
+        source_reference = source.path or source.name
+        effective_provenance = provenance
+        if source.source_type == "local":
+            pack_path = Path(source.path)
+            if not pack_path.is_dir():
+                raise ValueError(f"Pack directory not found: {source.path}")
+            return pack_path, install_source, source_reference, effective_provenance
+
+        if source.source_type == "marketplace":
+            if self._marketplace is None:
+                raise ValueError("Marketplace registry is not configured")
+            if not source.name:
+                raise ValueError("Marketplace installs require a pack name")
+            resolved = self._marketplace.resolve(source.name, source.version)
+            if resolved is None:
+                version_suffix = f" version '{source.version}'" if source.version else ""
+                raise ValueError(f"Marketplace pack '{source.name}'{version_suffix} was not found")
+            (
+                pack_path,
+                install_source,
+                source_reference,
+                effective_provenance,
+            ) = self._resolved_pack_metadata(
+                resolved,
+                fallback_provenance=provenance,
+            )
+            return pack_path, install_source, source_reference, effective_provenance
+
+        raise ValueError(f"Unsupported source type: {source.source_type}")
+
+    @staticmethod
+    def _resolved_pack_metadata(
+        resolved: MarketplaceResolvedPack,
+        *,
+        fallback_provenance: PackProvenance | None = None,
+    ) -> tuple[Path, str, str, PackProvenance | None]:
+        return (
+            resolved.pack_dir,
+            "marketplace",
+            resolved.source_name,
+            resolved.provenance or fallback_provenance,
+        )

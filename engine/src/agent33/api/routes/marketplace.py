@@ -37,6 +37,7 @@ def _record_to_summary(record: Any) -> MarketplacePackSummary:
         category=record.category,
         latest_version=record.latest_version,
         versions_count=len(record.versions),
+        sources=sorted({version.source_name for version in record.versions}),
     )
 
 
@@ -57,9 +58,13 @@ def _record_to_detail(record: Any) -> MarketplacePackDetail:
                 tags=item.tags,
                 category=item.category,
                 skills_count=item.skills_count,
+                source_name=item.source_name,
+                source_type=item.source_type,
+                trust_level=item.trust_level,
             )
             for item in record.versions
         ],
+        sources=sorted({version.source_name for version in record.versions}),
     )
 
 
@@ -75,6 +80,17 @@ async def list_marketplace_packs(request: Request) -> dict[str, Any]:
         "packs": [_record_to_summary(pack).model_dump() for pack in packs],
         "count": len(packs),
     }
+
+
+@router.post("/refresh", dependencies=[require_scope("admin")])
+async def refresh_marketplace(request: Request) -> dict[str, Any]:
+    """Refresh all configured marketplace sources."""
+    marketplace = _get_pack_marketplace(request)
+    if marketplace is None:
+        raise HTTPException(status_code=503, detail="Marketplace catalog not initialized")
+    marketplace.refresh()
+    packs = marketplace.list_packs()
+    return {"refreshed": True, "count": len(packs)}
 
 
 @router.get("/packs/{name}", dependencies=[require_scope("agents:read")])
@@ -110,6 +126,9 @@ async def list_marketplace_versions(name: str, request: Request) -> dict[str, An
                 tags=item.tags,
                 category=item.category,
                 skills_count=item.skills_count,
+                source_name=item.source_name,
+                source_type=item.source_type,
+                trust_level=item.trust_level,
             ).model_dump()
             for item in versions
         ],
