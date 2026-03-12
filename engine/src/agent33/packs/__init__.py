@@ -33,13 +33,15 @@ from agent33.packs.models import (
     PackStatus,
 )
 from agent33.packs.provenance import (
+    evaluate_trust,
+    sign_pack,
+    verify_pack,
+)
+from agent33.packs.provenance_models import (
     PackProvenance,
     PackTrustPolicy,
     TrustDecision,
     TrustLevel,
-    evaluate_trust,
-    sign_pack,
-    verify_pack,
 )
 
 __all__ = [

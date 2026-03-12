@@ -228,8 +228,15 @@ async def upgrade_pack(
         raise HTTPException(status_code=503, detail="Pack registry not initialized")
     rollback_manager = _get_pack_rollback_manager(request)
     if rollback_manager is not None:
-        with suppress(ValueError):
-            rollback_manager.archive_current(name)
+        try:
+            with suppress(ValueError):
+                rollback_manager.archive_current(name)
+        except OSError as exc:
+            logger.warning(
+                "pack_upgrade_archive_failed",
+                pack_name=name,
+                error=str(exc),
+            )
 
     source = PackSource(
         source_type=body.source_type,
@@ -417,7 +424,7 @@ async def update_pack_trust_policy(
 @router.get(
     "/enablement/matrix",
     response_model=EnablementMatrixResponse,
-    dependencies=[require_scope("agents:read")],
+    dependencies=[require_scope("admin")],
 )
 async def get_enablement_matrix(request: Request) -> EnablementMatrixResponse:
     """Return operator-visible pack enablement state across tenants."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent33.packs.provenance import PackTrustPolicy
+from agent33.packs.provenance_models import PackTrustPolicy, TrustLevel
 
 
 class TrustPolicyManager:
@@ -28,7 +28,7 @@ class TrustPolicyManager:
         self,
         *,
         require_signature: bool | None = None,
-        min_trust_level: Any | None = None,
+        min_trust_level: TrustLevel | None = None,
         allowed_signers: list[str] | None = None,
     ) -> PackTrustPolicy:
         if require_signature is not None:

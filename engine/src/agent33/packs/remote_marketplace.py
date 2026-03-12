@@ -20,7 +20,7 @@ from agent33.packs.marketplace import (
     MarketplacePackVersion,
     MarketplaceResolvedPack,
 )
-from agent33.packs.provenance import PackProvenance, TrustLevel
+from agent33.packs.provenance_models import PackProvenance, TrustLevel
 from agent33.packs.version import Version
 
 logger = structlog.get_logger()
@@ -47,11 +47,18 @@ class RemotePackIndex(BaseModel):
 class RemotePackMarketplace:
     """Marketplace backed by a remote JSON index and downloadable zip archives."""
 
-    def __init__(self, config: RemoteMarketplaceConfig, *, cache_dir: Path) -> None:
+    def __init__(
+        self,
+        config: RemoteMarketplaceConfig,
+        *,
+        cache_dir: Path,
+        max_download_size_bytes: int = 50 * 1024 * 1024,
+    ) -> None:
         self._config = config
         self._cache_dir = cache_dir / config.name
         self._index: RemotePackIndex | None = None
         self.source_name = config.name
+        self._max_download_size_bytes = max_download_size_bytes
 
     def invalidate(self) -> None:
         """Discard the cached index."""
@@ -221,7 +228,7 @@ class RemotePackMarketplace:
         self._download_file(version.download_url, archive_path)
         target_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(archive_path) as archive:
-            archive.extractall(target_dir)
+            self._safe_extract(archive, target_dir)
         archive_path.unlink(missing_ok=True)
 
         nested_manifest = next(
@@ -264,6 +271,8 @@ class RemotePackMarketplace:
         parsed = urlparse(url)
         if parsed.scheme in ("", "file"):
             source_path = self._path_from_url(url)
+            if source_path.stat().st_size > self._max_download_size_bytes:
+                raise ValueError(f"Remote pack archive exceeds max size: {source_path}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source_path, destination)
             return
@@ -272,11 +281,19 @@ class RemotePackMarketplace:
             if self._config.auth_token
             else None
         )
-        with httpx.Client(timeout=60.0) as client:
-            response = client.get(url, headers=headers)
+        downloaded = 0
+        with (
+            httpx.Client(timeout=60.0) as client,
+            client.stream("GET", url, headers=headers) as response,
+        ):
             response.raise_for_status()
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(response.content)
+            with destination.open("wb") as handle:
+                for chunk in response.iter_bytes():
+                    downloaded += len(chunk)
+                    if downloaded > self._max_download_size_bytes:
+                        raise ValueError(f"Remote pack archive exceeds max size: {url}")
+                    handle.write(chunk)
 
     @staticmethod
     def _path_from_url(url: str) -> Path:
@@ -284,3 +301,21 @@ class RemotePackMarketplace:
         if parsed.scheme == "file":
             return Path(url2pathname(parsed.path))
         return Path(url)
+
+    @staticmethod
+    def _safe_extract(archive: zipfile.ZipFile, target_dir: Path) -> None:
+        target_root = target_dir.resolve()
+        for member in archive.infolist():
+            member_path = Path(member.filename)
+            if member_path.is_absolute():
+                raise ValueError(f"Archive contains absolute path entry: {member.filename}")
+            if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError(f"Archive contains symlink entry: {member.filename}")
+            resolved_path = (target_root / member.filename).resolve()
+            try:
+                resolved_path.relative_to(target_root)
+            except ValueError:
+                raise ValueError(
+                    f"Archive entry escapes target directory: {member.filename}"
+                ) from None
+        archive.extractall(target_dir)

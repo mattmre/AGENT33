@@ -9,9 +9,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path  # noqa: TC003 -- Pydantic needs Path at runtime
-from typing import Any
 
 from pydantic import BaseModel, Field
+
+from agent33.packs.provenance_models import PackProvenance  # noqa: TC001
 
 
 class PackStatus(StrEnum):
@@ -115,7 +116,7 @@ class InstalledPack(BaseModel):
     source_reference: str = ""
     checksum: str = ""
     pack_dir: Path
-    provenance: Any | None = None
+    provenance: PackProvenance | None = None
 
     # Governance
     governance: PackGovernance = Field(default_factory=PackGovernance)

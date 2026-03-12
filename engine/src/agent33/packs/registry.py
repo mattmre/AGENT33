@@ -27,11 +27,10 @@ from agent33.packs.models import (
     PackStatus,
 )
 from agent33.packs.provenance import (
-    PackProvenance,
-    PackTrustPolicy,
     evaluate_trust,
     verify_pack,
 )
+from agent33.packs.provenance_models import PackProvenance, PackTrustPolicy
 
 if TYPE_CHECKING:
     from agent33.packs.marketplace import PackMarketplace

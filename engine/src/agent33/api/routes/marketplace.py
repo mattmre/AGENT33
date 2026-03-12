@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from agent33.packs.api_models import (
     InstallResponse,
@@ -88,7 +89,7 @@ async def refresh_marketplace(request: Request) -> dict[str, Any]:
     marketplace = _get_pack_marketplace(request)
     if marketplace is None:
         raise HTTPException(status_code=503, detail="Marketplace catalog not initialized")
-    marketplace.refresh()
+    await run_in_threadpool(marketplace.refresh)
     packs = marketplace.list_packs()
     return {"refreshed": True, "count": len(packs)}
 

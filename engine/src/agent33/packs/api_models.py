@@ -6,7 +6,7 @@ from datetime import datetime  # noqa: TC003 - Pydantic needs this at runtime
 
 from pydantic import BaseModel, Field
 
-from agent33.packs.provenance import (  # noqa: TC001
+from agent33.packs.provenance_models import (  # noqa: TC001
     PackProvenance,
     PackTrustPolicy,
     TrustLevel,

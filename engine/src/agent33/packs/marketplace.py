@@ -9,7 +9,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from agent33.packs.loader import load_pack_manifest
-from agent33.packs.provenance import PackProvenance, TrustLevel  # noqa: TC001
+from agent33.packs.provenance_models import PackProvenance, TrustLevel  # noqa: TC001
 from agent33.packs.version import Version
 
 logger = structlog.get_logger()

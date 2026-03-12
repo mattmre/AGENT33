@@ -42,10 +42,8 @@ class PackRollbackManager:
         if pack is None:
             raise ValueError(f"Pack '{pack_name}' is not installed")
 
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
         destination = self._archive_dir / pack_name / f"{pack.version}-{timestamp}"
-        if destination.exists():
-            shutil.rmtree(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(pack.pack_dir, destination)
 
@@ -67,8 +65,6 @@ class PackRollbackManager:
             raise ValueError(f"Pack '{pack_name}' is not installed")
 
         current_version = pack.version
-        self.archive_current(pack_name)
-
         candidates = self.list_archived_versions(pack_name)
         target = next(
             (
@@ -85,6 +81,7 @@ class PackRollbackManager:
                 + (f" at version '{version}'" if version else "")
             )
 
+        self.archive_current(pack_name)
         result = self._pack_registry.upgrade(pack_name, Path(target.archive_path), target.version)
         return result, target
 

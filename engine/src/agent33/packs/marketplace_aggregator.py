@@ -35,7 +35,19 @@ class MarketplaceAggregator:
         for marketplace in self._marketplaces:
             for record in marketplace.list_packs():
                 merged.setdefault(record.name, []).extend(record.versions)
-                metadata.setdefault(record.name, record)
+                existing = metadata.get(record.name)
+                if existing is None:
+                    metadata[record.name] = record
+                else:
+                    metadata[record.name] = MarketplacePackRecord(
+                        name=existing.name,
+                        description=existing.description or record.description,
+                        author=existing.author or record.author,
+                        tags=existing.tags or record.tags,
+                        category=existing.category or record.category,
+                        latest_version=existing.latest_version,
+                        versions=existing.versions,
+                    )
 
         packs: list[MarketplacePackRecord] = []
         for name, versions in merged.items():

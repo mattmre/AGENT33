@@ -446,12 +446,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 try:
                     config = RemoteMarketplaceConfig.model_validate(item)
                 except Exception:
-                    logger.warning("pack_marketplace_remote_source_invalid", source=item)
+                    logger.warning(
+                        "pack_marketplace_remote_source_invalid",
+                        name=item.get("name"),
+                        index_url=item.get("index_url"),
+                    )
                     continue
                 remote_marketplaces.append(
                     RemotePackMarketplace(
                         config,
                         cache_dir=Path(settings.pack_marketplace_cache_dir),
+                        max_download_size_bytes=settings.pack_max_size_mb * 1024 * 1024,
                     )
                 )
     pack_marketplace = MarketplaceAggregator([local_pack_marketplace, *remote_marketplaces])
