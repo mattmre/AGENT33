@@ -85,4 +85,8 @@ async def resolve_workflow(
 ) -> WorkflowResolutionResponse:
     """Resolve a workflow or canonical template for a task."""
     service = _get_discovery_service(request)
-    return WorkflowResolutionResponse(query=q, matches=service.resolve_workflow(q, limit=limit))
+    tenant_id = tenant_filter_for_request(request)
+    return WorkflowResolutionResponse(
+        query=q,
+        matches=service.resolve_workflow(q, limit=limit, tenant_id=tenant_id),
+    )

@@ -636,7 +636,9 @@ class TestMCPServerCreation:
         from agent33.security.auth import TokenPayload
 
         request = SimpleNamespace(
-            state=SimpleNamespace(user=TokenPayload(sub="reader", scopes=["workflows:read"]))
+            state=SimpleNamespace(
+                user=TokenPayload(sub="reader", scopes=["workflows:read"], tenant_id="tenant-1")
+            )
         )
         fake_server = _RecordingServer(request=request)
         discovery_service = MagicMock()
@@ -676,7 +678,95 @@ class TestMCPServerCreation:
             '{"query": "release", "matches": [{"name": "release", '
             '"source": "runtime", "score": 10.0}]}'
         )
-        discovery_service.resolve_workflow.assert_called_once_with("release", limit=3)
+        discovery_service.resolve_workflow.assert_called_once_with(
+            "release",
+            limit=3,
+            tenant_id="tenant-1",
+        )
+
+    async def test_resolve_workflow_omits_tenant_filter_for_admin(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(
+                user=TokenPayload(sub="admin-user", scopes=["admin"], tenant_id="tenant-1")
+            )
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.resolve_workflow.return_value = []
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+
+        await fake_server.handlers["call_tool"](
+            "resolve_workflow",
+            {"query": "deploy", "limit": 2},
+        )
+
+        discovery_service.resolve_workflow.assert_called_once_with(
+            "deploy",
+            limit=2,
+            tenant_id=None,
+        )
+
+    async def test_resolve_workflow_requires_tenant_for_non_admin(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(
+                user=TokenPayload(sub="reader", scopes=["workflows:read"], tenant_id="")
+            )
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.resolve_workflow.return_value = []
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+
+        result = await fake_server.handlers["call_tool"](
+            "resolve_workflow",
+            {"query": "deploy", "limit": 2},
+        )
+
+        assert result[0].text == (
+            '{"query": "deploy", "matches": [], '
+            '"error": "tenant_id is required for non-admin requests"}'
+        )
+        discovery_service.resolve_workflow.assert_not_called()
 
     async def test_discover_skills_omits_tenant_filter_for_admin(self) -> None:
         from agent33.mcp_server.bridge import MCPServiceBridge
