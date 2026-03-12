@@ -18,8 +18,17 @@ from agent33.agents.tool_loop import (
     ToolLoopResult,
     ToolLoopState,
 )
+from agent33.discovery.service import ToolDiscoveryMatch
 from agent33.llm.base import ChatMessage, LLMResponse, ToolCall, ToolCallFunction
 from agent33.tools.base import ToolContext, ToolResult
+from agent33.tools.discovery_runtime import (
+    DISCOVER_TOOLS_TOOL_NAME,
+    DiscoverToolsTool,
+    SessionToolRegistryView,
+    ToolActivationManager,
+)
+from agent33.tools.registry import ToolRegistry
+from agent33.tools.registry_entry import ToolRegistryEntry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -99,6 +108,26 @@ def _make_router(*responses: LLMResponse) -> MagicMock:
     router = MagicMock()
     router.complete = AsyncMock(side_effect=list(responses))
     return router
+
+
+class _StaticTool:
+    def __init__(self, name: str, description: str = "") -> None:
+        self.name = name
+        self.description = description or f"{name} description"
+        self.execute = AsyncMock(return_value=ToolResult.ok(f"{name} output"))
+
+
+def _register_runtime_tool(registry: ToolRegistry, tool: object) -> None:
+    registry.register_with_entry(
+        tool,
+        ToolRegistryEntry(
+            tool_id=tool.name,
+            name=tool.name,
+            version="1.0.0",
+            description=getattr(tool, "description", ""),
+            parameters_schema=getattr(tool, "parameters_schema", {}),
+        ),
+    )
 
 
 def _initial_messages() -> list[ChatMessage]:
@@ -312,6 +341,58 @@ class TestToolExecution:
         assert tool_msgs[0].content == "/home/user"
         assert tool_msgs[0].tool_call_id == "call_abc"
         assert tool_msgs[0].name == "shell"
+
+    async def test_dynamic_visibility_refreshes_after_discovery_activation(self) -> None:
+        """Dynamic tool visibility refreshes between iterations after discover_tools runs."""
+        registry = ToolRegistry()
+        discovery_service = MagicMock()
+        discovery_service.discover_tools.return_value = [
+            ToolDiscoveryMatch(name="shell", description="Run commands", score=9.0)
+        ]
+        activation_manager = ToolActivationManager()
+        discover_tool = DiscoverToolsTool(
+            discovery_service=discovery_service,
+            activation_manager=activation_manager,
+            mode="dynamic",
+        )
+        shell_tool = _StaticTool("shell", "Run commands")
+        _register_runtime_tool(registry, discover_tool)
+        _register_runtime_tool(registry, shell_tool)
+
+        visible_registry = SessionToolRegistryView(
+            registry,
+            mode="dynamic",
+            activation_manager=activation_manager,
+            context=ToolContext(tenant_id="tenant-1", session_id="session-1"),
+        )
+        router = _make_router(
+            _tool_response(
+                [
+                    _make_tool_call(
+                        DISCOVER_TOOLS_TOOL_NAME,
+                        '{"query": "run commands", "activation_limit": 1}',
+                    )
+                ]
+            ),
+            _text_response("done"),
+        )
+        loop = ToolLoop(
+            router=router,
+            tool_registry=visible_registry,
+            tool_context=ToolContext(tenant_id="tenant-1", session_id="session-1"),
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        result = await loop.run(_initial_messages(), model="m")
+
+        assert result.termination_reason == "completed"
+        first_tools = router.complete.call_args_list[0].kwargs["tools"]
+        second_tools = router.complete.call_args_list[1].kwargs["tools"]
+        assert [tool["name"] for tool in first_tools] == [DISCOVER_TOOLS_TOOL_NAME]
+        assert [tool["name"] for tool in second_tools] == [
+            DISCOVER_TOOLS_TOOL_NAME,
+            "shell",
+        ]
 
 
 # ---------------------------------------------------------------------------

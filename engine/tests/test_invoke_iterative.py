@@ -809,3 +809,39 @@ class TestInvokeIterativeRoute:
             assert resp.status_code == 200
             kwargs = runtime_cls.call_args.kwargs
             assert kwargs["context_manager"] is not None
+
+    def test_iterative_route_passes_runtime_session_into_tool_context(self, client) -> None:
+        """Iterative invoke should propagate the runtime session id into ToolContext."""
+        from agent33.agents.runtime import IterativeAgentResult
+
+        client.app.state.model_router = MagicMock()
+        client.app.state.tool_registry = _make_registry()
+        client.app.state.tool_activation_manager = MagicMock()
+
+        result = IterativeAgentResult(
+            output={"result": "ok"},
+            raw_response="ok",
+            tokens_used=1,
+            model="test-model",
+            iterations=1,
+            tool_calls_made=0,
+            tools_used=[],
+            termination_reason="completed",
+        )
+
+        with patch("agent33.api.routes.agents.AgentRuntime", autospec=True) as runtime_cls:
+            runtime = MagicMock()
+            runtime.invoke_iterative = AsyncMock(return_value=result)
+            runtime_cls.return_value = runtime
+
+            resp = client.post(
+                "/v1/agents/iter-agent/invoke-iterative",
+                json={"inputs": {"task": "test"}, "enable_double_confirmation": False},
+                headers={"x-agent-session-id": "session-123"},
+            )
+
+            assert resp.status_code == 200
+            kwargs = runtime_cls.call_args.kwargs
+            assert kwargs["session_id"] == "session-123"
+            assert kwargs["tool_context"].session_id == "session-123"
+            assert kwargs["tool_activation_manager"] is client.app.state.tool_activation_manager

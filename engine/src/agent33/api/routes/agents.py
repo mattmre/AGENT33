@@ -513,6 +513,7 @@ async def invoke_agent_iterative(
     token_payload = _get_token_payload(request)
     user_scopes = token_payload.scopes
     domain = _resolve_domain_context(request, body.domain)
+    session_id = _resolve_runtime_session_id(request)
     active_skills = await _resolve_active_skills(
         request=request,
         definition=definition,
@@ -528,6 +529,7 @@ async def invoke_agent_iterative(
         tool_policies=tool_policies,
         requested_by=token_payload.sub,
         tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
     )
 
     from agent33.agents.tool_loop import ToolLoopConfig
@@ -550,13 +552,14 @@ async def invoke_agent_iterative(
         )
 
     hook_registry = getattr(request.app.state, "hook_registry", None)
+    tool_activation_manager = getattr(request.app.state, "tool_activation_manager", None)
 
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
         model=body.model,
         temperature=body.temperature,
-        session_id=_resolve_runtime_session_id(request),
+        session_id=session_id,
         invocation_mode="iterative",
         effort=body.effort,
         effort_router=effort_router,
@@ -567,6 +570,8 @@ async def invoke_agent_iterative(
         tool_registry=tool_registry,
         tool_governance=tool_governance,
         tool_context=tool_context,
+        tool_activation_manager=tool_activation_manager,
+        tool_discovery_mode=settings.tool_discovery_mode,
         context_manager=context_manager,
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
@@ -636,6 +641,7 @@ async def invoke_agent_iterative_stream(
     hook_registry = getattr(request.app.state, "hook_registry", None)
     token_payload = _get_token_payload(request)
     domain = _resolve_domain_context(request, body.domain)
+    session_id = _resolve_runtime_session_id(request)
     active_skills = await _resolve_active_skills(
         request=request,
         definition=definition,
@@ -650,6 +656,7 @@ async def invoke_agent_iterative_stream(
         tool_policies=definition.governance.tool_policies if definition.governance else {},
         requested_by=token_payload.sub,
         tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
     )
 
     from agent33.agents.tool_loop import ToolLoopConfig
@@ -667,7 +674,7 @@ async def invoke_agent_iterative_stream(
         model=body.model,
         temperature=body.temperature,
         observation_capture=observation_capture,
-        session_id=_resolve_runtime_session_id(request),
+        session_id=session_id,
         invocation_mode="iterative_stream",
         effort=body.effort,
         effort_router=effort_router,
@@ -678,6 +685,8 @@ async def invoke_agent_iterative_stream(
         tool_registry=tool_registry,
         tool_governance=tool_governance,
         tool_context=tool_context,
+        tool_activation_manager=getattr(request.app.state, "tool_activation_manager", None),
+        tool_discovery_mode=settings.tool_discovery_mode,
         context_manager=context_manager,
         tenant_id=token_payload.tenant_id or "",
         domain=domain,

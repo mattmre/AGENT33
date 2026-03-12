@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -420,25 +421,22 @@ class TestMCPServerCreation:
         assert result[0].text == '{"status": "ok", "source": "proxy"}'
 
     async def test_discover_tools_routes_to_discovery_service(self) -> None:
+        from agent33.discovery.service import ToolDiscoveryMatch
         from agent33.mcp_server.bridge import MCPServiceBridge
         from agent33.mcp_server.server import create_mcp_server
         from agent33.security.auth import TokenPayload
+        from agent33.tools.discovery_runtime import ToolActivationManager
 
         request = SimpleNamespace(
+            headers={"x-agent-session-id": "session-1"},
             state=SimpleNamespace(
                 user=TokenPayload(sub="executor", scopes=["tools:execute"], tenant_id="tenant-1")
-            )
+            ),
         )
         fake_server = _RecordingServer(request=request)
         discovery_service = MagicMock()
         discovery_service.discover_tools.return_value = [
-            SimpleNamespace(
-                model_dump=lambda **_: {
-                    "name": "shell",
-                    "description": "Run commands",
-                    "score": 9.0,
-                }
-            )
+            ToolDiscoveryMatch(name="shell", description="Run commands", score=9.0)
         ]
 
         with (
@@ -456,18 +454,181 @@ class TestMCPServerCreation:
             ),
             patch("agent33.mcp_server.server.register_resources"),
         ):
-            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+            create_mcp_server(
+                MCPServiceBridge(
+                    discovery_service=discovery_service,
+                    tool_activation_manager=ToolActivationManager(),
+                    tool_discovery_mode="dynamic",
+                )
+            )
 
         result = await fake_server.handlers["call_tool"](
             "discover_tools",
-            {"query": "shell", "limit": 5},
+            {"query": "shell", "limit": 5, "activation_limit": 1},
         )
 
-        assert result[0].text == (
-            '{"query": "shell", "matches": [{"name": "shell", '
-            '"description": "Run commands", "score": 9.0}]}'
-        )
+        payload = json.loads(result[0].text)
+        assert payload["query"] == "shell"
+        assert payload["activated"] == ["shell"]
+        assert payload["activation_state"] == "activated"
+        assert payload["matches"] == [
+            {
+                "name": "shell",
+                "description": "Run commands",
+                "score": 9.0,
+                "status": "active",
+                "version": "",
+                "tags": [],
+            }
+        ]
         discovery_service.discover_tools.assert_called_once_with("shell", limit=5)
+
+    async def test_discover_tools_normalizes_invalid_numeric_arguments(self) -> None:
+        from agent33.discovery.service import ToolDiscoveryMatch
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+        from agent33.tools.discovery_runtime import ToolActivationManager
+
+        request = SimpleNamespace(
+            headers={"x-agent-session-id": "session-1"},
+            state=SimpleNamespace(
+                user=TokenPayload(sub="executor", scopes=["tools:execute"], tenant_id="tenant-1")
+            ),
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.discover_tools.return_value = [
+            ToolDiscoveryMatch(name="shell", description="Run commands", score=9.0)
+        ]
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(
+                MCPServiceBridge(
+                    discovery_service=discovery_service,
+                    tool_activation_manager=ToolActivationManager(),
+                    tool_discovery_mode="dynamic",
+                )
+            )
+
+        result = await fake_server.handlers["call_tool"](
+            "discover_tools",
+            {"query": "shell", "limit": "bogus", "activation_limit": None},
+        )
+
+        payload = json.loads(result[0].text)
+        assert payload["activated"] == ["shell"]
+        assert payload["activation_state"] == "activated"
+        discovery_service.discover_tools.assert_called_once_with("shell", limit=10)
+
+    async def test_runtime_list_tools_reflects_dynamic_session_activation(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+        from agent33.tools.discovery_runtime import (
+            DISCOVER_TOOLS_TOOL_NAME,
+            ToolActivationManager,
+        )
+        from agent33.tools.registry import ToolRegistry
+        from agent33.tools.registry_entry import ToolRegistryEntry
+
+        class _StaticTool:
+            def __init__(self, name: str, description: str) -> None:
+                self.name = name
+                self.description = description
+
+            async def execute(self, params, context):  # type: ignore[no-untyped-def]
+                return None
+
+        request = SimpleNamespace(
+            headers={"x-agent-session-id": "session-1"},
+            state=SimpleNamespace(
+                user=TokenPayload(
+                    sub="executor",
+                    scopes=["agents:read", "tools:execute"],
+                    tenant_id="tenant-1",
+                )
+            ),
+        )
+        fake_server = _RecordingServer(request=request)
+        tool_registry = ToolRegistry()
+        tool_registry.register_with_entry(
+            _StaticTool(DISCOVER_TOOLS_TOOL_NAME, "Discover tools"),
+            ToolRegistryEntry(
+                tool_id=DISCOVER_TOOLS_TOOL_NAME,
+                name=DISCOVER_TOOLS_TOOL_NAME,
+                version="1.0.0",
+                description="Discover tools",
+            ),
+        )
+        tool_registry.register_with_entry(
+            _StaticTool("shell", "Run commands"),
+            ToolRegistryEntry(
+                tool_id="shell",
+                name="shell",
+                version="1.0.0",
+                description="Run commands",
+            ),
+        )
+        tool_registry.register_with_entry(
+            _StaticTool("file_ops", "Read files"),
+            ToolRegistryEntry(
+                tool_id="file_ops",
+                name="file_ops",
+                version="1.0.0",
+                description="Read files",
+            ),
+        )
+
+        activation_manager = ToolActivationManager()
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(
+                MCPServiceBridge(
+                    tool_registry=tool_registry,
+                    tool_activation_manager=activation_manager,
+                    tool_discovery_mode="dynamic",
+                )
+            )
+
+        initial = await fake_server.handlers["call_tool"]("list_tools", {})
+        assert initial[0].text == ('[{"name": "discover_tools", "description": "Discover tools"}]')
+
+        activation_manager.activate_tools(["shell"], tenant_id="tenant-1", session_id="session-1")
+
+        after_activation = await fake_server.handlers["call_tool"]("list_tools", {})
+        assert after_activation[0].text == (
+            '[{"name": "discover_tools", "description": "Discover tools"}, '
+            '{"name": "shell", "description": "Run commands"}]'
+        )
 
     async def test_resolve_workflow_routes_to_discovery_service(self) -> None:
         from agent33.mcp_server.bridge import MCPServiceBridge

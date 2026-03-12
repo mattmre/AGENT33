@@ -130,6 +130,8 @@ def _build_skillsbench_adapter(
         tool_registry=tool_registry,
         tool_governance=getattr(request.app.state, "tool_governance", None),
         tool_context=tool_context,
+        tool_activation_manager=getattr(request.app.state, "tool_activation_manager", None),
+        tool_discovery_mode=settings.tool_discovery_mode,
         tenant_id=token_payload.tenant_id or "",
     )
 

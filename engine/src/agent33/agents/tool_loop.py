@@ -169,13 +169,13 @@ class ToolLoop:
             tool-call stats, and termination reason.
         """
         state = ToolLoopState()
-        tool_descriptions = self._collect_tool_descriptions()
 
         last_raw = ""
         last_model = model
 
         while state.iteration < self._config.max_iterations:
             state.iteration += 1  # 1-based iteration count
+            tool_descriptions = self._collect_tool_descriptions()
 
             # --- Call the LLM -------------------------------------------------
             try:
@@ -427,6 +427,7 @@ class ToolLoop:
         try:
             while state.iteration < self._config.max_iterations:
                 state.iteration += 1
+                tools = self._collect_tool_descriptions()
 
                 yield ToolLoopEvent(
                     event_type="iteration_started",
@@ -438,7 +439,11 @@ class ToolLoop:
                 yield ToolLoopEvent(
                     event_type="llm_request",
                     iteration=state.iteration,
-                    data={"model": model, "temperature": temperature},
+                    data={
+                        "model": model,
+                        "temperature": temperature,
+                        "tools_count": len(tools),
+                    },
                 )
 
                 try:
