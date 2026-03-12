@@ -264,6 +264,23 @@ class TestCheckSecurity:
         assert "JWT secret" in result.message
         assert result.remediation is not None
 
+    async def test_prefers_app_specific_settings(self, monkeypatch) -> None:
+        default_jwt_secret = Settings.model_fields["jwt_secret"].default
+        monkeypatch.setattr(
+            config_module.settings,
+            "jwt_secret",
+            SecretStr("non-default-global-secret"),
+        )
+
+        app_settings = Settings()
+        app_settings.jwt_secret = SecretStr(default_jwt_secret.get_secret_value())
+        app_settings.api_secret_key = SecretStr("non-default-api-secret")
+        app_settings.database_url = "postgresql+asyncpg://custom:secret@db:5432/agent33"
+
+        result = await check_security(SimpleNamespace(settings=app_settings))
+        assert result.status == CheckStatus.WARNING
+        assert "JWT secret" in result.message
+
 
 # ---------------------------------------------------------------------------
 # DOC-10: Config
@@ -276,6 +293,15 @@ class TestCheckConfig:
         result = await check_config(state)
         assert result.id == "DOC-10"
         assert result.status == CheckStatus.OK
+
+    async def test_prefers_app_specific_settings(self) -> None:
+        app_settings = Settings()
+        app_settings.training_enabled = True
+        app_settings.database_url = ""
+
+        result = await check_config(SimpleNamespace(settings=app_settings))
+        assert result.status == CheckStatus.WARNING
+        assert "training_enabled=True but no DATABASE_URL configured" in result.message
 
 
 # ---------------------------------------------------------------------------

@@ -79,7 +79,11 @@ class TaskEntry:
             task_id=data.get("task_id", uuid4().hex[:12]),
             description=data.get("description", ""),
             status=data.get("status", "pending"),
-            created_at=_parse_required_datetime(created, field_name="created_at"),
+            created_at=_parse_optional_datetime(
+                created,
+                field_name="created_at",
+            )
+            or datetime.now(UTC),
             completed_at=_parse_optional_datetime(completed, field_name="completed_at"),
             metadata=data.get("metadata", {}),
         )
@@ -123,7 +127,7 @@ class SessionEvent:
         return cls(
             event_id=data.get("event_id", uuid4().hex),
             event_type=SessionEventType(data["event_type"]),
-            timestamp=_parse_required_datetime(ts, field_name="timestamp"),
+            timestamp=_parse_persisted_datetime(ts, field_name="timestamp"),
             session_id=data.get("session_id", ""),
             data=data.get("data", {}),
             correlation_id=data.get("correlation_id", ""),
@@ -196,8 +200,8 @@ class OperatorSession:
             session_id=data.get("session_id", uuid4().hex),
             purpose=data.get("purpose", ""),
             status=OperatorSessionStatus(data.get("status", "active")),
-            started_at=_parse_required_datetime(started, field_name="started_at"),
-            updated_at=_parse_required_datetime(updated, field_name="updated_at"),
+            started_at=_parse_persisted_datetime(started, field_name="started_at"),
+            updated_at=_parse_persisted_datetime(updated, field_name="updated_at"),
             ended_at=_parse_optional_datetime(ended, field_name="ended_at"),
             tenant_id=data.get("tenant_id", ""),
             tasks=[TaskEntry.from_dict(t) for t in tasks_raw],
@@ -223,10 +227,10 @@ class OperatorSession:
         return len(self.tasks)
 
 
-def _parse_required_datetime(value: Any, *, field_name: str) -> datetime:
-    """Parse required datetimes while surfacing malformed persisted data."""
+def _parse_persisted_datetime(value: Any, *, field_name: str) -> datetime:
+    """Parse persisted required datetimes without masking missing fields."""
     if value is None:
-        return datetime.now(UTC)
+        raise ValueError(f"Missing {field_name}")
     if not isinstance(value, str):
         raise ValueError(f"Invalid {field_name}")
     try:
