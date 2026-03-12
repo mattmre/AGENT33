@@ -47,6 +47,7 @@ from agent33.api.routes import (
     sessions,
     synthetic_envs,
     tool_approvals,
+    tool_mutations,
     traces,
     training,
     visualizations,
@@ -296,7 +297,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Tool registry + governance ----------------------------------------
     from agent33.security.approval_tokens import ApprovalTokenManager
     from agent33.tools.approvals import ToolApprovalService
+    from agent33.tools.builtin.apply_patch import ApplyPatchTool
     from agent33.tools.governance import ToolGovernance
+    from agent33.tools.mutation_audit import MutationAuditStore
     from agent33.tools.registry import ToolRegistry
 
     tool_registry = ToolRegistry()
@@ -323,6 +326,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         approval_token_manager=approval_token_manager,
     )
     app.state.tool_governance = tool_governance
+    mutation_audit_store = MutationAuditStore(state_store=orchestration_state_store)
+    app.state.mutation_audit_store = mutation_audit_store
+    tool_mutations.set_mutation_audit_store(mutation_audit_store)
+    tool_registry.register(ApplyPatchTool(audit_store=mutation_audit_store))
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
     # -- Embedding provider + cache ----------------------------------------
@@ -608,6 +615,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         skill_registry=skill_registry,
         workflow_registry=workflows.get_workflow_registry(),
         proxy_manager=proxy_manager,
+        tool_governance=tool_governance,
     )
     mcp_server = create_mcp_server(mcp_bridge)
     mcp_transport = None
@@ -1132,6 +1140,7 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
+app.include_router(tool_mutations.router)
 app.include_router(sessions.router)
 app.include_router(operator.router)
 app.include_router(workflow_sse.router)
