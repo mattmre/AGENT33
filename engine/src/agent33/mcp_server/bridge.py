@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from agent33.memory.rag import RAGPipeline
     from agent33.skills.registry import SkillRegistry
     from agent33.tools.discovery_runtime import ToolActivationManager
+    from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
     from agent33.workflows.definition import WorkflowDefinition
 
@@ -33,6 +34,7 @@ class MCPServiceBridge:
         proxy_manager: ProxyManager | None = None,
         discovery_service: DiscoveryService | None = None,
         tool_activation_manager: ToolActivationManager | None = None,
+        tool_governance: ToolGovernance | None = None,
         tool_discovery_mode: str = "legacy",
     ) -> None:
         self.agent_registry = agent_registry
@@ -44,6 +46,7 @@ class MCPServiceBridge:
         self.proxy_manager = proxy_manager
         self.discovery_service = discovery_service
         self.tool_activation_manager = tool_activation_manager
+        self.tool_governance = tool_governance
         self.tool_discovery_mode = tool_discovery_mode
 
     def get_system_status(self) -> dict[str, Any]:

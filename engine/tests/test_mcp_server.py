@@ -188,6 +188,52 @@ class TestMCPServiceBridge:
         assert status["status"] == "operational"
         assert status["workflows_loaded"] == 2
 
+    async def test_execute_tool_runs_governance_and_validated_execute(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.tools import handle_execute_tool
+        from agent33.tools.base import ToolContext, ToolResult
+
+        tool_registry = MagicMock()
+        tool_registry.get.return_value = object()
+        tool_registry.validated_execute = AsyncMock(return_value=ToolResult.ok("patched"))
+        governance = MagicMock()
+        governance.pre_execute_check.return_value = True
+        governance.log_execution = MagicMock()
+
+        result = await handle_execute_tool(
+            MCPServiceBridge(tool_registry=tool_registry, tool_governance=governance),
+            tool_name="apply_patch",
+            arguments={"patch": "*** Begin Patch\n*** End Patch"},
+            context=ToolContext(user_scopes=["tools:execute"]),
+        )
+
+        assert result["success"] is True
+        tool_registry.validated_execute.assert_awaited_once()
+        governance.pre_execute_check.assert_called_once()
+        governance.log_execution.assert_called_once()
+
+    async def test_execute_tool_returns_governance_error_when_blocked(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.tools import handle_execute_tool
+        from agent33.tools.base import ToolContext
+
+        tool_registry = MagicMock()
+        tool_registry.get.return_value = object()
+        tool_registry.validated_execute = AsyncMock()
+        governance = MagicMock()
+        governance.pre_execute_check.return_value = False
+
+        result = await handle_execute_tool(
+            MCPServiceBridge(tool_registry=tool_registry, tool_governance=governance),
+            tool_name="apply_patch",
+            arguments={"patch": "*** Begin Patch\n*** End Patch"},
+            context=ToolContext(user_scopes=["tools:execute"]),
+        )
+
+        assert result["success"] is False
+        assert "blocked by governance policy" in result["error"]
+        tool_registry.validated_execute.assert_not_called()
+
 
 class TestMCPServerCreation:
     def test_create_server_without_sdk(self) -> None:

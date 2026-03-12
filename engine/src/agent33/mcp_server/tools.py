@@ -197,11 +197,30 @@ async def handle_execute_tool(
         from agent33.tools.base import ToolContext
 
         tool_context = context if isinstance(context, ToolContext) else ToolContext()
-        result = await tool.execute(arguments or {}, tool_context)
+        if bridge.tool_governance is not None:
+            allowed = bridge.tool_governance.pre_execute_check(
+                tool_name,
+                arguments or {},
+                tool_context,
+            )
+            if not allowed:
+                return {
+                    "tool": tool_name,
+                    "success": False,
+                    "error": f"Tool '{tool_name}' blocked by governance policy",
+                }
+        result = await bridge.tool_registry.validated_execute(
+            tool_name,
+            arguments or {},
+            tool_context,
+        )
+        if bridge.tool_governance is not None:
+            bridge.tool_governance.log_execution(tool_name, arguments or {}, result)
         return {
             "tool": tool_name,
             "output": result.output or "",
             "success": result.success,
+            "error": result.error or "",
         }
     except Exception as exc:
         return {"error": str(exc)}

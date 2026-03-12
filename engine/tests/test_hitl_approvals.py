@@ -71,6 +71,40 @@ def test_supervised_destructive_flow_consumes_approved_token() -> None:
     assert approvals.get_request(request.approval_id).status == ApprovalStatus.CONSUMED
 
 
+def test_apply_patch_requires_supervised_approval() -> None:
+    approvals = ToolApprovalService()
+    governance = ToolGovernance(approval_service=approvals)
+    context = ToolContext(user_scopes=["tools:execute"], requested_by="requester-3")
+
+    allowed = governance.pre_execute_check(
+        "apply_patch",
+        {"patch": "*** Begin Patch\n*** Add File: note.txt\n+hi\n*** End Patch"},
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert allowed is False
+
+    request = approvals.list_requests()[0]
+    approvals.decide(
+        request.approval_id,
+        approved=True,
+        reviewed_by="operator",
+        review_note="approved for patch apply",
+    )
+
+    second_allowed = governance.pre_execute_check(
+        "apply_patch",
+        {
+            "patch": "*** Begin Patch\n*** Add File: note.txt\n+hi\n*** End Patch",
+            "__approval_id": request.approval_id,
+        },
+        context,
+        autonomy_level=AutonomyLevel.SUPERVISED,
+    )
+    assert second_allowed is True
+    assert approvals.get_request(request.approval_id).status == ApprovalStatus.CONSUMED
+
+
 def test_supervised_destructive_flow_consumes_approval_token() -> None:
     approvals = ToolApprovalService()
     token_manager = ApprovalTokenManager(secret="test-secret")

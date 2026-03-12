@@ -28,10 +28,11 @@ _audit_logger = logging.getLogger("agent33.tools.audit")
 _CHAIN_OPERATORS = re.compile(r"[|;&]|&&|\|\|")
 _SUBSHELL_PATTERNS = re.compile(r"\$\(|`")
 
-# Tools that perform write/execute operations (blocked in read-only mode)
-_WRITE_TOOLS: frozenset[str] = frozenset({"shell", "file_ops", "browser"})
+# Tools that always perform write/execute operations (blocked in read-only mode)
+_WRITE_TOOLS: frozenset[str] = frozenset({"shell", "browser"})
 _DESTRUCTIVE_PARAMS: dict[str, set[str]] = {
     "file_ops": {"write"},  # operation=write is destructive
+    "apply_patch": {"apply"},
 }
 
 
@@ -114,7 +115,7 @@ class ToolGovernance:
         6. For web fetch, the domain is in the domain allowlist.
         """
         # --- Tool-specific governance policies ---
-        operation = str(params.get("operation", ""))
+        operation = self._resolve_operation(tool_name, params)
         if context.tool_policies:
             policy_result = self._check_tool_policy(tool_name, params, context)
             if policy_result is not None:
@@ -164,7 +165,9 @@ class ToolGovernance:
         if autonomy_level is not None:
             from agent33.agents.definition import AutonomyLevel
 
-            if autonomy_level == AutonomyLevel.READ_ONLY and tool_name in _WRITE_TOOLS:
+            if autonomy_level == AutonomyLevel.READ_ONLY and self._is_write_operation(
+                tool_name, operation
+            ):
                 logger.warning("Autonomy denied: tool=%s blocked in read-only mode", tool_name)
                 return False
             if (
@@ -330,7 +333,7 @@ class ToolGovernance:
         if not policies:
             return None
 
-        operation = params.get("operation")
+        operation = self._resolve_operation(tool_name, params)
 
         # 1. Check exact operation match first (most specific)
         if operation:
@@ -377,6 +380,20 @@ class ToolGovernance:
             return policies["*"].lower()
 
         return None
+
+    @staticmethod
+    def _resolve_operation(tool_name: str, params: dict[str, Any]) -> str:
+        """Return the effective operation name for a tool invocation."""
+        if tool_name == "apply_patch":
+            return "preview" if bool(params.get("dry_run", False)) else "apply"
+        return str(params.get("operation", ""))
+
+    @staticmethod
+    def _is_write_operation(tool_name: str, operation: str) -> bool:
+        """Return True when the invocation mutates state."""
+        return tool_name in _WRITE_TOOLS or (
+            tool_name in _DESTRUCTIVE_PARAMS and operation in _DESTRUCTIVE_PARAMS[tool_name]
+        )
 
     def _validate_command(self, command: str, context: ToolContext) -> bool:
         """Validate a shell command, checking all segments against the allowlist.
