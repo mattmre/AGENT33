@@ -35,6 +35,8 @@ SCOPES: set[str] = {
     "plugins:write",
     "operator:read",
     "operator:write",
+    "processes:read",
+    "processes:manage",
 }
 
 

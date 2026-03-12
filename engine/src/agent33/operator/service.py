@@ -130,6 +130,17 @@ class OperatorService:
         else:
             inventories["hooks"] = SubsystemInventory(count=0, loaded=False)
 
+        process_manager = getattr(self._app_state, "process_manager_service", None)
+        if process_manager is not None:
+            process_inventory = process_manager.inventory()
+            inventories["processes"] = SubsystemInventory(
+                count=process_inventory["count"],
+                loaded=True,
+                active=process_inventory["active"],
+            )
+        else:
+            inventories["processes"] = SubsystemInventory(count=0, loaded=False)
+
         # Runtime info
         now = time.time()
         start_dt = datetime.fromtimestamp(self._start_time, tz=UTC)

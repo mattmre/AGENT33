@@ -257,6 +257,8 @@ class Settings(BaseSettings):
     synthetic_env_bundle_retention: int = 100
     synthetic_env_bundle_persistence_path: str = "var/synthetic_environment_bundles.json"
     orchestration_state_store_path: str = ""
+    process_manager_log_dir: str = "var/process-manager"
+    process_manager_max_processes: int = 10
 
     # Continuous improvement learning signals (Phase 31)
     improvement_learning_enabled: bool = False
@@ -341,6 +343,7 @@ class Settings(BaseSettings):
         "improvement_learning_max_signals",
         "improvement_learning_max_generated_intakes",
         "voice_daemon_max_sessions",
+        "process_manager_max_processes",
     )
     @classmethod
     def _validate_learning_non_negative(cls, value: int) -> int:

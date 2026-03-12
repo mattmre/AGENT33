@@ -41,6 +41,7 @@ from agent33.api.routes import (
     operator,
     outcomes,
     packs,
+    processes,
     reasoning,
     releases,
     reviews,
@@ -331,6 +332,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tool_mutations.set_mutation_audit_store(mutation_audit_store)
     tool_registry.register(ApplyPatchTool(audit_store=mutation_audit_store))
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
+
+    from agent33.processes.service import ProcessManagerService
+
+    process_manager_service = ProcessManagerService(
+        workspace_root=Path.cwd(),
+        log_dir=Path(settings.process_manager_log_dir),
+        state_store=orchestration_state_store,
+        max_processes=settings.process_manager_max_processes,
+    )
+    app.state.process_manager_service = process_manager_service
+    logger.info(
+        "process_manager_service_initialized",
+        workspace_root=str(Path.cwd().resolve()),
+        log_dir=str(Path(settings.process_manager_log_dir).resolve()),
+        max_processes=settings.process_manager_max_processes,
+    )
 
     # -- Embedding provider + cache ----------------------------------------
     from agent33.memory.embeddings import EmbeddingProvider
@@ -938,6 +955,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("operator_session_service_shutdown_failed", exc_info=True)
 
+    _process_manager: Any = getattr(app.state, "process_manager_service", None)
+    if _process_manager is not None:
+        try:
+            await _process_manager.shutdown()
+            logger.info("process_manager_service_shutdown")
+        except Exception:
+            logger.warning("process_manager_service_shutdown_failed", exc_info=True)
+
     workflows.set_ws_manager(None)
 
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
@@ -1141,6 +1166,7 @@ app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
 app.include_router(tool_mutations.router)
+app.include_router(processes.router)
 app.include_router(sessions.router)
 app.include_router(operator.router)
 app.include_router(workflow_sse.router)
