@@ -105,6 +105,7 @@ _MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                     "type": "integer",
                     "description": "Maximum number of matches",
                     "default": 10,
+                    "minimum": 1,
                 },
                 "activate": {
                     "type": "boolean",
@@ -118,6 +119,7 @@ _MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                     "type": "integer",
                     "description": "Maximum number of matches to activate",
                     "default": 3,
+                    "minimum": 1,
                 },
             },
             "required": ["query"],

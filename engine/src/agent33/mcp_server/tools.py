@@ -11,6 +11,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _coerce_positive_int(value: Any, *, default: int) -> int:
+    """Return a positive integer or the provided default on invalid input."""
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, normalized)
+
+
 async def handle_list_agents(
     bridge: MCPServiceBridge,
 ) -> list[dict[str, Any]]:
@@ -131,7 +140,9 @@ async def handle_discover_tools(
     if discovery_service is None:
         return {"query": query, "matches": [], "error": "Discovery service not available"}
 
-    matches = discovery_service.discover_tools(query, limit=limit)
+    normalized_limit = _coerce_positive_int(limit, default=10)
+    normalized_activation_limit = _coerce_positive_int(activation_limit, default=3)
+    matches = discovery_service.discover_tools(query, limit=normalized_limit)
     activated: list[str] = []
     activation_state = "not_requested"
 
@@ -147,9 +158,10 @@ async def handle_discover_tools(
                 match.name for match in matches if match.name != DISCOVER_TOOLS_TOOL_NAME
             ]
             activated = activation_manager.activate_tools(
-                activation_candidates[: max(1, activation_limit)],
+                activation_candidates[:normalized_activation_limit],
                 tenant_id=tool_context.tenant_id,
                 session_id=tool_context.session_id,
+                requested_by=tool_context.requested_by,
             )
             activation_state = "activated"
         else:

@@ -81,6 +81,37 @@ class TestSessionToolRegistryView:
 
         assert [tool.name for tool in view.list_all()] == ["shell", "file_ops"]
 
+    def test_dynamic_mode_uses_requester_scope_when_tenant_missing(self) -> None:
+        registry = ToolRegistry()
+        _register_tool(registry, _StaticTool(DISCOVER_TOOLS_TOOL_NAME))
+        _register_tool(registry, _StaticTool("shell"))
+
+        activation_manager = ToolActivationManager()
+        activation_manager.activate_tools(
+            ["shell"],
+            requested_by="user-a",
+            session_id="session-1",
+        )
+
+        user_a_view = SessionToolRegistryView(
+            registry,
+            mode="dynamic",
+            activation_manager=activation_manager,
+            context=ToolContext(requested_by="user-a", session_id="session-1"),
+        )
+        user_b_view = SessionToolRegistryView(
+            registry,
+            mode="dynamic",
+            activation_manager=activation_manager,
+            context=ToolContext(requested_by="user-b", session_id="session-1"),
+        )
+
+        assert [tool.name for tool in user_a_view.list_all()] == [
+            DISCOVER_TOOLS_TOOL_NAME,
+            "shell",
+        ]
+        assert [tool.name for tool in user_b_view.list_all()] == [DISCOVER_TOOLS_TOOL_NAME]
+
     async def test_exact_name_execution_still_works_for_hidden_tool(self) -> None:
         registry = ToolRegistry()
         _register_tool(registry, _StaticTool(DISCOVER_TOOLS_TOOL_NAME))

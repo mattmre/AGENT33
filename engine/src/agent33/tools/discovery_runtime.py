@@ -25,18 +25,36 @@ class ToolActivationManager:
         self._active_tools: dict[tuple[str, str], list[str]] = {}
         self._lock = threading.Lock()
 
+    def _key(
+        self,
+        *,
+        tenant_id: str = "",
+        session_id: str = "",
+        requested_by: str = "",
+    ) -> tuple[str, str]:
+        scope_key = tenant_id.strip()
+        if not scope_key:
+            requester = requested_by.strip()
+            scope_key = f"user:{requester}" if requester else "anonymous"
+        return (scope_key, session_id)
+
     def activate_tools(
         self,
         tool_names: list[str],
         *,
         tenant_id: str = "",
         session_id: str = "",
+        requested_by: str = "",
     ) -> list[str]:
         """Activate tools for the given tenant/session and return newly activated names."""
         if not session_id:
             return []
 
-        key = (tenant_id, session_id)
+        key = self._key(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            requested_by=requested_by,
+        )
         with self._lock:
             existing = list(self._active_tools.get(key, []))
             seen = set(existing)
@@ -55,12 +73,27 @@ class ToolActivationManager:
 
             return activated
 
-    def list_active_tools(self, *, tenant_id: str = "", session_id: str = "") -> list[str]:
+    def list_active_tools(
+        self,
+        *,
+        tenant_id: str = "",
+        session_id: str = "",
+        requested_by: str = "",
+    ) -> list[str]:
         """Return active tools for the given tenant/session."""
         if not session_id:
             return []
         with self._lock:
-            return list(self._active_tools.get((tenant_id, session_id), []))
+            return list(
+                self._active_tools.get(
+                    self._key(
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        requested_by=requested_by,
+                    ),
+                    [],
+                )
+            )
 
 
 class SessionToolRegistryView:
@@ -107,6 +140,7 @@ class SessionToolRegistryView:
             self._activation_manager.list_active_tools(
                 tenant_id=self._context.tenant_id,
                 session_id=self._context.session_id,
+                requested_by=self._context.requested_by,
             )
         )
         visible_names = {DISCOVER_TOOLS_TOOL_NAME, *active_names}
@@ -219,6 +253,7 @@ class DiscoverToolsTool:
                     activation_candidates[:activation_limit],
                     tenant_id=context.tenant_id,
                     session_id=context.session_id,
+                    requested_by=context.requested_by,
                 )
                 activation_state = "activated"
             else:
