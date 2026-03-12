@@ -12,9 +12,10 @@ import type { CatalogEntry, CatalogPage, CategoryCount } from "./types";
 
 interface ToolCatalogPageProps {
   token: string | null;
+  apiKey: string | null;
 }
 
-export function ToolCatalogPage({ token }: ToolCatalogPageProps): JSX.Element {
+export function ToolCatalogPage({ token, apiKey }: ToolCatalogPageProps): JSX.Element {
   const [catalog, setCatalog] = useState<CatalogPage | null>(null);
   const [categories, setCategories] = useState<CategoryCount[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function ToolCatalogPage({ token }: ToolCatalogPageProps): JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchCatalogTools(token, {
+      const data = await fetchCatalogTools(token, apiKey, {
         category: selectedCategory ?? undefined,
         search: searchQuery || undefined,
         limit: pageSize,
@@ -41,16 +42,16 @@ export function ToolCatalogPage({ token }: ToolCatalogPageProps): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [token, selectedCategory, searchQuery, page]);
+  }, [apiKey, token, selectedCategory, searchQuery, page]);
 
   const loadCategories = useCallback(async () => {
     try {
-      const cats = await fetchCategories(token);
+      const cats = await fetchCategories(token, apiKey);
       setCategories(cats);
     } catch {
       // Categories are non-critical; silently degrade
     }
-  }, [token]);
+  }, [apiKey, token]);
 
   useEffect(() => {
     void loadTools();

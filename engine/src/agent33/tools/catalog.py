@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from agent33.tools.schema import get_tool_schema
+
 if TYPE_CHECKING:
     from agent33.plugins.registry import PluginRegistry
     from agent33.skills.registry import SkillRegistry
@@ -114,21 +116,13 @@ class ToolCatalogService:
                 category = "general"
 
                 if entry_meta is not None:
-                    schema = entry_meta.parameters_schema
                     result_schema = entry_meta.result_schema
                     tags = list(entry_meta.tags)
                     version = entry_meta.version
                     if tags:
                         category = tags[0]
 
-                # Check SchemaAwareTool if no entry schema
-                if not schema:
-                    from agent33.tools.base import SchemaAwareTool
-
-                    if isinstance(tool, SchemaAwareTool):
-                        raw = tool.parameters_schema
-                        if isinstance(raw, dict):
-                            schema = raw
+                schema = get_tool_schema(tool, entry_meta) or {}
 
                 entries.append(
                     CatalogEntry(
@@ -167,7 +161,7 @@ class ToolCatalogService:
                         )
                     )
 
-        # -- Skills that declare allowed_tools ------------------------------
+        # -- Skill catalog entries -----------------------------------------
         if self._skill_registry is not None:
             for skill in self._skill_registry.list_all():
                 entries.append(

@@ -68,7 +68,11 @@ function parseSchemaProperties(
 
 function SchemaNodeRow({ node, depth }: { node: SchemaNode; depth: number }): JSX.Element {
   return (
-    <>
+    <div
+      role="treeitem"
+      aria-level={depth + 1}
+      aria-expanded={node.children.length > 0 ? true : undefined}
+    >
       <div
         className="schema-node"
         style={{ paddingLeft: `${depth * 1.2}rem` }}
@@ -86,10 +90,14 @@ function SchemaNodeRow({ node, depth }: { node: SchemaNode; depth: number }): JS
           <span className="schema-desc">{node.description}</span>
         )}
       </div>
-      {node.children.map((child) => (
-        <SchemaNodeRow key={child.key} node={child} depth={depth + 1} />
-      ))}
-    </>
+      {node.children.length > 0 && (
+        <div role="group">
+          {node.children.map((child) => (
+            <SchemaNodeRow key={child.key} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

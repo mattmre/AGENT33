@@ -13,6 +13,7 @@ from agent33.api.routes.tool_catalog import set_catalog_service
 from agent33.main import app
 from agent33.security.auth import create_access_token
 from agent33.tools.catalog import (
+    CatalogEntry,
     ToolCatalogService,
 )
 from agent33.tools.registry_entry import ToolRegistryEntry
@@ -290,6 +291,24 @@ class TestGetToolSchema:
     def test_missing_tool_404(self, tools_client: TestClient) -> None:
         resp = tools_client.get("/v1/catalog/tools/unknown/schema")
         assert resp.status_code == 404
+
+    def test_route_uses_single_tool_lookup(self) -> None:
+        service = MagicMock(spec=ToolCatalogService)
+        service.get_tool.return_value = CatalogEntry(
+            name="shell",
+            parameters_schema={
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+            },
+            has_schema=True,
+        )
+        set_catalog_service(service)
+        client = _client(["tools:execute"], tenant_id="tenant-a")
+
+        resp = client.get("/v1/catalog/tools/shell/schema")
+
+        assert resp.status_code == 200
+        service.get_tool.assert_called_once_with("shell", tenant_id="tenant-a")
 
 
 # ---------------------------------------------------------------------------
