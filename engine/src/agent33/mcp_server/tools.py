@@ -257,11 +257,15 @@ async def handle_resolve_workflow(
     from agent33.tools.base import ToolContext
 
     tool_context = context if isinstance(context, ToolContext) else ToolContext()
-    tenant_id = (
-        None
-        if check_permission("admin", tool_context.user_scopes)
-        else (tool_context.tenant_id or None)
-    )
+    is_admin = check_permission("admin", tool_context.user_scopes)
+    if not is_admin and not tool_context.tenant_id:
+        return {
+            "query": query,
+            "matches": [],
+            "error": "tenant_id is required for non-admin requests",
+        }
+
+    tenant_id = None if is_admin else tool_context.tenant_id
     matches = discovery_service.resolve_workflow(query, limit=limit, tenant_id=tenant_id)
     return {
         "query": query,

@@ -428,10 +428,22 @@ def _skill_category_terms(skill: SkillDefinition, pack_name: str | None) -> list
 
 
 def _skill_source_path(base_path: Path | None) -> str:
-    """Return a stable relative-ish source path for a skill when available."""
+    """Return a non-sensitive logical path for a skill when available."""
     if base_path is None:
         return ""
+
     try:
-        return base_path.as_posix()
+        normalized_parts = [
+            part
+            for part in base_path.parts
+            if part not in {"", ".", "/", "\\"} and not part.endswith(":")
+        ]
     except Exception:
-        return str(base_path)
+        return getattr(base_path, "name", "") or ""
+
+    lowered_parts = [part.lower() for part in normalized_parts]
+    if "skills" in lowered_parts:
+        skills_index = lowered_parts.index("skills")
+        return "/".join(normalized_parts[skills_index:])
+
+    return normalized_parts[-1] if normalized_parts else ""

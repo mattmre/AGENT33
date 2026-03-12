@@ -252,3 +252,29 @@ class TestDiscoveryService:
         assert skill_matches
         assert skill_matches[0].name == "deploy-safely"
         assert skill_matches[0].pack == "alpha"
+        assert skill_matches[0].source_path == "skills/deploy-safely"
+
+    def test_resolve_workflow_skill_source_path_is_logical_not_absolute(
+        self, tmp_path: Path
+    ) -> None:
+        skill_registry = SkillRegistry()
+        skill_dir = tmp_path / "Users" / "tester" / "skills" / "incident" / "runbook"
+        skill_dir.mkdir(parents=True)
+        skill_registry.register(
+            SkillDefinition(
+                name="incident-runbook",
+                description="Handle incidents",
+                instructions="Follow the on-call runbook carefully.",
+                tags=["operations"],
+                base_path=skill_dir,
+            )
+        )
+
+        service = DiscoveryService(skill_registry=skill_registry)
+        matches = service.resolve_workflow("on-call runbook", limit=5)
+
+        skill_matches = [match for match in matches if match.source == "skill"]
+        assert skill_matches
+        assert skill_matches[0].source_path == "skills/incident/runbook"
+        assert "Users" not in skill_matches[0].source_path
+        assert ":" not in skill_matches[0].source_path
