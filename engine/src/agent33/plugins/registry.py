@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from agent33.plugins.base import PluginBase
+    from agent33.plugins.events import PluginEventStore
     from agent33.plugins.manifest import PluginManifest
 
 logger = logging.getLogger(__name__)
@@ -68,8 +69,9 @@ class PluginRegistry:
     - AgentRegistry for in-memory CRUD
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, event_store: PluginEventStore | None = None) -> None:
         self._plugins: dict[str, PluginEntry] = {}
+        self._event_store = event_store
 
     # ------------------------------------------------------------------
     # Tenant helpers
@@ -108,25 +110,8 @@ class PluginRegistry:
             if not entry.is_dir():
                 continue
             try:
-                manifest = load_manifest(entry)
-                if manifest.name in self._plugins:
-                    existing = self._plugins[manifest.name]
-                    logger.warning(
-                        "Plugin '%s' v%s already discovered (existing: v%s from %s)",
-                        manifest.name,
-                        manifest.version,
-                        existing.manifest.version,
-                        existing.plugin_dir,
-                    )
-                    continue
-                self._plugins[manifest.name] = PluginEntry(manifest, entry)
+                self.discover_plugin(entry)
                 discovered += 1
-                logger.info(
-                    "Discovered plugin: %s v%s from %s",
-                    manifest.name,
-                    manifest.version,
-                    entry,
-                )
             except FileNotFoundError:
                 # Directory has no manifest -- not a plugin, skip silently
                 pass
@@ -134,6 +119,36 @@ class PluginRegistry:
                 logger.warning("Failed to discover plugin from %s", entry, exc_info=True)
 
         return discovered
+
+    def discover_plugin(self, plugin_dir: Path, *, tenant_id: str = "") -> PluginManifest:
+        """Discover a single plugin directory and return its manifest."""
+        manifest = load_manifest(plugin_dir)
+        if manifest.name in self._plugins:
+            existing = self._plugins[manifest.name]
+            logger.warning(
+                "Plugin '%s' v%s already discovered (existing: v%s from %s)",
+                manifest.name,
+                manifest.version,
+                existing.manifest.version,
+                existing.plugin_dir,
+            )
+            raise PluginConflictError(
+                f"Plugin '{manifest.name}' already discovered from {existing.plugin_dir}"
+            )
+        self._plugins[manifest.name] = PluginEntry(manifest, plugin_dir, tenant_id=tenant_id)
+        logger.info(
+            "Discovered plugin: %s v%s from %s",
+            manifest.name,
+            manifest.version,
+            plugin_dir,
+        )
+        self._record_event(
+            "discovered",
+            manifest.name,
+            version=manifest.version,
+            details={"plugin_dir": str(plugin_dir), "tenant_id": tenant_id},
+        )
+        return manifest
 
     # ------------------------------------------------------------------
     # Dependency Resolution (Kahn's algorithm)
@@ -299,9 +314,16 @@ class PluginRegistry:
             entry.instance = instance
             entry.state = PluginState.LOADED
             logger.info("Loaded plugin: %s v%s", name, entry.manifest.version)
+            self._record_event("loaded", name, version=entry.manifest.version)
         except Exception as exc:
             entry.state = PluginState.ERROR
             entry.error = str(exc)
+            self._record_event(
+                "error",
+                name,
+                version=entry.manifest.version,
+                details={"operation": "load", "error": str(exc)},
+            )
             raise
 
     # ------------------------------------------------------------------
@@ -337,9 +359,16 @@ class PluginRegistry:
                 await entry.instance.on_enable()
             entry.state = PluginState.ACTIVE
             logger.info("Enabled plugin: %s", name)
+            self._record_event("enabled", name, version=entry.manifest.version)
         except Exception as exc:
             entry.state = PluginState.ERROR
             entry.error = str(exc)
+            self._record_event(
+                "error",
+                name,
+                version=entry.manifest.version,
+                details={"operation": "enable", "error": str(exc)},
+            )
             raise
 
     async def disable(self, name: str, *, tenant_id: str = "") -> None:
@@ -371,6 +400,7 @@ class PluginRegistry:
             except Exception:
                 logger.warning("Error during on_disable for plugin '%s'", name, exc_info=True)
         logger.info("Disabled plugin: %s", name)
+        self._record_event("disabled", name, version=entry.manifest.version)
 
     # ------------------------------------------------------------------
     # Unloading
@@ -406,6 +436,7 @@ class PluginRegistry:
         entry.instance = None
         entry.state = PluginState.UNLOADED
         logger.info("Unloaded plugin: %s", name)
+        self._record_event("unloaded", name, version=entry.manifest.version)
 
     async def unload_all(self) -> None:
         """Unload all plugins in reverse dependency order."""
@@ -516,6 +547,7 @@ class PluginRegistry:
                 f"Cannot remove plugin '{name}' in state {entry.state}. Unload it first."
             )
         del self._plugins[name]
+        self._record_event("removed", name, version=entry.manifest.version)
         return True
 
     # ------------------------------------------------------------------
@@ -554,3 +586,20 @@ class PluginRegistry:
             ):
                 results.append(m)
         return sorted(results, key=lambda m: m.name)
+
+    def _record_event(
+        self,
+        event_type: str,
+        plugin_name: str,
+        *,
+        version: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        if self._event_store is None:
+            return
+        self._event_store.record(
+            event_type,
+            plugin_name,
+            version=version,
+            details=details,
+        )
