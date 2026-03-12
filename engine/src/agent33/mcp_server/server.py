@@ -106,6 +106,19 @@ _MCP_TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                     "description": "Maximum number of matches",
                     "default": 10,
                 },
+                "activate": {
+                    "type": "boolean",
+                    "description": (
+                        "Activate matched tools for the current session "
+                        "when dynamic mode is enabled"
+                    ),
+                    "default": True,
+                },
+                "activation_limit": {
+                    "type": "integer",
+                    "description": "Maximum number of matches to activate",
+                    "default": 3,
+                },
             },
             "required": ["query"],
         },
@@ -241,12 +254,15 @@ def create_mcp_server(bridge: MCPServiceBridge) -> Any:
                 top_k=args.get("top_k", 5),
             )
         elif name == "list_tools":
-            result = await mcp_tools.handle_list_tools(bridge)
+            result = await mcp_tools.handle_list_tools(bridge, context=_build_tool_context(server))
         elif name == "discover_tools":
             result = await mcp_tools.handle_discover_tools(
                 bridge,
                 query=args.get("query", ""),
                 limit=args.get("limit", 10),
+                activate=args.get("activate", True),
+                activation_limit=args.get("activation_limit", 3),
+                context=_build_tool_context(server),
             )
         elif name == "execute_tool":
             enforce_registry_tool_access(server, bridge, str(args.get("tool_name", "")))
@@ -306,10 +322,19 @@ def _build_tool_context(server: Any) -> ToolContext:
     if user is None:
         return ToolContext()
 
+    headers = getattr(request, "headers", {})
+    session_id = ""
+    for header_name in ("x-agent-session-id", "x-session-id"):
+        candidate = headers.get(header_name, "") if hasattr(headers, "get") else ""
+        if str(candidate).strip():
+            session_id = str(candidate).strip()
+            break
+
     return ToolContext(
         user_scopes=list(getattr(user, "scopes", [])),
         requested_by=getattr(user, "sub", ""),
         tenant_id=getattr(user, "tenant_id", ""),
+        session_id=session_id,
     )
 
 

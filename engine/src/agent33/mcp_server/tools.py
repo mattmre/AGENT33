@@ -93,11 +93,22 @@ async def handle_search_memory(
 
 async def handle_list_tools(
     bridge: MCPServiceBridge,
+    context: Any | None = None,
 ) -> list[dict[str, Any]]:
     """List registered tools."""
     if not bridge.tool_registry:
         return []
-    tools = bridge.tool_registry.list_all()
+
+    from agent33.tools.base import ToolContext
+    from agent33.tools.discovery_runtime import SessionToolRegistryView
+
+    tool_context = context if isinstance(context, ToolContext) else ToolContext()
+    tools = SessionToolRegistryView(
+        bridge.tool_registry,
+        mode=getattr(bridge, "tool_discovery_mode", "legacy"),
+        activation_manager=getattr(bridge, "tool_activation_manager", None),
+        context=tool_context,
+    ).list_all()
     return [
         {
             "name": t.name if hasattr(t, "name") else str(t),
@@ -111,6 +122,9 @@ async def handle_discover_tools(
     bridge: MCPServiceBridge,
     query: str,
     limit: int = 10,
+    activate: bool = True,
+    activation_limit: int = 3,
+    context: Any | None = None,
 ) -> dict[str, Any]:
     """Discover relevant runtime tools."""
     discovery_service = getattr(bridge, "discovery_service", None)
@@ -118,9 +132,38 @@ async def handle_discover_tools(
         return {"query": query, "matches": [], "error": "Discovery service not available"}
 
     matches = discovery_service.discover_tools(query, limit=limit)
+    activated: list[str] = []
+    activation_state = "not_requested"
+
+    from agent33.tools.base import ToolContext
+    from agent33.tools.discovery_runtime import DISCOVER_TOOLS_TOOL_NAME
+
+    tool_context = context if isinstance(context, ToolContext) else ToolContext()
+    activation_manager = getattr(bridge, "tool_activation_manager", None)
+    tool_discovery_mode = getattr(bridge, "tool_discovery_mode", "legacy")
+    if activate and tool_discovery_mode == "dynamic" and activation_manager is not None:
+        if tool_context.session_id:
+            activation_candidates = [
+                match.name for match in matches if match.name != DISCOVER_TOOLS_TOOL_NAME
+            ]
+            activated = activation_manager.activate_tools(
+                activation_candidates[: max(1, activation_limit)],
+                tenant_id=tool_context.tenant_id,
+                session_id=tool_context.session_id,
+            )
+            activation_state = "activated"
+        else:
+            activation_state = "skipped_no_session"
+    elif activate and tool_discovery_mode == "dynamic":
+        activation_state = "skipped_unavailable"
+    elif activate:
+        activation_state = "legacy_mode"
+
     return {
         "query": query,
         "matches": [match.model_dump(mode="json") for match in matches],
+        "activated": activated,
+        "activation_state": activation_state,
     }
 
 

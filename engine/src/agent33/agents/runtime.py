@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.tools.base import ToolContext
+    from agent33.tools.discovery_runtime import ToolActivationManager
     from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
 
@@ -231,6 +232,8 @@ class AgentRuntime:
         tool_registry: ToolRegistry | None = None,
         tool_governance: ToolGovernance | None = None,
         tool_context: ToolContext | None = None,
+        tool_activation_manager: ToolActivationManager | None = None,
+        tool_discovery_mode: str = "legacy",
         runtime_enforcer: RuntimeEnforcer | None = None,
         context_manager: ContextManager | None = None,
         reasoning_protocol: Any | None = None,
@@ -262,7 +265,13 @@ class AgentRuntime:
         self._active_skills = active_skills or definition.skills
         self._tool_registry = tool_registry
         self._tool_governance = tool_governance
-        self._tool_context = tool_context
+        self._tool_context = (
+            dataclasses.replace(tool_context, session_id=session_id)
+            if tool_context is not None and session_id and not tool_context.session_id
+            else tool_context
+        )
+        self._tool_activation_manager = tool_activation_manager
+        self._tool_discovery_mode = tool_discovery_mode
         self._runtime_enforcer = runtime_enforcer
         self._context_manager = context_manager
         self._reasoning_protocol = reasoning_protocol
@@ -281,6 +290,23 @@ class AgentRuntime:
             return
         self._routing_decision_metadata.update(
             {key: value for key, value in metadata.items() if value is not None}
+        )
+
+    def _iterative_tool_registry(self) -> Any:
+        """Return the tool registry view used by iterative execution."""
+        if self._tool_registry is None:
+            raise RuntimeError(
+                "invoke_iterative() requires tool_registry — "
+                "pass it when constructing AgentRuntime"
+            )
+
+        from agent33.tools.discovery_runtime import SessionToolRegistryView
+
+        return SessionToolRegistryView(
+            self._tool_registry,
+            mode=self._tool_discovery_mode,
+            activation_manager=self._tool_activation_manager,
+            context=self._tool_context,
         )
 
     def _resolve_execution_parameters(
@@ -559,6 +585,8 @@ class AgentRuntime:
 
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
+        iterative_tool_registry = self._iterative_tool_registry()
+
         # --- Build system prompt (same as invoke) ---
         system_prompt = _build_system_prompt(self._definition)
 
@@ -607,7 +635,7 @@ class AgentRuntime:
             )
             tool_loop = ToolLoop(
                 router=self._router,
-                tool_registry=self._tool_registry,
+                tool_registry=iterative_tool_registry,
                 tool_governance=self._tool_governance,
                 tool_context=self._tool_context,
                 observation_capture=self._observation_capture,
@@ -674,7 +702,7 @@ class AgentRuntime:
         # --- Create and run the tool loop ---
         loop = ToolLoop(
             router=self._router,
-            tool_registry=self._tool_registry,
+            tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
             tool_context=self._tool_context,
             observation_capture=self._observation_capture,
@@ -790,6 +818,8 @@ class AgentRuntime:
             )
             return
 
+        iterative_tool_registry = self._iterative_tool_registry()
+
         # --- Build system prompt (same as invoke_iterative) ---
         system_prompt = _build_system_prompt(self._definition)
 
@@ -836,7 +866,7 @@ class AgentRuntime:
         loop_config = config or ToolLoopConfig()
         loop = ToolLoop(
             router=self._router,
-            tool_registry=self._tool_registry,
+            tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
             tool_context=self._tool_context,
             observation_capture=self._observation_capture,

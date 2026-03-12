@@ -794,6 +794,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Discovery service (Phase 46A) --------------------------------------
     from agent33.discovery.service import DiscoveryService
+    from agent33.tools.discovery_runtime import (
+        DISCOVER_TOOLS_TOOL_NAME,
+        DISCOVER_TOOLS_TOOL_VERSION,
+        DiscoverToolsTool,
+        ToolActivationManager,
+    )
+    from agent33.tools.registry_entry import ToolRegistryEntry
 
     discovery_service = DiscoveryService(
         tool_registry=tool_registry,
@@ -802,9 +809,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         workflow_registry=workflows.get_workflow_registry(),
         template_catalog=template_catalog,
     )
+    tool_activation_manager = ToolActivationManager()
+    discover_tools_tool = DiscoverToolsTool(
+        discovery_service=discovery_service,
+        activation_manager=tool_activation_manager,
+        mode=settings.tool_discovery_mode,
+    )
+    tool_registry.register_with_entry(
+        discover_tools_tool,
+        ToolRegistryEntry(
+            tool_id=DISCOVER_TOOLS_TOOL_NAME,
+            name=DISCOVER_TOOLS_TOOL_NAME,
+            version=DISCOVER_TOOLS_TOOL_VERSION,
+            description=discover_tools_tool.description,
+            owner="agent33",
+            tags=["discovery", "meta"],
+            parameters_schema=discover_tools_tool.parameters_schema,
+        ),
+    )
     app.state.discovery_service = discovery_service
+    app.state.tool_activation_manager = tool_activation_manager
     discovery_routes.set_discovery_service(discovery_service)
     mcp_bridge.discovery_service = discovery_service
+    mcp_bridge.tool_activation_manager = tool_activation_manager
+    mcp_bridge.tool_discovery_mode = settings.tool_discovery_mode
+    proxy_manager.set_native_tool_names({tool.name for tool in tool_registry.list_all()})
     logger.info("discovery_service_initialized")
 
     yield

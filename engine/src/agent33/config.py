@@ -193,6 +193,7 @@ class Settings(BaseSettings):
 
     # MCP Sync (Phase 45)
     mcp_sync_backup_enabled: bool = True  # create .bak before writing CLI configs
+    tool_discovery_mode: str = "legacy"  # legacy | dynamic
     connector_boundary_enabled: bool = False
     connector_policy_pack: str = "default"
     connector_governance_blocked_connectors: str = ""  # comma-separated
@@ -320,6 +321,14 @@ class Settings(BaseSettings):
         normalized = value.strip().lower()
         if normalized not in {"stub", "livekit"}:
             raise ValueError("voice_daemon_transport must be one of: stub, livekit")
+        return normalized
+
+    @field_validator("tool_discovery_mode")
+    @classmethod
+    def _validate_tool_discovery_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"legacy", "dynamic"}:
+            raise ValueError("tool_discovery_mode must be one of: legacy, dynamic")
         return normalized
 
     @field_validator(

@@ -19,6 +19,7 @@ class ToolContext:
     tool_policies: dict[str, str] = dataclasses.field(default_factory=dict)
     requested_by: str = ""
     tenant_id: str = ""
+    session_id: str = ""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
