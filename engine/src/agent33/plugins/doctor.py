@@ -57,9 +57,9 @@ class PluginDoctor:
         self._config_store = config_store
         self._installer = installer
 
-    async def diagnose(self, plugin_name: str) -> PluginDoctorReport:
+    async def diagnose(self, plugin_name: str, *, tenant_id: str = "") -> PluginDoctorReport:
         """Build a doctor report for one plugin."""
-        entry = self._plugin_registry.get(plugin_name)
+        entry = self._plugin_registry.get(plugin_name, tenant_id=tenant_id)
         if entry is None:
             raise KeyError(f"Plugin '{plugin_name}' not found")
 
@@ -105,7 +105,7 @@ class PluginDoctor:
 
         config_record = None
         if self._config_store is not None:
-            config_record = self._config_store.get(entry.manifest.name)
+            config_record = self._config_store.get(entry.manifest.name, tenant_id=tenant_id)
         checks.append(
             PluginDoctorCheck(
                 name="config",
@@ -206,9 +206,9 @@ class PluginDoctor:
             installed_path=install_record.installed_path if install_record is not None else "",
         )
 
-    async def diagnose_all(self) -> list[PluginDoctorReport]:
+    async def diagnose_all(self, *, tenant_id: str = "") -> list[PluginDoctorReport]:
         """Run diagnostics across all discovered plugins."""
         reports: list[PluginDoctorReport] = []
-        for manifest in self._plugin_registry.list_all():
-            reports.append(await self.diagnose(manifest.name))
+        for manifest in self._plugin_registry.list_all(tenant_id=tenant_id):
+            reports.append(await self.diagnose(manifest.name, tenant_id=tenant_id))
         return reports

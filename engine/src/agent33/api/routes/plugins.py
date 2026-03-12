@@ -113,10 +113,12 @@ def _manifest_to_summary(manifest: Any, state: str) -> PluginSummary:
 
 def _permission_inventory(entry: Any) -> PluginPermissionInventory:
     requested = sorted(permission.value for permission in entry.manifest.permissions)
-    granted = (
-        sorted(entry.instance.context.granted_permissions) if entry.instance is not None else []
-    )
-    denied = sorted(set(requested) - set(granted))
+    if entry.instance is None:
+        granted: list[str] = []
+        denied: list[str] = []
+    else:
+        granted = sorted(entry.instance.context.granted_permissions)
+        denied = sorted(set(requested) - set(granted))
     return PluginPermissionInventory(
         plugin_name=entry.manifest.name,
         requested=requested,
@@ -178,7 +180,7 @@ async def install_plugin(request: Request, body: PluginInstallRequest) -> Plugin
     requested_by, _ = _request_user(request)
     result = await installer.install_from_local(
         Path(body.source_path),
-        mode=PluginInstallMode(body.mode.value),
+        mode=body.mode,
         requested_by=requested_by,
         enable=body.enable,
     )
@@ -197,7 +199,7 @@ async def install_plugin(request: Request, body: PluginInstallRequest) -> Plugin
 async def doctor_plugins(request: Request) -> PluginDoctorSummaryResponse:
     """Run diagnostics across all visible plugins."""
     doctor = _get_plugin_doctor(request)
-    reports = await doctor.diagnose_all()
+    reports = await doctor.diagnose_all(tenant_id=tenant_filter_for_request(request) or "")
     return PluginDoctorSummaryResponse(
         count=len(reports),
         reports=[
@@ -259,7 +261,7 @@ async def get_plugin(request: Request, name: str) -> PluginDetail:
         state=entry.state.value,
         status=manifest.status.value,
         permissions=permission_inventory.requested,
-        granted_permissions=permission_inventory.granted or permission_inventory.requested,
+        granted_permissions=permission_inventory.granted,
         denied_permissions=permission_inventory.denied,
         contributions={
             "skills": contributions.skills,
@@ -409,8 +411,8 @@ async def link_plugin(
     body: PluginInstallRequest,
 ) -> PluginInstallResponse:
     """Link a plugin from a local source path."""
-    if body.mode != body.mode.link:
-        body = body.model_copy(update={"mode": body.mode.link})
+    if body.mode != PluginInstallMode.LINK:
+        body = body.model_copy(update={"mode": PluginInstallMode.LINK})
     installer = _get_plugin_installer(request)
     requested_by, _ = _request_user(request)
     result = await installer.install_from_local(
@@ -554,8 +556,9 @@ async def get_plugin_health(request: Request, name: str) -> PluginHealthResponse
 async def doctor_plugin(request: Request, name: str) -> PluginDoctorReportResponse:
     """Run diagnostics for one plugin."""
     doctor = _get_plugin_doctor(request)
+    tenant_id = tenant_filter_for_request(request) or ""
     try:
-        report = await doctor.diagnose(name)
+        report = await doctor.diagnose(name, tenant_id=tenant_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return PluginDoctorReportResponse.model_validate(report.model_dump(mode="json"))

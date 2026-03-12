@@ -15,7 +15,7 @@ from agent33.plugins.context import PluginContext
 from agent33.plugins.doctor import PluginDoctor
 from agent33.plugins.events import PluginEventStore
 from agent33.plugins.installer import PluginInstaller
-from agent33.plugins.manifest import PluginManifest
+from agent33.plugins.manifest import PluginManifest, PluginPermission
 from agent33.plugins.models import PluginState
 from agent33.plugins.registry import PluginEntry, PluginRegistry
 from agent33.security.auth import create_access_token
@@ -97,9 +97,11 @@ def _setup_registry_with_plugins(
     for p in plugins:
         name = p.pop("name")
         state = p.pop("state", PluginState.DISCOVERED)
+        tenant_id = p.pop("tenant_id", "")
         manifest = _make_manifest(name, **{k: v for k, v in p.items() if k != "state"})
         entry = PluginEntry(manifest, Path("/tmp") / name)
         entry.state = state
+        entry.tenant_id = tenant_id
         registry._plugins[name] = entry
     return registry
 
@@ -200,6 +202,20 @@ class TestGetPlugin:
         response = reader_client.get("/v1/plugins/nonexistent")
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
+
+    def test_get_plugin_without_instance_does_not_duplicate_permissions(
+        self, reader_client: TestClient
+    ) -> None:
+        registry = app.state.plugin_registry
+        entry = registry.get("alpha-plugin")
+        entry.manifest.permissions = [PluginPermission.CONFIG_READ]  # type: ignore[misc]
+
+        response = reader_client.get("/v1/plugins/alpha-plugin")
+
+        assert response.status_code == 200
+        assert response.json()["permissions"] == ["config:read"]
+        assert response.json()["granted_permissions"] == []
+        assert response.json()["denied_permissions"] == []
 
 
 class TestEnablePlugin:
@@ -459,12 +475,50 @@ class TestPluginLifecycleRoutes:
         assert response.status_code == 200
         assert response.json()["plugin_name"] == "alpha-plugin"
 
+    def test_plugin_permissions_without_instance_returns_empty_granted_and_denied(
+        self, reader_client: TestClient
+    ) -> None:
+        registry = app.state.plugin_registry
+        entry = registry.get("alpha-plugin")
+        entry.manifest.permissions = [PluginPermission.CONFIG_READ]  # type: ignore[misc]
+
+        response = reader_client.get("/v1/plugins/alpha-plugin/permissions")
+
+        assert response.status_code == 200
+        assert response.json()["requested"] == ["config:read"]
+        assert response.json()["granted"] == []
+        assert response.json()["denied"] == []
+
     def test_plugin_doctor_endpoint(self, reader_client: TestClient) -> None:
         response = reader_client.get("/v1/plugins/alpha-plugin/doctor")
 
         assert response.status_code == 200
         assert response.json()["plugin_name"] == "alpha-plugin"
         assert "overall_status" in response.json()
+
+    def test_plugin_doctor_endpoint_respects_tenant_visibility(
+        self, reader_client: TestClient
+    ) -> None:
+        registry = app.state.plugin_registry
+        registry.get("alpha-plugin").tenant_id = "tenant-b"  # type: ignore[union-attr]
+
+        response = reader_client.get("/v1/plugins/alpha-plugin/doctor")
+
+        assert response.status_code == 404
+
+    def test_plugin_doctor_summary_filters_to_visible_tenants(
+        self, reader_client: TestClient
+    ) -> None:
+        registry = app.state.plugin_registry
+        registry.get("alpha-plugin").tenant_id = ""  # type: ignore[union-attr]
+        registry.get("beta-plugin").tenant_id = "tenant-b"  # type: ignore[union-attr]
+
+        response = reader_client.get("/v1/plugins/doctor")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 1
+        assert [report["plugin_name"] for report in data["reports"]] == ["alpha-plugin"]
 
     def test_plugin_events_endpoint_returns_config_update_event(
         self, writer_client: TestClient

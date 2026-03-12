@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
-from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from agent33.plugins.installer import PluginInstallMode
 
 
 class PluginSummary(BaseModel):
@@ -62,18 +63,11 @@ class PluginHealthResponse(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class PluginInstallMode(StrEnum):
-    """Supported plugin install modes for the API."""
-
-    copy = "copy"
-    link = "link"
-
-
 class PluginInstallRequest(BaseModel):
     """Install or link a plugin from a local source path."""
 
     source_path: str
-    mode: PluginInstallMode = PluginInstallMode.copy
+    mode: PluginInstallMode = PluginInstallMode.COPY
     enable: bool | None = None
 
 
@@ -83,7 +77,7 @@ class PluginInstallResponse(BaseModel):
     success: bool
     plugin_name: str
     version: str = ""
-    mode: PluginInstallMode = PluginInstallMode.copy
+    mode: PluginInstallMode = PluginInstallMode.COPY
     linked: bool = False
     installed_path: str = ""
     source_path: str = ""

@@ -6,10 +6,13 @@ import shutil
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent33.plugins.config_store import PluginConfigStore
 from agent33.plugins.context import PluginContext
 from agent33.plugins.doctor import PluginDoctor
 from agent33.plugins.installer import PluginInstaller, PluginInstallMode
+from agent33.plugins.manifest import PluginPermission
 from agent33.plugins.registry import PluginRegistry
 from agent33.services.orchestration_state import OrchestrationStateStore
 from agent33.skills.registry import SkillRegistry
@@ -118,3 +121,56 @@ class TestPluginDoctor:
         assert report.permissions.plugin_name == "beta-plugin"
         assert report.permissions.granted == []
         assert report.permissions.denied == ["config:read"]
+
+    async def test_diagnose_respects_tenant_visibility(self, tmp_path) -> None:
+        source = _write_plugin(tmp_path / "sources", "tenant-plugin")
+        state_store = OrchestrationStateStore(str(tmp_path / "plugin_state.json"))
+        registry = PluginRegistry()
+        installer = PluginInstaller(
+            registry,
+            plugins_dir=tmp_path / "managed",
+            context_factory=_context_factory,
+            state_store=state_store,
+        )
+        await installer.install_from_local(source, enable=False)
+        registry.get("tenant-plugin").tenant_id = "tenant-a"  # type: ignore[union-attr]
+
+        doctor = PluginDoctor(registry, installer=installer)
+
+        report = await doctor.diagnose("tenant-plugin", tenant_id="tenant-a")
+        assert report.plugin_name == "tenant-plugin"
+
+        with pytest.raises(KeyError):
+            await doctor.diagnose("tenant-plugin", tenant_id="tenant-b")
+
+    async def test_diagnose_all_filters_to_visible_tenant_plugins(self, tmp_path) -> None:
+        state_store = OrchestrationStateStore(str(tmp_path / "plugin_state.json"))
+        registry = PluginRegistry()
+        installer = PluginInstaller(
+            registry,
+            plugins_dir=tmp_path / "managed",
+            context_factory=_context_factory,
+            state_store=state_store,
+        )
+
+        system_source = _write_plugin(tmp_path / "sources", "system-plugin")
+        tenant_a_source = _write_plugin(
+            tmp_path / "sources", "tenant-a-plugin", permissions=[PluginPermission.CONFIG_READ]
+        )
+        tenant_b_source = _write_plugin(tmp_path / "sources", "tenant-b-plugin")
+
+        await installer.install_from_local(system_source, enable=False)
+        await installer.install_from_local(tenant_a_source, enable=False)
+        await installer.install_from_local(tenant_b_source, enable=False)
+
+        registry.get("tenant-a-plugin").tenant_id = "tenant-a"  # type: ignore[union-attr]
+        registry.get("tenant-b-plugin").tenant_id = "tenant-b"  # type: ignore[union-attr]
+
+        doctor = PluginDoctor(registry, installer=installer)
+
+        reports = await doctor.diagnose_all(tenant_id="tenant-a")
+
+        assert [report.plugin_name for report in reports] == [
+            "system-plugin",
+            "tenant-a-plugin",
+        ]
