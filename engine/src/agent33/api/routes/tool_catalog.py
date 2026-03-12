@@ -86,19 +86,18 @@ async def get_tool_schema(request: Request, name: str) -> dict[str, Any]:
     """Get just the JSON Schema for a tool by name."""
     svc = _get_catalog_service(request)
     tenant_id = _catalog_tenant_id(request)
-    schema = svc.get_schema(name, tenant_id=tenant_id)
-    if schema is None:
-        entry = svc.get_tool(name, tenant_id=tenant_id)
-        if entry is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Tool '{name}' not found in catalog",
-            )
+    entry = svc.get_tool(name, tenant_id=tenant_id)
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool '{name}' not found in catalog",
+        )
+    if not entry.parameters_schema:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No JSON Schema available for tool '{name}'",
         )
-    return schema
+    return entry.parameters_schema
 
 
 @router.get(

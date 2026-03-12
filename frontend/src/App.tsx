@@ -199,7 +199,7 @@ export default function App(): JSX.Element {
         {/* Tool Catalog -> Runtime tool catalog with search, filters, schema */}
         {activeTab === "tools" && (
           <div className="consumer-tools-layout">
-            <ToolCatalogPage token={token || null} />
+            <ToolCatalogPage token={token || null} apiKey={apiKey || null} />
           </div>
         )}
 

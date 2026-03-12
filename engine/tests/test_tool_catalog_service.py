@@ -382,6 +382,18 @@ class TestSchemaLookup:
         svc = ToolCatalogService()
         assert svc.get_schema("does-not-exist") is None
 
+    def test_schema_aware_tool_schema_is_included(self) -> None:
+        schema = {"type": "object", "properties": {"path": {"type": "string"}}}
+        tool = _make_schema_tool("file_ops", schema=schema)
+        reg = _mock_tool_registry(tools=[tool])
+
+        svc = ToolCatalogService(tool_registry=reg)
+        result = svc.get_tool("file_ops")
+
+        assert result is not None
+        assert result.has_schema is True
+        assert result.parameters_schema == schema
+
 
 # ---------------------------------------------------------------------------
 # Tests: get_tool
