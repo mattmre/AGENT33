@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 DiagnosticCheckFn = Callable[[Any], Awaitable[DiagnosticCheck]]
 
 
+def _settings_for_state(app_state: Any) -> Any:
+    """Return the app-specific Settings instance when present."""
+    state_settings = getattr(app_state, "settings", None)
+    if state_settings is not None:
+        return state_settings
+
+    from agent33.config import settings as global_settings
+
+    return global_settings
+
+
 async def check_database(app_state: Any) -> DiagnosticCheck:
     """DOC-01: PostgreSQL connectivity."""
     try:
@@ -308,10 +319,11 @@ async def check_packs(app_state: Any) -> DiagnosticCheck:
 
 async def check_security(app_state: Any) -> DiagnosticCheck:
     """DOC-09: Security configuration (JWT secret, DB credentials)."""
-    from agent33.config import Settings, settings
+    from agent33.config import Settings
 
     issues: list[str] = []
     remediations: list[str] = []
+    settings = _settings_for_state(app_state)
     default_jwt_secret = Settings.model_fields["jwt_secret"].default
     default_api_secret = Settings.model_fields["api_secret_key"].default
 
@@ -347,9 +359,8 @@ async def check_security(app_state: Any) -> DiagnosticCheck:
 
 async def check_config(app_state: Any) -> DiagnosticCheck:
     """DOC-10: General config validation (deprecated/conflicting values)."""
-    from agent33.config import settings
-
     issues: list[str] = []
+    settings = _settings_for_state(app_state)
 
     # Check for potentially conflicting settings
     if settings.training_enabled and not settings.database_url:

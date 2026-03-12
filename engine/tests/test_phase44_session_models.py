@@ -171,15 +171,17 @@ class TestOperatorSession:
         assert restored.last_checkpoint_at is not None
 
     def test_from_dict_with_minimal_data(self) -> None:
-        session = OperatorSession.from_dict({"session_id": "s2"})
-        assert session.session_id == "s2"
-        assert session.status == OperatorSessionStatus.ACTIVE
-        assert session.tasks == []
-        assert session.context == {}
+        with pytest.raises(ValueError, match="Missing started_at"):
+            OperatorSession.from_dict({"session_id": "s2"})
 
     def test_from_dict_invalid_started_at_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="Invalid started_at"):
             OperatorSession.from_dict({"session_id": "s2", "started_at": "bad"})
+
+    def test_from_dict_missing_updated_at_raises_value_error(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        with pytest.raises(ValueError, match="Missing updated_at"):
+            OperatorSession.from_dict({"session_id": "s2", "started_at": now})
 
     def test_status_enum_values(self) -> None:
         assert OperatorSessionStatus.ACTIVE.value == "active"
