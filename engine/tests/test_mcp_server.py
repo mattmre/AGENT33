@@ -345,6 +345,7 @@ class TestMCPServerCreation:
         tools = await fake_server.handlers["list_tools"]()
         tool_names = {tool.name for tool in tools}
         assert "fs__read_file" in tool_names
+        assert "discover_tools" in tool_names
 
     async def test_execute_tool_rejects_unknown_registry_tool(self) -> None:
         from agent33.mcp_server.bridge import MCPServiceBridge
@@ -417,3 +418,143 @@ class TestMCPServerCreation:
 
         result = await fake_server.handlers["call_tool"]("fs__read_file", {"path": "/tmp/x"})
         assert result[0].text == '{"status": "ok", "source": "proxy"}'
+
+    async def test_discover_tools_routes_to_discovery_service(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(
+                user=TokenPayload(sub="executor", scopes=["tools:execute"], tenant_id="tenant-1")
+            )
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.discover_tools.return_value = [
+            SimpleNamespace(
+                model_dump=lambda **_: {
+                    "name": "shell",
+                    "description": "Run commands",
+                    "score": 9.0,
+                }
+            )
+        ]
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+
+        result = await fake_server.handlers["call_tool"](
+            "discover_tools",
+            {"query": "shell", "limit": 5},
+        )
+
+        assert result[0].text == (
+            '{"query": "shell", "matches": [{"name": "shell", '
+            '"description": "Run commands", "score": 9.0}]}'
+        )
+        discovery_service.discover_tools.assert_called_once_with("shell", limit=5)
+
+    async def test_resolve_workflow_routes_to_discovery_service(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(user=TokenPayload(sub="reader", scopes=["workflows:read"]))
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.resolve_workflow.return_value = [
+            SimpleNamespace(
+                model_dump=lambda **_: {
+                    "name": "release",
+                    "source": "runtime",
+                    "score": 10.0,
+                }
+            )
+        ]
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+
+        result = await fake_server.handlers["call_tool"](
+            "resolve_workflow",
+            {"query": "release", "limit": 3},
+        )
+
+        assert result[0].text == (
+            '{"query": "release", "matches": [{"name": "release", '
+            '"source": "runtime", "score": 10.0}]}'
+        )
+        discovery_service.resolve_workflow.assert_called_once_with("release", limit=3)
+
+    async def test_discover_skills_omits_tenant_filter_for_admin(self) -> None:
+        from agent33.mcp_server.bridge import MCPServiceBridge
+        from agent33.mcp_server.server import create_mcp_server
+        from agent33.security.auth import TokenPayload
+
+        request = SimpleNamespace(
+            state=SimpleNamespace(
+                user=TokenPayload(sub="admin-user", scopes=["admin"], tenant_id="tenant-1")
+            )
+        )
+        fake_server = _RecordingServer(request=request)
+        discovery_service = MagicMock()
+        discovery_service.discover_skills.return_value = []
+
+        with (
+            patch("agent33.mcp_server.server._HAS_MCP", True),
+            patch("agent33.mcp_server.server.Server", return_value=fake_server, create=True),
+            patch(
+                "agent33.mcp_server.server.Tool",
+                side_effect=lambda **kwargs: _ToolDescriptor(**kwargs),
+                create=True,
+            ),
+            patch(
+                "agent33.mcp_server.server.TextContent",
+                side_effect=lambda **kwargs: _TextContent(**kwargs),
+                create=True,
+            ),
+            patch("agent33.mcp_server.server.register_resources"),
+        ):
+            create_mcp_server(MCPServiceBridge(discovery_service=discovery_service))
+
+        await fake_server.handlers["call_tool"](
+            "discover_skills",
+            {"query": "deploy", "limit": 5},
+        )
+
+        discovery_service.discover_skills.assert_called_once_with(
+            "deploy",
+            limit=5,
+            tenant_id=None,
+        )

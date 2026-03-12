@@ -56,6 +56,9 @@ from agent33.api.routes import (
     workflows,
 )
 from agent33.api.routes import (
+    discovery as discovery_routes,
+)
+from agent33.api.routes import (
     plugins as plugins_routes,
 )
 from agent33.api.routes import (
@@ -789,6 +792,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         path=str(_core_workflows_dir),
     )
 
+    # -- Discovery service (Phase 46A) --------------------------------------
+    from agent33.discovery.service import DiscoveryService
+
+    discovery_service = DiscoveryService(
+        tool_registry=tool_registry,
+        skill_registry=skill_registry,
+        pack_registry=pack_registry,
+        workflow_registry=workflows.get_workflow_registry(),
+        template_catalog=template_catalog,
+    )
+    app.state.discovery_service = discovery_service
+    discovery_routes.set_discovery_service(discovery_service)
+    mcp_bridge.discovery_service = discovery_service
+    logger.info("discovery_service_initialized")
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
@@ -981,6 +999,7 @@ app.include_router(auth.router)
 app.include_router(webhooks.router)
 app.include_router(dashboard.router)
 app.include_router(memory_search.router)
+app.include_router(discovery_routes.router)
 app.include_router(reviews.router)
 app.include_router(traces.router)
 app.include_router(evaluations.router)

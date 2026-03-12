@@ -14,8 +14,11 @@ TOOL_SCOPES: dict[str, str] = {
     "invoke_agent": "agents:invoke",
     "search_memory": "agents:read",
     "list_tools": "agents:read",
+    "discover_tools": "tools:execute",
     "execute_tool": "tools:execute",
     "list_skills": "agents:read",
+    "discover_skills": "agents:read",
+    "resolve_workflow": "workflows:read",
     "get_system_status": "agents:read",
     # Phase 45: proxy admin tools
     "proxy_list_servers": "agents:read",

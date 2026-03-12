@@ -23,6 +23,9 @@ class TestMCPAuthMappings:
 
         assert get_required_scope_for_tool("list_agents") == "agents:read"
         assert get_required_scope_for_tool("invoke_agent") == "agents:invoke"
+        assert get_required_scope_for_tool("discover_tools") == "tools:execute"
+        assert get_required_scope_for_tool("discover_skills") == "agents:read"
+        assert get_required_scope_for_tool("resolve_workflow") == "workflows:read"
         assert get_required_scope_for_tool("execute_tool") == "tools:execute"
 
     def test_resource_scope_mapping_covers_documented_contract(self) -> None:

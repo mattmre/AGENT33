@@ -107,6 +107,23 @@ async def handle_list_tools(
     ]
 
 
+async def handle_discover_tools(
+    bridge: MCPServiceBridge,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Discover relevant runtime tools."""
+    discovery_service = getattr(bridge, "discovery_service", None)
+    if discovery_service is None:
+        return {"query": query, "matches": [], "error": "Discovery service not available"}
+
+    matches = discovery_service.discover_tools(query, limit=limit)
+    return {
+        "query": query,
+        "matches": [match.model_dump(mode="json") for match in matches],
+    }
+
+
 async def handle_execute_tool(
     bridge: MCPServiceBridge,
     tool_name: str,
@@ -150,6 +167,41 @@ async def handle_list_skills(
         }
         for s in skills
     ]
+
+
+async def handle_discover_skills(
+    bridge: MCPServiceBridge,
+    query: str,
+    limit: int = 10,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Discover relevant skills."""
+    discovery_service = getattr(bridge, "discovery_service", None)
+    if discovery_service is None:
+        return {"query": query, "matches": [], "error": "Discovery service not available"}
+
+    matches = discovery_service.discover_skills(query, limit=limit, tenant_id=tenant_id)
+    return {
+        "query": query,
+        "matches": [match.model_dump(mode="json") for match in matches],
+    }
+
+
+async def handle_resolve_workflow(
+    bridge: MCPServiceBridge,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Resolve workflows and canonical templates for a task."""
+    discovery_service = getattr(bridge, "discovery_service", None)
+    if discovery_service is None:
+        return {"query": query, "matches": [], "error": "Discovery service not available"}
+
+    matches = discovery_service.resolve_workflow(query, limit=limit)
+    return {
+        "query": query,
+        "matches": [match.model_dump(mode="json") for match in matches],
+    }
 
 
 async def handle_get_system_status(

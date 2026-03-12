@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent33.agents.registry import AgentRegistry
+    from agent33.discovery.service import DiscoveryService
     from agent33.llm.router import ModelRouter
     from agent33.mcp_server.proxy_manager import ProxyManager
     from agent33.memory.rag import RAGPipeline
@@ -29,6 +30,7 @@ class MCPServiceBridge:
         skill_registry: SkillRegistry | None = None,
         workflow_registry: dict[str, WorkflowDefinition] | None = None,
         proxy_manager: ProxyManager | None = None,
+        discovery_service: DiscoveryService | None = None,
     ) -> None:
         self.agent_registry = agent_registry
         self.tool_registry = tool_registry
@@ -37,6 +39,7 @@ class MCPServiceBridge:
         self.skill_registry = skill_registry
         self.workflow_registry = workflow_registry
         self.proxy_manager = proxy_manager
+        self.discovery_service = discovery_service
 
     def get_system_status(self) -> dict[str, Any]:
         """Return system status summary."""
