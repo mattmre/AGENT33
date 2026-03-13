@@ -48,3 +48,10 @@ This is a hardening slice, not a first implementation slice.
 - failed startup paths do not leave behind stale runtime state
 - direct Docker-session tests cover the hardened launch/cleanup behavior
 - focused execution adapter regressions remain green from a fresh worktree
+
+## CI Follow-up
+
+- Full-suite CI exposed a separate determinism issue in `engine/tests/test_processes_api.py`.
+- The process start route intentionally reuses shell-tool governance preflight, so a production-initialized app can require `tools:execute` in addition to `processes:manage`.
+- The async API test only passed in isolation when `app.state.tool_governance` had not been initialized, which made the behavior suite-order dependent.
+- The fix is to install a fresh `ToolGovernance` instance in that test module and assert the governed start behavior explicitly.

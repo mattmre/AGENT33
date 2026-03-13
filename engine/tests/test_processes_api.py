@@ -17,6 +17,7 @@ import pytest_asyncio
 from agent33.main import app
 from agent33.processes.service import ProcessManagerService
 from agent33.security.auth import create_access_token
+from agent33.tools.governance import ToolGovernance
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,6 +57,18 @@ async def _install_process_service(tmp_path: Path) -> Any:
             del app.state.process_manager_service
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _install_tool_governance() -> Any:
+    original = getattr(app.state, "tool_governance", None)
+    app.state.tool_governance = ToolGovernance()
+    yield app.state.tool_governance
+    if original is not None:
+        app.state.tool_governance = original
+    else:
+        with contextlib.suppress(AttributeError):
+            del app.state.tool_governance
+
+
 @pytest_asyncio.fixture()
 async def async_client() -> httpx.AsyncClient:
     transport = httpx.ASGITransport(app=app)
@@ -85,7 +98,7 @@ async def test_processes_auth_enforced(async_client: httpx.AsyncClient) -> None:
 
 @pytest.mark.asyncio()
 async def test_start_list_get_log_and_cleanup(async_client: httpx.AsyncClient) -> None:
-    headers = _auth_headers(scopes=["processes:read", "processes:manage"])
+    headers = _auth_headers(scopes=["processes:read", "processes:manage", "tools:execute"])
     start = await async_client.post(
         "/v1/processes",
         json={"command": _python_command('print("api-alpha", flush=True)')},
@@ -122,8 +135,23 @@ async def test_start_list_get_log_and_cleanup(async_client: httpx.AsyncClient) -
 
 
 @pytest.mark.asyncio()
-async def test_terminate_and_write_input(async_client: httpx.AsyncClient) -> None:
+async def test_start_requires_tools_execute_when_governance_active(
+    async_client: httpx.AsyncClient,
+) -> None:
     headers = _auth_headers(scopes=["processes:read", "processes:manage"])
+    start = await async_client.post(
+        "/v1/processes",
+        json={"command": _python_command('print("governed", flush=True)')},
+        headers=headers,
+    )
+
+    assert start.status_code == 403
+    assert start.json()["detail"] == "Process start blocked by tool governance"
+
+
+@pytest.mark.asyncio()
+async def test_terminate_and_write_input(async_client: httpx.AsyncClient) -> None:
+    headers = _auth_headers(scopes=["processes:read", "processes:manage", "tools:execute"])
     writer = await async_client.post(
         "/v1/processes",
         json={
