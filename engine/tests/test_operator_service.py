@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+from agent33.backup.manifest import BackupSummary
 from agent33.config import Settings
 from agent33.operator.models import CheckStatus, ResetTarget
 from agent33.operator.service import OperatorService, _mask_db_url
@@ -272,6 +273,18 @@ class TestGetBackups:
         assert result.backups == []
         assert result.count == 0
         assert "Phase 6" in result.note
+
+    def test_delegates_to_backup_service_when_available(self) -> None:
+        svc = _build_service()
+        svc._app_state.backup_service = SimpleNamespace(
+            list_backups=lambda: SimpleNamespace(
+                backups=[BackupSummary(backup_id="b1")],
+                count=1,
+            )
+        )
+        result = svc.get_backups()
+        assert result.count == 1
+        assert result.note == "Platform backup inventory is available under /v1/backups"
 
 
 # ---------------------------------------------------------------------------
