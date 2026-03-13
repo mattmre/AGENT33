@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from agent33.execution.adapters import jupyter as jupyter_module
 from agent33.execution.adapters.jupyter import (
     DockerKernelSession,
     JupyterAdapter,
@@ -23,6 +24,7 @@ from agent33.execution.models import (
     KernelContainerPolicy,
     KernelInterface,
     OutputArtifact,
+    SandboxConfig,
 )
 
 if TYPE_CHECKING:
@@ -90,11 +92,16 @@ class _FakeSession:
     def is_alive(self) -> bool:
         return not self.stopped
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        del sandbox
+        return True
+
 
 class _FakeSessionManager:
     def __init__(self, session: _FakeSession) -> None:
         self.session = session
         self.get_calls: list[tuple[str, str, str | None]] = []
+        self.last_sandbox: SandboxConfig | None = None
         self.removed: list[str] = []
         self.shutdown_called = False
 
@@ -103,8 +110,10 @@ class _FakeSessionManager:
         session_id: str,
         kernel_name: str = "python3",
         working_directory: str | None = None,
+        sandbox: SandboxConfig | None = None,
     ) -> _FakeSession:
         self.get_calls.append((session_id, kernel_name, working_directory))
+        self.last_sandbox = sandbox
         return self.session
 
     async def remove(self, session_id: str) -> None:
@@ -150,7 +159,9 @@ class TestKernelSessionManager:
             session_id: str,
             kernel_name: str,
             working_directory: str | None,
+            sandbox: SandboxConfig | None = None,
         ) -> _FakeSession:
+            del sandbox
             del working_directory
             session = _FakeSession(session_id, kernel_name)
             created.append(session)
@@ -163,6 +174,21 @@ class TestKernelSessionManager:
 
         assert first is second
         assert len(created) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_rejects_sandbox_mismatch_for_live_session(self) -> None:
+        session = _FakeSession("sess-1", "python3")
+        session.matches_sandbox = lambda sandbox: sandbox == SandboxConfig(memory_mb=512)  # type: ignore[method-assign]
+
+        manager = KernelSessionManager(max_sessions=2, idle_timeout=60.0)
+        manager._sessions = {"sess-1": session}
+
+        with pytest.raises(RuntimeError, match="does not match the running kernel session"):
+            await manager.get_or_create(
+                "sess-1",
+                "python3",
+                sandbox=SandboxConfig(memory_mb=256),
+            )
 
     @pytest.mark.asyncio
     async def test_reap_idle_removes_expired_sessions(self) -> None:
@@ -181,7 +207,7 @@ class TestKernelSessionManager:
 
 
 class TestDockerKernelSession:
-    def test_build_docker_command_disables_network_and_mounts_runtime(
+    def test_build_docker_command_applies_resource_limits_and_labels(
         self,
         tmp_path: Path,
     ) -> None:
@@ -198,6 +224,7 @@ class TestDockerKernelSession:
                 extra_run_args=["--cpus", "1"],
             ),
             working_directory="D:\\workspace",
+            sandbox=SandboxConfig(memory_mb=768, cpu_cores=2),
         )
 
         command = session._build_docker_command(
@@ -212,12 +239,151 @@ class TestDockerKernelSession:
         )
 
         assert command[:6] == ["docker", "run", "-d", "--rm", "--name", "agent33-kernel-sess-1"]
+        assert "--memory" in command
+        assert "768m" in command
+        assert "--cpus" in command
+        assert "2" in command
+        assert command.count("--cpus") == 1
+        assert "agent33.managed=true" in command
+        assert "agent33.session_id=sess-1" in command
+        assert "agent33.kernel_name=python3" in command
         assert "--network" in command
         assert "none" in command
         assert f"{tmp_path}:/agent33-runtime" in command
         assert "D:\\workspace:/workspace" in command
         assert "ghcr.io/example/jupyter:latest" in command
         assert "ipykernel_launcher" in command
+
+    @pytest.mark.asyncio
+    async def test_start_cleans_up_when_container_exits_before_ready(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class _Proc:
+            def __init__(
+                self,
+                *,
+                returncode: int,
+                stdout: bytes = b"",
+                stderr: bytes = b"",
+            ) -> None:
+                self.returncode = returncode
+                self._stdout = stdout
+                self._stderr = stderr
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return self._stdout, self._stderr
+
+        calls: list[tuple[str, ...]] = []
+        procs = [
+            _Proc(returncode=0, stdout=b"container-123\n"),
+            _Proc(returncode=0, stdout=b"exited\n"),
+            _Proc(returncode=0),
+        ]
+
+        async def _fake_exec(*args: str, **kwargs: object) -> _Proc:
+            del kwargs
+            calls.append(tuple(args))
+            return procs.pop(0)
+
+        monkeypatch.setattr(jupyter_module, "_HAS_JUPYTER", True)
+        monkeypatch.setattr(jupyter_module.shutil, "which", lambda _: "docker")
+        monkeypatch.setattr(jupyter_module.asyncio, "create_subprocess_exec", _fake_exec)
+
+        session = DockerKernelSession(
+            "sess-2",
+            "python3",
+            policy=KernelContainerPolicy(
+                enabled=True,
+                image="ghcr.io/example/jupyter:latest",
+                allowed_images=["ghcr.io/example/jupyter:latest"],
+            ),
+        )
+
+        with pytest.raises(RuntimeError, match="not running during startup: exited"):
+            await session.start()
+
+        assert session.is_alive is False
+        assert session._runtime_dir is not None
+        assert not session._runtime_dir.exists()
+        assert calls[1][:4] == ("docker", "inspect", "--format", "{{.State.Status}}")
+        assert calls[2][:3] == ("docker", "rm", "-f")
+
+    @pytest.mark.asyncio
+    async def test_start_cleans_up_when_kernel_readiness_times_out(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class _Proc:
+            def __init__(
+                self,
+                *,
+                returncode: int,
+                stdout: bytes = b"",
+                stderr: bytes = b"",
+            ) -> None:
+                self.returncode = returncode
+                self._stdout = stdout
+                self._stderr = stderr
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return self._stdout, self._stderr
+
+        class _Client:
+            def __init__(self) -> None:
+                self.channels_started = False
+                self.channels_stopped = False
+
+            def start_channels(self) -> None:
+                self.channels_started = True
+
+            def stop_channels(self) -> None:
+                self.channels_stopped = True
+
+            async def wait_for_ready(self) -> None:
+                raise TimeoutError
+
+        calls: list[tuple[str, ...]] = []
+        procs = [
+            _Proc(returncode=0, stdout=b"container-456\n"),
+            _Proc(returncode=0, stdout=b"running\n"),
+            _Proc(returncode=0),
+        ]
+        client = _Client()
+
+        async def _fake_exec(*args: str, **kwargs: object) -> _Proc:
+            del kwargs
+            calls.append(tuple(args))
+            return procs.pop(0)
+
+        async def _fake_build_client(*args: object, **kwargs: object) -> _Client:
+            del args, kwargs
+            return client
+
+        monkeypatch.setattr(jupyter_module, "_HAS_JUPYTER", True)
+        monkeypatch.setattr(jupyter_module.shutil, "which", lambda _: "docker")
+        monkeypatch.setattr(jupyter_module.asyncio, "create_subprocess_exec", _fake_exec)
+        monkeypatch.setattr(jupyter_module, "_build_async_kernel_client", _fake_build_client)
+
+        session = DockerKernelSession(
+            "sess-3",
+            "python3",
+            policy=KernelContainerPolicy(
+                enabled=True,
+                image="ghcr.io/example/jupyter:latest",
+                allowed_images=["ghcr.io/example/jupyter:latest"],
+            ),
+        )
+
+        with pytest.raises(RuntimeError, match="failed to start within 30.0 seconds"):
+            await session.start()
+
+        assert client.channels_started is True
+        assert client.channels_stopped is True
+        assert session.is_alive is False
+        assert session._runtime_dir is not None
+        assert not session._runtime_dir.exists()
+        assert calls[2][:3] == ("docker", "rm", "-f")
 
 
 class TestJupyterAdapter:
@@ -254,6 +420,7 @@ class TestJupyterAdapter:
         fake_session = _FakeSession("sess-123", "python3")
         manager = _FakeSessionManager(fake_session)
         adapter = JupyterAdapter(_make_definition(), session_manager=manager)
+        sandbox = SandboxConfig(timeout_ms=25_000, memory_mb=640, cpu_cores=2)
 
         result = await adapter.execute(
             ExecutionContract(
@@ -265,6 +432,7 @@ class TestJupyterAdapter:
                     stdin="print('hi')",
                     working_directory="D:\\repo",
                 ),
+                sandbox=sandbox,
                 metadata={"session_id": "sess-123", "language": "python"},
             )
         )
@@ -276,10 +444,11 @@ class TestJupyterAdapter:
         assert result.metadata["session_id"] == "sess-123"
         assert result.metadata["backend"] == "local"
         assert manager.get_calls == [("sess-123", "python3", "D:\\repo")]
+        assert manager.last_sandbox == sandbox
         assert manager.removed == []
         executed_code, timeout = fake_session.executed_code[0]
         assert "os.chdir" in executed_code
-        assert timeout == 30.0
+        assert timeout == 25.0
 
     @pytest.mark.asyncio
     async def test_execute_one_shot_session_is_removed(self) -> None:

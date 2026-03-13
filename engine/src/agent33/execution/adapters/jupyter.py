@@ -23,6 +23,7 @@ from agent33.execution.models import (
     KernelContainerPolicy,
     KernelInterface,
     OutputArtifact,
+    SandboxConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,8 @@ class _KernelSessionProtocol(Protocol):
         code: str,
         timeout: float = 60.0,
     ) -> tuple[bool, str, str, list[OutputArtifact]]: ...
+
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool: ...
 
     @property
     def is_alive(self) -> bool: ...
@@ -105,6 +108,25 @@ def _sanitize_container_name(session_id: str) -> str:
     """Generate a Docker-safe container name."""
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in session_id.lower())
     return f"agent33-kernel-{safe[:40]}"
+
+
+def _filter_conflicting_run_args(extra_run_args: list[str]) -> list[str]:
+    """Drop resource flags that are now governed by SandboxConfig."""
+    filtered: list[str] = []
+    skip_next = False
+
+    for arg in extra_run_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in {"--memory", "--cpus"}:
+            skip_next = True
+            continue
+        if arg.startswith("--memory=") or arg.startswith("--cpus="):
+            continue
+        filtered.append(arg)
+
+    return filtered
 
 
 def _build_directory_preamble(code: str, target_directory: str | None) -> str:
@@ -260,6 +282,11 @@ class KernelSession:
         msg_id = self._client.execute(code)
         return await _collect_kernel_output(self._client, msg_id, timeout)
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        """Local kernels do not persist container resource limits between calls."""
+        del sandbox
+        return True
+
     @property
     def is_alive(self) -> bool:
         if self._manager is None:
@@ -278,12 +305,14 @@ class DockerKernelSession:
         policy: KernelContainerPolicy,
         startup_timeout: float = 30.0,
         working_directory: str | None = None,
+        sandbox: SandboxConfig | None = None,
     ) -> None:
         self.session_id = session_id
         self.kernel_name = kernel_name
         self.created_at = time.time()
         self.last_used = time.time()
         self._policy = policy
+        self._sandbox = sandbox or SandboxConfig()
         self._startup_timeout = startup_timeout
         self._working_directory = working_directory
         self._runtime_dir: Path | None = None
@@ -328,16 +357,45 @@ class DockerKernelSession:
         self._runtime_dir = runtime_dir
         self._host_connection_file = host_connection_file
         self._container_id = stdout_bytes.decode("utf-8", errors="replace").strip() or None
-        self._client = await _build_async_kernel_client(host_connection_file)
-        self._client.start_channels()
         try:
+            await self._assert_container_running(stage="startup")
+            self._client = await _build_async_kernel_client(host_connection_file)
+            self._client.start_channels()
             await asyncio.wait_for(self._client.wait_for_ready(), timeout=self._startup_timeout)
+            await self._assert_container_running(stage="readiness")
         except TimeoutError as exc:
             await self.stop()
             raise RuntimeError(
                 f"Docker kernel failed to start within {self._startup_timeout} seconds"
             ) from exc
+        except Exception:
+            await self.stop()
+            raise
         self._started = True
+
+    async def _inspect_container_state(self) -> tuple[bool, str]:
+        """Return whether the managed container is still running."""
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}}",
+            self._container_name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_bytes, stderr_bytes = await proc.communicate()
+        if proc.returncode != 0:
+            stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
+            return False, stderr or "inspect_failed"
+        status = stdout_bytes.decode("utf-8", errors="replace").strip() or "unknown"
+        return status == "running", status
+
+    async def _assert_container_running(self, *, stage: str) -> None:
+        """Fail early when the container exits before the kernel is ready."""
+        running, status = await self._inspect_container_state()
+        if not running:
+            raise RuntimeError(f"Docker kernel container is not running during {stage}: {status}")
 
     def _build_docker_command(
         self,
@@ -352,6 +410,12 @@ class DockerKernelSession:
             "--rm",
             "--name",
             self._container_name,
+            "--label",
+            "agent33.managed=true",
+            "--label",
+            f"agent33.session_id={self.session_id}",
+            "--label",
+            f"agent33.kernel_name={self.kernel_name}",
         ]
 
         if self._policy.network_enabled:
@@ -375,7 +439,15 @@ class DockerKernelSession:
                 ]
             )
 
-        command.extend(self._policy.extra_run_args)
+        command.extend(_filter_conflicting_run_args(self._policy.extra_run_args))
+        command.extend(
+            [
+                "--memory",
+                f"{self._sandbox.memory_mb}m",
+                "--cpus",
+                str(self._sandbox.cpu_cores),
+            ]
+        )
         command.append(self._policy.image)
         command.extend(
             [
@@ -420,6 +492,12 @@ class DockerKernelSession:
         msg_id = self._client.execute(code)
         return await _collect_kernel_output(self._client, msg_id, timeout)
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        """Reject silent resource-limit changes on reused stateful sessions."""
+        if sandbox is None:
+            return True
+        return self._sandbox == sandbox
+
     @property
     def is_alive(self) -> bool:
         return self._started
@@ -439,7 +517,7 @@ class KernelSessionManager:
         self._max_sessions = max_sessions
         self._idle_timeout = idle_timeout
         self._session_factory = session_factory or (
-            lambda session_id, kernel_name, working_directory=None: KernelSession(
+            lambda session_id, kernel_name, working_directory=None, sandbox=None: KernelSession(
                 session_id,
                 kernel_name,
             )
@@ -451,12 +529,18 @@ class KernelSessionManager:
         session_id: str,
         kernel_name: str = "python3",
         working_directory: str | None = None,
+        sandbox: SandboxConfig | None = None,
     ) -> _KernelSessionProtocol:
         """Get an existing session or create a new one."""
         async with self._lock:
             if session_id in self._sessions:
                 session = self._sessions[session_id]
                 if session.is_alive:
+                    if not session.matches_sandbox(sandbox):
+                        raise RuntimeError(
+                            f"Sandbox configuration for session '{session_id}' does not match "
+                            "the running kernel session"
+                        )
                     return session
                 del self._sessions[session_id]
 
@@ -465,7 +549,12 @@ class KernelSessionManager:
             if len(self._sessions) >= self._max_sessions:
                 raise RuntimeError(f"Maximum kernel sessions ({self._max_sessions}) reached")
 
-            session = self._session_factory(session_id, kernel_name, working_directory)
+            session = self._session_factory(
+                session_id,
+                kernel_name,
+                working_directory,
+                sandbox,
+            )
             await session.start()
             self._sessions[session_id] = session
             return session
@@ -524,18 +613,38 @@ class JupyterAdapter(BaseAdapter):
 
     def _build_session_factory(self, kernel: KernelInterface) -> Any:
         if kernel.container.enabled:
-            return lambda session_id, kernel_name, working_directory=None: DockerKernelSession(
+
+            def _docker_factory(
+                session_id: str,
+                kernel_name: str,
+                working_directory: str | None = None,
+                sandbox: SandboxConfig | None = None,
+            ) -> DockerKernelSession:
+                return DockerKernelSession(
+                    session_id,
+                    kernel_name,
+                    policy=kernel.container,
+                    startup_timeout=kernel.startup_timeout_seconds,
+                    working_directory=working_directory,
+                    sandbox=sandbox,
+                )
+
+            return _docker_factory
+
+        def _local_factory(
+            session_id: str,
+            kernel_name: str,
+            working_directory: str | None = None,
+            sandbox: SandboxConfig | None = None,
+        ) -> KernelSession:
+            del working_directory, sandbox
+            return KernelSession(
                 session_id,
                 kernel_name,
-                policy=kernel.container,
                 startup_timeout=kernel.startup_timeout_seconds,
-                working_directory=working_directory,
             )
-        return lambda session_id, kernel_name, working_directory=None: KernelSession(
-            session_id,
-            kernel_name,
-            startup_timeout=kernel.startup_timeout_seconds,
-        )
+
+        return _local_factory
 
     async def execute(self, contract: ExecutionContract) -> ExecutionResult:
         """Execute code in a local or Docker-backed kernel session."""
@@ -574,6 +683,7 @@ class JupyterAdapter(BaseAdapter):
                 effective_session_id,
                 kernel_name,
                 working_directory=working_directory,
+                sandbox=contract.sandbox,
             )
             success, stdout, stderr, artifacts = await session.execute(code, timeout)
 
