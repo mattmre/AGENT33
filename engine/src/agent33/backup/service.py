@@ -64,6 +64,11 @@ class BackupService:
         self._workspace_dir = workspace_dir
         self._backup_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def runtime_version(self) -> str:
+        """Return the current engine runtime version used in backup metadata."""
+        return "0.1.0"
+
     def inventory(self, *, mode: BackupMode = BackupMode.FULL) -> BackupInventoryResponse:
         """Preview the assets that would be included in a backup."""
         normalized_mode = BackupMode(mode)
@@ -101,7 +106,7 @@ class BackupService:
             backup_id=backup_id,
             created_at=created_at,
             platform=platform.system().lower(),
-            runtime_version="0.1.0",
+            runtime_version=self.runtime_version,
             archive_root=str(self._app_root.resolve()),
             backup_mode=normalized_mode,
             assets=inventory.assets,
@@ -338,6 +343,17 @@ class BackupService:
             backup=self._load_summary(archive_path),
             manifest=self._load_manifest(archive_path),
         )
+
+    def load_manifest(self, archive_path: Path) -> BackupManifest:
+        """Load the manifest for one archive path."""
+        return self._load_manifest(archive_path)
+
+    def resolve_target_path(self, relative_path: str) -> Path | None:
+        """Resolve a manifest asset path to the current live target path."""
+        for candidate in self._asset_candidates():
+            if candidate.relative_path == relative_path:
+                return candidate.source_path.resolve() if candidate.source_path else None
+        return None
 
     def resolve_backup_path(self, backup_id: str) -> Path | None:
         """Resolve a backup ID to an archive path."""
