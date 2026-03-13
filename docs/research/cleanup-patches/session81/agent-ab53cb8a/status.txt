@@ -1,0 +1,24 @@
+path=.claude/worktrees/agent-ab53cb8a
+branch=feat/session59-wave5-refinements
+subject=Merge pull request #159 from mattmre/codex/session64-wrap
+classification=keep-intact
+note=session59 wave5 refinements prototype
+status_count=12
+committed_patch_bytes=0
+tracked_patch_bytes=45244
+untracked_count=4
+untracked_patch_bytes=18561
+
+[git-status]
+ M engine/src/agent33/api/routes/workflow_sse.py
+ M engine/src/agent33/execution/adapters/jupyter.py
+ M engine/src/agent33/execution/models.py
+ M engine/src/agent33/workflows/ws_manager.py
+ M engine/tests/test_execution_jupyter_adapter.py
+ M engine/tests/test_workflow_sse.py
+ M frontend/src/lib/workflowLiveTransport.test.ts
+ M frontend/src/lib/workflowLiveTransport.ts
+?? frontend/src/components/AuthPanel.test.tsx
+?? frontend/src/components/GlobalSearch.test.tsx
+?? frontend/src/components/HealthPanel.test.tsx
+?? frontend/src/components/ObservationStream.test.tsx

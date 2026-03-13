@@ -1,0 +1,424 @@
+diff --git a/engine/src/agent33/api/routes/plugins.py b/engine/src/agent33/api/routes/plugins.py
+index 1097b6c4740d3fce9d469d17458f0b604ff7fcc7..67e724b59bdbd087cd346b094e0aa6a2caec2d96 100644
+--- a/engine/src/agent33/api/routes/plugins.py
++++ b/engine/src/agent33/api/routes/plugins.py
+@@ -13,9 +13,15 @@ from agent33.plugins.api_models import (
+     PluginConfigUpdate,
+     PluginDetail,
+     PluginDiscoverResponse,
++    PluginDoctorCheckResponse,
++    PluginDoctorResponse,
++    PluginEventResponse,
+     PluginHealthResponse,
++    PluginInstallRequest,
++    PluginInstallResponse,
+     PluginSearchResponse,
+     PluginSummary,
++    PluginUpdateRequest,
+ )
+ from agent33.plugins.models import PluginState
+ from agent33.security.permissions import require_scope
+@@ -357,3 +363,281 @@ async def discover_plugins(request: Request) -> PluginDiscoverResponse:
+         discovered=discovered,
+         total=registry.count,
+     )
++
++
++# ---------------------------------------------------------------------------
++# Track Phase 3: Plugin Lifecycle Control Plane
++# ---------------------------------------------------------------------------
++
++
++def _get_plugin_installer(request: Request) -> Any:
++    """Extract plugin installer from app state."""
++    installer = getattr(request.app.state, "plugin_installer", None)
++    if installer is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Plugin installer not initialized",
++        )
++    return installer
++
++
++def _get_plugin_doctor(request: Request) -> Any:
++    """Extract plugin doctor from app state."""
++    doctor = getattr(request.app.state, "plugin_doctor", None)
++    if doctor is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Plugin doctor not initialized",
++        )
++    return doctor
++
++
++def _get_plugin_event_emitter(request: Request) -> Any:
++    """Extract plugin event emitter from app state."""
++    return getattr(request.app.state, "plugin_event_emitter", None)
++
++
++def _get_plugin_config_store(request: Request) -> Any:
++    """Extract plugin config store from app state."""
++    return getattr(request.app.state, "plugin_config_store", None)
++
++
++@router.post(
++    "/install",
++    response_model=PluginInstallResponse,
++    status_code=status.HTTP_201_CREATED,
++    dependencies=[require_scope("plugins:write")],
++)
++async def install_plugin(
++    request: Request, body: PluginInstallRequest
++) -> PluginInstallResponse:
++    """Install a plugin from a local path, archive, or registry spec."""
++    installer = _get_plugin_installer(request)
++
++    if body.source_type == "local":
++        result = installer.install_from_local(
++            Path(body.path), version_pin=body.version_pin
++        )
++    elif body.source_type == "archive":
++        result = installer.install_from_archive(Path(body.path))
++    elif body.source_type == "registry":
++        result = installer.install_from_registry(body.registry_spec)
++    else:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail=f"Unsupported source type: {body.source_type}",
++        )
++
++    if not result.success:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail={"errors": result.errors},
++        )
++
++    # Emit lifecycle event
++    emitter = _get_plugin_event_emitter(request)
++    if emitter is not None:
++        emitter.emit(
++            "installed",
++            result.plugin_name,
++            version=result.version,
++            details={"source_type": body.source_type},
++        )
++
++    return PluginInstallResponse(
++        success=result.success,
++        plugin_name=result.plugin_name,
++        version=result.version,
++        warnings=result.warnings,
++    )
++
++
++@router.post(
++    "/{name}/update",
++    response_model=PluginInstallResponse,
++    dependencies=[require_scope("plugins:write")],
++)
++async def update_plugin(
++    request: Request, name: str, body: PluginUpdateRequest
++) -> PluginInstallResponse:
++    """Update an installed plugin to a new version from a source directory."""
++    installer = _get_plugin_installer(request)
++
++    # Unload first if needed
++    registry = _get_plugin_registry(request)
++    entry = registry.get(name)
++    if entry is not None and entry.state.value not in ("discovered", "unloaded"):
++        try:
++            await registry.unload(name)
++        except Exception as exc:
++            raise HTTPException(
++                status_code=status.HTTP_409_CONFLICT,
++                detail=f"Failed to unload plugin before update: {exc}",
++            ) from exc
++
++    result = installer.update(
++        name, Path(body.source_path), target_version=body.target_version
++    )
++
++    if not result.success:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail={"errors": result.errors},
++        )
++
++    emitter = _get_plugin_event_emitter(request)
++    if emitter is not None:
++        emitter.emit("updated", name, version=result.version)
++
++    return PluginInstallResponse(
++        success=result.success,
++        plugin_name=result.plugin_name,
++        version=result.version,
++        warnings=result.warnings,
++    )
++
++
++@router.delete(
++    "/{name}",
++    response_model=PluginInstallResponse,
++    dependencies=[require_scope("plugins:write")],
++)
++async def uninstall_plugin(request: Request, name: str) -> PluginInstallResponse:
++    """Uninstall a plugin and remove it from disk."""
++    registry = _get_plugin_registry(request)
++    entry = registry.get(name)
++    if entry is None:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail=f"Plugin '{name}' not found",
++        )
++
++    # Unload first if needed
++    if entry.state.value not in ("discovered", "unloaded"):
++        try:
++            await registry.unload(name)
++        except Exception as exc:
++            raise HTTPException(
++                status_code=status.HTTP_409_CONFLICT,
++                detail=f"Failed to unload plugin before uninstall: {exc}",
++            ) from exc
++
++    installer = _get_plugin_installer(request)
++    result = installer.uninstall(name)
++
++    if not result.success:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail={"errors": result.errors},
++        )
++
++    # Clean up config
++    config_store = _get_plugin_config_store(request)
++    if config_store is not None:
++        config_store.delete(name)
++
++    emitter = _get_plugin_event_emitter(request)
++    if emitter is not None:
++        emitter.emit("uninstalled", name)
++
++    return PluginInstallResponse(
++        success=True,
++        plugin_name=name,
++    )
++
++
++@router.get(
++    "/{name}/doctor",
++    response_model=PluginDoctorResponse,
++    dependencies=[require_scope("plugins:read")],
++)
++async def doctor_plugin(request: Request, name: str) -> PluginDoctorResponse:
++    """Run diagnostic checks on a specific plugin."""
++    doctor = _get_plugin_doctor(request)
++
++    try:
++        report = doctor.diagnose(name)
++    except KeyError:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail=f"Plugin '{name}' not found",
++        )
++
++    return PluginDoctorResponse(
++        plugin_name=report.plugin_name,
++        checks=[
++            PluginDoctorCheckResponse(
++                name=c.name,
++                status=c.status,
++                message=c.message,
++                remediation=c.remediation,
++            )
++            for c in report.checks
++        ],
++        overall_status=report.overall_status,
++    )
++
++
++@router.get(
++    "/doctor/all",
++    response_model=list[PluginDoctorResponse],
++    dependencies=[require_scope("plugins:read")],
++)
++async def doctor_all_plugins(
++    request: Request,
++) -> list[PluginDoctorResponse]:
++    """Run diagnostics across all discovered plugins."""
++    doctor = _get_plugin_doctor(request)
++    reports = doctor.diagnose_all()
++
++    return [
++        PluginDoctorResponse(
++            plugin_name=r.plugin_name,
++            checks=[
++                PluginDoctorCheckResponse(
++                    name=c.name,
++                    status=c.status,
++                    message=c.message,
++                    remediation=c.remediation,
++                )
++                for c in r.checks
++            ],
++            overall_status=r.overall_status,
++        )
++        for r in reports
++    ]
++
++
++@router.get(
++    "/{name}/events",
++    response_model=list[PluginEventResponse],
++    dependencies=[require_scope("plugins:read")],
++)
++async def get_plugin_events(
++    request: Request, name: str, limit: int = 50
++) -> list[PluginEventResponse]:
++    """Get lifecycle events for a plugin."""
++    # Verify plugin exists
++    registry = _get_plugin_registry(request)
++    entry = registry.get(name)
++    if entry is None:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail=f"Plugin '{name}' not found",
++        )
++
++    emitter = _get_plugin_event_emitter(request)
++    if emitter is None:
++        return []
++
++    events = emitter.get_events(plugin_name=name, limit=limit)
++    return [
++        PluginEventResponse(
++            event_type=e.event_type,
++            plugin_name=e.plugin_name,
++            version=e.version,
++            timestamp=e.timestamp.isoformat(),
++            details=e.details,
++        )
++        for e in events
++    ]
+diff --git a/engine/src/agent33/plugins/api_models.py b/engine/src/agent33/plugins/api_models.py
+index 713eaa7688d3a6f62d756354e474106920c28cd6..24251c8d13608a8068ffad44ec25f5aa5fe5277b 100644
+--- a/engine/src/agent33/plugins/api_models.py
++++ b/engine/src/agent33/plugins/api_models.py
+@@ -73,3 +73,80 @@ class PluginDiscoverResponse(BaseModel):
+ 
+     discovered: int
+     total: int
++
++
++# ---------------------------------------------------------------------------
++# Track Phase 3: Plugin Lifecycle Control Plane
++# ---------------------------------------------------------------------------
++
++
++class PluginInstallRequest(BaseModel):
++    """Request body for plugin installation."""
++
++    source_type: str = Field(
++        default="local",
++        description="Source type: 'local', 'archive', or 'registry'",
++    )
++    path: str = Field(
++        default="",
++        description="Local filesystem path (for local/archive source)",
++    )
++    registry_spec: str = Field(
++        default="",
++        description="Registry spec, e.g. 'my-plugin@1.2.0' (for registry source)",
++    )
++    version_pin: str = Field(
++        default="",
++        description="Exact version to require (for local source)",
++    )
++
++
++class PluginInstallResponse(BaseModel):
++    """Response for plugin install/update/uninstall operations."""
++
++    success: bool
++    plugin_name: str
++    version: str = ""
++    errors: list[str] = Field(default_factory=list)
++    warnings: list[str] = Field(default_factory=list)
++
++
++class PluginUpdateRequest(BaseModel):
++    """Request body for plugin update."""
++
++    source_path: str = Field(
++        ...,
++        min_length=1,
++        description="Path to the new version source directory",
++    )
++    target_version: str = Field(
++        default="",
++        description="Expected version of the new source",
++    )
++
++
++class PluginDoctorCheckResponse(BaseModel):
++    """A single diagnostic check result."""
++
++    name: str
++    status: str  # "ok", "warn", "error"
++    message: str
++    remediation: str = ""
++
++
++class PluginDoctorResponse(BaseModel):
++    """Full doctor report for a plugin."""
++
++    plugin_name: str
++    checks: list[PluginDoctorCheckResponse] = Field(default_factory=list)
++    overall_status: str = "healthy"
++
++
++class PluginEventResponse(BaseModel):
++    """A single lifecycle event response."""
++
++    event_type: str
++    plugin_name: str
++    version: str = ""
++    timestamp: str
++    details: dict[str, Any] = Field(default_factory=dict)
+diff --git a/engine/src/agent33/plugins/models.py b/engine/src/agent33/plugins/models.py
+index cd48e87d2c9cde153b16661b4936d7d820275ae2..7c64d0305c5caad050816786c56067602347bd58 100644
+--- a/engine/src/agent33/plugins/models.py
++++ b/engine/src/agent33/plugins/models.py
+@@ -2,8 +2,11 @@
+ 
+ from __future__ import annotations
+ 
++from datetime import datetime
+ from enum import StrEnum
+ 
++from pydantic import BaseModel, Field
++
+ 
+ class PluginState(StrEnum):
+     """Lifecycle state of a loaded plugin.
+@@ -37,3 +40,20 @@ class PluginScope(StrEnum):
+     SYSTEM = "system"
+     SHARED = "shared"
+     TENANT = "tenant"
++
++
++class PluginHealthStatus(BaseModel):
++    """Health status tracking for a plugin instance."""
++
++    healthy: bool = True
++    last_check: datetime | None = None
++    last_failure: str = ""
++    failure_count: int = 0
++
++
++class PluginPermissionGrant(BaseModel):
++    """Records whether a specific permission was granted or denied."""
++
++    permission: str
++    granted: bool
++    reason: str = Field(default="", description="Explanation for the grant/denial decision")

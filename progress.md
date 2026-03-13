@@ -1,0 +1,660 @@
+# Progress Log
+
+## 2026-03-13
+
+- Re-audited repo-only worktrees and local branches for `D:\GITHUB\AGENT33`.
+- Removed stale post-merge verify worktrees for Sessions 70-80 and deleted their matching local verify branches.
+- Removed merged implementation worktrees/branches for:
+  - Session 59 Phase 44-46 merged slices
+  - Session 57 Wave 0 PR3
+  - Sessions 64, 65, 68, and 70-80 merged slices already preserved by PR history
+- Deleted extra unbound local branches that were no longer attached to any worktree and were already preserved on `origin/main`, including `worktree-agent-*`, `codex/session64-wrap`, `temp/session66-merge-rehearsal`, `temp/session66-remaining-open-prs`, `codex/main-merge-cleanup`, and `codex/nightly-merge-main`.
+- Preserved the remaining holdouts because they still contain either:
+  - substantive uncommitted code not stored on the repo side
+  - closed/superseded branch history with non-trivial diffs that have not been proven redundant
+  - a local-only workflow tweak in `worktrees/nightly-merge-main`
+- Re-ran the holdout comparison against `origin/main` after confirming the root checkout is too stale to use as a preservation baseline.
+- Wrote the detailed holdout report to `docs/research/session81-holdout-preservation-audit.md`.
+- Classified the remaining holdouts into:
+  - `keep-intact` for large prototype or branch-only code
+  - `salvage-first` for mostly superseded but still unique work
+  - `low-value salvage` for near-fully-preserved branches with only small residual diffs
+- Created a repo-local preservation archive at `docs/research/cleanup-patches/session81/`.
+- Exported patch bundles for every remaining holdout:
+  - `committed-vs-origin-main.patch` for branch-only diffs
+  - `working-tree-tracked.patch` for tracked local edits
+  - `working-tree-untracked.patch` for untracked files when present
+- Added `manifest.csv`, `manifest.json`, per-holdout `status.txt`, and the repeatable export script `export_holdout_patches.ps1`.
+- Chose not to open a CI PR for `nightly-merge-main`; its `--no-cov` workflow tweak is preserved in the archive for later explicit review.
+- Executed the preservation-backed low-risk cleanup:
+  - removed worktrees `codex-main-final`, `nightly-merge-main`, `session57-main-ci-fix`, `session57-merge-check`, and `session62-skillsbench-reporting`
+  - removed local branches `codex/session59-wrap`, `temp/session67-post-merge-smoke-fix`, `temp/session57-main-ci-fix`, `temp/session57-merge-check`, and `codex/session62-skillsbench-reporting`
+- Remaining repo-specific worktrees now total 12 under `worktrees/` plus 4 under `.claude/worktrees/`, all of which are the intentionally retained `keep-intact` holdouts.
+- Executed the next preservation-backed cleanup subset:
+  - removed worktrees `phase28`, `phase38`, and `phase43`
+  - removed local branches `feat/session56-phase28-security-adapters`, `feat/session56-phase38-token-streaming`, and `feat/session56-phase43-mcp-resources-auth`
+- Remaining repo-specific worktrees now total 9 under `worktrees/` plus 4 under `.claude/worktrees/`, all of which are preserved and intentionally retained.
+- Deep-resolved the remaining holdouts against `origin/main` and recorded the result in `docs/research/session82-remaining-holdout-resolution-audit.md`.
+- Verified the clean closed-stack holdouts are already preserved on `main` and now have explicit disposition decisions:
+  - `session57-wave1-live-base`
+  - `session57-wave1-pr3`
+  - `session58-phase26-wizard`
+  - `session60-docs-validation`
+  - `session61-phase38-docker-kernels`
+- Verified the dirty Session 57 scratch trees contain only local edits to files that already exist on `main`; they no longer represent unresolved merge candidates:
+  - `session57-wave0-integration`
+  - `session57-wave0-pr1`
+  - `session57-wave1-pr1`
+  - `session57-wave1-pr2`
+- Verified the remaining `.claude` prototypes are historical alternatives, not hidden merge debt:
+  - `agent-a5a29d23` carries early pack audit/health concepts
+  - `agent-ab53cb8a` carries optional extra frontend component tests
+  - `agent-ac4da72a` carries an older combined mutation/process/backup design
+  - `agent-af722d5d` carries an earlier semantic activation/catalog design
+- No deletions were performed in this analysis pass.
+- Executed the next cleanup batch after the Session 82 resolution audit:
+  - removed worktrees `session57-wave1-live-base`, `session57-wave1-pr3`, `session58-phase26-wizard`, `session60-docs-validation`, `session61-phase38-docker-kernels`
+  - removed worktrees `session57-wave0-integration`, `session57-wave0-pr1`, `session57-wave1-pr1`, `session57-wave1-pr2`
+  - deleted their matching local branches
+- Confirmed the only remaining repo-specific non-root worktrees are:
+  - `.claude/worktrees/agent-a5a29d23`
+  - `.claude/worktrees/agent-ab53cb8a`
+  - `.claude/worktrees/agent-ac4da72a`
+  - `.claude/worktrees/agent-af722d5d`
+- Implemented the only cleanup-aligned redo from the remaining prototypes:
+  - added frontend component tests for `AuthPanel`, `GlobalSearch`, `HealthPanel`, and `ObservationStream`
+- Frontend validation after adding those tests:
+  - `npm install`
+  - `npm test -- --run src/components/AuthPanel.test.tsx src/components/GlobalSearch.test.tsx src/components/HealthPanel.test.tsx src/components/ObservationStream.test.tsx`
+  - `npm run lint`
+- Validation result:
+  - targeted Vitest run passed: `21 passed`
+  - frontend TypeScript lint passed
+
+## 2026-03-12
+
+- Loaded `pr-manager`, `planning-with-files`, and `session-wrap` skills.
+- Confirmed current worktree inventory and root checkout dirtiness.
+- Created persistent planning artifacts for crash-safe execution.
+- Collected PR metadata, comments, review state, and branch status for `#166`-`#171`.
+- Determined the target stack is already merged upstream; shifted execution from open-PR remediation to merged-stack follow-up PRs from `origin/main`.
+- Audited `origin/main` directly and identified three follow-up slices:
+  - residual Phase 44 / operator debt
+  - residual Phase 45 MCP fabric debt
+  - residual tool catalog debt
+- Created a fresh `origin/main` worktree for slice 1 and implemented:
+  - strict persisted session datetime parsing for replay/session restore
+  - app-specific settings resolution in operator diagnostics
+- Validation for slice 1:
+  - `pytest engine/tests/test_phase44_session_models.py engine/tests/test_operator_diagnostics.py -q --no-cov`
+  - `ruff check engine/src engine/tests`
+  - `ruff format --check engine/src engine/tests`
+  - `mypy engine/src --config-file engine/pyproject.toml`
+- Opened follow-up PR `#174` and merged it to `main` via the GitHub merge API after CI passed.
+- Created a fresh `origin/main` worktree for slice 2 and implemented:
+  - configurable proxy-tool separator handling in MCP auth
+  - on-demand proxy health refresh wiring and route cleanup
+  - approval-token default one-time wiring
+  - cooldown recovery through the circuit-breaker API
+- Validation for slice 2:
+  - `pytest engine/tests/test_phase45_proxy_child.py engine/tests/test_phase45_mcp_proxy_routes.py engine/tests/test_phase45_mcp_sync_routes.py engine/tests/test_phase45_approval_tokens.py engine/tests/test_phase45_approval_token_routes.py engine/tests/test_mcp_resources_auth.py -q --no-cov`
+  - `ruff check engine/src engine/tests`
+  - `ruff format --check engine/src engine/tests`
+  - `mypy engine/src --config-file engine/pyproject.toml`
+- Opened follow-up PR `#175` and merged it to `main` via the GitHub merge API after CI passed.
+- Created a fresh `origin/main` worktree for slice 3 and implemented:
+  - single-lookup schema handling in the tool-catalog route
+  - shared schema resolution in the catalog service
+  - API-key auth support for tool-catalog frontend calls
+  - accessible tree semantics in the schema viewer
+- Validation for slice 3:
+  - `pytest engine/tests/test_tool_catalog_routes.py engine/tests/test_tool_catalog_service.py -q --no-cov`
+  - `ruff check engine/src engine/tests`
+  - `ruff format --check engine/src engine/tests`
+  - `mypy engine/src --config-file engine/pyproject.toml`
+  - `npm run lint`
+  - `npm test -- --run src/features/tool-catalog/SchemaViewer.test.tsx src/features/tool-catalog/ToolCatalogPage.test.tsx`
+- Opened follow-up PR `#176` and merged it to `main` via the GitHub merge API after CI passed.
+- Final merged-baseline verification from a fresh `origin/main` worktree passed:
+  - `pytest engine/tests/test_phase44_session_models.py engine/tests/test_operator_diagnostics.py engine/tests/test_phase45_proxy_child.py engine/tests/test_phase45_mcp_proxy_routes.py engine/tests/test_phase45_mcp_sync_routes.py engine/tests/test_phase45_approval_tokens.py engine/tests/test_phase45_approval_token_routes.py engine/tests/test_mcp_resources_auth.py engine/tests/test_tool_catalog_routes.py engine/tests/test_tool_catalog_service.py -q --no-cov`
+  - `ruff check engine/src engine/tests`
+  - `ruff format --check engine/src engine/tests`
+  - `mypy engine/src --config-file engine/pyproject.toml`
+  - `npm run lint`
+  - `npm test -- --run src/features/tool-catalog/SchemaViewer.test.tsx src/features/tool-catalog/ToolCatalogPage.test.tsx`
+- Session wrap updated:
+  - `docs/sessions/session-70-2026-03-12.md`
+  - `docs/next-session.md`
+  - `CLAUDE.md`
+- Re-loaded `pr-manager` and `planning-with-files` after the Session 70 merge wave to start the remaining-roadmap planning loop.
+- Confirmed there are no open GitHub PRs, so there is nothing active to review or patch in place.
+- Recovered the current state from the existing repo planning files after the planning skill catch-up script path failed locally.
+- Audited recent merged PR history and verified the current merged baseline:
+  - `#172` and `#173` already landed major Phase 46 discovery/activation work
+  - `#174`, `#175`, and `#176` already landed the remediation follow-up stack
+- Reviewed research docs for:
+  - Phase 46 architecture
+  - OpenClaw Tracks 3-6 architecture
+  - Wave 5 refinements (Phase 25 / Phase 38 / frontend tests)
+  - Phase 35 live voice runtime
+  - Phase 30 / 31 / 32 / 33 / 35 operational hardening dependencies
+- Derived the new execution posture:
+  - Phase 46 is now a closeout/reconciliation slice, not a full greenfield feature
+  - Track 4 should extend the existing marketplace/provenance baseline from PR `#162`
+  - Phase 25 and Phase 38 are hardening/test waves, not first implementations
+  - Phase 35 should be sequenced carefully against Phase 48 to avoid double work on the voice scaffold
+- Prepared updated planning artifacts for the next sequential implementation wave.
+- Expanded the remaining roadmap into explicit slice IDs `S1`-`S17` with:
+  - a `Current Slice Pointer` in `task_plan.md`
+  - standard per-slice execution phases
+  - dependency ordering
+  - resume instructions
+- Added a single-file sequential queue at:
+  - `docs/research/session70-slice-task-list-2026-03-12.md`
+- Ran the session-wrap follow-through for the planning-only session state:
+  - updated `docs/next-session.md` to point at slices `S1`-`S17`
+  - updated `CLAUDE.md` with the fresh-context-per-slice rule
+  - updated `docs/sessions/session-70-2026-03-12.md` with the sequential queue and resume guidance
+- Began `S1` from a fresh worktree:
+  - fetched `origin`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-phase46-closeout`
+  - branch: `codex/session71-s1-phase46-closeout`
+- S1 scope lock:
+  - keep the already-merged discovery and dynamic activation behavior intact
+  - close the remaining Phase 46 gap by making discovery/resolution more skill-aware
+  - target improvements: instruction-aware skill ranking, workflow-resolution skill matches, tenant-aware skill resolution in workflow mode, and status/doc reconciliation
+- S1 implementation completed in worktree `session71-s1-phase46-closeout`:
+  - strengthened skill discovery scoring with instruction and path/pack metadata signals
+  - extended `resolve_workflow` to include `source=\"skill\"` matches
+  - threaded tenant filtering through workflow resolution in FastAPI and MCP
+  - added `docs/research/session71-phase46-closeout-audit.md`
+- S1 validation passed using worktree-local `PYTHONPATH` to avoid editable-install drift:
+  - `PYTHONPATH=D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-phase46-closeout\\engine\\src python -m pytest engine/tests/test_discovery_service.py engine/tests/test_discovery_routes.py engine/tests/test_mcp_server.py -q --no-cov`
+  - `python -m ruff format engine/src/agent33/discovery/service.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/mcp_server/server.py engine/tests/test_discovery_service.py engine/tests/test_discovery_routes.py engine/tests/test_mcp_server.py`
+  - `python -m ruff check engine/src/agent33/discovery/service.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/mcp_server/server.py engine/tests/test_discovery_service.py engine/tests/test_discovery_routes.py engine/tests/test_mcp_server.py`
+  - `PYTHONPATH=D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-phase46-closeout\\engine\\src python -m mypy engine/src/agent33/discovery/service.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/mcp_server/server.py --config-file engine/pyproject.toml`
+- S1 branch and PR state:
+  - commit: `3fd2602`
+  - branch: `codex/session71-s1-phase46-closeout`
+  - PR: `#177` `feat(phase46): close out skill-aware discovery resolution`
+  - status: CI pending
+- S1 review loop:
+  - inspected PR `#177` comments and found two actionable Copilot review findings
+  - patched MCP tenant enforcement for `resolve_workflow`
+  - sanitized skill `source_path` output to logical `skills/...` paths
+  - added regressions for missing-tenant MCP requests and non-absolute skill source paths
+- S1 amended validation passed in worktree `session71-s1-phase46-closeout`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-phase46-closeout\\engine\\src'; python -m pytest engine/tests/test_discovery_service.py engine/tests/test_discovery_routes.py engine/tests/test_mcp_server.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/discovery/service.py engine/src/agent33/mcp_server/tools.py engine/tests/test_discovery_service.py engine/tests/test_mcp_server.py engine/tests/test_discovery_routes.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/server.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-phase46-closeout\\engine\\src'; python -m mypy engine/src/agent33/discovery/service.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/server.py --config-file engine/pyproject.toml`
+- S1 amended branch state:
+  - fix commit: `ab50a30` `fix(phase46): tighten workflow resolution boundaries`
+  - pushed updated branch and posted PR follow-up comment with validation summary
+- S1 merge and post-merge verification:
+  - PR `#177` merged to `main` at `2026-03-12T17:36:32Z`
+  - merge commit: `adc90cf`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_discovery_service.py engine/tests/test_discovery_routes.py engine/tests/test_mcp_server.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/discovery/service.py engine/src/agent33/mcp_server/tools.py engine/tests/test_discovery_service.py engine/tests/test_mcp_server.py engine/tests/test_discovery_routes.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/server.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session71-s1-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/discovery/service.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/api/routes/discovery.py engine/src/agent33/mcp_server/server.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S1` complete
+  - `S2` next in `research`
+- Began `S2` from a fresh worktree:
+  - fetched merged `origin/main` at `adc90cf`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle`
+  - branch: `codex/session72-s2-plugin-lifecycle`
+- S2 research and scope lock:
+  - committed baseline has plugin manifests, registry, capability grants, and basic routes
+  - Track 3 gap is operational lifecycle, not a greenfield plugin SDK
+  - wrote `docs/research/session72-s2-plugin-lifecycle-scope.md`
+- S2 implementation completed in worktree `session72-s2-plugin-lifecycle`:
+  - added `engine/src/agent33/plugins/config_store.py`
+  - added `engine/src/agent33/plugins/events.py`
+  - added `engine/src/agent33/plugins/installer.py`
+  - added `engine/src/agent33/plugins/doctor.py`
+  - extended plugin API models, routes, registry events, and app startup wiring
+  - persisted plugin lifecycle state through `plugin_state_store_path`
+- S2 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m pytest engine/tests/test_plugin_config_store.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_routes.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m pytest engine/tests -q --no-cov -k plugin`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m mypy engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+  - `python -m ruff check engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py engine/tests/test_plugin_config_store.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_routes.py`
+  - `python -m ruff format --check engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py engine/tests/test_plugin_config_store.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_routes.py`
+- S2 branch and PR state:
+  - commit: `f9534fa`
+  - branch: `codex/session72-s2-plugin-lifecycle`
+  - PR: `#178` `feat(plugins): add lifecycle operations surface`
+  - status: CI pending
+- S2 review loop:
+  - inspected PR `#178` review comments and found five actionable Copilot findings
+  - patched tenant-scoped doctor summary/detail behavior
+  - removed duplicate granted/denied permission reporting for unloaded plugins
+  - unified API install models with the installer `PluginInstallMode`
+  - added regressions for tenant-filtered doctor access and unloaded permission semantics
+- S2 amended validation passed in worktree `session72-s2-plugin-lifecycle`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m pytest engine/tests/test_plugin_config_store.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_routes.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m pytest engine/tests -q --no-cov -k plugin`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle\\engine\\src'; python -m mypy engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+  - `python -m ruff check engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py engine/tests/test_plugin_config_store.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_routes.py`
+  - `python -m ruff format --check engine/src/agent33/plugins engine/src/agent33/api/routes/plugins.py engine/src/agent33/main.py engine/tests/test_plugin_config_store.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_routes.py`
+- S2 amended branch state:
+  - fix commit: `bb4f3c2` `fix(plugins): scope doctor endpoints and permission reporting`
+  - pushed updated branch and posted PR follow-up comment with validation summary
+- S2 merge and post-merge verification:
+  - PR `#178` merged to `main` at `2026-03-12T18:47:08Z`
+  - merge commit: `6059b76`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_plugin_config_store.py engine/tests/test_plugin_installer.py engine/tests/test_plugin_doctor.py engine/tests/test_plugin_routes.py -q --no-cov`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-postmerge-verify\\engine\\src'; python -m pytest engine/tests -q --no-cov -k plugin`
+- Current pointer advanced:
+  - `S2` complete
+  - `S3` next in `research`
+- Began `S3` from a fresh worktree:
+  - fetched merged `origin/main` at `6059b76`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution`
+  - branch: `codex/session73-s3-pack-distribution`
+- S3 research and scope lock:
+  - committed baseline already had local marketplace install paths and provenance/trust primitives from Phase 33
+  - Track 4 gap is the operator distribution layer, not a rebuild of the marketplace MVP
+  - wrote `docs/research/session73-s3-pack-distribution-scope.md`
+- S3 implementation completed in worktree `session73-s3-pack-distribution`:
+  - added remote marketplace sources with cached index/download support
+  - added marketplace aggregation across local and remote sources
+  - added persisted pack trust-policy management
+  - added pack upgrade and rollback flows with archived revisions
+  - added enablement matrix routes and trust inspection routes
+- S3 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m pytest engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_pack_provenance.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m pytest engine/tests -q --no-cov -k \"pack or marketplace\"`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m mypy engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+  - `python -m ruff check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py`
+  - `python -m ruff format --check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py`
+- S3 branch and PR state:
+  - commit: `748c625`
+  - branch: `codex/session73-s3-pack-distribution`
+  - PR: `#179` `feat(packs): harden distribution lifecycle`
+  - status: CI pending
+- S3 review loop:
+  - inspected PR `#179` comments and found eleven actionable Copilot hardening findings
+  - patched rollback archive uniqueness and failed-rollback side effects
+  - hardened remote archive handling with size limits, streaming, and safe ZIP extraction
+  - merged marketplace metadata across sources instead of keeping first-seen partial records
+  - moved marketplace refresh off the event loop and redacted remote-source logging
+  - restricted the enablement matrix read endpoint to admin scope
+  - restored typed pack provenance via shared provenance models and tightened trust-policy typing
+- S3 amended validation passed in worktree `session73-s3-pack-distribution`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m pytest engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_pack_provenance.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m pytest engine/tests -q --no-cov -k \"pack or marketplace\"`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution\\engine\\src'; python -m mypy engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+  - `python -m ruff check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py engine/tests/test_pack_provenance.py`
+  - `python -m ruff format --check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py engine/tests/test_pack_provenance.py`
+- S3 amended branch state:
+  - fix commit: `3159fdb` `fix(packs): harden remote distribution paths`
+  - pushed updated branch and posted PR follow-up comment with validation summary
+- S3 merge and post-merge verification:
+  - PR `#179` merged to `main` at `2026-03-12T19:39:24Z`
+  - merge commit: `81c735a`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_pack_provenance.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py engine/tests/test_pack_provenance.py`
+    - `python -m ruff format --check engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py engine/src/agent33/config.py engine/tests/test_pack_registry.py engine/tests/test_pack_routes.py engine/tests/test_marketplace_routes.py engine/tests/test_remote_marketplace.py engine/tests/test_marketplace_aggregator.py engine/tests/test_trust_manager.py engine/tests/test_pack_rollback.py engine/tests/test_pack_provenance.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/packs engine/src/agent33/api/routes/packs.py engine/src/agent33/api/routes/marketplace.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-postmerge-verify\\engine\\src'; python -m pytest engine/tests -q --no-cov -k "pack or marketplace"`
+- Current pointer advanced:
+  - `S3` complete
+  - `S4` next in `research`
+- Began `S4` from a fresh worktree:
+  - fetched merged `origin/main` at `81c735a`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-apply-patch-foundation`
+  - branch: `codex/session74-s4-apply-patch-foundation`
+- S4 research and scope lock:
+  - committed baseline already had governance, approvals, and shell/file tools
+  - Track 5A gap is structured, governed mutation rather than generic file writes
+  - wrote `docs/research/session74-s4-apply-patch-scope.md`
+- S4 implementation completed in worktree `session74-s4-apply-patch-foundation`:
+  - added builtin `apply_patch` with Codex-style patch parsing, dry-run preview, and workspace containment
+  - added persisted mutation audit store and `/v1/tools/mutations` read routes
+  - aligned MCP `execute_tool` with governance and validated execution
+- S4 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-apply-patch-foundation\\engine\\src'; python -m pytest engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-apply-patch-foundation\\engine\\src'; python -m pytest engine/tests/test_tool_loop.py engine/tests/test_tool_registry_ops.py engine/tests/test_phase14_security.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py`
+  - `python -m ruff format --check engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-apply-patch-foundation\\engine\\src'; python -m mypy engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- S4 branch and PR state:
+  - commit: `81b7159`
+  - branch: `codex/session74-s4-apply-patch-foundation`
+  - PR: `#180` `feat(tools): add governed apply_patch foundation`
+  - status: merged
+- S4 merge and post-merge verification:
+  - PR `#180` merged to `main` at `2026-03-12T20:11:54Z`
+  - merge commit: `e474bc4`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py`
+    - `python -m ruff format --check engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py engine/tests/test_apply_patch_tool.py engine/tests/test_tool_mutations_api.py engine/tests/test_hitl_approvals.py engine/tests/test_mcp_server.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/tools/builtin/apply_patch.py engine/src/agent33/tools/mutation_audit.py engine/src/agent33/tools/governance.py engine/src/agent33/api/routes/tool_mutations.py engine/src/agent33/mcp_server/bridge.py engine/src/agent33/mcp_server/tools.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_tool_loop.py engine/tests/test_tool_registry_ops.py engine/tests/test_phase14_security.py -q --no-cov`
+- Current pointer advanced:
+  - `S4` complete
+  - `S5` next in `research`
+- Began `S5` from a fresh worktree:
+  - fetched merged `origin/main` at `e474bc4`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager`
+  - branch: `codex/session75-s5-process-manager`
+- S5 research and scope lock:
+  - committed baseline still lacks a process-manager service and route surface for long-running commands
+  - `run_command` remains fire-and-wait only and operator session inventory remains skeletal
+  - wrote `docs/research/session75-s5-process-manager-scope.md`
+- S5 implementation completed in worktree `session75-s5-process-manager`:
+  - added `engine/src/agent33/processes/models.py`
+  - added `engine/src/agent33/processes/service.py`
+  - added `engine/src/agent33/api/routes/processes.py`
+  - wired process-manager startup and shutdown in `engine/src/agent33/main.py`
+  - added process inventory to `engine/src/agent33/operator/service.py`
+  - added process scopes in `engine/src/agent33/security/permissions.py`
+  - added targeted tests in `engine/tests/test_process_manager.py` and `engine/tests/test_processes_api.py`
+- S5 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager\\engine\\src'; python -m pytest engine/tests/test_process_manager.py engine/tests/test_processes_api.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager\\engine\\src'; python -m pytest engine/tests/test_operator_api.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py`
+  - `python -m ruff format engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py`
+  - `python -m ruff format --check engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager\\engine\\src'; python -m mypy engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S5` implementation complete
+  - `S5` next step is `pr_prep`
+- S5 branch and PR state:
+  - commit: `ea4e4d1`
+  - branch: `codex/session75-s5-process-manager`
+  - PR: `#181` `feat(processes): add managed command runtime`
+- S5 merge and post-merge verification:
+  - PR `#181` merged to `main`
+  - merge commit: `41565ad`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_operator_api.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py`
+    - `python -m ruff format --check engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py engine/tests/test_process_manager.py engine/tests/test_processes_api.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/processes engine/src/agent33/api/routes/processes.py engine/src/agent33/operator/service.py engine/src/agent33/security/permissions.py engine/src/agent33/config.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S5` complete
+  - `S6` next in `research`
+- Began `S6` from a fresh worktree:
+  - fetched merged `origin/main` at `41565ad`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-backup-foundation`
+  - branch: `codex/session76-s6-backup-foundation`
+- S6 research and scope lock:
+  - confirmed current backup is limited to improvement-learning state and operator backups remain a skeleton
+  - wrote `docs/research/session76-s6-backup-foundation-scope.md`
+- S6 implementation completed in worktree `session76-s6-backup-foundation`:
+  - added `engine/src/agent33/backup/manifest.py`
+  - added `engine/src/agent33/backup/archive.py`
+  - added `engine/src/agent33/backup/service.py`
+  - added `engine/src/agent33/api/routes/backups.py`
+  - wired `BackupService` startup and new `backup_dir` setting
+  - updated operator backup listing to delegate to the platform backup service
+- S6 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-backup-foundation\\engine\\src'; python -m pytest engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py -q --no-cov`
+  - `python -m ruff format engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py`
+  - `python -m ruff format --check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py`
+  - `python -m ruff check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-backup-foundation\\engine\\src'; python -m mypy engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S6` implementation and validation complete
+  - `S6` next step is `pr_prep`
+- S6 branch and PR state:
+  - commit: `d5764d8`
+  - branch: `codex/session76-s6-backup-foundation`
+  - PR: `#182` `feat(backups): add platform backup foundation`
+- S6 merge and post-merge verification:
+  - PR `#182` merged to `main`
+  - merge commit: `aa69d9f`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py`
+    - `python -m ruff format --check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py engine/tests/test_backup_manifest.py engine/tests/test_backup_service.py engine/tests/test_backup_routes.py engine/tests/test_operator_service.py engine/tests/test_operator_api.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/src/agent33/config.py engine/src/agent33/main.py engine/src/agent33/operator/models.py engine/src/agent33/operator/service.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S6` complete
+  - `S7` next in `research`
+- Began `S7` from a fresh worktree:
+  - fetched merged `origin/main` at `aa69d9f`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-restore-preview`
+  - branch: `codex/session77-s7-restore-preview`
+- S7 research and scope lock:
+  - confirmed there is still no platform restore planner or `/v1/backups/{id}/restore-plan`
+  - confirmed the merged S6 backup service provides manifest/detail/verify surfaces needed for read-only restore preview
+  - wrote `docs/research/session77-s7-restore-preview-scope.md`
+- S7 implementation completed in worktree `session77-s7-restore-preview`:
+  - added `engine/src/agent33/backup/restore_planner.py`
+  - extended `engine/src/agent33/api/routes/backups.py` with `POST /v1/backups/{id}/restore-plan`
+  - added public manifest/target-resolution helpers to `engine/src/agent33/backup/service.py`
+  - exported restore-plan models/services in `engine/src/agent33/backup/__init__.py`
+  - added focused restore-preview regressions in `engine/tests/test_restore_planner.py`
+- S7 validation passed in the fresh worktree using worktree-local `PYTHONPATH`:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-restore-preview\\engine\\src'; python -m pytest engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py -q --no-cov`
+  - `python -m ruff format engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py`
+  - `python -m ruff format --check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py`
+  - `python -m ruff check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-restore-preview\\engine\\src'; python -m mypy engine/src/agent33/backup engine/src/agent33/api/routes/backups.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S7` implementation and validation complete
+  - `S7` next step is `pr_prep`
+- S7 branch and PR state:
+  - commit: `2f68643`
+  - branch: `codex/session77-s7-restore-preview`
+  - PR: `#183` `feat(backups): add restore preview planning`
+- S7 merge and post-merge verification:
+  - PR `#183` merged to `main`
+  - merge commit: `d794fb2`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py`
+    - `python -m ruff format --check engine/src/agent33/backup engine/src/agent33/api/routes/backups.py engine/tests/test_restore_planner.py engine/tests/test_backup_routes.py engine/tests/test_backup_service.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/backup engine/src/agent33/api/routes/backups.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S7` complete
+  - `S8` next in `research`
+- Began `S8` from a fresh worktree:
+  - fetched merged `origin/main` at `d794fb2`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-sse-hardening`
+  - branch: `codex/session78-s8-sse-hardening`
+- S8 research and scope lock:
+  - confirmed Phase 25 SSE fallback already exists and the remaining gap is resilience/replay, not first implementation
+  - wrote `docs/research/session78-s8-sse-hardening-scope.md`
+- S8 implementation completed in worktree `session78-s8-sse-hardening`:
+  - extended `WorkflowWSManager` with bounded replay buffers and cursor-aware SSE subscription helpers
+  - added SSE `id:` frame emission and `Last-Event-ID` replay handling in `engine/src/agent33/api/routes/workflow_sse.py`
+  - hardened `frontend/src/lib/workflowLiveTransport.ts` with reconnect backoff, cursor propagation, and permanent-failure handling
+  - expanded backend and frontend workflow-live regressions for replay and reconnect semantics
+- S8 validation passed in the fresh worktree:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-sse-hardening\\engine\\src'; python -m pytest engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py engine/tests/test_visualizations_api.py -q --no-cov`
+  - `python -m ruff format engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py`
+  - `python -m ruff check engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py`
+  - `python -m ruff format --check engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-sse-hardening\\engine\\src'; python -m mypy engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py --config-file engine/pyproject.toml`
+  - `npm ci`
+  - `npm run lint`
+  - `npm test -- --run src/lib/workflowLiveTransport.test.ts src/components/OperationCard.test.tsx`
+- Current pointer advanced:
+  - `S8` implementation and validation complete
+  - `S8` next step is `pr_prep`
+- S8 branch and PR state:
+  - commit: `2045d24`
+  - branch: `codex/session78-s8-sse-hardening`
+  - PR: `#184` `feat(workflows): harden SSE resume semantics`
+- Current pointer advanced:
+  - `S8` is now in `pr_open`
+- S8 merge and post-merge verification:
+  - PR `#184` merged to `main`
+  - merge commit: `bcc13eb`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-postmerge-verify`
+  - verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py engine/tests/test_visualizations_api.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py`
+    - `python -m ruff format --check engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py engine/tests/test_workflow_sse.py engine/tests/test_workflow_ws.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/workflows/events.py engine/src/agent33/workflows/ws_manager.py engine/src/agent33/api/routes/workflow_sse.py --config-file engine/pyproject.toml`
+    - `npm ci`
+    - `npm run lint`
+    - `npm test -- --run src/lib/workflowLiveTransport.test.ts src/components/OperationCard.test.tsx`
+- Current pointer advanced:
+  - `S8` complete
+  - `S9` next in `research`
+- Began `S9` from a fresh worktree:
+  - fetched merged `origin/main` at `bcc13eb`
+  - created `D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening`
+  - branch: `codex/session79-s9-docker-hardening`
+- S9 research and scope lock:
+  - audited the current Docker-backed Jupyter adapter, prior Session 61 architecture memo, and existing adapter tests
+  - confirmed the remaining work is container hardening rather than first implementation
+  - wrote `docs/research/session79-s9-docker-hardening-scope.md`
+- Resumed the remaining-roadmap loop with `pr-manager`, `planning-with-files`, and `session-wrap` loaded for sequential execution.
+- Checked GitHub PR state:
+  - `gh pr list --state open --json 'number,title,headRefName,baseRefName,url,reviewDecision,isDraft,mergeStateStatus'`
+  - result: no open PRs, so the next `pr-manager` cycle starts by creating the S9 PR rather than remediating an existing branch
+- Recovery/status checks for S9:
+  - `git worktree list`
+  - `git -C D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening status --short`
+  - `git fetch origin`
+  - `git -C D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening rev-parse HEAD`
+  - `git -C D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening rev-parse origin/main`
+- Observed environment issue:
+  - `python $env:USERPROFILE\\.claude\\skills\\planning-with-files\\scripts\\session-catchup.py ...` failed because that helper script path does not exist here
+  - recovered from repo-local `task_plan.md`, `findings.md`, and `progress.md` instead
+- S9 scope-lock conclusion:
+  - preserve the existing Jupyter adapter contract
+  - thread `ExecutionContract.sandbox` into Docker session creation for new sessions only
+  - add explicit container-state validation and stronger cleanup on readiness/startup failure
+  - add focused direct regressions for resource flags and lifecycle failure paths
+- S9 implementation completed in worktree `session79-s9-docker-hardening`:
+  - threaded `ExecutionContract.sandbox` into Docker-backed Jupyter session creation
+  - added Docker container labels plus contract-driven `--memory` / `--cpus` runtime flags
+  - added explicit Docker container-state assertions during startup/readiness with cleanup on failure
+  - expanded direct `DockerKernelSession` regressions for resource flags, exited-container startup failure, readiness timeout cleanup, and sandbox propagation through the adapter/session manager boundary
+- S9 validation notes:
+  - initial `python -m pytest engine/tests/test_execution_jupyter_adapter.py -q --no-cov` run used a stale editable install from another worktree and produced false negatives against the wrong source tree
+  - reran validation with worktree-local `PYTHONPATH`
+- S9 validation passed in the fresh worktree:
+  - `python -m ruff format engine/src/agent33/execution/adapters/jupyter.py engine/tests/test_execution_jupyter_adapter.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m pytest engine/tests/test_execution_jupyter_adapter.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m pytest engine/tests/test_workflow_execute_code.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/execution/adapters/jupyter.py engine/tests/test_execution_jupyter_adapter.py`
+  - `python -m ruff format --check engine/src/agent33/execution/adapters/jupyter.py engine/tests/test_execution_jupyter_adapter.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m mypy engine/src/agent33/execution/adapters/jupyter.py --config-file engine/pyproject.toml`
+- S9 PR and review loop:
+  - branch pushed as `codex/session79-s9-docker-hardening`
+  - PR opened as `#185` `feat(execution): harden docker kernel startup controls`
+  - initial implementation commit: `53d3d08`
+  - Copilot review findings patched in `7764176`:
+    - reject sandbox-mismatched live session reuse
+    - strip conflicting `--memory` / `--cpus` flags from `extra_run_args` before applying sandbox runtime limits
+- S9 CI blocker investigation:
+  - full-suite CI failed in `engine/tests/test_processes_api.py::test_start_list_get_log_and_cleanup` with `403` because managed process start reused shell-tool governance and required `tools:execute` once `app.state.tool_governance` was initialized
+  - isolated local runs had passed only because `httpx.ASGITransport(app=app)` did not always run against an app state with initialized governance, making the test suite-order dependent
+- S9 follow-up fix for the CI blocker:
+  - added an autouse `ToolGovernance` fixture to `engine/tests/test_processes_api.py`
+  - updated managed-process happy-path tests to include `tools:execute`
+  - added a regression asserting start is blocked without `tools:execute`
+  - documented the finding under `docs/research/session79-s9-docker-hardening-scope.md`
+  - follow-up commit: `f6d1539` `test(api): make process governance assertions deterministic`
+- S9 post-fix validation passed:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m pytest engine/tests/test_processes_api.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m pytest engine/tests/test_backup_routes.py engine/tests/test_processes_api.py -q --no-cov`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening\\engine\\src'; python -m pytest engine/tests/test_execution_jupyter_adapter.py engine/tests/test_workflow_execute_code.py engine/tests/test_processes_api.py -q --no-cov`
+  - `python -m ruff check engine/tests/test_processes_api.py`
+  - `python -m ruff format --check engine/tests/test_processes_api.py`
+- S9 PR follow-up status:
+  - pushed `f6d1539` to `codex/session79-s9-docker-hardening`
+  - posted PR comment with the CI-root-cause summary and local validation details
+  - current state: waiting on rerun CI for PR `#185`
+- S9 rerun CI result:
+  - `gh pr checks 185 --watch --interval 10`
+  - all required checks finished green
+  - `test` passed in `15m44s`
+- S9 merge and post-merge verification:
+  - `gh pr merge 185 --squash --delete-branch --admin` failed locally because branch `main` is already checked out in the root worktree
+  - merged through GitHub API instead:
+    - `gh api -X PUT repos/mattmre/AGENT33/pulls/185/merge -f merge_method=squash`
+  - merge commit: `f8d9cdc`
+  - fresh verify worktree created: `D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-postmerge-verify`
+  - post-merge verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_execution_jupyter_adapter.py engine/tests/test_workflow_execute_code.py engine/tests/test_processes_api.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/execution/adapters/jupyter.py engine/tests/test_execution_jupyter_adapter.py engine/tests/test_processes_api.py`
+    - `python -m ruff format --check engine/src/agent33/execution/adapters/jupyter.py engine/tests/test_execution_jupyter_adapter.py engine/tests/test_processes_api.py`
+
+## 2026-03-13
+
+- Loaded `pr-manager`, `planning-with-files`, and `session-wrap` skills for the remaining-roadmap execution request.
+- Checked live PR state with:
+  - `gh pr list --state open --json 'number,title,headRefName,baseRefName,author,reviewDecision,url'`
+  - result: `[]`
+- Confirmed repo/root constraints before starting new slice work:
+  - `git remote -v`
+  - `git status --short`
+  - `Get-ChildItem worktrees`
+- Re-read persistent execution context:
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+  - `docs/sessions/session-79-2026-03-13.md`
+- Refreshed the persistent planning artifacts to reflect the current `pr-manager` posture:
+  - no open PR comments to remediate
+  - next execution starts at `S10`
+  - one fresh worktree per slice is the operative "fresh agent" boundary
+  - merge plan is `S10` -> `S17`, one verified PR at a time
+- Created a fresh `S10` audit worktree from `origin/main`:
+  - `git fetch origin`
+  - `git worktree add worktrees/session80-s10-phase30-trace-tuning origin/main -b codex/session80-s10-phase30-trace-tuning`
+- Audited the prior Phase 30 implementation trail:
+  - `git -C worktrees/session64-phase30-trace-tuning log --oneline --decorate -5`
+  - confirmed historic Phase 30 trace-tuning commits were already ancestors of `main`
+- Re-read the authoritative Phase 30 memo:
+  - `docs/research/session64-phase30-production-trace-tuning.md`
+- Audited current merged code in the fresh worktree:
+  - `engine/src/agent33/agents/runtime.py`
+  - `engine/src/agent33/api/routes/agents.py`
+  - `engine/src/agent33/observability/effort_telemetry.py`
+  - `engine/tests/test_phase30_effort_routing.py`
+- S10 validation passed from the fresh worktree:
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-phase30-trace-tuning\\engine\\src'; python -m pytest engine/tests/test_phase30_effort_routing.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py engine/tests/test_phase30_effort_routing.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-phase30-trace-tuning\\engine\\src'; python -m mypy engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py --config-file engine/pyproject.toml`
+- S10 audit conclusion:
+  - no new backend delta remains for the Phase 30 trace-tuning slice
+  - `S10` is complete via audit/status reconciliation
+  - next active implementation target is `S11`
+- Wrote tracked handoff docs in the `S10` worktree:
+  - `docs/research/session80-phase30-trace-tuning-audit.md`
+  - `docs/sessions/session-80-2026-03-13.md`
+  - refreshed `docs/next-session.md`
+  - refreshed `CLAUDE.md` with the stale-roadmap audit lesson
+- S10 PR and merge loop:
+  - committed audit/docs closeout as `1ded29b` `docs(phase30): reconcile trace tuning status`
+  - pushed branch `codex/session80-s10-phase30-trace-tuning`
+  - opened PR `#186` `docs(phase30): reconcile trace tuning status`
+  - self-review found no additional fixes beyond the audit/status reconciliation already on the branch
+  - attempted to post a PR comment with the self-review summary, but GitHub returned `AddComment` permission denied for the current token
+  - watched CI with `gh pr checks 186 --watch --interval 10`
+  - all checks finished green, including `test` in `15m36s`
+  - merged PR `#186` as squash commit `ed9dde8`
+- S10 post-merge verification:
+  - fetched merged `origin/main`
+  - created fresh verify worktree `D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-postmerge-verify`
+  - initial verify lint command mistakenly included `CLAUDE.md` in `ruff check`, which produced expected syntax noise because it is Markdown, not Python
+  - corrected verification commands passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_phase30_effort_routing.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py engine/tests/test_phase30_effort_routing.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py --config-file engine/pyproject.toml`
+  - queue advanced: `S10` complete, `S11` next in `research`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/execution/adapters/jupyter.py --config-file engine/pyproject.toml`
+- Current pointer advanced:
+  - `S9` complete
+  - `S10` next in `research`

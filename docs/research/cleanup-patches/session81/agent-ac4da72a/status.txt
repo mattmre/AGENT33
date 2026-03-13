@@ -1,0 +1,24 @@
+path=.claude/worktrees/agent-ac4da72a
+branch=feat/session59-openclaw-tracks5-6-mutation-backup
+subject=Merge pull request #159 from mattmre/codex/session64-wrap
+classification=keep-intact
+note=session59 tracks5-6 mutation-backup prototype
+status_count=12
+committed_patch_bytes=0
+tracked_patch_bytes=0
+untracked_count=16
+untracked_patch_bytes=139967
+
+[git-status]
+?? engine/src/agent33/api/routes/backups.py
+?? engine/src/agent33/api/routes/mutations.py
+?? engine/src/agent33/backup/
+?? engine/src/agent33/execution/process_manager.py
+?? engine/src/agent33/tools/builtin/apply_patch.py
+?? engine/src/agent33/tools/builtin/patch_audit.py
+?? engine/src/agent33/tools/builtin/patch_security.py
+?? engine/tests/test_openclaw_t5_patch.py
+?? engine/tests/test_openclaw_t5_process.py
+?? engine/tests/test_openclaw_t5_routes.py
+?? engine/tests/test_openclaw_t6_backup.py
+?? engine/tests/test_openclaw_t6_routes.py

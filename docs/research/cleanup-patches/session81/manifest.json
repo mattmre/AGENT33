@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "agent-a5a29d23",
+    "path": ".claude/worktrees/agent-a5a29d23",
+    "branch": "feat/session59-openclaw-tracks3-4-plugins-packs",
+    "classification": "keep-intact",
+    "note": "session59 tracks3-4 prototype",
+    "status_count": 22,
+    "committed_patch": "",
+    "committed_patch_bytes": 0,
+    "tracked_patch": "working-tree-tracked.patch",
+    "tracked_patch_bytes": 13244,
+    "untracked_count": 19,
+    "untracked_patch": "working-tree-untracked.patch",
+    "untracked_patch_bytes": 156518
+  },
+  {
+    "slug": "agent-ab53cb8a",
+    "path": ".claude/worktrees/agent-ab53cb8a",
+    "branch": "feat/session59-wave5-refinements",
+    "classification": "keep-intact",
+    "note": "session59 wave5 refinements prototype",
+    "status_count": 12,
+    "committed_patch": "",
+    "committed_patch_bytes": 0,
+    "tracked_patch": "working-tree-tracked.patch",
+    "tracked_patch_bytes": 45244,
+    "untracked_count": 4,
+    "untracked_patch": "working-tree-untracked.patch",
+    "untracked_patch_bytes": 18561
+  },
+  {
+    "slug": "agent-ac4da72a",
+    "path": ".claude/worktrees/agent-ac4da72a",
+    "branch": "feat/session59-openclaw-tracks5-6-mutation-backup",
+    "classification": "keep-intact",
+    "note": "session59 tracks5-6 mutation-backup prototype",
+    "status_count": 12,
+    "committed_patch": "",
+    "committed_patch_bytes": 0,
+    "tracked_patch": "",
+    "tracked_patch_bytes": 0,
+    "untracked_count": 16,
+    "untracked_patch": "working-tree-untracked.patch",
+    "untracked_patch_bytes": 139967
+  },
+  {
+    "slug": "agent-af722d5d",
+    "path": ".claude/worktrees/agent-af722d5d",
+    "branch": "feat/session59-phase46-dynamic-catalog",
+    "classification": "keep-intact",
+    "note": "session59 phase46 dynamic catalog prototype",
+    "status_count": 19,
+    "committed_patch": "",
+    "committed_patch_bytes": 0,
+    "tracked_patch": "working-tree-tracked.patch",
+    "tracked_patch_bytes": 58437,
+    "untracked_count": 16,
+    "untracked_patch": "working-tree-untracked.patch",
+    "untracked_patch_bytes": 125756
+  }
+]
