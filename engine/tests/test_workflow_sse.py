@@ -86,7 +86,11 @@ def _read_sse_events(lines: Iterator[str | bytes], count: int) -> list[dict[str,
     return events
 
 
-def _mock_request(manager: WorkflowWSManager) -> SimpleNamespace:
+def _mock_request(
+    manager: WorkflowWSManager,
+    *,
+    headers: dict[str, str] | None = None,
+) -> SimpleNamespace:
     state = SimpleNamespace(ws_manager=manager)
     state.user = SimpleNamespace(
         sub="workflow-sse-user",
@@ -96,6 +100,7 @@ def _mock_request(manager: WorkflowWSManager) -> SimpleNamespace:
     return SimpleNamespace(
         app=SimpleNamespace(state=state),
         state=state,
+        headers=headers or {},
         is_disconnected=AsyncMock(return_value=False),
     )
 
@@ -239,6 +244,44 @@ class TestWorkflowSSEEndpoint:
         assert live_event["type"] == "step_started"
         assert live_event["step_id"] == "step-a"
         assert await manager.active_sse_subscriptions("run-live") == 0
+
+    @pytest.mark.asyncio
+    async def test_sse_endpoint_replays_buffered_events_after_last_event_id(self) -> None:
+        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
+        await manager.register_run("run-replay", "wf-replay", owner_subject="workflow-sse-user")
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_STARTED,
+                run_id="run-replay",
+                workflow_name="wf-replay",
+                step_id="step-a",
+            )
+        )
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_COMPLETED,
+                run_id="run-replay",
+                workflow_name="wf-replay",
+                step_id="step-a",
+            )
+        )
+        _install_manager(manager)
+
+        request = _mock_request(manager, headers={"last-event-id": "1"})
+        sse_response = await stream_workflow_events("run-replay", request)
+        try:
+            events = [await _read_sse_chunk(sse_response), await _read_sse_chunk(sse_response)]
+        finally:
+            await _close_sse_response(sse_response)
+
+        assert events[0]["type"] == "sync"
+        assert events[1] == {
+            "type": "step_completed",
+            "run_id": "run-replay",
+            "workflow_name": "wf-replay",
+            "timestamp": events[1]["timestamp"],
+            "step_id": "step-a",
+        }
 
     @pytest.mark.asyncio
     async def test_sse_endpoint_emits_heartbeat_events(self) -> None:

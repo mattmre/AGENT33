@@ -235,6 +235,54 @@ class TestWorkflowWSManager:
         assert queue.empty()
 
     @pytest.mark.asyncio
+    async def test_sse_replay_returns_buffered_events_after_cursor(self) -> None:
+        manager = WorkflowWSManager(sse_replay_buffer_size=4)
+        await manager.register_run("run-sse-replay", "wf-replay")
+
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_STARTED,
+                run_id="run-sse-replay",
+                workflow_name="wf-replay",
+                step_id="step-a",
+            )
+        )
+        await manager.publish_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.STEP_COMPLETED,
+                run_id="run-sse-replay",
+                workflow_name="wf-replay",
+                step_id="step-a",
+            )
+        )
+
+        replay_events = await manager.replay_sse_events("run-sse-replay", after_event_id="1")
+
+        assert len(replay_events) == 1
+        assert replay_events[0].event_type == WorkflowEventType.STEP_COMPLETED
+        assert replay_events[0].event_id == "2"
+
+    @pytest.mark.asyncio
+    async def test_sse_replay_buffer_is_bounded(self) -> None:
+        manager = WorkflowWSManager(sse_replay_buffer_size=2)
+        await manager.register_run("run-sse-bounded", "wf-bounded")
+
+        for step_id in ("step-a", "step-b", "step-c"):
+            await manager.publish_event(
+                WorkflowEvent(
+                    event_type=WorkflowEventType.STEP_COMPLETED,
+                    run_id="run-sse-bounded",
+                    workflow_name="wf-bounded",
+                    step_id=step_id,
+                )
+            )
+
+        replay_events = await manager.replay_sse_events("run-sse-bounded", after_event_id="0")
+
+        assert [event.event_id for event in replay_events] == ["2", "3"]
+        assert [event.step_id for event in replay_events] == ["step-b", "step-c"]
+
+    @pytest.mark.asyncio
     async def test_run_access_requires_matching_owner_and_tenant(self) -> None:
         manager = WorkflowWSManager()
         await manager.register_run(

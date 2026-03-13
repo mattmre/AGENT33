@@ -26,11 +26,13 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
         raise HTTPException(status_code=503, detail="Workflow live manager not available")
 
     user = _get_request_user(request)
-    queue = await manager.subscribe_sse_if_allowed(
+    queue, replay_events = await manager.subscribe_sse_with_replay_if_allowed(
         run_id,
         subject=user.sub,
         tenant_id=getattr(user, "tenant_id", ""),
+        scopes=getattr(user, "scopes", []),
         is_admin="admin" in getattr(user, "scopes", []),
+        after_event_id=request.headers.get("last-event-id"),
     )
     if queue is None:
         raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
@@ -46,6 +48,8 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
         next_heartbeat_at = loop.time() + manager.heartbeat_interval_seconds
         try:
             yield _format_sse(sync_event)
+            for replay_event in replay_events:
+                yield _format_sse(replay_event)
             while True:
                 if await request.is_disconnected():
                     break
@@ -81,7 +85,13 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
 
 def _format_sse(event: WorkflowEvent) -> str:
     """Serialize a workflow event as a single SSE data frame."""
-    return f"data: {event.to_json()}\n\n"
+    frame_lines: list[str] = []
+    if event.event_id:
+        frame_lines.append(f"id: {event.event_id}")
+    payload = event.to_json()
+    for line in payload.splitlines() or [payload]:
+        frame_lines.append(f"data: {line}")
+    return "\n".join(frame_lines) + "\n\n"
 
 
 def _get_request_user(request: Request) -> Any:

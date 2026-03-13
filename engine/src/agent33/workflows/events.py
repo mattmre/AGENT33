@@ -38,6 +38,7 @@ class WorkflowEvent:
     timestamp: float = field(default_factory=time.time)
     step_id: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
+    event_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dict suitable for JSON serialization."""
