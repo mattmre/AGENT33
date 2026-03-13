@@ -116,6 +116,10 @@ AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBen
 
 Phase plans live in `docs/phases/`. The original core phases (01-21) are complete and the recent Session 50/51 stack is now merged on `main` (including Phases 32/33 core work plus Phase 31 persistence/quality hardening and A5 synthetic environments). Remaining work is primarily late-phase refinement/verification/hardening; see `docs/phases/README.md` for canonical status and `docs/next-session.md` for the active priority queue.
 
+Before reopening a "remaining" roadmap item, audit the merged baseline first. Session 80
+confirmed that `S10 / Phase 30 Stage 3` was already present on `main`, and only the queue
+state was stale.
+
 ### Phase Dependency Chain (11-20)
 11 (Agent Registry) → 12 (Tool Registry) → 13 (Code Execution) → 14 (Security Hardening) → 15 (Review Automation) → 16 (Observability) → 17 (Evaluation Gates) → 18 (Autonomy Enforcement) → 19 (Release Automation) → 20 (Continuous Improvement)
 
