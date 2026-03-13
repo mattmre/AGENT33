@@ -79,6 +79,7 @@ export interface WorkflowLiveEvent {
   run_id: string;
   workflow_name: string;
   timestamp: number;
+  event_id?: string;
   step_id?: string;
   data?: Record<string, unknown>;
 }

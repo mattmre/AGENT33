@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from dataclasses import dataclass, field
+from collections import deque
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -34,6 +35,7 @@ class WorkflowRunSnapshot:
     terminal: bool = False
     error: str | None = None
     duration_ms: float | None = None
+    last_event_id: int = 0
 
     def to_event_data(self) -> dict[str, Any]:
         """Return the transport payload used by sync events."""
@@ -70,15 +72,18 @@ class WorkflowWSManager:
         self,
         heartbeat_interval_seconds: float = 30.0,
         sse_queue_maxsize: int = 100,
+        sse_replay_buffer_size: int = 200,
     ) -> None:
         self._subscriptions: dict[str, set[Any]] = {}
         self._reverse: dict[Any, set[str]] = {}
         self._connections: dict[Any, _ConnectionState] = {}
         self._sse_subscriptions: dict[str, set[asyncio.Queue[WorkflowEvent]]] = {}
+        self._sse_replay_buffers: dict[str, deque[WorkflowEvent]] = {}
         self._snapshots: dict[str, WorkflowRunSnapshot] = {}
         self._lock = asyncio.Lock()
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
         self.sse_queue_maxsize = max(1, sse_queue_maxsize)
+        self.sse_replay_buffer_size = max(1, sse_replay_buffer_size)
 
     async def register_run(
         self,
@@ -104,6 +109,10 @@ class WorkflowWSManager:
                 snapshot.owner_subject = owner_subject
             if tenant_id:
                 snapshot.tenant_id = tenant_id
+            self._sse_replay_buffers.setdefault(
+                run_id,
+                deque(maxlen=self.sse_replay_buffer_size),
+            )
 
     async def has_run(self, run_id: str) -> bool:
         """Return ``True`` when *run_id* is known to the manager."""
@@ -209,6 +218,31 @@ class WorkflowWSManager:
             self._sse_subscriptions.setdefault(run_id, set()).add(queue)
         return queue
 
+    async def subscribe_sse_with_replay_if_allowed(
+        self,
+        run_id: str,
+        *,
+        subject: str | None,
+        tenant_id: str = "",
+        scopes: list[str] | None = None,
+        is_admin: bool = False,
+        after_event_id: str | None = None,
+    ) -> tuple[asyncio.Queue[WorkflowEvent] | None, list[WorkflowEvent]]:
+        """Atomically authorize, subscribe, and capture replay events."""
+        queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue(maxsize=self.sse_queue_maxsize)
+        async with self._lock:
+            snapshot = self._snapshots.get(run_id)
+            if snapshot is None:
+                return None, []
+            if not (is_admin or check_permission("admin", scopes or [])):
+                if snapshot.tenant_id and snapshot.tenant_id != tenant_id:
+                    return None, []
+                if snapshot.owner_subject and snapshot.owner_subject != subject:
+                    return None, []
+            replay_events = self._replay_events_unlocked(run_id, after_event_id)
+            self._sse_subscriptions.setdefault(run_id, set()).add(queue)
+        return queue, replay_events
+
     async def unsubscribe_sse(
         self,
         run_id: str,
@@ -233,7 +267,12 @@ class WorkflowWSManager:
                     workflow_name=event.workflow_name,
                 ),
             )
+            event = self._assign_event_id(snapshot, event)
             self._apply_event(snapshot, event)
+            self._sse_replay_buffers.setdefault(
+                event.run_id,
+                deque(maxlen=self.sse_replay_buffer_size),
+            ).append(event)
             targets = list(self._subscriptions.get(event.run_id, set()))
             sse_targets = list(self._sse_subscriptions.get(event.run_id, set()))
 
@@ -296,6 +335,15 @@ class WorkflowWSManager:
             workflow_name=workflow_name,
             data={"status": status, "terminal": terminal},
         )
+
+    async def replay_sse_events(
+        self,
+        run_id: str,
+        after_event_id: str | None,
+    ) -> list[WorkflowEvent]:
+        """Return buffered SSE events after the provided cursor."""
+        async with self._lock:
+            return self._replay_events_unlocked(run_id, after_event_id)
 
     async def send_heartbeat(self, ws: WebSocket, run_id: str) -> bool:
         """Send a heartbeat event for *run_id* to *ws*."""
@@ -474,6 +522,32 @@ class WorkflowWSManager:
                 logger.warning("sse_queue_still_full_after_drop", run_id=run_id)
                 return False
 
+    def _assign_event_id(
+        self,
+        snapshot: WorkflowRunSnapshot,
+        event: WorkflowEvent,
+    ) -> WorkflowEvent:
+        snapshot.last_event_id += 1
+        return replace(event, event_id=str(snapshot.last_event_id))
+
+    def _replay_events_unlocked(
+        self,
+        run_id: str,
+        after_event_id: str | None,
+    ) -> list[WorkflowEvent]:
+        cursor = _parse_event_cursor(after_event_id)
+        if cursor is None:
+            return []
+        buffer = self._sse_replay_buffers.get(run_id)
+        if buffer is None:
+            return []
+        replay_events: list[WorkflowEvent] = []
+        for event in buffer:
+            event_cursor = _parse_event_cursor(event.event_id)
+            if event_cursor is not None and event_cursor > cursor:
+                replay_events.append(event)
+        return replay_events
+
 
 def _coerce_float(value: Any) -> float | None:
     if value is None:
@@ -482,3 +556,16 @@ def _coerce_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_event_cursor(value: str | None) -> int | None:
+    if value is None:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    try:
+        parsed = int(candidate)
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None
