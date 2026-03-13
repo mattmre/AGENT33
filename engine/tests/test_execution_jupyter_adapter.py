@@ -92,6 +92,10 @@ class _FakeSession:
     def is_alive(self) -> bool:
         return not self.stopped
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        del sandbox
+        return True
+
 
 class _FakeSessionManager:
     def __init__(self, session: _FakeSession) -> None:
@@ -172,6 +176,21 @@ class TestKernelSessionManager:
         assert len(created) == 1
 
     @pytest.mark.asyncio
+    async def test_get_or_create_rejects_sandbox_mismatch_for_live_session(self) -> None:
+        session = _FakeSession("sess-1", "python3")
+        session.matches_sandbox = lambda sandbox: sandbox == SandboxConfig(memory_mb=512)  # type: ignore[method-assign]
+
+        manager = KernelSessionManager(max_sessions=2, idle_timeout=60.0)
+        manager._sessions = {"sess-1": session}
+
+        with pytest.raises(RuntimeError, match="does not match the running kernel session"):
+            await manager.get_or_create(
+                "sess-1",
+                "python3",
+                sandbox=SandboxConfig(memory_mb=256),
+            )
+
+    @pytest.mark.asyncio
     async def test_reap_idle_removes_expired_sessions(self) -> None:
         old = _FakeSession("old", "python3")
         old.last_used = time.time() - 120.0
@@ -224,6 +243,7 @@ class TestDockerKernelSession:
         assert "768m" in command
         assert "--cpus" in command
         assert "2" in command
+        assert command.count("--cpus") == 1
         assert "agent33.managed=true" in command
         assert "agent33.session_id=sess-1" in command
         assert "agent33.kernel_name=python3" in command

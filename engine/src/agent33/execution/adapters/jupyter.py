@@ -52,6 +52,8 @@ class _KernelSessionProtocol(Protocol):
         timeout: float = 60.0,
     ) -> tuple[bool, str, str, list[OutputArtifact]]: ...
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool: ...
+
     @property
     def is_alive(self) -> bool: ...
 
@@ -106,6 +108,25 @@ def _sanitize_container_name(session_id: str) -> str:
     """Generate a Docker-safe container name."""
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in session_id.lower())
     return f"agent33-kernel-{safe[:40]}"
+
+
+def _filter_conflicting_run_args(extra_run_args: list[str]) -> list[str]:
+    """Drop resource flags that are now governed by SandboxConfig."""
+    filtered: list[str] = []
+    skip_next = False
+
+    for arg in extra_run_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in {"--memory", "--cpus"}:
+            skip_next = True
+            continue
+        if arg.startswith("--memory=") or arg.startswith("--cpus="):
+            continue
+        filtered.append(arg)
+
+    return filtered
 
 
 def _build_directory_preamble(code: str, target_directory: str | None) -> str:
@@ -261,6 +282,11 @@ class KernelSession:
         msg_id = self._client.execute(code)
         return await _collect_kernel_output(self._client, msg_id, timeout)
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        """Local kernels do not persist container resource limits between calls."""
+        del sandbox
+        return True
+
     @property
     def is_alive(self) -> bool:
         if self._manager is None:
@@ -413,7 +439,7 @@ class DockerKernelSession:
                 ]
             )
 
-        command.extend(self._policy.extra_run_args)
+        command.extend(_filter_conflicting_run_args(self._policy.extra_run_args))
         command.extend(
             [
                 "--memory",
@@ -466,6 +492,12 @@ class DockerKernelSession:
         msg_id = self._client.execute(code)
         return await _collect_kernel_output(self._client, msg_id, timeout)
 
+    def matches_sandbox(self, sandbox: SandboxConfig | None) -> bool:
+        """Reject silent resource-limit changes on reused stateful sessions."""
+        if sandbox is None:
+            return True
+        return self._sandbox == sandbox
+
     @property
     def is_alive(self) -> bool:
         return self._started
@@ -504,6 +536,11 @@ class KernelSessionManager:
             if session_id in self._sessions:
                 session = self._sessions[session_id]
                 if session.is_alive:
+                    if not session.matches_sandbox(sandbox):
+                        raise RuntimeError(
+                            f"Sandbox configuration for session '{session_id}' does not match "
+                            "the running kernel session"
+                        )
                     return session
                 del self._sessions[session_id]
 
