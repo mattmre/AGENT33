@@ -259,6 +259,7 @@ class Settings(BaseSettings):
     orchestration_state_store_path: str = ""
     process_manager_log_dir: str = "var/process-manager"
     process_manager_max_processes: int = 10
+    backup_dir: str = "var/backups"
 
     # Continuous improvement learning signals (Phase 31)
     improvement_learning_enabled: bool = False

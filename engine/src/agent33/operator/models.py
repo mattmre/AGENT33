@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agent33.backup.manifest import BackupSummary  # noqa: TC001
+
 # ---------------------------------------------------------------------------
 # Health / status
 # ---------------------------------------------------------------------------
@@ -190,6 +192,6 @@ class SessionListResponse(BaseModel):
 class BackupListResponse(BaseModel):
     """Response for GET /v1/operator/backups."""
 
-    backups: list[dict[str, Any]] = Field(default_factory=list)
+    backups: list[BackupSummary] = Field(default_factory=list)
     count: int = 0
     note: str = "Archive-grade backup management coming in Track Phase 6"

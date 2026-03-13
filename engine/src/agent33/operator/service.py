@@ -513,8 +513,16 @@ class OperatorService:
     # ------------------------------------------------------------------
 
     def get_backups(self) -> BackupListResponse:
-        """Return backup catalog (skeleton until Track Phase 6)."""
-        return BackupListResponse()
+        """Return backup catalog, delegating to the platform backup service when available."""
+        backup_service = getattr(self._app_state, "backup_service", None)
+        if backup_service is None:
+            return BackupListResponse()
+        result = backup_service.list_backups()
+        return BackupListResponse(
+            backups=result.backups,
+            count=result.count,
+            note="Platform backup inventory is available under /v1/backups",
+        )
 
 
 def _mask_db_url(url: str) -> str:

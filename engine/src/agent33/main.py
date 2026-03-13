@@ -21,6 +21,7 @@ from agent33.api.routes import (
     agents,
     auth,
     autonomy,
+    backups,
     benchmarks,
     chat,
     comparative,
@@ -122,6 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.orchestration_state_store = orchestration_state_store
 
     from agent33.autonomy.service import AutonomyService
+    from agent33.backup.service import BackupService
     from agent33.observability.trace_collector import TraceCollector
     from agent33.release.service import ReleaseService
 
@@ -347,6 +349,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         workspace_root=str(Path.cwd().resolve()),
         log_dir=str(Path(settings.process_manager_log_dir).resolve()),
         max_processes=settings.process_manager_max_processes,
+    )
+
+    backup_service = BackupService(
+        backup_dir=Path(settings.backup_dir),
+        settings=settings,
+        app_root=Path.cwd(),
+        workspace_dir=None,
+    )
+    app.state.backup_service = backup_service
+    logger.info(
+        "backup_service_initialized",
+        backup_dir=str(Path(settings.backup_dir).resolve()),
     )
 
     # -- Embedding provider + cache ----------------------------------------
@@ -1167,6 +1181,7 @@ app.include_router(synthetic_envs.router)
 app.include_router(tool_approvals.router)
 app.include_router(tool_mutations.router)
 app.include_router(processes.router)
+app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(operator.router)
 app.include_router(workflow_sse.router)
