@@ -1,81 +1,77 @@
 # Next Session Briefing
 
-Last updated: 2026-03-12 (Session 71 — Phase 46 closeout in progress)
+Last updated: 2026-03-13 (Session 80 — S10 audited complete, S11 next)
 
 ## Current State
 
-- The Session 59 continuation implementation queue is now **fully merged to `main`**:
-  - **PR #169** — Phase 44 hooks/session safety follow-ups merged
-  - **PR #167** — OpenClaw Track 1 operator shell merged
-  - **PR #168** — Stage 3 review/approval hardening merged
-  - **PR #170** — Phase 45 MCP fabric runtime wiring and approval-token hardening merged
-  - **PR #171** — OpenClaw Track 2 tool catalog with tenant-scoped plugin data merged
-- The root checkout at `D:\GITHUB\AGENT33` remains dirty/shared; if new implementation work starts, create a fresh worktree from current `main`.
-- The next session should start from merged `main`, not from the older PR worktrees.
-- The current implementation slice is Phase 46 closeout, focused on better skill-aware discovery and tenant-aware workflow resolution.
-- Every new slice should begin with fresh context:
-  - create a fresh worktree from `origin/main`
+- The sequential merge wave through `S9` is on `main`:
+  - `#177` — Phase 46 closeout
+  - `#178` — OpenClaw Track 3 plugin lifecycle
+  - `#179` — OpenClaw Track 4 pack distribution hardening
+  - `#180` — OpenClaw Track 5A governed `apply_patch`
+  - `#181` — OpenClaw Track 5B process manager
+  - `#182` — OpenClaw Track 6A backup foundation
+  - `#183` — OpenClaw Track 6B restore preview
+  - `#184` — Phase 25 SSE resume/reconnect hardening
+  - `#185` — Phase 38 Docker kernel hardening
+- `S10 / Phase 30 Stage 3` was audited against the current merged baseline and confirmed already complete on `main`; no backend delta remained after verification.
+- There are no open GitHub PRs right now.
+- The next slice has not started yet; create a fresh worktree from `origin/main` for `S11`.
+- The root checkout remains dirty, so implementation work should continue only from fresh worktrees created off `origin/main`.
+- Every slice must begin with fresh context:
+  - start from a fresh `origin/main` worktree
   - read `task_plan.md`, `findings.md`, and `progress.md`
-  - execute one slice only per worktree
-
-## Validation Snapshot
-
-- PR `#169`
-  - targeted Phase 44/session/hooks pytest suite passed
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed before merge
-- PR `#167`
-  - targeted operator pytest suite passed before merge
-  - after restacking on merged `main`, `python -m pytest --no-cov tests/test_operator_api.py tests/test_operator_service.py tests/test_phase44_session_api.py tests/test_phase44_integration.py -q` passed (`103 passed`)
-  - GitHub check suite reran green before merge
-- PR `#168`
-  - backend review pytest suite passed
-  - frontend `tsc --noEmit`, targeted `vitest`, and `vite build` passed
-  - targeted `ruff format --check`, `ruff check`, and `mypy` passed before merge
-- PR `#170`
-  - `191` focused backend tests passed across HITL approvals, MCP proxy/sync, resources, server wiring, and integration wiring
-  - follow-up CI fix replaced legacy event-loop usage in `tests/test_phase45_mcp_proxy_routes.py`
-  - targeted `ruff format --check`, `ruff check`, and `python -m pytest --no-cov tests/test_phase45_mcp_proxy_routes.py -q` passed before merge
-  - GitHub check suite reran green before merge
-- PR `#171`
-  - backend `pytest --no-cov tests/test_tool_catalog_service.py tests/test_tool_catalog_routes.py -q` passed (`62 passed`) during initial PR prep
-  - frontend `tsc --noEmit`, `vitest run`, and `vite build` passed (`15` files / `104` tests)
-  - follow-up CI fixes removed leaky `PropertyMock`/stub patterns and made route tests prefer explicit service overrides over stale `app.state`
-  - targeted `ruff format`, `ruff check`, and `python -m pytest --no-cov tests/test_tool_catalog_routes.py tests/test_tool_catalog_service.py -q` passed (`63 passed`) before merge
-  - GitHub check suite reran green before merge
+  - resume only the current slice and its first incomplete phase step
 
 ## Immediate Priorities
 
-1. Finish and merge the current Phase 46 closeout slice from a fresh `origin/main` worktree.
-2. Start the next slice from fresh context only after that merge:
-   - OpenClaw Track 3 plugin lifecycle platform
-3. Continue the remaining roadmap sequentially to minimize PR drift:
-   - OpenClaw Track 4
-   - OpenClaw Tracks 5-6
+1. **S11 / Phase 47**: capability pack expansion and workflow weaving
+2. **S12 / Phase 35/48**: voice convergence decision
+3. **S13 / Phase 48**: operator UX and production hardening
+4. **S14 / OpenClaw Track 7**: web research and trust
+5. **S15 / OpenClaw Track 8**: sessions and context UX
 
-## Current Implementation Focus
+## Secondary Priorities
 
-The active slice is Phase 46 closeout, scoped to:
+6. **S16 / OpenClaw Track 9**: operations, config, and doctor
+7. **S17 / OpenClaw Track 10**: provenance, FE hardening, closeout
 
-- richer skill-aware discovery ranking
-- `resolve_workflow` returning workflow-oriented skill matches in addition to runtime workflows/templates
-- tenant-aware workflow resolution for pack-provided skills
-- tests and status reconciliation
+## Housekeeping
 
-## Notes
+- Start the next slice from a fresh `origin/main` worktree for `S11`; do not reuse the `S10` audit worktree for implementation.
+- Keep using worktree-local `engine/.venv` and local `frontend/node_modules` installs for verification.
+- Treat each fresh worktree as a fresh-context boundary for one slice only.
+- Clean up stale worktrees once the docs-only root state is reconciled.
 
-- Preferred backend validation path remains a worktree-local `engine/.venv`. Fallback only: set `PYTHONPATH=<active-worktree>\\engine\\src`.
-- Fresh frontend worktrees may not have local dev dependencies installed. Run `npm install` in that worktree before `npm run test`, `npm run lint`, or `npm run build`.
-- Frontend builds that import canonical workflow YAML from `core/` must use the repository root as the Docker build context.
-- Phase 35 voice runtime is still `stub` transport only; do not assume `voice_daemon_transport=livekit` works yet.
-- Recent GitHub Copilot Agent workflow failures have been infra noise unless they point to an actual product regression.
-- Tool catalog route tests should use `set_catalog_service()` as the authoritative override; stale `app.state.tool_catalog_service` can otherwise leak across broader test runs.
-- Discovery/Phase 46 verification should use a worktree-local `engine/.venv` when available, or `PYTHONPATH=<active-worktree>\\engine\\src` as the fallback so tests execute the current slice rather than a stale editable install.
+## Phase Status Summary
+
+| Phase / Track | Status | Notes |
+| --- | --- | --- |
+| 01-21 | Complete | Foundation stable |
+| 22-29 | Complete | UI, review, and planning foundations merged |
+| 30 | Complete | Session 80 audit confirmed production trace tuning is already present on `main` |
+| 31-33 | Complete | Persistence, packs, and marketplace baseline merged |
+| 35 | In Progress | Voice daemon merged, but remaining work must be minimized because Phase 48 replaces the scaffold with a sidecar |
+| 36-46 | Complete | Includes later hardening slices already on `main` |
+| 47-48 | Planned | Capability packs, voice sidecar, production hardening |
+| OpenClaw T1-T6 | Complete | Closed in PRs `#167`, `#171`, `#178`-`#183` |
+| OpenClaw T7-T10 | Planned | Research/trust, session UX, ops/doctor, provenance closeout |
 
 ## Key Paths
 
-- Session 67 log: `docs/sessions/session-67-2026-03-10.md`
-- Session 69 log: `docs/sessions/session-69-2026-03-11.md`
-- Session 71 Phase 46 audit: `docs/research/session71-phase46-closeout-audit.md`
-- Session 60 crash-recovery baseline: `docs/sessions/session-60-2026-03-10.md`
-- Session 59 research set: `docs/research/session59-*.md`
-- Phase roadmaps: `docs/phases/PHASE-44-48-EVOKORE-INTEGRATION-ROADMAP.md`, `docs/phases/OPENCLAW-PARITY-10-PHASE-ROADMAP.md`
+- Session 80 log: `docs/sessions/session-80-2026-03-13.md`
+- Session 80 audit memo: `docs/research/session80-phase30-trace-tuning-audit.md`
+- Prior session log: `docs/sessions/session-79-2026-03-13.md`
+- Prior session context: `docs/sessions/session-70-2026-03-12.md`, `docs/sessions/session-71-2026-03-12.md`
+- Phase roadmaps:
+  - `docs/phases/PHASE-44-48-EVOKORE-INTEGRATION-ROADMAP.md`
+  - `docs/phases/OPENCLAW-PARITY-10-PHASE-ROADMAP.md`
+
+## Environmental Notes
+
+- Use a fresh worktree from `origin/main` for each new implementation slice.
+- Read `task_plan.md`, `findings.md`, and `progress.md` before starting that slice.
+- For the immediate next step, create a new `S11` worktree from `origin/main`.
+- Create `engine/.venv` inside that worktree before running Python checks.
+- Run `npm install` or `npm ci` inside the worktree-local `frontend/` before frontend checks.
+- Frontend Docker builds must use repo root as the build context.
