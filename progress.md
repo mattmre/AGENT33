@@ -658,3 +658,30 @@
 - Current pointer advanced:
   - `S9` complete
   - `S10` next in `research`
+## 2026-03-13
+
+- Reviewed and remediated the two cleanup follow-up PRs sequentially with `pr-manager`:
+  - `#187` docs/session/research cleanup sync
+  - `#188` frontend control-plane component tests
+- `#187` review fixes:
+  - corrected the `S11` resume artifact in `task_plan.md`
+  - fixed stale findings/session references and the broken Windows absolute roadmap link
+  - narrowed `docs/research/cleanup-patches/session81/` to the four intentional `.claude` prototypes
+  - regenerated the kept patch archive with preserved newlines and relative metadata
+  - rewrote the PR branch to a single clean commit so GitGuardian no longer scanned the original manifest-sha commit in PR history
+- `#188` review fixes:
+  - removed brittle exact `user-event` call-count assertions from `AuthPanel.test.tsx`
+  - replaced timer-based `ObservationStream` assertions with deterministic mock-reader synchronization and final-state assertions
+- `#188` local validation passed before merge:
+  - `npm test -- --run src/components/AuthPanel.test.tsx src/components/GlobalSearch.test.tsx src/components/HealthPanel.test.tsx src/components/ObservationStream.test.tsx`
+  - `npm run lint`
+- Merge order and outcomes:
+  - merged `#187` first as squash commit `2c0549d`
+  - merged `#188` second as squash commit `06ae9f1`
+- Final merged-baseline verification passed from root `main`:
+  - `npm test -- --run src/components/AuthPanel.test.tsx src/components/GlobalSearch.test.tsx src/components/HealthPanel.test.tsx src/components/ObservationStream.test.tsx`
+  - `npm run lint`
+- Post-merge cleanup:
+  - removed local worktrees `worktrees/session83-docs-sync` and `worktrees/session83-cleanup-tests`
+  - deleted local branches `codex/session83-docs-sync` and `codex/session83-cleanup-tests`
+  - left root untracked files `temp_report.txt` and `temp_search_results.txt` in place because they belong to an interrupted analysis from another CLI
