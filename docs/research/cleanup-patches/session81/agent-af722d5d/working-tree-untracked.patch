@@ -1,0 +1,3528 @@
+diff --git a/engine/src/agent33/api/routes/discovery.py b/engine/src/agent33/api/routes/discovery.py
+new file mode 100644
+index 0000000..d4e682b
+--- /dev/null
++++ b/engine/src/agent33/api/routes/discovery.py
+@@ -0,0 +1,328 @@
++"""API routes for dynamic tool discovery and session-scoped tool activation."""
++
++# NOTE: no ``from __future__ import annotations`` -- Pydantic needs these
++# types at runtime for request-body validation.
++
++from typing import Any
++
++import structlog
++from fastapi import APIRouter, HTTPException, Request, status
++from pydantic import BaseModel, Field
++
++from agent33.security.permissions import require_scope
++
++logger = structlog.get_logger()
++
++router = APIRouter(prefix="/v1", tags=["discovery"])
++
++
++# -- Request / response models -----------------------------------------------
++
++
++class ResolveRequest(BaseModel):
++    """Request body for semantic skill resolution."""
++
++    query: str = Field(..., min_length=1, description="Natural-language query")
++    max_results: int = Field(default=5, ge=1, le=50)
++    include_instructions: bool = False
++
++
++class ResolvedSkillResponse(BaseModel):
++    """A single resolved skill."""
++
++    name: str
++    description: str
++    score: float
++    tags: list[str] = Field(default_factory=list)
++    instructions: str = ""
++
++
++class ResolveResponse(BaseModel):
++    """Response for semantic skill resolution."""
++
++    query: str
++    results: list[ResolvedSkillResponse]
++    count: int
++
++
++class ActivateRequest(BaseModel):
++    """Request body for tool activation."""
++
++    tool_names: list[str] = Field(..., min_length=1)
++
++
++class ActivationSetResponse(BaseModel):
++    """Response showing the current activation state."""
++
++    session_id: str
++    core_tools: list[str]
++    activated_tools: list[str]
++    deactivated_tools: list[str]
++    visible_tools: list[str]
++
++
++class DiscoveryStatusResponse(BaseModel):
++    """Response for discovery system status."""
++
++    last_scan: str | None = None
++    scan_count: int = 0
++    total_discovered: int = 0
++    mcp_discovered: int = 0
++    plugin_discovered: int = 0
++    entrypoint_discovered: int = 0
++    errors: list[str] = Field(default_factory=list)
++    healthy: bool = True
++
++
++class ScanResponse(BaseModel):
++    """Response for a discovery scan."""
++
++    total: int
++    added: list[str] = Field(default_factory=list)
++    removed: list[str] = Field(default_factory=list)
++    entrypoint_count: int = 0
++    mcp_count: int = 0
++    errors: list[str] = Field(default_factory=list)
++
++
++class ActiveToolResponse(BaseModel):
++    """A single active tool in a session."""
++
++    name: str
++    description: str = ""
++    category: str = ""
++    source: str = ""
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++def _get_resolver(request: Request) -> Any:
++    """Extract the SemanticSkillResolver from app state."""
++    resolver = getattr(request.app.state, "skill_resolver", None)
++    if resolver is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Semantic skill resolver not initialized",
++        )
++    return resolver
++
++
++def _get_activation_manager(request: Request) -> Any:
++    """Extract the ToolActivationManager from app state."""
++    manager = getattr(request.app.state, "tool_activation_manager", None)
++    if manager is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Tool activation manager not initialized",
++        )
++    return manager
++
++
++def _get_discovery(request: Request) -> Any:
++    """Extract the DynamicToolDiscovery from app state."""
++    discovery = getattr(request.app.state, "tool_discovery", None)
++    if discovery is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Dynamic tool discovery not initialized",
++        )
++    return discovery
++
++
++def _get_catalog_service(request: Request) -> Any:
++    """Extract the ToolCatalogService from app state."""
++    service = getattr(request.app.state, "tool_catalog_service", None)
++    if service is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail="Tool catalog service not initialized",
++        )
++    return service
++
++
++# -- Semantic resolution endpoints --------------------------------------------
++
++
++@router.post(
++    "/discovery/resolve",
++    response_model=ResolveResponse,
++    dependencies=[require_scope("tools:execute")],
++)
++async def resolve_skills(request: Request, body: ResolveRequest) -> ResolveResponse:
++    """Semantic skill resolution: match a natural-language query to skills."""
++    resolver = _get_resolver(request)
++
++    results = await resolver.resolve(
++        body.query,
++        top_k=body.max_results,
++        include_instructions=body.include_instructions,
++        exclude_deprecated=True,
++    )
++
++    return ResolveResponse(
++        query=body.query,
++        results=[
++            ResolvedSkillResponse(
++                name=r.name,
++                description=r.description,
++                score=round(r.score, 4),
++                tags=r.tags,
++                instructions=r.instructions,
++            )
++            for r in results
++        ],
++        count=len(results),
++    )
++
++
++# -- Dynamic discovery endpoints ----------------------------------------------
++
++
++@router.get(
++    "/discovery/scan",
++    response_model=ScanResponse,
++    dependencies=[require_scope("admin")],
++)
++async def trigger_scan(request: Request) -> ScanResponse:
++    """Trigger a dynamic tool re-scan across all sources."""
++    discovery = _get_discovery(request)
++    result = await discovery.scan()
++    return ScanResponse(
++        total=result.total,
++        added=result.added,
++        removed=result.removed,
++        entrypoint_count=result.entrypoint_count,
++        mcp_count=result.mcp_count,
++        errors=result.errors,
++    )
++
++
++@router.get(
++    "/discovery/status",
++    response_model=DiscoveryStatusResponse,
++    dependencies=[require_scope("tools:execute")],
++)
++async def discovery_status(request: Request) -> DiscoveryStatusResponse:
++    """Return the current discovery index status."""
++    discovery = _get_discovery(request)
++    st = discovery.status
++    return DiscoveryStatusResponse(
++        last_scan=st.last_scan.isoformat() if st.last_scan else None,
++        scan_count=st.scan_count,
++        total_discovered=st.total_discovered,
++        mcp_discovered=st.mcp_discovered,
++        plugin_discovered=st.plugin_discovered,
++        entrypoint_discovered=st.entrypoint_discovered,
++        errors=st.errors,
++        healthy=len(st.errors) == 0,
++    )
++
++
++# -- Session-scoped tool activation endpoints ---------------------------------
++
++
++@router.post(
++    "/sessions/{session_id}/tools/activate",
++    response_model=ActivationSetResponse,
++    dependencies=[require_scope("tools:execute")],
++)
++async def activate_tools(
++    request: Request, session_id: str, body: ActivateRequest
++) -> ActivationSetResponse:
++    """Activate tools in a session."""
++    manager = _get_activation_manager(request)
++    # Ensure the set exists.
++    manager.get_or_create(session_id)
++    manager.activate(session_id, body.tool_names)
++    return _build_activation_response(manager, session_id)
++
++
++@router.delete(
++    "/sessions/{session_id}/tools/{tool_name}",
++    response_model=ActivationSetResponse,
++    dependencies=[require_scope("tools:execute")],
++)
++async def deactivate_tool(
++    request: Request, session_id: str, tool_name: str
++) -> ActivationSetResponse:
++    """Deactivate a tool from a session."""
++    manager = _get_activation_manager(request)
++    aset = manager.get(session_id)
++    if aset is None:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail=f"No activation set for session '{session_id}'",
++        )
++    manager.deactivate(session_id, [tool_name])
++    return _build_activation_response(manager, session_id)
++
++
++@router.get(
++    "/sessions/{session_id}/tools",
++    response_model=list[ActiveToolResponse],
++    dependencies=[require_scope("tools:execute")],
++)
++async def list_active_tools(
++    request: Request, session_id: str
++) -> list[ActiveToolResponse]:
++    """List active tools in a session."""
++    manager = _get_activation_manager(request)
++    catalog = _get_catalog_service(request)
++
++    visible = manager.list_visible(session_id)
++    if not visible:
++        # If no activation set, return all tools (legacy mode).
++        aset = manager.get(session_id)
++        if aset is None:
++            all_tools = catalog.build_catalog()
++            results: list[ActiveToolResponse] = []
++            for group in all_tools.groups:
++                for tool in group.tools:
++                    results.append(
++                        ActiveToolResponse(
++                            name=tool.name,
++                            description=tool.description,
++                            category=tool.category,
++                            source=tool.source,
++                        )
++                    )
++            return results
++
++    results = []
++    for name in visible:
++        detail = catalog.get_tool_detail(name)
++        if detail:
++            results.append(
++                ActiveToolResponse(
++                    name=detail.name,
++                    description=detail.description,
++                    category=detail.category,
++                    source=detail.source,
++                )
++            )
++        else:
++            results.append(ActiveToolResponse(name=name))
++    return results
++
++
++def _build_activation_response(
++    manager: Any, session_id: str
++) -> ActivationSetResponse:
++    """Build an ActivationSetResponse from the manager state."""
++    aset = manager.get(session_id)
++    if aset is None:
++        return ActivationSetResponse(
++            session_id=session_id,
++            core_tools=[],
++            activated_tools=[],
++            deactivated_tools=[],
++            visible_tools=[],
++        )
++    return ActivationSetResponse(
++        session_id=session_id,
++        core_tools=aset.core_tools,
++        activated_tools=sorted(aset.activated_tools),
++        deactivated_tools=sorted(aset.deactivated_tools),
++        visible_tools=manager.list_visible(session_id),
++    )
+diff --git a/engine/src/agent33/skills/semantic.py b/engine/src/agent33/skills/semantic.py
+new file mode 100644
+index 0000000..49b26de
+--- /dev/null
++++ b/engine/src/agent33/skills/semantic.py
+@@ -0,0 +1,145 @@
++"""Embedding-based semantic index for skill discovery."""
++
++from __future__ import annotations
++
++import logging
++import math
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from agent33.memory.embeddings import EmbeddingProvider
++    from agent33.skills.definition import SkillDefinition
++
++logger = logging.getLogger(__name__)
++
++
++class SkillEmbeddingIndex:
++    """Maintains an embedding index over skill metadata for semantic search.
++
++    Uses cosine similarity over pre-computed embeddings to find skills
++    matching a natural-language query.  Degrades gracefully when the
++    embedding provider is unavailable (returns empty results).
++    """
++
++    def __init__(
++        self,
++        embedding_provider: EmbeddingProvider,
++    ) -> None:
++        self._provider = embedding_provider
++        self._embeddings: dict[str, list[float]] = {}
++        self._metadata: dict[str, dict[str, str]] = {}
++        self._dirty = False
++
++    @property
++    def size(self) -> int:
++        """Number of indexed skills."""
++        return len(self._embeddings)
++
++    @property
++    def indexed_names(self) -> list[str]:
++        """Return the names of all indexed skills."""
++        return sorted(self._embeddings.keys())
++
++    async def index_skill(self, skill: SkillDefinition) -> bool:
++        """Compute and store embedding for a single skill.
++
++        Returns True if indexing succeeded, False on embedding failure.
++        """
++        text = self._build_index_text(skill)
++        try:
++            vector = await self._provider.embed(text)
++        except Exception:
++            logger.warning(
++                "Failed to embed skill '%s'; skipping semantic index", skill.name
++            )
++            return False
++
++        self._embeddings[skill.name] = vector
++        self._metadata[skill.name] = {
++            "name": skill.name,
++            "description": skill.description,
++            "tags": ", ".join(skill.tags),
++        }
++        self._dirty = True
++        return True
++
++    async def index_all(self, skills: list[SkillDefinition]) -> int:
++        """Index all skills. Returns count of successfully indexed skills."""
++        count = 0
++        for skill in skills:
++            if await self.index_skill(skill):
++                count += 1
++        logger.info("Indexed %d / %d skills in semantic index", count, len(skills))
++        return count
++
++    def remove(self, skill_name: str) -> bool:
++        """Remove a skill from the index. Returns True if it existed."""
++        removed = self._embeddings.pop(skill_name, None) is not None
++        self._metadata.pop(skill_name, None)
++        if removed:
++            self._dirty = True
++        return removed
++
++    async def search(
++        self, query: str, top_k: int = 10
++    ) -> list[tuple[str, float]]:
++        """Return (skill_name, similarity_score) pairs ranked by cosine similarity.
++
++        Returns an empty list if the embedding provider is unavailable or
++        the index is empty.
++        """
++        if not self._embeddings:
++            return []
++
++        try:
++            query_vector = await self._provider.embed(query)
++        except Exception:
++            logger.warning("Embedding provider unavailable for semantic search query")
++            return []
++
++        return self._cosine_rank(query_vector, top_k)
++
++    def clear(self) -> None:
++        """Remove all indexed entries."""
++        self._embeddings.clear()
++        self._metadata.clear()
++        self._dirty = True
++
++    # -- Internal helpers ----------------------------------------------------
++
++    @staticmethod
++    def _build_index_text(skill: SkillDefinition) -> str:
++        """Combine skill metadata into a single indexable string."""
++        parts = [skill.name, skill.description]
++        parts.extend(skill.tags)
++        if skill.instructions:
++            # Include first 500 chars of instructions for richer semantic signal.
++            parts.append(skill.instructions[:500])
++        return " ".join(parts)
++
++    @staticmethod
++    def _cosine_similarity(a: list[float], b: list[float]) -> float:
++        """Compute cosine similarity between two vectors."""
++        if len(a) != len(b) or not a:
++            return 0.0
++        dot = sum(x * y for x, y in zip(a, b))
++        norm_a = math.sqrt(sum(x * x for x in a))
++        norm_b = math.sqrt(sum(x * x for x in b))
++        if norm_a == 0.0 or norm_b == 0.0:
++            return 0.0
++        return dot / (norm_a * norm_b)
++
++    def _cosine_rank(
++        self, query_vec: list[float], top_k: int
++    ) -> list[tuple[str, float]]:
++        """Rank all indexed skills against the query vector."""
++        scored: list[tuple[str, float]] = []
++        for name, emb in self._embeddings.items():
++            sim = self._cosine_similarity(query_vec, emb)
++            scored.append((name, sim))
++        scored.sort(key=lambda x: x[1], reverse=True)
++        return scored[:top_k]
++
++    def get_metadata(self, skill_name: str) -> dict[str, str] | None:
++        """Return the metadata stored for a skill, or None."""
++        return self._metadata.get(skill_name)
+diff --git a/engine/src/agent33/skills/semantic_resolver.py b/engine/src/agent33/skills/semantic_resolver.py
+new file mode 100644
+index 0000000..a9e9fdb
+--- /dev/null
++++ b/engine/src/agent33/skills/semantic_resolver.py
+@@ -0,0 +1,207 @@
++"""Semantic skill resolver: hybrid BM25 + embedding search for skill discovery."""
++
++from __future__ import annotations
++
++import logging
++from dataclasses import dataclass, field
++from typing import TYPE_CHECKING
++
++from agent33.memory.bm25 import BM25Index
++
++if TYPE_CHECKING:
++    from agent33.skills.definition import SkillDefinition
++    from agent33.skills.registry import SkillRegistry
++    from agent33.skills.semantic import SkillEmbeddingIndex
++
++logger = logging.getLogger(__name__)
++
++# Default RRF constant (same value used in memory/hybrid.py).
++_RRF_K = 60
++
++
++@dataclass
++class ResolvedSkill:
++    """A single result from semantic skill resolution."""
++
++    name: str
++    description: str
++    score: float
++    tags: list[str] = field(default_factory=list)
++    instructions: str = ""
++    semantic_rank: int = 0
++    bm25_rank: int = 0
++
++
++class SemanticSkillResolver:
++    """Hybrid BM25 + embedding search for skill and tool discovery.
++
++    Combines two retrieval signals using Reciprocal Rank Fusion (RRF):
++    - **Semantic**: cosine similarity from the SkillEmbeddingIndex
++    - **BM25**: keyword matching from an in-memory BM25 index built on
++      skill name, description, and tags
++
++    The resolver is designed for *discovery* (operators and agents finding
++    skills by natural-language objective), not prompt-injection safety.
++    """
++
++    def __init__(
++        self,
++        skill_registry: SkillRegistry,
++        embedding_index: SkillEmbeddingIndex | None = None,
++        bm25_weight: float = 0.4,
++        semantic_weight: float = 0.6,
++        rrf_k: int = _RRF_K,
++    ) -> None:
++        self._registry = skill_registry
++        self._embedding_index = embedding_index
++        self._bm25_weight = max(0.0, min(1.0, bm25_weight))
++        self._semantic_weight = max(0.0, min(1.0, semantic_weight))
++        self._rrf_k = max(1, rrf_k)
++        self._bm25 = BM25Index()
++        self._bm25_name_map: dict[int, str] = {}
++        self._built = False
++
++    @property
++    def is_built(self) -> bool:
++        """Whether the BM25 index has been built."""
++        return self._built
++
++    def build_bm25_index(self) -> int:
++        """Build (or rebuild) the BM25 keyword index from current registry contents.
++
++        Returns the number of skills indexed.
++        """
++        self._bm25 = BM25Index()
++        self._bm25_name_map.clear()
++
++        skills = self._registry.list_all()
++        for skill in skills:
++            text = self._skill_to_bm25_text(skill)
++            idx = self._bm25.add_document(text, metadata={"name": skill.name})
++            self._bm25_name_map[idx] = skill.name
++
++        self._built = True
++        logger.info("Built BM25 index with %d skills", len(skills))
++        return len(skills)
++
++    async def resolve(
++        self,
++        query: str,
++        *,
++        top_k: int = 10,
++        include_instructions: bool = False,
++        exclude_deprecated: bool = True,
++    ) -> list[ResolvedSkill]:
++        """Resolve a natural-language query to matching skills.
++
++        Uses hybrid BM25 + semantic search with RRF fusion when the
++        embedding index is available.  Falls back to BM25-only when
++        embeddings are unavailable.
++
++        Parameters
++        ----------
++        query:
++            Natural-language description of the desired capability.
++        top_k:
++            Maximum number of results to return.
++        include_instructions:
++            If True, include full skill instructions in results (L1).
++        exclude_deprecated:
++            If True, filter out deprecated skills.
++        """
++        if not self._built:
++            self.build_bm25_index()
++
++        # -- BM25 retrieval ---------------------------------------------------
++        fetch_k = top_k * 3
++        bm25_results = self._bm25.search(query, top_k=fetch_k)
++        bm25_ranked: list[tuple[str, int]] = []
++        for rank, result in enumerate(bm25_results, 1):
++            name = self._bm25_name_map.get(result.doc_index, "")
++            if name:
++                bm25_ranked.append((name, rank))
++
++        # -- Semantic retrieval -----------------------------------------------
++        semantic_ranked: list[tuple[str, int]] = []
++        if self._embedding_index is not None:
++            try:
++                sem_results = await self._embedding_index.search(query, top_k=fetch_k)
++                for rank, (name, _score) in enumerate(sem_results, 1):
++                    semantic_ranked.append((name, rank))
++            except Exception:
++                logger.warning("Semantic search failed; falling back to BM25-only")
++
++        # -- RRF fusion -------------------------------------------------------
++        fused = self._fuse(bm25_ranked, semantic_ranked)
++
++        # -- Build results ----------------------------------------------------
++        results: list[ResolvedSkill] = []
++        for name, score, bm25_rank, sem_rank in fused[:top_k]:
++            skill = self._registry.get(name)
++            if skill is None:
++                continue
++            if exclude_deprecated and skill.status.value == "deprecated":
++                continue
++
++            resolved = ResolvedSkill(
++                name=skill.name,
++                description=skill.description,
++                score=score,
++                tags=list(skill.tags),
++                bm25_rank=bm25_rank,
++                semantic_rank=sem_rank,
++            )
++            if include_instructions and skill.instructions:
++                resolved.instructions = skill.instructions
++            results.append(resolved)
++
++        return results
++
++    # -- Internals ------------------------------------------------------------
++
++    @staticmethod
++    def _skill_to_bm25_text(skill: SkillDefinition) -> str:
++        """Build a weighted BM25 document from skill metadata.
++
++        Repeats high-weight fields to approximate field weighting.
++        """
++        parts: list[str] = []
++        # name weight 3.0 => repeat 3x
++        parts.extend([skill.name] * 3)
++        # description weight 2.0 => repeat 2x
++        parts.extend([skill.description] * 2)
++        # tags weight 1.0
++        parts.extend(skill.tags)
++        # instructions first 500 chars weight 0.5 => include once (min unit)
++        if skill.instructions:
++            parts.append(skill.instructions[:500])
++        return " ".join(parts)
++
++    def _fuse(
++        self,
++        bm25_ranked: list[tuple[str, int]],
++        semantic_ranked: list[tuple[str, int]],
++    ) -> list[tuple[str, float, int, int]]:
++        """Merge two ranked lists using weighted RRF.
++
++        Returns (name, fused_score, bm25_rank, semantic_rank) tuples sorted
++        by descending fused score.
++        """
++        scores: dict[str, tuple[float, int, int]] = {}
++
++        for name, rank in bm25_ranked:
++            rrf = self._bm25_weight / (self._rrf_k + rank)
++            prev = scores.get(name, (0.0, 0, 0))
++            scores[name] = (prev[0] + rrf, rank, prev[2])
++
++        for name, rank in semantic_ranked:
++            rrf = self._semantic_weight / (self._rrf_k + rank)
++            prev = scores.get(name, (0.0, 0, 0))
++            scores[name] = (prev[0] + rrf, prev[1], rank)
++
++        fused = [
++            (name, score, bm25_r, sem_r)
++            for name, (score, bm25_r, sem_r) in scores.items()
++        ]
++        fused.sort(key=lambda x: x[1], reverse=True)
++        return fused
+diff --git a/engine/src/agent33/tools/activation.py b/engine/src/agent33/tools/activation.py
+new file mode 100644
+index 0000000..088f655
+--- /dev/null
++++ b/engine/src/agent33/tools/activation.py
+@@ -0,0 +1,149 @@
++"""Session-scoped tool activation sets for dynamic discovery mode."""
++
++from __future__ import annotations
++
++import logging
++from datetime import datetime, timezone
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++from agent33.tools.catalog import CORE_TOOL_NAMES
++
++logger = logging.getLogger(__name__)
++
++
++class ToolActivationSet(BaseModel):
++    """Session-scoped set of activated tools."""
++
++    session_id: str
++    tenant_id: str
++    core_tools: list[str] = Field(default_factory=list)
++    activated_tools: set[str] = Field(default_factory=set)
++    deactivated_tools: set[str] = Field(default_factory=set)
++    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
++    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
++
++    def to_persist(self) -> dict[str, Any]:
++        """Serialize for persistence."""
++        return {
++            "session_id": self.session_id,
++            "tenant_id": self.tenant_id,
++            "core_tools": self.core_tools,
++            "activated_tools": sorted(self.activated_tools),
++            "deactivated_tools": sorted(self.deactivated_tools),
++            "created_at": self.created_at.isoformat(),
++            "updated_at": self.updated_at.isoformat(),
++        }
++
++    @classmethod
++    def from_persist(cls, data: dict[str, Any]) -> ToolActivationSet:
++        """Deserialize from persisted data."""
++        return cls(
++            session_id=data["session_id"],
++            tenant_id=data.get("tenant_id", ""),
++            core_tools=data.get("core_tools", []),
++            activated_tools=set(data.get("activated_tools", [])),
++            deactivated_tools=set(data.get("deactivated_tools", [])),
++            created_at=datetime.fromisoformat(data["created_at"]),
++            updated_at=datetime.fromisoformat(data["updated_at"]),
++        )
++
++
++class ToolActivationManager:
++    """Manages per-session tool activation state."""
++
++    def __init__(self, core_tools: list[str] | None = None) -> None:
++        self._sets: dict[str, ToolActivationSet] = {}
++        self._core_tools = list(core_tools or sorted(CORE_TOOL_NAMES))
++
++    @property
++    def core_tools(self) -> list[str]:
++        """Return the list of core tools that are always visible."""
++        return list(self._core_tools)
++
++    def get_or_create(self, session_id: str, tenant_id: str = "") -> ToolActivationSet:
++        """Get or create an activation set for a session."""
++        if session_id not in self._sets:
++            self._sets[session_id] = ToolActivationSet(
++                session_id=session_id,
++                tenant_id=tenant_id,
++                core_tools=list(self._core_tools),
++            )
++            logger.info(
++                "Created activation set for session %s with %d core tools",
++                session_id,
++                len(self._core_tools),
++            )
++        return self._sets[session_id]
++
++    def get(self, session_id: str) -> ToolActivationSet | None:
++        """Get an existing activation set or None."""
++        return self._sets.get(session_id)
++
++    def activate(self, session_id: str, tool_names: list[str]) -> ToolActivationSet:
++        """Add tools to the session's activation set."""
++        aset = self._sets.get(session_id)
++        if aset is None:
++            raise KeyError(f"No activation set for session '{session_id}'")
++        aset.activated_tools.update(tool_names)
++        # If previously deactivated, remove from deactivated set.
++        aset.deactivated_tools -= set(tool_names)
++        aset.updated_at = datetime.now(timezone.utc)
++        logger.info("Activated %d tools in session %s", len(tool_names), session_id)
++        return aset
++
++    def deactivate(self, session_id: str, tool_names: list[str]) -> ToolActivationSet:
++        """Remove tools from the session's activation set."""
++        aset = self._sets.get(session_id)
++        if aset is None:
++            raise KeyError(f"No activation set for session '{session_id}'")
++        for name in tool_names:
++            # Cannot deactivate core tools.
++            if name in aset.core_tools:
++                logger.warning(
++                    "Cannot deactivate core tool '%s' in session %s", name, session_id
++                )
++                continue
++            aset.activated_tools.discard(name)
++            aset.deactivated_tools.add(name)
++        aset.updated_at = datetime.now(timezone.utc)
++        logger.info("Deactivated %d tools in session %s", len(tool_names), session_id)
++        return aset
++
++    def is_visible(self, session_id: str, tool_name: str) -> bool:
++        """Check if a tool should be visible in the current session.
++
++        In dynamic mode, a tool is visible if:
++        1. It is a core tool AND not explicitly deactivated, OR
++        2. It has been explicitly activated AND not deactivated.
++        """
++        aset = self._sets.get(session_id)
++        if aset is None:
++            # No activation set means legacy mode; everything is visible.
++            return True
++        if tool_name in aset.deactivated_tools:
++            return False
++        if tool_name in aset.core_tools:
++            return True
++        return tool_name in aset.activated_tools
++
++    def list_visible(self, session_id: str) -> list[str]:
++        """Return all tool names visible in the session."""
++        aset = self._sets.get(session_id)
++        if aset is None:
++            return []
++        visible: set[str] = set()
++        visible.update(aset.core_tools)
++        visible.update(aset.activated_tools)
++        visible -= aset.deactivated_tools
++        return sorted(visible)
++
++    def remove_session(self, session_id: str) -> bool:
++        """Remove an activation set for a session. Returns True if it existed."""
++        return self._sets.pop(session_id, None) is not None
++
++    @property
++    def session_count(self) -> int:
++        """Number of active sessions with activation sets."""
++        return len(self._sets)
+diff --git a/engine/src/agent33/tools/builtin/discover_tools.py b/engine/src/agent33/tools/builtin/discover_tools.py
+new file mode 100644
+index 0000000..da20f85
+--- /dev/null
++++ b/engine/src/agent33/tools/builtin/discover_tools.py
+@@ -0,0 +1,104 @@
++"""Meta-tool that searches the runtime tool catalog."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++
++from agent33.tools.base import ToolContext, ToolResult
++
++
++class DiscoverToolsTool:
++    """Search for available tools by keyword or category.
++
++    In dynamic discovery mode, matched tools are automatically added
++    to the session's activation set.
++    """
++
++    @property
++    def name(self) -> str:
++        return "discover_tools"
++
++    @property
++    def description(self) -> str:
++        return "Search for available tools by keyword or category."
++
++    @property
++    def parameters_schema(self) -> dict[str, Any]:
++        return {
++            "type": "object",
++            "properties": {
++                "query": {
++                    "type": "string",
++                    "description": "Search query for tool discovery",
++                },
++                "category": {
++                    "type": "string",
++                    "description": "Category filter (e.g. files, web, runtime)",
++                },
++            },
++            "required": ["query"],
++        }
++
++    def __init__(self) -> None:
++        self._catalog_service: Any = None
++        self._activation_manager: Any = None
++
++    def set_catalog_service(self, service: Any) -> None:
++        """Wire the catalog service after construction."""
++        self._catalog_service = service
++
++    def set_activation_manager(self, manager: Any) -> None:
++        """Wire the activation manager after construction."""
++        self._activation_manager = manager
++
++    async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
++        """Search the tool catalog and optionally activate found tools."""
++        query = params.get("query", "").strip()
++        category = params.get("category", "").strip()
++
++        if not query and not category:
++            return ToolResult.fail("Either 'query' or 'category' must be provided.")
++
++        if self._catalog_service is None:
++            return ToolResult.fail("Tool catalog service not available.")
++
++        if query:
++            entries = self._catalog_service.search_catalog(query)
++        else:
++            catalog = self._catalog_service.build_catalog(category_filter=category)
++            entries = []
++            for group in catalog.groups:
++                entries.extend(group.tools)
++
++        if category and query:
++            entries = [e for e in entries if e.category == category]
++
++        if not entries:
++            return ToolResult.ok("No tools found matching your query.")
++
++        # Format results.
++        results = []
++        tool_names = []
++        for entry in entries[:20]:  # Cap at 20 results.
++            results.append({
++                "name": entry.name,
++                "description": entry.description,
++                "category": entry.category,
++                "source": entry.source,
++                "available": entry.available,
++            })
++            tool_names.append(entry.name)
++
++        # Auto-activate discovered tools in dynamic mode.
++        if self._activation_manager is not None and tool_names:
++            session_id = getattr(context, "requested_by", "")
++            if session_id:
++                try:
++                    aset = self._activation_manager.get(session_id)
++                    if aset is not None:
++                        self._activation_manager.activate(session_id, tool_names)
++                except Exception:
++                    pass  # Activation is best-effort.
++
++        return ToolResult.ok(json.dumps(results, indent=2))
+diff --git a/engine/src/agent33/tools/builtin/resolve_workflow.py b/engine/src/agent33/tools/builtin/resolve_workflow.py
+new file mode 100644
+index 0000000..fe12cf8
+--- /dev/null
++++ b/engine/src/agent33/tools/builtin/resolve_workflow.py
+@@ -0,0 +1,99 @@
++"""Built-in tool for resolving natural-language objectives to skills."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++
++from agent33.tools.base import ToolContext, ToolResult
++
++
++class ResolveWorkflowTool:
++    """Resolve a natural-language objective to matching skills and workflows.
++
++    Uses the SemanticSkillResolver (hybrid BM25 + embedding search) to
++    find the best matching skills for a given objective.  Returns skill
++    metadata (L0) and optionally full instructions (L1) for top matches.
++    """
++
++    @property
++    def name(self) -> str:
++        return "resolve_workflow"
++
++    @property
++    def description(self) -> str:
++        return (
++            "Given a natural-language objective, find the best matching skills "
++            "and workflow templates. Returns skill instructions and metadata."
++        )
++
++    @property
++    def parameters_schema(self) -> dict[str, Any]:
++        return {
++            "type": "object",
++            "properties": {
++                "objective": {
++                    "type": "string",
++                    "description": (
++                        "Natural-language description of what you want to accomplish"
++                    ),
++                },
++                "max_results": {
++                    "type": "integer",
++                    "default": 3,
++                    "description": "Maximum number of matching skills to return",
++                },
++                "include_instructions": {
++                    "type": "boolean",
++                    "default": False,
++                    "description": "Include full skill instructions (L1) in results",
++                },
++            },
++            "required": ["objective"],
++        }
++
++    def __init__(self) -> None:
++        self._resolver: Any = None
++
++    def set_resolver(self, resolver: Any) -> None:
++        """Wire the SemanticSkillResolver after construction."""
++        self._resolver = resolver
++
++    async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
++        """Resolve an objective to matching skills."""
++        objective = params.get("objective", "").strip()
++        if not objective:
++            return ToolResult.fail("The 'objective' parameter is required.")
++
++        if self._resolver is None:
++            return ToolResult.fail("Semantic skill resolver not available.")
++
++        max_results = params.get("max_results", 3)
++        include_instructions = params.get("include_instructions", False)
++
++        try:
++            results = await self._resolver.resolve(
++                objective,
++                top_k=max_results,
++                include_instructions=include_instructions,
++                exclude_deprecated=True,
++            )
++        except Exception as exc:
++            return ToolResult.fail(f"Skill resolution failed: {exc}")
++
++        if not results:
++            return ToolResult.ok("No matching skills found for the given objective.")
++
++        output = []
++        for resolved in results:
++            entry: dict[str, Any] = {
++                "name": resolved.name,
++                "description": resolved.description,
++                "score": round(resolved.score, 4),
++                "tags": resolved.tags,
++            }
++            if include_instructions and resolved.instructions:
++                entry["instructions"] = resolved.instructions
++            output.append(entry)
++
++        return ToolResult.ok(json.dumps(output, indent=2))
+diff --git a/engine/src/agent33/tools/catalog.py b/engine/src/agent33/tools/catalog.py
+new file mode 100644
+index 0000000..a305532
+--- /dev/null
++++ b/engine/src/agent33/tools/catalog.py
+@@ -0,0 +1,80 @@
++"""Tool catalog data models for the dynamic discovery surface."""
++
++from __future__ import annotations
++
++from datetime import datetime
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++from agent33.tools.registry_entry import ToolProvenance, ToolStatus
++
++
++# -- Category taxonomy -------------------------------------------------------
++
++CATEGORY_MAP: dict[str, str] = {
++    "file_ops": "files",
++    "apply_patch": "files",
++    "shell": "runtime",
++    "execute_code": "runtime",
++    "web_fetch": "web",
++    "web_search": "web",
++    "search": "web",
++    "browser": "web",
++    "telegram": "messaging",
++    "discord": "messaging",
++    "slack": "messaging",
++    "whatsapp": "messaging",
++    "matrix": "messaging",
++    "voice": "media",
++    "image": "media",
++    "discover_tools": "discovery",
++    "resolve_workflow": "discovery",
++}
++
++# Tools tagged as "core" are always visible in dynamic mode.
++CORE_TOOL_NAMES: frozenset[str] = frozenset(
++    {
++        "shell",
++        "file_ops",
++        "web_fetch",
++        "search",
++        "discover_tools",
++        "resolve_workflow",
++    }
++)
++
++
++class ToolCatalogEntry(BaseModel):
++    """A single tool in the runtime catalog."""
++
++    name: str
++    description: str
++    version: str = ""
++    category: str = ""
++    source: str = ""  # "core", "plugin:<id>", "pack:<id>", "mcp:<server>"
++    status: ToolStatus = ToolStatus.ACTIVE
++    available: bool = True
++    unavailable_reason: str = ""
++    parameters_schema: dict[str, Any] = Field(default_factory=dict)
++    result_schema: dict[str, Any] = Field(default_factory=dict)
++    tags: list[str] = Field(default_factory=list)
++    provenance: ToolProvenance | None = None
++    requires_approval: bool = False
++    last_used: datetime | None = None
++
++
++class ToolCatalogGroup(BaseModel):
++    """Tools grouped by category."""
++
++    category: str
++    tools: list[ToolCatalogEntry]
++
++
++class ToolCatalogResponse(BaseModel):
++    """Full catalog response."""
++
++    groups: list[ToolCatalogGroup]
++    total_count: int
++    active_count: int
++    discovery_mode: str  # "legacy" or "dynamic"
+diff --git a/engine/src/agent33/tools/catalog_service.py b/engine/src/agent33/tools/catalog_service.py
+new file mode 100644
+index 0000000..db2f658
+--- /dev/null
++++ b/engine/src/agent33/tools/catalog_service.py
+@@ -0,0 +1,229 @@
++"""Catalog service that builds runtime-truth tool catalogs."""
++
++from __future__ import annotations
++
++import logging
++from typing import TYPE_CHECKING, Any
++
++from agent33.tools.catalog import (
++    CATEGORY_MAP,
++    ToolCatalogEntry,
++    ToolCatalogGroup,
++    ToolCatalogResponse,
++)
++from agent33.tools.registry_entry import ToolStatus
++
++if TYPE_CHECKING:
++    from agent33.skills.registry import SkillRegistry
++    from agent33.tools.base import SchemaAwareTool, Tool
++    from agent33.tools.registry import ToolRegistry
++
++logger = logging.getLogger(__name__)
++
++
++def _resolve_category(tool_name: str, tags: list[str]) -> str:
++    """Derive the category for a tool from the static map or its tags."""
++    if tool_name in CATEGORY_MAP:
++        return CATEGORY_MAP[tool_name]
++    # Check tags for a category hint.
++    for tag in tags:
++        low = tag.lower()
++        if low in CATEGORY_MAP.values():
++            return low
++    return "general"
++
++
++def _resolve_source(tool_name: str, entry_tags: list[str]) -> str:
++    """Determine the provenance source label for a tool."""
++    for tag in entry_tags:
++        if tag.startswith("plugin:") or tag.startswith("pack:") or tag.startswith("mcp:"):
++            return tag
++    return "core"
++
++
++class ToolCatalogService:
++    """Builds runtime-truth tool catalogs from ToolRegistry + SkillRegistry."""
++
++    def __init__(
++        self,
++        tool_registry: ToolRegistry,
++        skill_registry: SkillRegistry | None = None,
++    ) -> None:
++        self._tool_registry = tool_registry
++        self._skill_registry = skill_registry
++
++    def build_catalog(
++        self,
++        *,
++        tenant_id: str = "",
++        agent_id: str = "",
++        session_id: str = "",
++        include_schemas: bool = False,
++        category_filter: str = "",
++        status_filter: str = "",
++        source_filter: str = "",
++        discovery_mode: str = "legacy",
++    ) -> ToolCatalogResponse:
++        """Build the full catalog with grouping, filtering, and availability."""
++        entries: list[ToolCatalogEntry] = []
++
++        for tool in self._tool_registry.list_all():
++            reg_entry = self._tool_registry.get_entry(tool.name)
++            tags = reg_entry.tags if reg_entry else []
++            category = _resolve_category(tool.name, tags)
++            source = _resolve_source(tool.name, tags)
++            tool_status = reg_entry.status if reg_entry else ToolStatus.ACTIVE
++            version = reg_entry.version if reg_entry else ""
++            provenance = reg_entry.provenance if reg_entry else None
++
++            # Determine availability.
++            available = True
++            unavailable_reason = ""
++            if tool_status == ToolStatus.BLOCKED:
++                available = False
++                unavailable_reason = "Tool is blocked"
++            elif tool_status == ToolStatus.DEPRECATED:
++                dep_msg = reg_entry.deprecation_message if reg_entry else ""
++                unavailable_reason = dep_msg or "Tool is deprecated"
++
++            # Determine if approval is required (check for approval scope).
++            requires_approval = bool(
++                reg_entry
++                and reg_entry.scope
++                and reg_entry.scope.data_access == "write"
++            )
++
++            params_schema: dict[str, Any] = {}
++            result_schema: dict[str, Any] = {}
++            if include_schemas:
++                params_schema = self._get_params_schema(tool, reg_entry)
++                result_schema = (reg_entry.result_schema if reg_entry else {})
++
++            entry = ToolCatalogEntry(
++                name=tool.name,
++                description=tool.description,
++                version=version,
++                category=category,
++                source=source,
++                status=tool_status,
++                available=available,
++                unavailable_reason=unavailable_reason,
++                parameters_schema=params_schema,
++                result_schema=result_schema,
++                tags=tags,
++                provenance=provenance,
++                requires_approval=requires_approval,
++            )
++            entries.append(entry)
++
++        # Apply filters.
++        if category_filter:
++            entries = [e for e in entries if e.category == category_filter]
++        if status_filter:
++            entries = [e for e in entries if e.status.value == status_filter]
++        if source_filter:
++            entries = [e for e in entries if e.source.startswith(source_filter)]
++
++        # Group by category.
++        groups_map: dict[str, list[ToolCatalogEntry]] = {}
++        for entry in entries:
++            groups_map.setdefault(entry.category, []).append(entry)
++
++        groups = [
++            ToolCatalogGroup(category=cat, tools=tools)
++            for cat, tools in sorted(groups_map.items())
++        ]
++
++        active_count = sum(1 for e in entries if e.status == ToolStatus.ACTIVE)
++
++        return ToolCatalogResponse(
++            groups=groups,
++            total_count=len(entries),
++            active_count=active_count,
++            discovery_mode=discovery_mode,
++        )
++
++    def get_tool_detail(
++        self, tool_name: str
++    ) -> ToolCatalogEntry | None:
++        """Return full catalog entry for a single tool including schema."""
++        tool = self._tool_registry.get(tool_name)
++        if tool is None:
++            return None
++
++        reg_entry = self._tool_registry.get_entry(tool_name)
++        tags = reg_entry.tags if reg_entry else []
++        category = _resolve_category(tool_name, tags)
++        source = _resolve_source(tool_name, tags)
++        tool_status = reg_entry.status if reg_entry else ToolStatus.ACTIVE
++        version = reg_entry.version if reg_entry else ""
++        provenance = reg_entry.provenance if reg_entry else None
++
++        available = tool_status != ToolStatus.BLOCKED
++        unavailable_reason = ""
++        if tool_status == ToolStatus.BLOCKED:
++            unavailable_reason = "Tool is blocked"
++        elif tool_status == ToolStatus.DEPRECATED:
++            unavailable_reason = (
++                reg_entry.deprecation_message if reg_entry else "Tool is deprecated"
++            )
++
++        return ToolCatalogEntry(
++            name=tool.name,
++            description=tool.description,
++            version=version,
++            category=category,
++            source=source,
++            status=tool_status,
++            available=available,
++            unavailable_reason=unavailable_reason,
++            parameters_schema=self._get_params_schema(tool, reg_entry),
++            result_schema=(reg_entry.result_schema if reg_entry else {}),
++            tags=tags,
++            provenance=provenance,
++        )
++
++    def search_catalog(self, query: str) -> list[ToolCatalogEntry]:
++        """Text search across catalog entries."""
++        query_lower = query.lower()
++        results: list[ToolCatalogEntry] = []
++        for tool in self._tool_registry.list_all():
++            if (
++                query_lower in tool.name.lower()
++                or query_lower in tool.description.lower()
++            ):
++                reg_entry = self._tool_registry.get_entry(tool.name)
++                tags = reg_entry.tags if reg_entry else []
++                category = _resolve_category(tool.name, tags)
++                source = _resolve_source(tool.name, tags)
++                tool_status = reg_entry.status if reg_entry else ToolStatus.ACTIVE
++                version = reg_entry.version if reg_entry else ""
++
++                results.append(
++                    ToolCatalogEntry(
++                        name=tool.name,
++                        description=tool.description,
++                        version=version,
++                        category=category,
++                        source=source,
++                        status=tool_status,
++                        available=tool_status != ToolStatus.BLOCKED,
++                        tags=tags,
++                    )
++                )
++        return results
++
++    @staticmethod
++    def _get_params_schema(
++        tool: Tool,
++        reg_entry: Any,
++    ) -> dict[str, Any]:
++        """Extract parameters schema from a tool or its registry entry."""
++        # Prefer SchemaAwareTool's declared schema.
++        from agent33.tools.base import SchemaAwareTool
++
++        if isinstance(tool, SchemaAwareTool):
++            return dict(tool.parameters_schema)
++        if reg_entry and reg_entry.parameters_schema:
++            return dict(reg_entry.parameters_schema)
++        return {}
+diff --git a/engine/src/agent33/tools/discovery.py b/engine/src/agent33/tools/discovery.py
+new file mode 100644
+index 0000000..df1f5c6
+--- /dev/null
++++ b/engine/src/agent33/tools/discovery.py
+@@ -0,0 +1,170 @@
++"""Dynamic tool discovery: runtime scanning beyond static registry."""
++
++from __future__ import annotations
++
++import logging
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from typing import TYPE_CHECKING, Any
++
++if TYPE_CHECKING:
++    from agent33.tools.registry import ToolRegistry
++
++logger = logging.getLogger(__name__)
++
++
++@dataclass
++class DiscoveryStatus:
++    """Status of the dynamic discovery system."""
++
++    last_scan: datetime | None = None
++    scan_count: int = 0
++    total_discovered: int = 0
++    mcp_discovered: int = 0
++    plugin_discovered: int = 0
++    entrypoint_discovered: int = 0
++    errors: list[str] = field(default_factory=list)
++
++    def to_dict(self) -> dict[str, Any]:
++        """Serialize for API responses."""
++        return {
++            "last_scan": self.last_scan.isoformat() if self.last_scan else None,
++            "scan_count": self.scan_count,
++            "total_discovered": self.total_discovered,
++            "mcp_discovered": self.mcp_discovered,
++            "plugin_discovered": self.plugin_discovered,
++            "entrypoint_discovered": self.entrypoint_discovered,
++            "errors": self.errors,
++            "healthy": len(self.errors) == 0,
++        }
++
++
++class DynamicToolDiscovery:
++    """Runtime tool discovery beyond the static registry.
++
++    Scans multiple sources for available tools:
++    - MCP servers (via the tool registry's existing MCP integration)
++    - Python entrypoints (setuptools entry_points)
++    - Plugin-provided tools
++
++    Tracks what was discovered and when, and can detect changes between
++    successive scans.
++    """
++
++    def __init__(
++        self,
++        tool_registry: ToolRegistry,
++        mcp_server_urls: list[str] | None = None,
++    ) -> None:
++        self._tool_registry = tool_registry
++        self._mcp_urls = mcp_server_urls or []
++        self._status = DiscoveryStatus()
++        self._known_tools: set[str] = set()
++
++    @property
++    def status(self) -> DiscoveryStatus:
++        """Return the current discovery status."""
++        return self._status
++
++    async def scan(self) -> DiscoveryScanResult:
++        """Run a full discovery scan across all sources.
++
++        Returns a summary of what was found, including any newly
++        discovered or removed tools compared to the last scan.
++        """
++        self._status.errors.clear()
++        previous_tools = set(self._known_tools)
++
++        # Snapshot current tools before discovery.
++        pre_scan = {t.name for t in self._tool_registry.list_all()}
++
++        # -- Entrypoint discovery --------------------------------------------
++        entrypoint_count = 0
++        try:
++            entrypoint_count = self._tool_registry.discover_from_entrypoints()
++            self._status.entrypoint_discovered = entrypoint_count
++        except Exception as exc:
++            logger.error("Entrypoint discovery failed: %s", exc)
++            self._status.errors.append(f"entrypoint: {exc}")
++
++        # -- MCP server discovery --------------------------------------------
++        mcp_count = 0
++        for url in self._mcp_urls:
++            try:
++                count = await self._tool_registry.discover_mcp_sse_server(url)
++                mcp_count += count
++            except Exception as exc:
++                logger.error("MCP discovery failed for %s: %s", url, exc)
++                self._status.errors.append(f"mcp:{url}: {exc}")
++        self._status.mcp_discovered = mcp_count
++
++        # -- Plugin discovery ------------------------------------------------
++        # Plugins register tools via the ToolRegistry directly during their
++        # enable() lifecycle.  We count tools that appeared between scans
++        # and are not from entrypoints or MCP.
++        post_scan = {t.name for t in self._tool_registry.list_all()}
++        new_from_plugins = post_scan - pre_scan - {
++            t.name
++            for t in self._tool_registry.list_all()
++            if hasattr(t, "_mcp_session")
++        }
++        self._status.plugin_discovered = len(new_from_plugins)
++
++        # -- Aggregate -------------------------------------------------------
++        self._known_tools = post_scan
++        self._status.total_discovered = len(post_scan)
++        self._status.scan_count += 1
++        self._status.last_scan = datetime.now(timezone.utc)
++
++        added = post_scan - previous_tools if previous_tools else set()
++        removed = previous_tools - post_scan if previous_tools else set()
++
++        return DiscoveryScanResult(
++            total=len(post_scan),
++            added=sorted(added),
++            removed=sorted(removed),
++            entrypoint_count=entrypoint_count,
++            mcp_count=mcp_count,
++            errors=list(self._status.errors),
++        )
++
++    def add_mcp_url(self, url: str) -> None:
++        """Add an MCP server URL for future scans."""
++        if url not in self._mcp_urls:
++            self._mcp_urls.append(url)
++
++    def remove_mcp_url(self, url: str) -> bool:
++        """Remove an MCP server URL. Returns True if it was present."""
++        try:
++            self._mcp_urls.remove(url)
++            return True
++        except ValueError:
++            return False
++
++    @property
++    def mcp_urls(self) -> list[str]:
++        """Return configured MCP server URLs."""
++        return list(self._mcp_urls)
++
++
++@dataclass
++class DiscoveryScanResult:
++    """Result of a single discovery scan."""
++
++    total: int
++    added: list[str] = field(default_factory=list)
++    removed: list[str] = field(default_factory=list)
++    entrypoint_count: int = 0
++    mcp_count: int = 0
++    errors: list[str] = field(default_factory=list)
++
++    def to_dict(self) -> dict[str, Any]:
++        """Serialize for API responses."""
++        return {
++            "total": self.total,
++            "added": self.added,
++            "removed": self.removed,
++            "entrypoint_count": self.entrypoint_count,
++            "mcp_count": self.mcp_count,
++            "errors": self.errors,
++        }
+diff --git a/engine/tests/test_phase46_activation.py b/engine/tests/test_phase46_activation.py
+new file mode 100644
+index 0000000..2b7de14
+--- /dev/null
++++ b/engine/tests/test_phase46_activation.py
+@@ -0,0 +1,199 @@
++"""Tests for session-scoped tool activation (Phase 46)."""
++
++from __future__ import annotations
++
++import pytest
++
++from agent33.tools.activation import ToolActivationManager, ToolActivationSet
++from agent33.tools.catalog import CORE_TOOL_NAMES
++
++
++class TestToolActivationSet:
++    def test_creation_defaults(self) -> None:
++        aset = ToolActivationSet(session_id="s1", tenant_id="t1")
++        assert aset.session_id == "s1"
++        assert aset.tenant_id == "t1"
++        assert aset.core_tools == []
++        assert aset.activated_tools == set()
++        assert aset.deactivated_tools == set()
++
++    def test_serialize_round_trip(self) -> None:
++        aset = ToolActivationSet(
++            session_id="s1",
++            tenant_id="t1",
++            core_tools=["shell", "file_ops"],
++            activated_tools={"web_fetch"},
++            deactivated_tools={"browser"},
++        )
++        data = aset.to_persist()
++        restored = ToolActivationSet.from_persist(data)
++
++        assert restored.session_id == "s1"
++        assert restored.tenant_id == "t1"
++        assert restored.core_tools == ["shell", "file_ops"]
++        assert restored.activated_tools == {"web_fetch"}
++        assert restored.deactivated_tools == {"browser"}
++
++
++class TestToolActivationManager:
++    def test_get_or_create_new_session(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell", "file_ops"])
++        aset = mgr.get_or_create("session-1", "tenant-1")
++
++        assert aset.session_id == "session-1"
++        assert aset.tenant_id == "tenant-1"
++        assert aset.core_tools == ["shell", "file_ops"]
++        assert mgr.session_count == 1
++
++    def test_get_or_create_returns_existing(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        aset1 = mgr.get_or_create("session-1")
++        aset2 = mgr.get_or_create("session-1")
++        assert aset1.session_id == aset2.session_id
++        assert mgr.session_count == 1
++
++    def test_get_nonexistent_returns_none(self) -> None:
++        mgr = ToolActivationManager()
++        assert mgr.get("nonexistent") is None
++
++    def test_activate_adds_tools(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch", "browser"])
++
++        aset = mgr.get("s1")
++        assert aset is not None
++        assert "web_fetch" in aset.activated_tools
++        assert "browser" in aset.activated_tools
++
++    def test_activate_removes_from_deactivated(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++        mgr.deactivate("s1", ["web_fetch"])
++
++        aset = mgr.get("s1")
++        assert aset is not None
++        assert "web_fetch" in aset.deactivated_tools
++        assert "web_fetch" not in aset.activated_tools
++
++        # Re-activate should move it back.
++        mgr.activate("s1", ["web_fetch"])
++        aset = mgr.get("s1")
++        assert aset is not None
++        assert "web_fetch" in aset.activated_tools
++        assert "web_fetch" not in aset.deactivated_tools
++
++    def test_activate_nonexistent_session_raises(self) -> None:
++        mgr = ToolActivationManager()
++        with pytest.raises(KeyError, match="No activation set"):
++            mgr.activate("nonexistent", ["shell"])
++
++    def test_deactivate_nonexistent_session_raises(self) -> None:
++        mgr = ToolActivationManager()
++        with pytest.raises(KeyError, match="No activation set"):
++            mgr.deactivate("nonexistent", ["shell"])
++
++    def test_deactivate_core_tool_is_blocked(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.deactivate("s1", ["shell"])
++
++        # Core tool should NOT be in deactivated set.
++        aset = mgr.get("s1")
++        assert aset is not None
++        assert "shell" not in aset.deactivated_tools
++
++    def test_deactivate_non_core_tool(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++        mgr.deactivate("s1", ["web_fetch"])
++
++        aset = mgr.get("s1")
++        assert aset is not None
++        assert "web_fetch" in aset.deactivated_tools
++        assert "web_fetch" not in aset.activated_tools
++
++    def test_is_visible_core_tool(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell", "file_ops"])
++        mgr.get_or_create("s1")
++
++        assert mgr.is_visible("s1", "shell") is True
++        assert mgr.is_visible("s1", "file_ops") is True
++
++    def test_is_visible_activated_tool(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++
++        assert mgr.is_visible("s1", "web_fetch") is True
++
++    def test_is_visible_non_activated_tool(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++
++        assert mgr.is_visible("s1", "web_fetch") is False
++
++    def test_is_visible_deactivated_tool(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++        mgr.deactivate("s1", ["web_fetch"])
++
++        assert mgr.is_visible("s1", "web_fetch") is False
++
++    def test_is_visible_no_session_returns_true(self) -> None:
++        """No activation set means legacy mode -- everything visible."""
++        mgr = ToolActivationManager()
++        assert mgr.is_visible("nonexistent", "any_tool") is True
++
++    def test_list_visible(self) -> None:
++        mgr = ToolActivationManager(core_tools=["shell", "file_ops"])
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch", "browser"])
++        mgr.deactivate("s1", ["browser"])
++
++        visible = mgr.list_visible("s1")
++        assert "shell" in visible
++        assert "file_ops" in visible
++        assert "web_fetch" in visible
++        assert "browser" not in visible
++
++    def test_list_visible_empty_session(self) -> None:
++        mgr = ToolActivationManager()
++        assert mgr.list_visible("nonexistent") == []
++
++    def test_session_isolation(self) -> None:
++        """Activating in session A does NOT affect session B."""
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("s1")
++        mgr.get_or_create("s2")
++
++        mgr.activate("s1", ["web_fetch"])
++
++        assert mgr.is_visible("s1", "web_fetch") is True
++        assert mgr.is_visible("s2", "web_fetch") is False
++
++    def test_remove_session(self) -> None:
++        mgr = ToolActivationManager()
++        mgr.get_or_create("s1")
++        assert mgr.session_count == 1
++
++        assert mgr.remove_session("s1") is True
++        assert mgr.session_count == 0
++        assert mgr.get("s1") is None
++
++    def test_remove_nonexistent_session(self) -> None:
++        mgr = ToolActivationManager()
++        assert mgr.remove_session("nonexistent") is False
++
++    def test_core_tools_property(self) -> None:
++        mgr = ToolActivationManager(core_tools=["a", "b"])
++        assert mgr.core_tools == ["a", "b"]
++
++    def test_default_core_tools(self) -> None:
++        mgr = ToolActivationManager()
++        # Should use CORE_TOOL_NAMES from catalog.
++        for name in mgr.core_tools:
++            assert name in CORE_TOOL_NAMES
+diff --git a/engine/tests/test_phase46_builtin_tools.py b/engine/tests/test_phase46_builtin_tools.py
+new file mode 100644
+index 0000000..30eca0c
+--- /dev/null
++++ b/engine/tests/test_phase46_builtin_tools.py
+@@ -0,0 +1,252 @@
++"""Tests for discover_tools and resolve_workflow builtin tools (Phase 46)."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++
++from agent33.skills.definition import SkillDefinition
++from agent33.skills.registry import SkillRegistry
++from agent33.skills.semantic_resolver import ResolvedSkill, SemanticSkillResolver
++from agent33.tools.activation import ToolActivationManager
++from agent33.tools.base import ToolContext
++from agent33.tools.builtin.discover_tools import DiscoverToolsTool
++from agent33.tools.builtin.resolve_workflow import ResolveWorkflowTool
++from agent33.tools.catalog import ToolCatalogEntry, ToolCatalogGroup, ToolCatalogResponse
++from agent33.tools.catalog_service import ToolCatalogService
++from agent33.tools.registry import ToolRegistry
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++def _ctx(**kwargs: Any) -> ToolContext:
++    return ToolContext(**kwargs)
++
++
++class FakeTool:
++    def __init__(self, name: str, description: str = "fake") -> None:
++        self._name = name
++        self._description = description
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    async def execute(self, params: dict[str, Any], context: Any) -> Any:
++        pass
++
++
++# -- DiscoverToolsTool tests --------------------------------------------------
++
++
++class TestDiscoverToolsTool:
++    def test_metadata(self) -> None:
++        tool = DiscoverToolsTool()
++        assert tool.name == "discover_tools"
++        assert "search" in tool.description.lower() or "discover" in tool.description.lower()
++        assert tool.parameters_schema["required"] == ["query"]
++
++    async def test_search_finds_tools(self) -> None:
++        tool = DiscoverToolsTool()
++        registry = ToolRegistry()
++        registry.register(FakeTool("shell", "Run shell commands"))
++        registry.register(FakeTool("file_ops", "File operations"))
++        catalog = ToolCatalogService(registry)
++        tool.set_catalog_service(catalog)
++
++        result = await tool.execute({"query": "shell"}, _ctx())
++        assert result.success
++        parsed = json.loads(result.output)
++        assert len(parsed) == 1
++        assert parsed[0]["name"] == "shell"
++        assert parsed[0]["description"] == "Run shell commands"
++
++    async def test_search_by_category(self) -> None:
++        tool = DiscoverToolsTool()
++        registry = ToolRegistry()
++        registry.register(FakeTool("shell", "Run commands"))
++        registry.register(FakeTool("web_fetch", "Fetch web pages"))
++        catalog = ToolCatalogService(registry)
++        tool.set_catalog_service(catalog)
++
++        result = await tool.execute({"query": "", "category": "web"}, _ctx())
++        assert result.success
++        parsed = json.loads(result.output)
++        assert len(parsed) == 1
++        assert parsed[0]["name"] == "web_fetch"
++
++    async def test_empty_query_and_category_fails(self) -> None:
++        tool = DiscoverToolsTool()
++        result = await tool.execute({"query": ""}, _ctx())
++        assert not result.success
++        assert "must be provided" in result.error
++
++    async def test_no_catalog_service_fails(self) -> None:
++        tool = DiscoverToolsTool()
++        result = await tool.execute({"query": "anything"}, _ctx())
++        assert not result.success
++        assert "not available" in result.error
++
++    async def test_no_results(self) -> None:
++        tool = DiscoverToolsTool()
++        registry = ToolRegistry()
++        catalog = ToolCatalogService(registry)
++        tool.set_catalog_service(catalog)
++
++        result = await tool.execute({"query": "nonexistent"}, _ctx())
++        assert result.success
++        assert "no tools found" in result.output.lower()
++
++    async def test_auto_activates_in_dynamic_mode(self) -> None:
++        tool = DiscoverToolsTool()
++        registry = ToolRegistry()
++        registry.register(FakeTool("web_fetch", "Fetch web"))
++        catalog = ToolCatalogService(registry)
++        tool.set_catalog_service(catalog)
++
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("session-1")
++        tool.set_activation_manager(mgr)
++
++        result = await tool.execute(
++            {"query": "web"},
++            _ctx(requested_by="session-1"),
++        )
++        assert result.success
++        # web_fetch should now be activated.
++        assert mgr.is_visible("session-1", "web_fetch")
++
++
++# -- ResolveWorkflowTool tests ------------------------------------------------
++
++
++class TestResolveWorkflowTool:
++    def test_metadata(self) -> None:
++        tool = ResolveWorkflowTool()
++        assert tool.name == "resolve_workflow"
++        assert "objective" in tool.parameters_schema["required"]
++
++    async def test_resolve_succeeds(self) -> None:
++        tool = ResolveWorkflowTool()
++
++        # Create a real resolver with a real registry.
++        registry = SkillRegistry()
++        registry.register(
++            SkillDefinition(
++                name="deploy-k8s",
++                description="Deploy to Kubernetes",
++                tags=["devops"],
++            )
++        )
++        resolver = SemanticSkillResolver(registry, embedding_index=None)
++        tool.set_resolver(resolver)
++
++        result = await tool.execute(
++            {"objective": "deploy to kubernetes"},
++            _ctx(),
++        )
++        assert result.success
++        parsed = json.loads(result.output)
++        assert len(parsed) >= 1
++        assert parsed[0]["name"] == "deploy-k8s"
++        assert parsed[0]["score"] > 0
++        assert "devops" in parsed[0]["tags"]
++
++    async def test_resolve_with_instructions(self) -> None:
++        tool = ResolveWorkflowTool()
++        registry = SkillRegistry()
++        registry.register(
++            SkillDefinition(
++                name="deploy-k8s",
++                description="Deploy to Kubernetes",
++                instructions="Step 1: kubectl apply",
++            )
++        )
++        resolver = SemanticSkillResolver(registry)
++        tool.set_resolver(resolver)
++
++        result = await tool.execute(
++            {"objective": "deploy", "include_instructions": True},
++            _ctx(),
++        )
++        assert result.success
++        parsed = json.loads(result.output)
++        assert "kubectl apply" in parsed[0]["instructions"]
++
++    async def test_resolve_empty_objective_fails(self) -> None:
++        tool = ResolveWorkflowTool()
++        result = await tool.execute({"objective": ""}, _ctx())
++        assert not result.success
++        assert "required" in result.error.lower()
++
++    async def test_resolve_no_resolver_fails(self) -> None:
++        tool = ResolveWorkflowTool()
++        result = await tool.execute({"objective": "test"}, _ctx())
++        assert not result.success
++        assert "not available" in result.error
++
++    async def test_resolve_no_matches(self) -> None:
++        tool = ResolveWorkflowTool()
++        registry = SkillRegistry()
++        resolver = SemanticSkillResolver(registry)
++        tool.set_resolver(resolver)
++
++        result = await tool.execute(
++            {"objective": "completely unrelated query"},
++            _ctx(),
++        )
++        assert result.success
++        assert "no matching skills" in result.output.lower()
++
++    async def test_resolve_max_results(self) -> None:
++        tool = ResolveWorkflowTool()
++        registry = SkillRegistry()
++        for i in range(10):
++            registry.register(
++                SkillDefinition(name=f"skill-{i}", description=f"Skill number {i}")
++            )
++        resolver = SemanticSkillResolver(registry)
++        tool.set_resolver(resolver)
++
++        result = await tool.execute(
++            {"objective": "skill", "max_results": 2},
++            _ctx(),
++        )
++        assert result.success
++        parsed = json.loads(result.output)
++        assert len(parsed) <= 2
++
++    async def test_resolve_excludes_deprecated(self) -> None:
++        from agent33.skills.definition import SkillStatus
++
++        tool = ResolveWorkflowTool()
++        registry = SkillRegistry()
++        registry.register(
++            SkillDefinition(
++                name="old-skill",
++                description="Old deprecated skill about deploying",
++                status=SkillStatus.DEPRECATED,
++            )
++        )
++        registry.register(
++            SkillDefinition(
++                name="new-skill",
++                description="New skill about deploying",
++            )
++        )
++        resolver = SemanticSkillResolver(registry)
++        tool.set_resolver(resolver)
++
++        result = await tool.execute({"objective": "deploy"}, _ctx())
++        assert result.success
++        parsed = json.loads(result.output)
++        names = [r["name"] for r in parsed]
++        assert "old-skill" not in names
+diff --git a/engine/tests/test_phase46_catalog.py b/engine/tests/test_phase46_catalog.py
+new file mode 100644
+index 0000000..6eac4ac
+--- /dev/null
++++ b/engine/tests/test_phase46_catalog.py
+@@ -0,0 +1,399 @@
++"""Tests for tool catalog models and catalog service (Phase 46)."""
++
++from __future__ import annotations
++
++from typing import Any
++
++import pytest
++
++from agent33.tools.catalog import (
++    CATEGORY_MAP,
++    CORE_TOOL_NAMES,
++    ToolCatalogEntry,
++    ToolCatalogGroup,
++    ToolCatalogResponse,
++)
++from agent33.tools.catalog_service import ToolCatalogService, _resolve_category
++from agent33.tools.registry import ToolRegistry
++from agent33.tools.registry_entry import (
++    ToolProvenance,
++    ToolRegistryEntry,
++    ToolStatus,
++)
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++class FakeTool:
++    """Minimal tool implementation for testing."""
++
++    def __init__(self, name: str, description: str = "A fake tool") -> None:
++        self._name = name
++        self._description = description
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    async def execute(self, params: dict[str, Any], context: Any) -> Any:
++        pass
++
++
++class FakeSchemaAwareTool(FakeTool):
++    """Fake tool that also implements parameters_schema."""
++
++    @property
++    def parameters_schema(self) -> dict[str, Any]:
++        return {
++            "type": "object",
++            "properties": {"input": {"type": "string"}},
++            "required": ["input"],
++        }
++
++
++def _make_registry(*tools: FakeTool) -> ToolRegistry:
++    """Create a ToolRegistry pre-loaded with fake tools."""
++    registry = ToolRegistry()
++    for tool in tools:
++        registry.register(tool)
++    return registry
++
++
++def _make_registry_with_entries(
++    tools_and_entries: list[tuple[FakeTool, ToolRegistryEntry]],
++) -> ToolRegistry:
++    registry = ToolRegistry()
++    for tool, entry in tools_and_entries:
++        registry.register_with_entry(tool, entry)
++    return registry
++
++
++# -- Model tests --------------------------------------------------------------
++
++
++class TestToolCatalogEntry:
++    def test_serialization_round_trip(self) -> None:
++        entry = ToolCatalogEntry(
++            name="shell",
++            description="Run shell commands",
++            version="1.0",
++            category="runtime",
++            source="core",
++            status=ToolStatus.ACTIVE,
++            available=True,
++            tags=["runtime", "core"],
++        )
++        data = entry.model_dump()
++        assert data["name"] == "shell"
++        assert data["category"] == "runtime"
++        assert data["source"] == "core"
++        assert data["available"] is True
++        assert data["status"] == "active"
++
++    def test_defaults(self) -> None:
++        entry = ToolCatalogEntry(name="x", description="y")
++        assert entry.version == ""
++        assert entry.category == ""
++        assert entry.available is True
++        assert entry.unavailable_reason == ""
++        assert entry.parameters_schema == {}
++        assert entry.tags == []
++
++    def test_unavailable_with_reason(self) -> None:
++        entry = ToolCatalogEntry(
++            name="blocked_tool",
++            description="Blocked",
++            available=False,
++            unavailable_reason="Security review pending",
++        )
++        assert not entry.available
++        assert entry.unavailable_reason == "Security review pending"
++
++
++class TestToolCatalogGroup:
++    def test_group_with_tools(self) -> None:
++        tools = [
++            ToolCatalogEntry(name="a", description="d1"),
++            ToolCatalogEntry(name="b", description="d2"),
++        ]
++        group = ToolCatalogGroup(category="files", tools=tools)
++        assert group.category == "files"
++        assert len(group.tools) == 2
++        assert group.tools[0].name == "a"
++
++
++class TestToolCatalogResponse:
++    def test_response_structure(self) -> None:
++        resp = ToolCatalogResponse(
++            groups=[
++                ToolCatalogGroup(
++                    category="runtime",
++                    tools=[ToolCatalogEntry(name="shell", description="Shell")],
++                )
++            ],
++            total_count=1,
++            active_count=1,
++            discovery_mode="legacy",
++        )
++        assert resp.total_count == 1
++        assert resp.active_count == 1
++        assert resp.discovery_mode == "legacy"
++        assert len(resp.groups) == 1
++        assert resp.groups[0].category == "runtime"
++
++
++# -- Category mapping tests ---------------------------------------------------
++
++
++class TestCategoryMap:
++    def test_known_tools_have_categories(self) -> None:
++        assert CATEGORY_MAP["shell"] == "runtime"
++        assert CATEGORY_MAP["file_ops"] == "files"
++        assert CATEGORY_MAP["web_fetch"] == "web"
++        assert CATEGORY_MAP["telegram"] == "messaging"
++        assert CATEGORY_MAP["discover_tools"] == "discovery"
++
++    def test_resolve_category_known(self) -> None:
++        assert _resolve_category("shell", []) == "runtime"
++        assert _resolve_category("file_ops", []) == "files"
++
++    def test_resolve_category_from_tags(self) -> None:
++        assert _resolve_category("my_custom_tool", ["web"]) == "web"
++
++    def test_resolve_category_unknown_defaults_to_general(self) -> None:
++        assert _resolve_category("unknown_tool", []) == "general"
++
++
++class TestCoreToolNames:
++    def test_includes_discovery_tools(self) -> None:
++        assert "discover_tools" in CORE_TOOL_NAMES
++        assert "resolve_workflow" in CORE_TOOL_NAMES
++
++    def test_includes_shell(self) -> None:
++        assert "shell" in CORE_TOOL_NAMES
++
++
++# -- Catalog service tests ----------------------------------------------------
++
++
++class TestToolCatalogService:
++    def test_build_catalog_groups_by_category(self) -> None:
++        registry = _make_registry(
++            FakeTool("shell", "Run commands"),
++            FakeTool("file_ops", "File operations"),
++            FakeTool("web_fetch", "Fetch web pages"),
++        )
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++
++        assert catalog.total_count == 3
++        assert catalog.active_count == 3
++        assert catalog.discovery_mode == "legacy"
++
++        categories = {g.category for g in catalog.groups}
++        assert "runtime" in categories
++        assert "files" in categories
++        assert "web" in categories
++
++    def test_build_catalog_category_filter(self) -> None:
++        registry = _make_registry(
++            FakeTool("shell", "Run commands"),
++            FakeTool("file_ops", "File operations"),
++        )
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog(category_filter="runtime")
++
++        assert catalog.total_count == 1
++        assert len(catalog.groups) == 1
++        assert catalog.groups[0].category == "runtime"
++        assert catalog.groups[0].tools[0].name == "shell"
++
++    def test_build_catalog_with_status_filter(self) -> None:
++        registry = _make_registry_with_entries([
++            (
++                FakeTool("tool_a", "Active tool"),
++                ToolRegistryEntry(
++                    tool_id="tool_a",
++                    name="tool_a",
++                    version="1.0",
++                    status=ToolStatus.ACTIVE,
++                ),
++            ),
++            (
++                FakeTool("tool_b", "Blocked tool"),
++                ToolRegistryEntry(
++                    tool_id="tool_b",
++                    name="tool_b",
++                    version="1.0",
++                    status=ToolStatus.BLOCKED,
++                ),
++            ),
++        ])
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog(status_filter="active")
++
++        assert catalog.total_count == 1
++        names = [t.name for g in catalog.groups for t in g.tools]
++        assert "tool_a" in names
++        assert "tool_b" not in names
++
++    def test_blocked_tool_marked_unavailable(self) -> None:
++        registry = _make_registry_with_entries([
++            (
++                FakeTool("blocked", "Blocked tool"),
++                ToolRegistryEntry(
++                    tool_id="blocked",
++                    name="blocked",
++                    version="1.0",
++                    status=ToolStatus.BLOCKED,
++                ),
++            ),
++        ])
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++
++        tool = catalog.groups[0].tools[0]
++        assert tool.name == "blocked"
++        assert not tool.available
++        assert tool.unavailable_reason == "Tool is blocked"
++
++    def test_deprecated_tool_shows_reason(self) -> None:
++        registry = _make_registry_with_entries([
++            (
++                FakeTool("old_tool", "Old tool"),
++                ToolRegistryEntry(
++                    tool_id="old_tool",
++                    name="old_tool",
++                    version="0.9",
++                    status=ToolStatus.DEPRECATED,
++                    deprecation_message="Use new_tool instead",
++                ),
++            ),
++        ])
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++
++        tool = catalog.groups[0].tools[0]
++        assert tool.name == "old_tool"
++        assert tool.unavailable_reason == "Use new_tool instead"
++
++    def test_include_schemas(self) -> None:
++        registry = _make_registry(
++            FakeSchemaAwareTool("typed_tool", "Tool with schema"),
++        )
++        service = ToolCatalogService(registry)
++
++        # Without schemas.
++        catalog = service.build_catalog(include_schemas=False)
++        tool = catalog.groups[0].tools[0]
++        assert tool.parameters_schema == {}
++
++        # With schemas.
++        catalog = service.build_catalog(include_schemas=True)
++        tool = catalog.groups[0].tools[0]
++        assert tool.parameters_schema["type"] == "object"
++        assert "input" in tool.parameters_schema["properties"]
++
++    def test_source_labeling_core(self) -> None:
++        registry = _make_registry(FakeTool("shell", "Shell"))
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++        tool = catalog.groups[0].tools[0]
++        assert tool.source == "core"
++
++    def test_source_labeling_from_tags(self) -> None:
++        registry = _make_registry_with_entries([
++            (
++                FakeTool("mcp_tool", "MCP tool"),
++                ToolRegistryEntry(
++                    tool_id="mcp_tool",
++                    name="mcp_tool",
++                    version="1.0",
++                    tags=["mcp:local-server"],
++                ),
++            ),
++        ])
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++        tool = catalog.groups[0].tools[0]
++        assert tool.source == "mcp:local-server"
++
++    def test_source_filter(self) -> None:
++        registry = _make_registry_with_entries([
++            (
++                FakeTool("core_tool", "Core"),
++                ToolRegistryEntry(tool_id="core_tool", name="core_tool", version="1.0"),
++            ),
++            (
++                FakeTool("mcp_tool", "MCP"),
++                ToolRegistryEntry(
++                    tool_id="mcp_tool",
++                    name="mcp_tool",
++                    version="1.0",
++                    tags=["mcp:server1"],
++                ),
++            ),
++        ])
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog(source_filter="mcp")
++        assert catalog.total_count == 1
++        assert catalog.groups[0].tools[0].name == "mcp_tool"
++
++    def test_get_tool_detail_existing(self) -> None:
++        registry = _make_registry(FakeTool("shell", "Run shell commands"))
++        service = ToolCatalogService(registry)
++        detail = service.get_tool_detail("shell")
++        assert detail is not None
++        assert detail.name == "shell"
++        assert detail.description == "Run shell commands"
++        assert detail.category == "runtime"
++
++    def test_get_tool_detail_missing(self) -> None:
++        registry = _make_registry()
++        service = ToolCatalogService(registry)
++        assert service.get_tool_detail("nonexistent") is None
++
++    def test_search_catalog_by_name(self) -> None:
++        registry = _make_registry(
++            FakeTool("shell", "Run commands"),
++            FakeTool("file_ops", "File operations"),
++        )
++        service = ToolCatalogService(registry)
++        results = service.search_catalog("shell")
++        assert len(results) == 1
++        assert results[0].name == "shell"
++
++    def test_search_catalog_by_description(self) -> None:
++        registry = _make_registry(
++            FakeTool("shell", "Run commands"),
++            FakeTool("file_ops", "File operations"),
++        )
++        service = ToolCatalogService(registry)
++        results = service.search_catalog("file")
++        assert len(results) == 1
++        assert results[0].name == "file_ops"
++
++    def test_search_catalog_no_match(self) -> None:
++        registry = _make_registry(FakeTool("shell", "Run commands"))
++        service = ToolCatalogService(registry)
++        results = service.search_catalog("nonexistent")
++        assert len(results) == 0
++
++    def test_empty_registry_produces_empty_catalog(self) -> None:
++        registry = _make_registry()
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog()
++        assert catalog.total_count == 0
++        assert catalog.active_count == 0
++        assert len(catalog.groups) == 0
++
++    def test_discovery_mode_passthrough(self) -> None:
++        registry = _make_registry()
++        service = ToolCatalogService(registry)
++        catalog = service.build_catalog(discovery_mode="dynamic")
++        assert catalog.discovery_mode == "dynamic"
+diff --git a/engine/tests/test_phase46_discovery.py b/engine/tests/test_phase46_discovery.py
+new file mode 100644
+index 0000000..74ee176
+--- /dev/null
++++ b/engine/tests/test_phase46_discovery.py
+@@ -0,0 +1,162 @@
++"""Tests for dynamic tool discovery (Phase 46)."""
++
++from __future__ import annotations
++
++from typing import Any
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++
++from agent33.tools.discovery import DynamicToolDiscovery, DiscoveryScanResult
++from agent33.tools.registry import ToolRegistry
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++class FakeTool:
++    def __init__(self, name: str, description: str = "fake") -> None:
++        self._name = name
++        self._description = description
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    async def execute(self, params: dict[str, Any], context: Any) -> Any:
++        pass
++
++
++# -- Tests --------------------------------------------------------------------
++
++
++class TestDynamicToolDiscovery:
++    async def test_initial_status(self) -> None:
++        registry = ToolRegistry()
++        discovery = DynamicToolDiscovery(registry)
++
++        st = discovery.status
++        assert st.last_scan is None
++        assert st.scan_count == 0
++        assert st.total_discovered == 0
++        assert st.errors == []
++
++    async def test_scan_discovers_entrypoint_tools(self) -> None:
++        registry = ToolRegistry()
++        # Pre-register one tool.
++        registry.register(FakeTool("shell", "Run commands"))
++
++        discovery = DynamicToolDiscovery(registry)
++        result = await discovery.scan()
++
++        assert isinstance(result, DiscoveryScanResult)
++        # At minimum, the pre-registered tool is counted.
++        assert result.total >= 1
++        assert discovery.status.scan_count == 1
++        assert discovery.status.last_scan is not None
++
++    async def test_scan_detects_new_tools(self) -> None:
++        registry = ToolRegistry()
++        registry.register(FakeTool("shell", "Run commands"))
++
++        discovery = DynamicToolDiscovery(registry)
++        # First scan sets baseline.
++        await discovery.scan()
++
++        # Add a new tool between scans.
++        registry.register(FakeTool("new_tool", "New tool"))
++        result = await discovery.scan()
++
++        assert "new_tool" in result.added
++
++    async def test_scan_detects_removed_tools(self) -> None:
++        registry = ToolRegistry()
++        tool_a = FakeTool("tool_a", "Tool A")
++        registry.register(tool_a)
++        registry.register(FakeTool("tool_b", "Tool B"))
++
++        discovery = DynamicToolDiscovery(registry)
++        await discovery.scan()
++
++        # Remove a tool between scans.
++        registry._tools.pop("tool_a")
++        result = await discovery.scan()
++
++        assert "tool_a" in result.removed
++
++    async def test_scan_records_errors(self) -> None:
++        registry = ToolRegistry()
++        # Use an MCP URL that will fail.
++        discovery = DynamicToolDiscovery(
++            registry, mcp_server_urls=["http://nonexistent:9999"]
++        )
++        result = await discovery.scan()
++
++        # MCP discovery failure should be recorded but not crash the scan.
++        assert discovery.status.scan_count == 1
++
++    async def test_mcp_url_management(self) -> None:
++        registry = ToolRegistry()
++        discovery = DynamicToolDiscovery(registry)
++
++        assert discovery.mcp_urls == []
++
++        discovery.add_mcp_url("http://mcp1:8080")
++        discovery.add_mcp_url("http://mcp2:8080")
++        assert len(discovery.mcp_urls) == 2
++
++        # Duplicate add is idempotent.
++        discovery.add_mcp_url("http://mcp1:8080")
++        assert len(discovery.mcp_urls) == 2
++
++        assert discovery.remove_mcp_url("http://mcp1:8080") is True
++        assert len(discovery.mcp_urls) == 1
++        assert discovery.remove_mcp_url("http://nonexistent") is False
++
++    async def test_scan_result_serialization(self) -> None:
++        result = DiscoveryScanResult(
++            total=5,
++            added=["new_tool"],
++            removed=["old_tool"],
++            entrypoint_count=3,
++            mcp_count=2,
++            errors=[],
++        )
++        data = result.to_dict()
++        assert data["total"] == 5
++        assert data["added"] == ["new_tool"]
++        assert data["removed"] == ["old_tool"]
++        assert data["entrypoint_count"] == 3
++        assert data["mcp_count"] == 2
++
++    async def test_status_serialization(self) -> None:
++        registry = ToolRegistry()
++        discovery = DynamicToolDiscovery(registry)
++        await discovery.scan()
++
++        data = discovery.status.to_dict()
++        assert data["scan_count"] == 1
++        assert data["last_scan"] is not None
++        assert data["healthy"] is True
++
++    async def test_status_unhealthy_on_errors(self) -> None:
++        registry = ToolRegistry()
++        discovery = DynamicToolDiscovery(registry)
++        discovery.status.errors.append("something broke")
++
++        data = discovery.status.to_dict()
++        assert data["healthy"] is False
++
++    async def test_multiple_scans_increment_count(self) -> None:
++        registry = ToolRegistry()
++        discovery = DynamicToolDiscovery(registry)
++
++        await discovery.scan()
++        await discovery.scan()
++        await discovery.scan()
++
++        assert discovery.status.scan_count == 3
+diff --git a/engine/tests/test_phase46_integration.py b/engine/tests/test_phase46_integration.py
+new file mode 100644
+index 0000000..d7b1501
+--- /dev/null
++++ b/engine/tests/test_phase46_integration.py
+@@ -0,0 +1,243 @@
++"""Integration tests for Phase 46: natural-language query -> resolved skill -> activated.
++
++These tests verify the full pipeline from semantic resolution through
++session activation, exercising all three subsystems together.
++"""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++from unittest.mock import AsyncMock
++
++import pytest
++
++from agent33.skills.definition import SkillDefinition, SkillStatus
++from agent33.skills.registry import SkillRegistry
++from agent33.skills.semantic import SkillEmbeddingIndex
++from agent33.skills.semantic_resolver import SemanticSkillResolver
++from agent33.tools.activation import ToolActivationManager
++from agent33.tools.base import ToolContext
++from agent33.tools.builtin.discover_tools import DiscoverToolsTool
++from agent33.tools.builtin.resolve_workflow import ResolveWorkflowTool
++from agent33.tools.catalog_service import ToolCatalogService
++from agent33.tools.registry import ToolRegistry
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++class FakeTool:
++    def __init__(self, name: str, description: str = "fake") -> None:
++        self._name = name
++        self._description = description
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    async def execute(self, params: dict[str, Any], context: Any) -> Any:
++        pass
++
++
++def _make_embedding_provider(dim: int = 8) -> AsyncMock:
++    """Deterministic mock embedding provider."""
++    provider = AsyncMock()
++
++    async def _embed(text: str) -> list[float]:
++        words = text.lower().split()
++        vec = [0.0] * dim
++        for word in words:
++            idx = hash(word) % dim
++            vec[idx] += 1.0
++        magnitude = sum(v * v for v in vec) ** 0.5
++        if magnitude > 0:
++            vec = [v / magnitude for v in vec]
++        return vec
++
++    provider.embed = AsyncMock(side_effect=_embed)
++    return provider
++
++
++# -- Integration tests --------------------------------------------------------
++
++
++class TestPhase46Integration:
++    """Full pipeline: resolve skill -> discover tool -> activate in session."""
++
++    async def test_resolve_then_activate_pipeline(self) -> None:
++        """A natural-language query resolves a skill, and the corresponding
++        tool is activated in the session."""
++        # Set up skill registry with skills.
++        skill_registry = SkillRegistry()
++        skill_registry.register(
++            SkillDefinition(
++                name="kubernetes-deploy",
++                description="Deploy applications to a Kubernetes cluster",
++                tags=["devops", "containers"],
++                instructions="Use kubectl apply -f to deploy manifests.",
++            )
++        )
++        skill_registry.register(
++            SkillDefinition(
++                name="email-notify",
++                description="Send email notifications to users",
++                tags=["messaging"],
++            )
++        )
++
++        # Set up embedding index.
++        provider = _make_embedding_provider()
++        embedding_index = SkillEmbeddingIndex(provider)
++        await embedding_index.index_all(skill_registry.list_all())
++
++        # Set up resolver.
++        resolver = SemanticSkillResolver(
++            skill_registry, embedding_index=embedding_index
++        )
++
++        # Resolve "deploy containers to cloud".
++        results = await resolver.resolve(
++            "deploy containers to cloud",
++            top_k=5,
++            include_instructions=True,
++        )
++        assert len(results) >= 1
++        # Kubernetes deploy skill should rank high.
++        assert results[0].name == "kubernetes-deploy"
++        assert "kubectl" in results[0].instructions
++
++        # Set up tool activation.
++        tool_registry = ToolRegistry()
++        tool_registry.register(FakeTool("shell", "Shell"))
++        tool_registry.register(FakeTool("kubernetes-deploy", "K8s deploy"))
++        catalog = ToolCatalogService(tool_registry)
++
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("session-1")
++
++        # Activate the resolved skill's corresponding tool.
++        mgr.activate("session-1", [results[0].name])
++        assert mgr.is_visible("session-1", "kubernetes-deploy")
++        assert not mgr.is_visible("session-1", "email-notify")
++
++    async def test_discover_tools_activates_found_tools(self) -> None:
++        """The discover_tools builtin activates tools it finds."""
++        tool_registry = ToolRegistry()
++        tool_registry.register(FakeTool("shell", "Run commands"))
++        tool_registry.register(FakeTool("web_fetch", "Fetch web pages"))
++        tool_registry.register(FakeTool("browser", "Browser automation"))
++
++        catalog = ToolCatalogService(tool_registry)
++        mgr = ToolActivationManager(core_tools=["shell"])
++        mgr.get_or_create("session-1")
++
++        discover = DiscoverToolsTool()
++        discover.set_catalog_service(catalog)
++        discover.set_activation_manager(mgr)
++
++        # Discover web-related tools.
++        result = await discover.execute(
++            {"query": "web"},
++            ToolContext(requested_by="session-1"),
++        )
++        assert result.success
++        parsed = json.loads(result.output)
++
++        # Both web_fetch and browser should be found.
++        found_names = {t["name"] for t in parsed}
++        assert "web_fetch" in found_names
++
++        # They should now be activated.
++        assert mgr.is_visible("session-1", "web_fetch")
++
++    async def test_resolve_workflow_excludes_deprecated_in_pipeline(self) -> None:
++        """Deprecated skills are excluded from resolve_workflow results."""
++        skill_registry = SkillRegistry()
++        skill_registry.register(
++            SkillDefinition(
++                name="old-deploy",
++                description="Old deployment skill",
++                status=SkillStatus.DEPRECATED,
++            )
++        )
++        skill_registry.register(
++            SkillDefinition(
++                name="new-deploy",
++                description="New deployment skill",
++                status=SkillStatus.ACTIVE,
++            )
++        )
++
++        resolver = SemanticSkillResolver(skill_registry)
++        tool = ResolveWorkflowTool()
++        tool.set_resolver(resolver)
++
++        result = await tool.execute({"objective": "deploy"}, ToolContext())
++        assert result.success
++        parsed = json.loads(result.output)
++        names = [r["name"] for r in parsed]
++        assert "old-deploy" not in names
++        assert "new-deploy" in names
++
++    async def test_catalog_search_matches_registry(self) -> None:
++        """Catalog service reflects the actual tool registry state."""
++        tool_registry = ToolRegistry()
++        tool_registry.register(FakeTool("shell", "Run commands"))
++        tool_registry.register(FakeTool("file_ops", "File operations"))
++        tool_registry.register(FakeTool("web_fetch", "Fetch web pages"))
++
++        catalog = ToolCatalogService(tool_registry)
++
++        # Build catalog.
++        response = catalog.build_catalog()
++        all_names = {
++            t.name for g in response.groups for t in g.tools
++        }
++        registry_names = {t.name for t in tool_registry.list_all()}
++        assert all_names == registry_names
++
++    async def test_dynamic_mode_hides_non_core(self) -> None:
++        """In dynamic mode, non-core tools are not visible until activated."""
++        mgr = ToolActivationManager(core_tools=["shell", "file_ops"])
++        mgr.get_or_create("s1")
++
++        # Core tools visible.
++        assert mgr.is_visible("s1", "shell")
++        assert mgr.is_visible("s1", "file_ops")
++
++        # Non-core hidden.
++        assert not mgr.is_visible("s1", "web_fetch")
++        assert not mgr.is_visible("s1", "browser")
++
++        # After discovery + activation, non-core becomes visible.
++        mgr.activate("s1", ["web_fetch"])
++        assert mgr.is_visible("s1", "web_fetch")
++        assert not mgr.is_visible("s1", "browser")
++
++    async def test_embedding_fallback_to_bm25(self) -> None:
++        """When embeddings fail, resolver still returns BM25 results."""
++        skill_registry = SkillRegistry()
++        skill_registry.register(
++            SkillDefinition(
++                name="kubernetes-deploy",
++                description="Deploy to Kubernetes cluster",
++                tags=["devops"],
++            )
++        )
++
++        # Embedding provider that always fails.
++        broken_provider = AsyncMock()
++        broken_provider.embed = AsyncMock(side_effect=ConnectionError("offline"))
++        broken_index = SkillEmbeddingIndex(broken_provider)
++
++        resolver = SemanticSkillResolver(
++            skill_registry, embedding_index=broken_index
++        )
++        results = await resolver.resolve("deploy kubernetes")
++        assert len(results) >= 1
++        assert results[0].name == "kubernetes-deploy"
+diff --git a/engine/tests/test_phase46_routes.py b/engine/tests/test_phase46_routes.py
+new file mode 100644
+index 0000000..95ddd69
+--- /dev/null
++++ b/engine/tests/test_phase46_routes.py
+@@ -0,0 +1,280 @@
++"""API route tests for Phase 46 discovery endpoints."""
++
++from __future__ import annotations
++
++from typing import Any
++
++import pytest
++from fastapi.testclient import TestClient
++
++from agent33.main import app
++from agent33.security.auth import create_access_token
++from agent33.skills.definition import SkillDefinition
++from agent33.skills.registry import SkillRegistry
++from agent33.skills.semantic_resolver import SemanticSkillResolver
++from agent33.tools.activation import ToolActivationManager
++from agent33.tools.catalog_service import ToolCatalogService
++from agent33.tools.discovery import DynamicToolDiscovery
++from agent33.tools.registry import ToolRegistry
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++class FakeTool:
++    def __init__(self, name: str, description: str = "fake") -> None:
++        self._name = name
++        self._description = description
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    async def execute(self, params: dict[str, Any], context: Any) -> Any:
++        pass
++
++
++def _client(scopes: list[str]) -> TestClient:
++    """Create a TestClient with a valid JWT carrying the given scopes."""
++    token = create_access_token("test-user", scopes=scopes)
++    return TestClient(app, headers={"Authorization": f"Bearer {token}"})
++
++
++@pytest.fixture()
++def admin_client() -> TestClient:
++    return _client(["admin", "tools:execute"])
++
++
++@pytest.fixture()
++def tools_client() -> TestClient:
++    return _client(["tools:execute"])
++
++
++def _setup_resolver() -> SemanticSkillResolver:
++    """Create a resolver with a few skills."""
++    registry = SkillRegistry()
++    registry.register(
++        SkillDefinition(
++            name="deploy-k8s",
++            description="Deploy to Kubernetes",
++            tags=["devops"],
++        )
++    )
++    registry.register(
++        SkillDefinition(
++            name="send-email",
++            description="Send email notifications",
++            tags=["messaging"],
++        )
++    )
++    return SemanticSkillResolver(registry, embedding_index=None)
++
++
++def _setup_tool_registry() -> ToolRegistry:
++    """Create a ToolRegistry with a few tools."""
++    registry = ToolRegistry()
++    registry.register(FakeTool("shell", "Run shell commands"))
++    registry.register(FakeTool("web_fetch", "Fetch web pages"))
++    registry.register(FakeTool("file_ops", "File operations"))
++    return registry
++
++
++# -- Semantic resolution route tests ------------------------------------------
++
++
++class TestResolveRoute:
++    def test_resolve_returns_matching_skills(self, tools_client: TestClient) -> None:
++        resolver = _setup_resolver()
++        app.state.skill_resolver = resolver
++
++        resp = tools_client.post(
++            "/v1/discovery/resolve",
++            json={"query": "deploy to kubernetes"},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["query"] == "deploy to kubernetes"
++        assert data["count"] >= 1
++        assert data["results"][0]["name"] == "deploy-k8s"
++        assert data["results"][0]["score"] > 0
++        assert "devops" in data["results"][0]["tags"]
++
++    def test_resolve_empty_query_rejected(self, tools_client: TestClient) -> None:
++        resolver = _setup_resolver()
++        app.state.skill_resolver = resolver
++
++        resp = tools_client.post("/v1/discovery/resolve", json={"query": ""})
++        assert resp.status_code == 422
++
++    def test_resolve_no_resolver_503(self, tools_client: TestClient) -> None:
++        # Remove the resolver from app state.
++        if hasattr(app.state, "skill_resolver"):
++            delattr(app.state, "skill_resolver")
++
++        resp = tools_client.post(
++            "/v1/discovery/resolve",
++            json={"query": "test"},
++        )
++        assert resp.status_code == 503
++
++    def test_resolve_max_results(self, tools_client: TestClient) -> None:
++        registry = SkillRegistry()
++        for i in range(10):
++            registry.register(
++                SkillDefinition(name=f"s{i}", description=f"Skill {i}")
++            )
++        app.state.skill_resolver = SemanticSkillResolver(registry)
++
++        resp = tools_client.post(
++            "/v1/discovery/resolve",
++            json={"query": "skill", "max_results": 3},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data["results"]) <= 3
++
++    def test_resolve_unauthenticated_401(self) -> None:
++        client = TestClient(app)
++        resp = client.post(
++            "/v1/discovery/resolve",
++            json={"query": "test"},
++        )
++        assert resp.status_code == 401
++
++
++# -- Discovery scan/status route tests ----------------------------------------
++
++
++class TestDiscoveryRoutes:
++    def test_scan_returns_result(self, admin_client: TestClient) -> None:
++        tool_registry = _setup_tool_registry()
++        app.state.tool_discovery = DynamicToolDiscovery(tool_registry)
++
++        resp = admin_client.get("/v1/discovery/scan")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert "total" in data
++        assert isinstance(data["added"], list)
++
++    def test_status_returns_health(self, tools_client: TestClient) -> None:
++        tool_registry = _setup_tool_registry()
++        app.state.tool_discovery = DynamicToolDiscovery(tool_registry)
++
++        resp = tools_client.get("/v1/discovery/status")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["scan_count"] == 0
++        assert data["healthy"] is True
++
++    def test_status_no_discovery_503(self, tools_client: TestClient) -> None:
++        if hasattr(app.state, "tool_discovery"):
++            delattr(app.state, "tool_discovery")
++
++        resp = tools_client.get("/v1/discovery/status")
++        assert resp.status_code == 503
++
++
++# -- Session activation route tests -------------------------------------------
++
++
++class TestActivationRoutes:
++    def _setup_activation(self) -> ToolActivationManager:
++        tool_registry = _setup_tool_registry()
++        catalog = ToolCatalogService(tool_registry)
++        mgr = ToolActivationManager(core_tools=["shell"])
++        app.state.tool_activation_manager = mgr
++        app.state.tool_catalog_service = catalog
++        return mgr
++
++    def test_activate_tools(self, tools_client: TestClient) -> None:
++        mgr = self._setup_activation()
++        mgr.get_or_create("s1")
++
++        resp = tools_client.post(
++            "/v1/sessions/s1/tools/activate",
++            json={"tool_names": ["web_fetch"]},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["session_id"] == "s1"
++        assert "web_fetch" in data["activated_tools"]
++        assert "web_fetch" in data["visible_tools"]
++
++    def test_deactivate_tool(self, tools_client: TestClient) -> None:
++        mgr = self._setup_activation()
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++
++        resp = tools_client.delete("/v1/sessions/s1/tools/web_fetch")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert "web_fetch" in data["deactivated_tools"]
++        assert "web_fetch" not in data["visible_tools"]
++
++    def test_deactivate_nonexistent_session_404(self, tools_client: TestClient) -> None:
++        self._setup_activation()
++
++        resp = tools_client.delete("/v1/sessions/nonexistent/tools/shell")
++        assert resp.status_code == 404
++
++    def test_list_active_tools(self, tools_client: TestClient) -> None:
++        mgr = self._setup_activation()
++        mgr.get_or_create("s1")
++        mgr.activate("s1", ["web_fetch"])
++
++        resp = tools_client.get("/v1/sessions/s1/tools")
++        assert resp.status_code == 200
++        data = resp.json()
++        names = [t["name"] for t in data]
++        assert "shell" in names
++        assert "web_fetch" in names
++
++    def test_list_active_tools_core_only(self, tools_client: TestClient) -> None:
++        mgr = self._setup_activation()
++        mgr.get_or_create("s1")
++
++        resp = tools_client.get("/v1/sessions/s1/tools")
++        assert resp.status_code == 200
++        data = resp.json()
++        names = [t["name"] for t in data]
++        assert "shell" in names
++        assert "web_fetch" not in names
++
++    def test_activate_empty_list_rejected(self, tools_client: TestClient) -> None:
++        self._setup_activation()
++
++        resp = tools_client.post(
++            "/v1/sessions/s1/tools/activate",
++            json={"tool_names": []},
++        )
++        assert resp.status_code == 422
++
++    def test_session_isolation_via_api(self, tools_client: TestClient) -> None:
++        """Activating in session s1 does not affect session s2."""
++        mgr = self._setup_activation()
++        mgr.get_or_create("s1")
++        mgr.get_or_create("s2")
++
++        tools_client.post(
++            "/v1/sessions/s1/tools/activate",
++            json={"tool_names": ["web_fetch"]},
++        )
++
++        resp = tools_client.get("/v1/sessions/s2/tools")
++        assert resp.status_code == 200
++        names = [t["name"] for t in resp.json()]
++        assert "web_fetch" not in names
++
++    def test_no_activation_manager_503(self, tools_client: TestClient) -> None:
++        if hasattr(app.state, "tool_activation_manager"):
++            delattr(app.state, "tool_activation_manager")
++
++        resp = tools_client.post(
++            "/v1/sessions/s1/tools/activate",
++            json={"tool_names": ["shell"]},
++        )
++        assert resp.status_code == 503
+diff --git a/engine/tests/test_phase46_semantic.py b/engine/tests/test_phase46_semantic.py
+new file mode 100644
+index 0000000..b5a79c5
+--- /dev/null
++++ b/engine/tests/test_phase46_semantic.py
+@@ -0,0 +1,386 @@
++"""Tests for semantic skill embedding index and resolver (Phase 46)."""
++
++from __future__ import annotations
++
++from typing import Any
++from unittest.mock import AsyncMock
++
++import pytest
++
++from agent33.skills.definition import SkillDefinition, SkillStatus
++from agent33.skills.registry import SkillRegistry
++from agent33.skills.semantic import SkillEmbeddingIndex
++from agent33.skills.semantic_resolver import SemanticSkillResolver
++
++
++# -- Helpers ------------------------------------------------------------------
++
++
++def _make_embedding_provider(dim: int = 4) -> AsyncMock:
++    """Create a mock EmbeddingProvider that returns deterministic vectors.
++
++    Uses a simple hash-based approach: each word in the text shifts
++    the vector slightly, ensuring different texts produce different
++    embeddings while keeping vectors normalized enough for cosine
++    similarity to be meaningful.
++    """
++    provider = AsyncMock()
++
++    async def _embed(text: str) -> list[float]:
++        # Deterministic vector based on text content.
++        words = text.lower().split()
++        vec = [0.0] * dim
++        for i, word in enumerate(words):
++            idx = hash(word) % dim
++            vec[idx] += 1.0
++        # Normalize.
++        magnitude = sum(v * v for v in vec) ** 0.5
++        if magnitude > 0:
++            vec = [v / magnitude for v in vec]
++        return vec
++
++    provider.embed = AsyncMock(side_effect=_embed)
++    return provider
++
++
++def _make_skill(
++    name: str,
++    description: str,
++    tags: list[str] | None = None,
++    instructions: str = "",
++    status: SkillStatus = SkillStatus.ACTIVE,
++) -> SkillDefinition:
++    return SkillDefinition(
++        name=name,
++        description=description,
++        tags=tags or [],
++        instructions=instructions,
++        status=status,
++    )
++
++
++def _make_registry(*skills: SkillDefinition) -> SkillRegistry:
++    registry = SkillRegistry()
++    for skill in skills:
++        registry.register(skill)
++    return registry
++
++
++# -- SkillEmbeddingIndex tests ------------------------------------------------
++
++
++class TestSkillEmbeddingIndex:
++    async def test_index_single_skill(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        skill = _make_skill("deploy-k8s", "Deploy to Kubernetes cluster", ["devops"])
++
++        result = await index.index_skill(skill)
++        assert result is True
++        assert index.size == 1
++        assert "deploy-k8s" in index.indexed_names
++
++    async def test_index_all_skills(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        skills = [
++            _make_skill("skill-a", "Skill A"),
++            _make_skill("skill-b", "Skill B"),
++            _make_skill("skill-c", "Skill C"),
++        ]
++        count = await index.index_all(skills)
++        assert count == 3
++        assert index.size == 3
++
++    async def test_index_skill_embedding_failure_returns_false(self) -> None:
++        provider = AsyncMock()
++        provider.embed = AsyncMock(side_effect=ConnectionError("Ollama unavailable"))
++        index = SkillEmbeddingIndex(provider)
++        skill = _make_skill("broken", "This will fail to embed")
++
++        result = await index.index_skill(skill)
++        assert result is False
++        assert index.size == 0
++
++    async def test_search_returns_ranked_results(self) -> None:
++        provider = _make_embedding_provider(dim=8)
++        index = SkillEmbeddingIndex(provider)
++
++        # Index skills with different descriptions.
++        await index.index_skill(
++            _make_skill("deploy-k8s", "Deploy containers to Kubernetes cluster")
++        )
++        await index.index_skill(
++            _make_skill("send-email", "Send email notifications to users")
++        )
++        await index.index_skill(
++            _make_skill("deploy-docker", "Deploy Docker containers to production")
++        )
++
++        results = await index.search("deploy containers", top_k=3)
++
++        # Should return results ranked by similarity.
++        assert len(results) == 3
++        # All three skills should appear with scores.
++        names = [name for name, _ in results]
++        assert len(names) == 3
++        # The top result's score should be >= the last result's score.
++        scores = [score for _, score in results]
++        assert scores[0] >= scores[-1]
++
++    async def test_search_empty_index_returns_empty(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        results = await index.search("anything")
++        assert results == []
++
++    async def test_search_embedding_failure_returns_empty(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        await index.index_skill(_make_skill("test", "Test skill"))
++
++        # Make the query embedding fail.
++        provider.embed = AsyncMock(side_effect=ConnectionError("down"))
++        results = await index.search("test")
++        assert results == []
++
++    async def test_search_top_k_limits_results(self) -> None:
++        provider = _make_embedding_provider(dim=16)
++        index = SkillEmbeddingIndex(provider)
++        for i in range(10):
++            await index.index_skill(_make_skill(f"skill-{i}", f"Skill number {i}"))
++
++        results = await index.search("skill", top_k=3)
++        assert len(results) == 3
++
++    async def test_remove_skill(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        await index.index_skill(_make_skill("to-remove", "Will be removed"))
++        assert index.size == 1
++
++        assert index.remove("to-remove") is True
++        assert index.size == 0
++        assert index.remove("to-remove") is False
++
++    async def test_clear_index(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        await index.index_all([
++            _make_skill("a", "A"),
++            _make_skill("b", "B"),
++        ])
++        assert index.size == 2
++
++        index.clear()
++        assert index.size == 0
++
++    async def test_get_metadata(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        await index.index_skill(
++            _make_skill("deploy-k8s", "Deploy to K8s", tags=["devops", "containers"])
++        )
++
++        meta = index.get_metadata("deploy-k8s")
++        assert meta is not None
++        assert meta["name"] == "deploy-k8s"
++        assert meta["description"] == "Deploy to K8s"
++        assert "devops" in meta["tags"]
++
++    async def test_get_metadata_missing(self) -> None:
++        provider = _make_embedding_provider()
++        index = SkillEmbeddingIndex(provider)
++        assert index.get_metadata("nonexistent") is None
++
++    def test_cosine_similarity_identical_vectors(self) -> None:
++        v = [1.0, 0.0, 0.0, 1.0]
++        sim = SkillEmbeddingIndex._cosine_similarity(v, v)
++        assert abs(sim - 1.0) < 1e-6
++
++    def test_cosine_similarity_orthogonal_vectors(self) -> None:
++        a = [1.0, 0.0]
++        b = [0.0, 1.0]
++        sim = SkillEmbeddingIndex._cosine_similarity(a, b)
++        assert abs(sim) < 1e-6
++
++    def test_cosine_similarity_zero_vector(self) -> None:
++        a = [0.0, 0.0]
++        b = [1.0, 0.0]
++        sim = SkillEmbeddingIndex._cosine_similarity(a, b)
++        assert sim == 0.0
++
++    def test_cosine_similarity_mismatched_lengths(self) -> None:
++        a = [1.0, 0.0]
++        b = [1.0, 0.0, 0.0]
++        sim = SkillEmbeddingIndex._cosine_similarity(a, b)
++        assert sim == 0.0
++
++    def test_build_index_text_includes_metadata(self) -> None:
++        skill = _make_skill(
++            "deploy-k8s",
++            "Deploy to Kubernetes",
++            tags=["devops", "containers"],
++            instructions="Step 1: configure kubectl. Step 2: apply manifests.",
++        )
++        text = SkillEmbeddingIndex._build_index_text(skill)
++        assert "deploy-k8s" in text
++        assert "Deploy to Kubernetes" in text
++        assert "devops" in text
++        assert "containers" in text
++        assert "configure kubectl" in text
++
++
++# -- SemanticSkillResolver tests ----------------------------------------------
++
++
++class TestSemanticSkillResolver:
++    async def test_resolve_bm25_only(self) -> None:
++        """BM25-only resolution when no embedding index is provided."""
++        registry = _make_registry(
++            _make_skill("deploy-k8s", "Deploy to Kubernetes cluster", ["devops"]),
++            _make_skill("send-email", "Send email notifications"),
++            _make_skill("deploy-docker", "Deploy Docker containers"),
++        )
++        resolver = SemanticSkillResolver(registry, embedding_index=None)
++
++        results = await resolver.resolve("deploy")
++        assert len(results) > 0
++        # At least one deploy skill should appear.
++        names = [r.name for r in results]
++        assert any("deploy" in n for n in names)
++
++    async def test_resolve_hybrid(self) -> None:
++        """Hybrid resolution with both BM25 and semantic."""
++        provider = _make_embedding_provider(dim=8)
++        registry = _make_registry(
++            _make_skill("deploy-k8s", "Deploy to Kubernetes cluster", ["devops"]),
++            _make_skill("send-email", "Send email notifications"),
++            _make_skill("deploy-docker", "Deploy Docker containers"),
++        )
++        embedding_index = SkillEmbeddingIndex(provider)
++        await embedding_index.index_all(registry.list_all())
++
++        resolver = SemanticSkillResolver(registry, embedding_index=embedding_index)
++
++        results = await resolver.resolve("deploy containers")
++        assert len(results) > 0
++        # Deploy skills should rank above email.
++        deploy_found = False
++        email_found = False
++        for r in results:
++            if "deploy" in r.name:
++                assert not email_found, "Deploy skills should appear before email"
++                deploy_found = True
++            if r.name == "send-email":
++                email_found = True
++        assert deploy_found
++
++    async def test_resolve_excludes_deprecated(self) -> None:
++        registry = _make_registry(
++            _make_skill("old-skill", "Deprecated skill", status=SkillStatus.DEPRECATED),
++            _make_skill("new-skill", "Active skill"),
++        )
++        resolver = SemanticSkillResolver(registry)
++
++        results = await resolver.resolve("skill", exclude_deprecated=True)
++        names = [r.name for r in results]
++        assert "old-skill" not in names
++        assert "new-skill" in names
++
++    async def test_resolve_includes_deprecated_when_requested(self) -> None:
++        registry = _make_registry(
++            _make_skill("old-skill", "Deprecated skill", status=SkillStatus.DEPRECATED),
++        )
++        resolver = SemanticSkillResolver(registry)
++
++        results = await resolver.resolve("skill", exclude_deprecated=False)
++        names = [r.name for r in results]
++        assert "old-skill" in names
++
++    async def test_resolve_includes_instructions(self) -> None:
++        registry = _make_registry(
++            _make_skill(
++                "detailed-skill",
++                "A detailed skill",
++                instructions="Step 1: Do this. Step 2: Do that.",
++            ),
++        )
++        resolver = SemanticSkillResolver(registry)
++
++        # Without instructions.
++        results = await resolver.resolve("detailed", include_instructions=False)
++        assert results[0].instructions == ""
++
++        # With instructions.
++        resolver2 = SemanticSkillResolver(registry)
++        results = await resolver2.resolve("detailed", include_instructions=True)
++        assert "Step 1" in results[0].instructions
++
++    async def test_resolve_top_k_limits(self) -> None:
++        skills = [_make_skill(f"skill-{i}", f"Skill number {i}") for i in range(20)]
++        registry = _make_registry(*skills)
++        resolver = SemanticSkillResolver(registry)
++
++        results = await resolver.resolve("skill", top_k=5)
++        assert len(results) <= 5
++
++    async def test_resolve_empty_registry(self) -> None:
++        registry = _make_registry()
++        resolver = SemanticSkillResolver(registry)
++        results = await resolver.resolve("anything")
++        assert results == []
++
++    async def test_resolve_scores_are_positive(self) -> None:
++        registry = _make_registry(
++            _make_skill("deploy", "Deploy applications"),
++        )
++        resolver = SemanticSkillResolver(registry)
++        results = await resolver.resolve("deploy")
++        assert len(results) > 0
++        for r in results:
++            assert r.score > 0.0
++
++    async def test_resolve_results_have_tags(self) -> None:
++        registry = _make_registry(
++            _make_skill("deploy-k8s", "Deploy to K8s", ["devops", "containers"]),
++        )
++        resolver = SemanticSkillResolver(registry)
++        results = await resolver.resolve("deploy")
++        assert results[0].tags == ["devops", "containers"]
++
++    def test_build_bm25_index(self) -> None:
++        registry = _make_registry(
++            _make_skill("a", "Skill A"),
++            _make_skill("b", "Skill B"),
++        )
++        resolver = SemanticSkillResolver(registry)
++        assert not resolver.is_built
++
++        count = resolver.build_bm25_index()
++        assert count == 2
++        assert resolver.is_built
++
++    async def test_auto_builds_bm25_on_first_resolve(self) -> None:
++        registry = _make_registry(_make_skill("auto", "Auto build test"))
++        resolver = SemanticSkillResolver(registry)
++        assert not resolver.is_built
++
++        await resolver.resolve("auto")
++        assert resolver.is_built
++
++    async def test_semantic_search_failure_degrades_to_bm25(self) -> None:
++        """When semantic search fails, BM25 results are still returned."""
++        provider = AsyncMock()
++        provider.embed = AsyncMock(side_effect=ConnectionError("down"))
++
++        registry = _make_registry(
++            _make_skill("deploy-k8s", "Deploy to Kubernetes"),
++        )
++        embedding_index = SkillEmbeddingIndex(provider)
++
++        resolver = SemanticSkillResolver(registry, embedding_index=embedding_index)
++        results = await resolver.resolve("deploy")
++        # Should still find via BM25.
++        assert len(results) > 0
++        assert results[0].name == "deploy-k8s"

@@ -1,0 +1,31 @@
+path=.claude/worktrees/agent-af722d5d
+branch=feat/session59-phase46-dynamic-catalog
+subject=Merge pull request #159 from mattmre/codex/session64-wrap
+classification=keep-intact
+note=session59 phase46 dynamic catalog prototype
+status_count=19
+committed_patch_bytes=0
+tracked_patch_bytes=58437
+untracked_count=16
+untracked_patch_bytes=125756
+
+[git-status]
+ M engine/.coverage
+ M engine/src/agent33/config.py
+ M engine/src/agent33/main.py
+?? engine/src/agent33/api/routes/discovery.py
+?? engine/src/agent33/skills/semantic.py
+?? engine/src/agent33/skills/semantic_resolver.py
+?? engine/src/agent33/tools/activation.py
+?? engine/src/agent33/tools/builtin/discover_tools.py
+?? engine/src/agent33/tools/builtin/resolve_workflow.py
+?? engine/src/agent33/tools/catalog.py
+?? engine/src/agent33/tools/catalog_service.py
+?? engine/src/agent33/tools/discovery.py
+?? engine/tests/test_phase46_activation.py
+?? engine/tests/test_phase46_builtin_tools.py
+?? engine/tests/test_phase46_catalog.py
+?? engine/tests/test_phase46_discovery.py
+?? engine/tests/test_phase46_integration.py
+?? engine/tests/test_phase46_routes.py
+?? engine/tests/test_phase46_semantic.py

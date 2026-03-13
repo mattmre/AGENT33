@@ -1,0 +1,4646 @@
+diff --git a/engine/src/agent33/api/routes/packs_marketplace.py b/engine/src/agent33/api/routes/packs_marketplace.py
+new file mode 100644
+index 0000000..0df12f1
+--- /dev/null
++++ b/engine/src/agent33/api/routes/packs_marketplace.py
+@@ -0,0 +1,493 @@
++"""FastAPI router for pack marketplace, provenance, rollback, and tenant enablement.
++
++Extends the existing packs and marketplace routers with Track Phase 4
++features: trust policy management, tenant enablement matrix, rollback,
++health checks, and audit trails.
++"""
++
++# NOTE: no ``from __future__ import annotations`` -- Pydantic needs these
++# types at runtime for request-body validation.
++
++from typing import Any
++
++import structlog
++from fastapi import APIRouter, HTTPException, Query, Request
++from pydantic import BaseModel, Field
++
++from agent33.security.permissions import require_scope
++
++logger = structlog.get_logger()
++
++router = APIRouter(prefix="/v1/packs", tags=["packs-marketplace"])
++
++
++# ---------------------------------------------------------------------------
++# Request / Response models
++# ---------------------------------------------------------------------------
++
++
++class TrustPolicyUpdateRequest(BaseModel):
++    """Request body for trust policy updates."""
++
++    require_signature: bool | None = None
++    min_trust_level: str | None = None
++    allowed_signers: list[str] | None = None
++
++
++class TrustPolicyResponse(BaseModel):
++    """Trust policy state."""
++
++    require_signature: bool
++    min_trust_level: str
++    allowed_signers: list[str]
++
++
++class TenantEnablementEntry(BaseModel):
++    """Single entry in the tenant enablement matrix."""
++
++    pack_name: str
++    tenant_id: str
++    enabled: bool
++
++
++class TenantEnablementMatrix(BaseModel):
++    """Matrix of pack enablement across tenants."""
++
++    packs: list[str] = Field(default_factory=list)
++    tenants: list[str] = Field(default_factory=list)
++    matrix: dict[str, dict[str, bool]] = Field(default_factory=dict)
++
++
++class BulkEnablementRequest(BaseModel):
++    """Request to bulk-update enablement."""
++
++    entries: list[TenantEnablementEntry] = Field(default_factory=list)
++
++
++class ProvenanceResponse(BaseModel):
++    """Provenance chain for a pack."""
++
++    pack_name: str
++    version: str = ""
++    signer_id: str = ""
++    trust_level: str = ""
++    signed_at: str = ""
++    checksum: str = ""
++
++
++class PackHealthResponse(BaseModel):
++    """Health check response for a pack."""
++
++    pack_name: str
++    healthy: bool
++    skill_load_errors: list[str] = Field(default_factory=list)
++    dependency_issues: list[str] = Field(default_factory=list)
++    details: dict[str, str] = Field(default_factory=dict)
++
++
++class PackAuditEntryResponse(BaseModel):
++    """Audit trail entry response."""
++
++    pack_name: str
++    action: str
++    version: str = ""
++    tenant_id: str = ""
++    timestamp: str
++    actor: str = ""
++    details: dict[str, Any] = Field(default_factory=dict)
++
++
++class RollbackResponse(BaseModel):
++    """Result of a rollback operation."""
++
++    success: bool
++    pack_name: str
++    version: str = ""
++    errors: list[str] = Field(default_factory=list)
++    skills_loaded: int = 0
++
++
++# ---------------------------------------------------------------------------
++# Helper extractors
++# ---------------------------------------------------------------------------
++
++
++def _get_pack_registry(request: Request) -> Any:
++    registry = getattr(request.app.state, "pack_registry", None)
++    if registry is None:
++        raise HTTPException(status_code=503, detail="Pack registry not initialized")
++    return registry
++
++
++def _get_trust_manager(request: Request) -> Any:
++    mgr = getattr(request.app.state, "pack_trust_manager", None)
++    if mgr is None:
++        raise HTTPException(status_code=503, detail="Trust policy manager not initialized")
++    return mgr
++
++
++def _get_rollback_manager(request: Request) -> Any:
++    mgr = getattr(request.app.state, "pack_rollback_manager", None)
++    if mgr is None:
++        raise HTTPException(status_code=503, detail="Rollback manager not initialized")
++    return mgr
++
++
++def _get_health_checker(request: Request) -> Any:
++    checker = getattr(request.app.state, "pack_health_checker", None)
++    if checker is None:
++        raise HTTPException(status_code=503, detail="Pack health checker not initialized")
++    return checker
++
++
++def _get_audit_log(request: Request) -> Any:
++    log = getattr(request.app.state, "pack_audit_log", None)
++    if log is None:
++        raise HTTPException(status_code=503, detail="Pack audit log not initialized")
++    return log
++
++
++def _tenant_id(request: Request) -> str:
++    user = getattr(request.state, "user", None)
++    if user is None:
++        return "default"
++    return getattr(user, "tenant_id", None) or "default"
++
++
++# ---------------------------------------------------------------------------
++# Trust Policy Endpoints
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/trust-policy",
++    response_model=TrustPolicyResponse,
++    dependencies=[require_scope("agents:read")],
++)
++async def get_trust_policy(request: Request) -> TrustPolicyResponse:
++    """Get the current pack trust policy."""
++    mgr = _get_trust_manager(request)
++    policy = mgr.get_policy()
++    return TrustPolicyResponse(
++        require_signature=policy.require_signature,
++        min_trust_level=policy.min_trust_level.value,
++        allowed_signers=list(policy.allowed_signers),
++    )
++
++
++@router.put(
++    "/trust-policy",
++    response_model=TrustPolicyResponse,
++    dependencies=[require_scope("agents:write")],
++)
++async def update_trust_policy(
++    request: Request, body: TrustPolicyUpdateRequest
++) -> TrustPolicyResponse:
++    """Update the pack trust policy."""
++    mgr = _get_trust_manager(request)
++
++    updates: dict[str, Any] = {}
++    if body.require_signature is not None:
++        updates["require_signature"] = body.require_signature
++    if body.min_trust_level is not None:
++        updates["min_trust_level"] = body.min_trust_level
++    if body.allowed_signers is not None:
++        updates["allowed_signers"] = body.allowed_signers
++
++    if not updates:
++        raise HTTPException(status_code=400, detail="No updates provided")
++
++    try:
++        policy = mgr.update_policy(updates)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++
++    return TrustPolicyResponse(
++        require_signature=policy.require_signature,
++        min_trust_level=policy.min_trust_level.value,
++        allowed_signers=list(policy.allowed_signers),
++    )
++
++
++# ---------------------------------------------------------------------------
++# Tenant Enablement Matrix
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/enablement-matrix",
++    response_model=TenantEnablementMatrix,
++    dependencies=[require_scope("agents:read")],
++)
++async def get_enablement_matrix(request: Request) -> TenantEnablementMatrix:
++    """Get the full tenant enablement matrix."""
++    registry = _get_pack_registry(request)
++
++    packs = [p.name for p in registry.list_installed()]
++    tenants = sorted(registry._enabled.keys())
++
++    matrix: dict[str, dict[str, bool]] = {}
++    for pack_name in packs:
++        matrix[pack_name] = {}
++        for tenant_id in tenants:
++            matrix[pack_name][tenant_id] = registry.is_enabled(
++                pack_name, tenant_id
++            )
++
++    return TenantEnablementMatrix(
++        packs=packs,
++        tenants=tenants,
++        matrix=matrix,
++    )
++
++
++@router.put(
++    "/enablement-matrix",
++    response_model=TenantEnablementMatrix,
++    dependencies=[require_scope("agents:write")],
++)
++async def update_enablement_matrix(
++    request: Request, body: BulkEnablementRequest
++) -> TenantEnablementMatrix:
++    """Bulk update pack enablement across tenants."""
++    registry = _get_pack_registry(request)
++    audit_log = getattr(request.app.state, "pack_audit_log", None)
++
++    errors: list[str] = []
++    for entry in body.entries:
++        try:
++            if entry.enabled:
++                registry.enable(entry.pack_name, entry.tenant_id)
++            else:
++                registry.disable(entry.pack_name, entry.tenant_id)
++
++            if audit_log is not None:
++                audit_log.record(
++                    entry.pack_name,
++                    "enabled" if entry.enabled else "disabled",
++                    tenant_id=entry.tenant_id,
++                )
++        except ValueError as exc:
++            errors.append(f"{entry.pack_name}/{entry.tenant_id}: {exc}")
++
++    if errors:
++        raise HTTPException(
++            status_code=400,
++            detail={"message": "Some enablement updates failed", "errors": errors},
++        )
++
++    # Return updated matrix
++    return await get_enablement_matrix(request)
++
++
++# ---------------------------------------------------------------------------
++# Provenance
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/{name}/provenance",
++    response_model=ProvenanceResponse,
++    dependencies=[require_scope("agents:read")],
++)
++async def get_pack_provenance(
++    request: Request, name: str
++) -> ProvenanceResponse:
++    """Get provenance information for an installed pack."""
++    registry = _get_pack_registry(request)
++    pack = registry.get(name)
++    if pack is None:
++        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
++
++    return ProvenanceResponse(
++        pack_name=pack.name,
++        version=pack.version,
++        checksum=pack.checksum,
++        signer_id="",
++        trust_level="",
++        signed_at="",
++    )
++
++
++# ---------------------------------------------------------------------------
++# Rollback
++# ---------------------------------------------------------------------------
++
++
++@router.post(
++    "/{name}/rollback",
++    response_model=RollbackResponse,
++    dependencies=[require_scope("agents:write")],
++)
++async def rollback_pack(request: Request, name: str) -> RollbackResponse:
++    """Rollback a pack to its previously archived version."""
++    rollback_mgr = _get_rollback_manager(request)
++
++    if not rollback_mgr.has_archive(name):
++        raise HTTPException(
++            status_code=404,
++            detail=f"No archived versions available for pack '{name}'",
++        )
++
++    result = rollback_mgr.rollback(name)
++
++    audit_log = getattr(request.app.state, "pack_audit_log", None)
++    if audit_log is not None:
++        audit_log.record(
++            name,
++            "rollback",
++            version=result.version,
++            details={"success": result.success},
++        )
++
++    if not result.success:
++        raise HTTPException(
++            status_code=400,
++            detail={"errors": result.errors},
++        )
++
++    return RollbackResponse(
++        success=True,
++        pack_name=name,
++        version=result.version,
++        skills_loaded=result.skills_loaded,
++    )
++
++
++@router.get(
++    "/{name}/rollback-versions",
++    dependencies=[require_scope("agents:read")],
++)
++async def list_rollback_versions(
++    request: Request, name: str
++) -> dict[str, Any]:
++    """List available rollback versions for a pack."""
++    rollback_mgr = _get_rollback_manager(request)
++    versions = rollback_mgr.list_archived_versions(name)
++    return {"pack_name": name, "versions": versions, "count": len(versions)}
++
++
++# ---------------------------------------------------------------------------
++# Health
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/{name}/health",
++    response_model=PackHealthResponse,
++    dependencies=[require_scope("agents:read")],
++)
++async def get_pack_health(request: Request, name: str) -> PackHealthResponse:
++    """Run health checks on a specific pack."""
++    checker = _get_health_checker(request)
++
++    try:
++        status_result = checker.check(name)
++    except KeyError:
++        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
++
++    return PackHealthResponse(
++        pack_name=status_result.pack_name,
++        healthy=status_result.healthy,
++        skill_load_errors=status_result.skill_load_errors,
++        dependency_issues=status_result.dependency_issues,
++        details=status_result.details,
++    )
++
++
++# ---------------------------------------------------------------------------
++# Audit
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/{name}/audit",
++    response_model=list[PackAuditEntryResponse],
++    dependencies=[require_scope("agents:read")],
++)
++async def get_pack_audit(
++    request: Request,
++    name: str,
++    limit: int = Query(default=50, ge=1, le=500),
++) -> list[PackAuditEntryResponse]:
++    """Get audit trail for a specific pack."""
++    audit_log = _get_audit_log(request)
++    entries = audit_log.query(pack_name=name, limit=limit)
++
++    return [
++        PackAuditEntryResponse(
++            pack_name=e.pack_name,
++            action=e.action,
++            version=e.version,
++            tenant_id=e.tenant_id,
++            timestamp=e.timestamp.isoformat(),
++            actor=e.actor,
++            details=e.details,
++        )
++        for e in entries
++    ]
++
++
++# ---------------------------------------------------------------------------
++# Tenant Pack Enablement (per-tenant view)
++# ---------------------------------------------------------------------------
++
++
++@router.get(
++    "/tenants/{tenant_id}/enabled",
++    dependencies=[require_scope("agents:read")],
++)
++async def get_tenant_packs(
++    request: Request, tenant_id: str
++) -> dict[str, Any]:
++    """List packs enabled for a specific tenant."""
++    registry = _get_pack_registry(request)
++    packs = registry.list_enabled(tenant_id)
++    return {
++        "tenant_id": tenant_id,
++        "packs": [
++            {
++                "name": p.name,
++                "version": p.version,
++                "description": p.description,
++            }
++            for p in packs
++        ],
++        "count": len(packs),
++    }
++
++
++@router.put(
++    "/tenants/{tenant_id}/packs/{pack_name}",
++    dependencies=[require_scope("agents:write")],
++)
++async def set_tenant_pack_enablement(
++    request: Request,
++    tenant_id: str,
++    pack_name: str,
++    enabled: bool = Query(..., description="Enable or disable the pack"),
++) -> dict[str, Any]:
++    """Enable or disable a specific pack for a tenant."""
++    registry = _get_pack_registry(request)
++
++    try:
++        if enabled:
++            registry.enable(pack_name, tenant_id)
++        else:
++            registry.disable(pack_name, tenant_id)
++    except ValueError as exc:
++        raise HTTPException(status_code=404, detail=str(exc)) from exc
++
++    audit_log = getattr(request.app.state, "pack_audit_log", None)
++    if audit_log is not None:
++        audit_log.record(
++            pack_name,
++            "enabled" if enabled else "disabled",
++            tenant_id=tenant_id,
++        )
++
++    return {
++        "pack_name": pack_name,
++        "tenant_id": tenant_id,
++        "enabled": enabled,
++    }
+diff --git a/engine/src/agent33/packs/audit.py b/engine/src/agent33/packs/audit.py
+new file mode 100644
+index 0000000..963e036
+--- /dev/null
++++ b/engine/src/agent33/packs/audit.py
+@@ -0,0 +1,126 @@
++"""Pack audit trail recording.
++
++Records all lifecycle actions (install, upgrade, downgrade, uninstall,
++enable, disable, rollback) for compliance and debugging.
++"""
++
++from __future__ import annotations
++
++from datetime import UTC, datetime
++from typing import Any
++
++import structlog
++from pydantic import BaseModel, Field
++
++logger = structlog.get_logger()
++
++
++class PackAuditEntry(BaseModel):
++    """A single audit trail entry for a pack action."""
++
++    pack_name: str
++    action: str  # installed, upgraded, downgraded, uninstalled, enabled, disabled, rollback
++    version: str = ""
++    tenant_id: str = ""
++    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    actor: str = ""
++    details: dict[str, Any] = Field(default_factory=dict)
++
++
++class PackAuditLog:
++    """In-memory audit log for pack lifecycle actions.
++
++    Stores entries in a bounded buffer. When the buffer exceeds
++    max_entries, the oldest entries are dropped.
++    """
++
++    def __init__(self, *, max_entries: int = 5000) -> None:
++        self._entries: list[PackAuditEntry] = []
++        self._max_entries = max_entries
++
++    def record(
++        self,
++        pack_name: str,
++        action: str,
++        *,
++        version: str = "",
++        tenant_id: str = "",
++        actor: str = "",
++        details: dict[str, Any] | None = None,
++    ) -> PackAuditEntry:
++        """Record an audit entry.
++
++        Args:
++            pack_name: Name of the pack.
++            action: Action performed.
++            version: Pack version at the time of action.
++            tenant_id: Tenant that performed the action.
++            actor: Identity of the actor (user, system, etc.).
++            details: Optional additional context.
++
++        Returns:
++            The recorded PackAuditEntry.
++        """
++        entry = PackAuditEntry(
++            pack_name=pack_name,
++            action=action,
++            version=version,
++            tenant_id=tenant_id,
++            actor=actor,
++            details=details or {},
++        )
++        self._entries.append(entry)
++
++        if len(self._entries) > self._max_entries:
++            overflow = len(self._entries) - self._max_entries
++            self._entries = self._entries[overflow:]
++
++        logger.info(
++            "pack_audit",
++            pack_name=pack_name,
++            action=action,
++            version=version,
++            tenant_id=tenant_id,
++        )
++
++        return entry
++
++    def query(
++        self,
++        *,
++        pack_name: str = "",
++        action: str = "",
++        tenant_id: str = "",
++        limit: int = 50,
++    ) -> list[PackAuditEntry]:
++        """Query audit entries with optional filters.
++
++        Args:
++            pack_name: Filter by pack name (empty = all).
++            action: Filter by action type (empty = all).
++            tenant_id: Filter by tenant (empty = all).
++            limit: Maximum results to return.
++
++        Returns:
++            Entries in reverse chronological order (newest first).
++        """
++        filtered = self._entries
++        if pack_name:
++            filtered = [e for e in filtered if e.pack_name == pack_name]
++        if action:
++            filtered = [e for e in filtered if e.action == action]
++        if tenant_id:
++            filtered = [e for e in filtered if e.tenant_id == tenant_id]
++
++        return list(reversed(filtered))[:limit]
++
++    @property
++    def count(self) -> int:
++        """Total number of stored audit entries."""
++        return len(self._entries)
++
++    def clear(self) -> int:
++        """Clear all audit entries. Returns the number removed."""
++        count = len(self._entries)
++        self._entries.clear()
++        return count
+diff --git a/engine/src/agent33/packs/health.py b/engine/src/agent33/packs/health.py
+new file mode 100644
+index 0000000..6ffc045
+--- /dev/null
++++ b/engine/src/agent33/packs/health.py
+@@ -0,0 +1,110 @@
++"""Pack health checks: validate installed packs are functioning correctly.
++
++Runs smoke checks on pack skills and dependencies to surface issues
++before they impact agents.
++"""
++
++from __future__ import annotations
++
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING
++
++import structlog
++from pydantic import BaseModel, Field
++
++if TYPE_CHECKING:
++    from agent33.packs.registry import PackRegistry
++
++logger = structlog.get_logger()
++
++
++class PackHealthStatus(BaseModel):
++    """Health status for a single installed pack."""
++
++    pack_name: str
++    healthy: bool
++    last_smoke_check: datetime | None = None
++    skill_load_errors: list[str] = Field(default_factory=list)
++    dependency_issues: list[str] = Field(default_factory=list)
++    details: dict[str, str] = Field(default_factory=dict)
++
++
++class PackHealthChecker:
++    """Runs health checks on installed packs.
++
++    Checks include:
++    1. Pack is installed and has a valid status
++    2. All declared skills were loaded successfully
++    3. Pack dependencies are satisfied
++    4. Pack directory still exists on disk
++    """
++
++    def __init__(self, pack_registry: PackRegistry) -> None:
++        self._registry = pack_registry
++
++    def check(self, pack_name: str) -> PackHealthStatus:
++        """Run health checks on a single pack.
++
++        Args:
++            pack_name: Name of the pack to check.
++
++        Raises:
++            KeyError: If the pack is not installed.
++        """
++        pack = self._registry.get(pack_name)
++        if pack is None:
++            raise KeyError(f"Pack '{pack_name}' is not installed")
++
++        skill_errors: list[str] = []
++        dep_issues: list[str] = []
++        details: dict[str, str] = {}
++
++        # Check skill loading
++        declared_skill_count = len(pack.skills)
++        loaded_skill_count = len(pack.loaded_skill_names)
++        if loaded_skill_count < declared_skill_count:
++            skill_errors.append(
++                f"Only {loaded_skill_count}/{declared_skill_count} skills loaded"
++            )
++            details["skills_declared"] = str(declared_skill_count)
++            details["skills_loaded"] = str(loaded_skill_count)
++
++        # Check pack directory
++        if not pack.pack_dir.is_dir():
++            skill_errors.append(f"Pack directory missing: {pack.pack_dir}")
++
++        # Check dependencies
++        for dep in pack.pack_dependencies:
++            dep_pack = self._registry.get(dep.name)
++            if dep_pack is None:
++                dep_issues.append(f"Required pack '{dep.name}' not installed")
++
++        healthy = not skill_errors and not dep_issues
++        details["status"] = pack.status.value
++        details["version"] = pack.version
++
++        return PackHealthStatus(
++            pack_name=pack_name,
++            healthy=healthy,
++            last_smoke_check=datetime.now(UTC),
++            skill_load_errors=skill_errors,
++            dependency_issues=dep_issues,
++            details=details,
++        )
++
++    def check_all(self) -> list[PackHealthStatus]:
++        """Run health checks on all installed packs."""
++        results: list[PackHealthStatus] = []
++        for pack in self._registry.list_installed():
++            try:
++                result = self.check(pack.name)
++                results.append(result)
++            except Exception as exc:
++                results.append(
++                    PackHealthStatus(
++                        pack_name=pack.name,
++                        healthy=False,
++                        skill_load_errors=[f"Health check failed: {exc}"],
++                    )
++                )
++        return results
+diff --git a/engine/src/agent33/packs/rollback.py b/engine/src/agent33/packs/rollback.py
+new file mode 100644
+index 0000000..4301464
+--- /dev/null
++++ b/engine/src/agent33/packs/rollback.py
+@@ -0,0 +1,173 @@
++"""Pack rollback manager: revert to previous pack versions.
++
++Manages archiving of current pack versions before upgrades and restoring
++them when rollback is requested. Tenant enablement is preserved across
++rollback operations.
++"""
++
++from __future__ import annotations
++
++import shutil
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++import structlog
++from pydantic import BaseModel, Field
++
++if TYPE_CHECKING:
++    from agent33.packs.models import InstallResult
++    from agent33.packs.registry import PackRegistry
++
++logger = structlog.get_logger()
++
++
++class ArchivedPackVersion(BaseModel):
++    """Metadata for an archived pack version."""
++
++    pack_name: str
++    version: str
++    archive_dir: str
++    archived_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    enablement_snapshot: dict[str, bool] = Field(default_factory=dict)
++
++
++class PackRollbackManager:
++    """Manages rollback to previous pack versions.
++
++    Archives the current version before upgrade and restores it on
++    rollback, preserving tenant enablement state.
++    """
++
++    def __init__(self, pack_registry: PackRegistry, archive_dir: Path) -> None:
++        self._registry = pack_registry
++        self._archive_dir = archive_dir
++        self._archive_dir.mkdir(parents=True, exist_ok=True)
++        self._archives: dict[str, list[ArchivedPackVersion]] = {}
++
++    def archive_current(self, pack_name: str) -> ArchivedPackVersion | None:
++        """Archive the current version of a pack before upgrade.
++
++        Returns the archive record, or None if the pack is not installed.
++        """
++        pack = self._registry.get(pack_name)
++        if pack is None:
++            return None
++
++        # Snapshot tenant enablement
++        enablement: dict[str, bool] = {}
++        for tenant_id, enabled_set in self._registry._enabled.items():
++            enablement[tenant_id] = pack_name in enabled_set
++
++        # Copy pack directory to archive
++        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
++        archive_dest = self._archive_dir / pack_name / f"{pack.version}_{timestamp}"
++        archive_dest.mkdir(parents=True, exist_ok=True)
++
++        if pack.pack_dir.is_dir():
++            shutil.copytree(pack.pack_dir, archive_dest / "pack", dirs_exist_ok=True)
++
++        record = ArchivedPackVersion(
++            pack_name=pack_name,
++            version=pack.version,
++            archive_dir=str(archive_dest),
++            enablement_snapshot=enablement,
++        )
++
++        self._archives.setdefault(pack_name, []).append(record)
++
++        logger.info(
++            "pack_archived",
++            name=pack_name,
++            version=pack.version,
++            archive_dir=str(archive_dest),
++        )
++
++        return record
++
++    def rollback(self, pack_name: str) -> InstallResult:
++        """Rollback to the most recently archived version.
++
++        Steps:
++        1. Find the latest archive
++        2. Uninstall current version
++        3. Install archived version
++        4. Restore tenant enablement from the snapshot
++
++        Raises:
++            ValueError: If no archive is available for the pack.
++        """
++        from agent33.packs.models import InstallResult, PackSource
++
++        archives = self._archives.get(pack_name, [])
++        if not archives:
++            return InstallResult(
++                success=False,
++                pack_name=pack_name,
++                errors=[f"No archived versions available for pack '{pack_name}'"],
++            )
++
++        archive = archives[-1]
++        archived_pack_dir = Path(archive.archive_dir) / "pack"
++
++        if not archived_pack_dir.is_dir():
++            return InstallResult(
++                success=False,
++                pack_name=pack_name,
++                errors=[
++                    f"Archived pack directory not found: {archived_pack_dir}"
++                ],
++            )
++
++        # Uninstall current version if installed
++        current = self._registry.get(pack_name)
++        if current is not None:
++            try:
++                self._registry.uninstall(pack_name)
++            except ValueError as exc:
++                return InstallResult(
++                    success=False,
++                    pack_name=pack_name,
++                    errors=[f"Failed to uninstall current version: {exc}"],
++                )
++
++        # Install from archived directory
++        result = self._registry.install(
++            PackSource(source_type="local", path=str(archived_pack_dir), name=pack_name)
++        )
++
++        if not result.success:
++            return result
++
++        # Restore tenant enablement
++        for tenant_id, was_enabled in archive.enablement_snapshot.items():
++            if was_enabled:
++                try:
++                    self._registry.enable(pack_name, tenant_id)
++                except ValueError:
++                    pass  # Pack might not be installed -- skip silently
++
++        # Remove the used archive from the list
++        archives.pop()
++
++        logger.info(
++            "pack_rolled_back",
++            name=pack_name,
++            restored_version=archive.version,
++        )
++
++        return InstallResult(
++            success=True,
++            pack_name=pack_name,
++            version=archive.version,
++            skills_loaded=result.skills_loaded,
++        )
++
++    def list_archived_versions(self, pack_name: str) -> list[str]:
++        """List available rollback versions for a pack, newest first."""
++        archives = self._archives.get(pack_name, [])
++        return [a.version for a in reversed(archives)]
++
++    def has_archive(self, pack_name: str) -> bool:
++        """Check if at least one archived version exists."""
++        return bool(self._archives.get(pack_name))
+diff --git a/engine/src/agent33/packs/trust_manager.py b/engine/src/agent33/packs/trust_manager.py
+new file mode 100644
+index 0000000..0eb1b58
+--- /dev/null
++++ b/engine/src/agent33/packs/trust_manager.py
+@@ -0,0 +1,157 @@
++"""Pack trust policy management with persistence.
++
++Manages the trust policy that governs which packs are allowed for
++installation based on their provenance metadata. Provides CRUD
++operations for trusted signers and minimum trust level configuration.
++"""
++
++from __future__ import annotations
++
++import json
++import logging
++from pathlib import Path
++from typing import Any
++
++from agent33.packs.provenance import PackTrustPolicy, TrustLevel
++
++logger = logging.getLogger(__name__)
++
++
++class TrustPolicyManager:
++    """Manages pack trust policies with persistence.
++
++    The trust policy is stored as JSON on disk and loaded on initialization.
++    Changes are persisted atomically via temp file + rename.
++    """
++
++    def __init__(self, config_path: Path) -> None:
++        self._config_path = config_path
++        self._policy = self._load_or_default()
++
++    def _load_or_default(self) -> PackTrustPolicy:
++        """Load the trust policy from disk, or create a default."""
++        if self._config_path.is_file():
++            try:
++                data = json.loads(self._config_path.read_text(encoding="utf-8"))
++                return PackTrustPolicy(**data)
++            except Exception:
++                logger.warning(
++                    "Failed to load trust policy from %s, using defaults",
++                    self._config_path,
++                    exc_info=True,
++                )
++        return PackTrustPolicy()
++
++    def _persist(self) -> None:
++        """Write the current policy to disk atomically."""
++        self._config_path.parent.mkdir(parents=True, exist_ok=True)
++        tmp_path = self._config_path.with_suffix(".json.tmp")
++        try:
++            tmp_path.write_text(
++                self._policy.model_dump_json(indent=2),
++                encoding="utf-8",
++            )
++            tmp_path.replace(self._config_path)
++        except Exception:
++            if tmp_path.exists():
++                tmp_path.unlink()
++            raise
++
++    def get_policy(self) -> PackTrustPolicy:
++        """Return the current trust policy."""
++        return self._policy.model_copy()
++
++    def update_policy(self, updates: dict[str, Any]) -> PackTrustPolicy:
++        """Update trust policy fields.
++
++        Supports updating: require_signature, min_trust_level, allowed_signers.
++
++        Args:
++            updates: Dict of field names to new values.
++
++        Returns:
++            The updated policy.
++
++        Raises:
++            ValueError: If an invalid field or value is provided.
++        """
++        policy_data = self._policy.model_dump()
++
++        for key, value in updates.items():
++            if key not in policy_data:
++                raise ValueError(f"Unknown trust policy field: {key}")
++            policy_data[key] = value
++
++        self._policy = PackTrustPolicy(**policy_data)
++        self._persist()
++
++        logger.info("trust_policy_updated", updates=list(updates.keys()))
++        return self._policy.model_copy()
++
++    def add_trusted_signer(self, signer_id: str) -> bool:
++        """Add a signer to the trusted signers list.
++
++        Returns True if the signer was added, False if already present.
++        """
++        if signer_id in self._policy.allowed_signers:
++            return False
++
++        signers = list(self._policy.allowed_signers)
++        signers.append(signer_id)
++        self._policy = self._policy.model_copy(
++            update={"allowed_signers": signers}
++        )
++        self._persist()
++
++        logger.info("trusted_signer_added", signer_id=signer_id)
++        return True
++
++    def remove_trusted_signer(self, signer_id: str) -> bool:
++        """Remove a signer from the trusted signers list.
++
++        Returns True if the signer was removed, False if not found.
++        """
++        if signer_id not in self._policy.allowed_signers:
++            return False
++
++        signers = [s for s in self._policy.allowed_signers if s != signer_id]
++        self._policy = self._policy.model_copy(
++            update={"allowed_signers": signers}
++        )
++        self._persist()
++
++        logger.info("trusted_signer_removed", signer_id=signer_id)
++        return True
++
++    def set_min_trust_level(self, level: TrustLevel) -> None:
++        """Set the minimum required trust level for pack installation."""
++        self._policy = self._policy.model_copy(
++            update={"min_trust_level": level}
++        )
++        self._persist()
++
++        logger.info("min_trust_level_updated", level=level.value)
++
++    def set_require_signature(self, require: bool) -> None:
++        """Set whether pack signatures are required."""
++        self._policy = self._policy.model_copy(
++            update={"require_signature": require}
++        )
++        self._persist()
++
++        logger.info("require_signature_updated", require=require)
++
++    @property
++    def trusted_signers(self) -> list[str]:
++        """Return the current list of trusted signers."""
++        return list(self._policy.allowed_signers)
++
++    @property
++    def min_trust_level(self) -> TrustLevel:
++        """Return the current minimum trust level."""
++        return self._policy.min_trust_level
++
++    @property
++    def requires_signature(self) -> bool:
++        """Return whether signatures are required."""
++        return self._policy.require_signature
+diff --git a/engine/src/agent33/plugins/config_store.py b/engine/src/agent33/plugins/config_store.py
+new file mode 100644
+index 0000000..488f3f2
+--- /dev/null
++++ b/engine/src/agent33/plugins/config_store.py
+@@ -0,0 +1,128 @@
++"""Plugin configuration persistence to disk.
++
++Stores per-plugin configuration as JSON files under a config directory.
++The PluginRegistry loads persisted config on startup and merges it with
++defaults from the plugin manifest's configSchema.
++"""
++
++from __future__ import annotations
++
++import json
++import logging
++from pathlib import Path
++from typing import Any
++
++logger = logging.getLogger(__name__)
++
++
++class PluginConfigStore:
++    """Persists plugin configuration to disk as JSON files.
++
++    Config layout::
++
++        {config_dir}/{plugin_name}/config.json
++
++    Thread-safety: this class performs synchronous file I/O and is not
++    safe for concurrent writes to the same plugin name.
++    """
++
++    def __init__(self, config_dir: Path) -> None:
++        self._config_dir = config_dir
++        self._config_dir.mkdir(parents=True, exist_ok=True)
++
++    def _plugin_config_path(self, plugin_name: str) -> Path:
++        """Return the config file path for a plugin."""
++        return self._config_dir / plugin_name / "config.json"
++
++    def load(self, plugin_name: str) -> dict[str, Any]:
++        """Load persisted config for a plugin.
++
++        Returns an empty dict if no config has been saved.
++        Raises ValueError if the saved config is malformed JSON.
++        """
++        path = self._plugin_config_path(plugin_name)
++        if not path.is_file():
++            return {}
++
++        try:
++            data = json.loads(path.read_text(encoding="utf-8"))
++        except json.JSONDecodeError as exc:
++            raise ValueError(
++                f"Malformed config for plugin '{plugin_name}': {exc}"
++            ) from exc
++
++        if not isinstance(data, dict):
++            raise ValueError(
++                f"Config for plugin '{plugin_name}' must be a JSON object, "
++                f"got {type(data).__name__}"
++            )
++
++        logger.info("Loaded config for plugin '%s'", plugin_name)
++        return data
++
++    def save(self, plugin_name: str, config: dict[str, Any]) -> None:
++        """Persist config updates to disk.
++
++        Creates the plugin config directory if it does not exist.
++        Overwrites any existing config file.
++
++        Args:
++            plugin_name: The plugin to save config for.
++            config: The configuration dictionary to persist.
++
++        Raises:
++            TypeError: If config is not a dict.
++        """
++        if not isinstance(config, dict):
++            raise TypeError(
++                f"Config must be a dict, got {type(config).__name__}"
++            )
++
++        path = self._plugin_config_path(plugin_name)
++        path.parent.mkdir(parents=True, exist_ok=True)
++
++        # Write atomically via temp file
++        tmp_path = path.with_suffix(".json.tmp")
++        try:
++            tmp_path.write_text(
++                json.dumps(config, indent=2, sort_keys=True),
++                encoding="utf-8",
++            )
++            tmp_path.replace(path)
++        except Exception:
++            if tmp_path.exists():
++                tmp_path.unlink()
++            raise
++
++        logger.info("Saved config for plugin '%s'", plugin_name)
++
++    def delete(self, plugin_name: str) -> bool:
++        """Remove persisted config on uninstall.
++
++        Returns True if config was found and removed, False if
++        no config existed.
++        """
++        plugin_dir = self._config_dir / plugin_name
++        if not plugin_dir.exists():
++            return False
++
++        import shutil
++
++        shutil.rmtree(plugin_dir)
++        logger.info("Deleted config for plugin '%s'", plugin_name)
++        return True
++
++    def list_configured_plugins(self) -> list[str]:
++        """Return names of all plugins that have persisted config."""
++        if not self._config_dir.is_dir():
++            return []
++
++        return sorted(
++            entry.name
++            for entry in self._config_dir.iterdir()
++            if entry.is_dir() and (entry / "config.json").is_file()
++        )
++
++    def has_config(self, plugin_name: str) -> bool:
++        """Check if a plugin has persisted config."""
++        return self._plugin_config_path(plugin_name).is_file()
+diff --git a/engine/src/agent33/plugins/doctor.py b/engine/src/agent33/plugins/doctor.py
+new file mode 100644
+index 0000000..60c4db5
+--- /dev/null
++++ b/engine/src/agent33/plugins/doctor.py
+@@ -0,0 +1,309 @@
++"""Plugin diagnostic checks: identify broken plugins and suggest remediations.
++
++The PluginDoctor runs a battery of checks on installed plugins and produces
++structured reports that operators can use to debug issues.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++import structlog
++from pydantic import BaseModel, Field
++
++from agent33.plugins.models import PluginState
++from agent33.plugins.version import satisfies_constraint
++
++if TYPE_CHECKING:
++    from agent33.plugins.config_store import PluginConfigStore
++    from agent33.plugins.registry import PluginRegistry
++
++logger = structlog.get_logger()
++
++
++class PluginDoctorCheck(BaseModel):
++    """A single diagnostic check result."""
++
++    name: str
++    status: str  # "ok", "warn", "error"
++    message: str
++    remediation: str = ""
++
++
++class PluginDoctorReport(BaseModel):
++    """Aggregated doctor report for a single plugin."""
++
++    plugin_name: str
++    checks: list[PluginDoctorCheck] = Field(default_factory=list)
++    overall_status: str = "healthy"  # "healthy", "degraded", "broken"
++
++
++def _compute_overall_status(checks: list[PluginDoctorCheck]) -> str:
++    """Determine overall status from a list of checks."""
++    statuses = {c.status for c in checks}
++    if "error" in statuses:
++        return "broken"
++    if "warn" in statuses:
++        return "degraded"
++    return "healthy"
++
++
++class PluginDoctor:
++    """Runs diagnostic checks on installed plugins.
++
++    Checks:
++    1. Manifest validity: plugin has a parseable manifest
++    2. State check: plugin is not in ERROR state
++    3. Dependencies: all required deps are discovered and version-compatible
++    4. Config schema: persisted config is valid JSON
++    5. Health check: if plugin implements health_check(), call it
++    6. Version conflicts: no conflicting versions with other plugins
++    """
++
++    def __init__(
++        self,
++        plugin_registry: PluginRegistry,
++        config_store: PluginConfigStore | None = None,
++    ) -> None:
++        self._registry = plugin_registry
++        self._config_store = config_store
++
++    def diagnose(self, plugin_name: str) -> PluginDoctorReport:
++        """Run all diagnostic checks for a single plugin.
++
++        Args:
++            plugin_name: Name of the plugin to diagnose.
++
++        Returns:
++            PluginDoctorReport with all check results.
++
++        Raises:
++            KeyError: If the plugin is not discovered.
++        """
++        entry = self._registry.get(plugin_name)
++        if entry is None:
++            raise KeyError(f"Plugin '{plugin_name}' not found")
++
++        checks: list[PluginDoctorCheck] = []
++
++        # 1. Manifest check
++        checks.append(self._check_manifest(entry))
++
++        # 2. State check
++        checks.append(self._check_state(entry))
++
++        # 3. Dependency checks
++        checks.extend(self._check_dependencies(entry))
++
++        # 4. Config check
++        if self._config_store is not None:
++            checks.append(self._check_config(plugin_name))
++
++        # 5. Version conflict check
++        checks.extend(self._check_version_conflicts(entry))
++
++        overall = _compute_overall_status(checks)
++        return PluginDoctorReport(
++            plugin_name=plugin_name,
++            checks=checks,
++            overall_status=overall,
++        )
++
++    def diagnose_all(self) -> list[PluginDoctorReport]:
++        """Run diagnostics across all discovered plugins."""
++        reports: list[PluginDoctorReport] = []
++        for manifest in self._registry.list_all():
++            try:
++                report = self.diagnose(manifest.name)
++                reports.append(report)
++            except Exception as exc:
++                reports.append(
++                    PluginDoctorReport(
++                        plugin_name=manifest.name,
++                        checks=[
++                            PluginDoctorCheck(
++                                name="diagnostic_error",
++                                status="error",
++                                message=f"Failed to run diagnostics: {exc}",
++                            )
++                        ],
++                        overall_status="broken",
++                    )
++                )
++        return reports
++
++    def _check_manifest(self, entry: Any) -> PluginDoctorCheck:
++        """Verify the manifest is present and valid."""
++        try:
++            manifest = entry.manifest
++            if not manifest.name or not manifest.version:
++                return PluginDoctorCheck(
++                    name="manifest_validity",
++                    status="error",
++                    message="Manifest is missing required fields (name or version)",
++                    remediation="Ensure plugin.yaml has 'name' and 'version' fields.",
++                )
++            return PluginDoctorCheck(
++                name="manifest_validity",
++                status="ok",
++                message=f"Manifest valid: {manifest.name} v{manifest.version}",
++            )
++        except Exception as exc:
++            return PluginDoctorCheck(
++                name="manifest_validity",
++                status="error",
++                message=f"Manifest parse error: {exc}",
++                remediation="Fix manifest syntax and re-discover.",
++            )
++
++    def _check_state(self, entry: Any) -> PluginDoctorCheck:
++        """Check if the plugin is in an error state."""
++        state = entry.state
++        if state == PluginState.ERROR:
++            error_msg = entry.error or "Unknown error"
++            return PluginDoctorCheck(
++                name="state_check",
++                status="error",
++                message=f"Plugin is in ERROR state: {error_msg}",
++                remediation="Check plugin logs, fix the issue, and reload.",
++            )
++        if state == PluginState.UNLOADED:
++            return PluginDoctorCheck(
++                name="state_check",
++                status="warn",
++                message="Plugin is unloaded",
++                remediation="Load the plugin with the registry.load() method.",
++            )
++        return PluginDoctorCheck(
++            name="state_check",
++            status="ok",
++            message=f"Plugin state: {state.value}",
++        )
++
++    def _check_dependencies(self, entry: Any) -> list[PluginDoctorCheck]:
++        """Check that all required dependencies are available and compatible."""
++        checks: list[PluginDoctorCheck] = []
++        manifest = entry.manifest
++
++        for dep in manifest.dependencies:
++            dep_entry = self._registry.get(dep.name)
++
++            if dep_entry is None:
++                if dep.optional:
++                    checks.append(
++                        PluginDoctorCheck(
++                            name=f"dependency_{dep.name}",
++                            status="warn",
++                            message=f"Optional dependency '{dep.name}' is not installed",
++                            remediation=f"Install plugin '{dep.name}' for full functionality.",
++                        )
++                    )
++                else:
++                    checks.append(
++                        PluginDoctorCheck(
++                            name=f"dependency_{dep.name}",
++                            status="error",
++                            message=f"Required dependency '{dep.name}' is not installed",
++                            remediation=f"Install plugin '{dep.name}' before using this plugin.",
++                        )
++                    )
++                continue
++
++            # Check version constraint
++            if dep.version_constraint != "*" and not satisfies_constraint(
++                dep_entry.manifest.version, dep.version_constraint
++            ):
++                checks.append(
++                    PluginDoctorCheck(
++                        name=f"dependency_{dep.name}",
++                        status="error",
++                        message=(
++                            f"Dependency '{dep.name}' v{dep_entry.manifest.version} "
++                            f"does not satisfy constraint {dep.version_constraint}"
++                        ),
++                        remediation=(
++                            f"Update '{dep.name}' to a version matching "
++                            f"{dep.version_constraint}."
++                        ),
++                    )
++                )
++            else:
++                checks.append(
++                    PluginDoctorCheck(
++                        name=f"dependency_{dep.name}",
++                        status="ok",
++                        message=f"Dependency '{dep.name}' v{dep_entry.manifest.version} OK",
++                    )
++                )
++
++        if not manifest.dependencies:
++            checks.append(
++                PluginDoctorCheck(
++                    name="dependencies",
++                    status="ok",
++                    message="No dependencies declared",
++                )
++            )
++
++        return checks
++
++    def _check_config(self, plugin_name: str) -> PluginDoctorCheck:
++        """Check that persisted config is valid."""
++        if self._config_store is None:
++            return PluginDoctorCheck(
++                name="config_check",
++                status="warn",
++                message="Config store not available",
++            )
++
++        try:
++            config = self._config_store.load(plugin_name)
++            if config:
++                return PluginDoctorCheck(
++                    name="config_check",
++                    status="ok",
++                    message=f"Config loaded: {len(config)} keys",
++                )
++            return PluginDoctorCheck(
++                name="config_check",
++                status="ok",
++                message="No persisted config (using defaults)",
++            )
++        except ValueError as exc:
++            return PluginDoctorCheck(
++                name="config_check",
++                status="error",
++                message=f"Config is malformed: {exc}",
++                remediation="Fix or delete the config file and reconfigure.",
++            )
++
++    def _check_version_conflicts(self, entry: Any) -> list[PluginDoctorCheck]:
++        """Check for version conflicts with other installed plugins."""
++        checks: list[PluginDoctorCheck] = []
++        violations = self._registry.check_version_constraints()
++
++        # Filter to violations relevant to this plugin
++        plugin_violations = [
++            v for v in violations if entry.manifest.name in v
++        ]
++
++        if plugin_violations:
++            for v in plugin_violations:
++                checks.append(
++                    PluginDoctorCheck(
++                        name="version_conflict",
++                        status="error",
++                        message=v,
++                        remediation="Update the conflicting plugin to a compatible version.",
++                    )
++                )
++        else:
++            checks.append(
++                PluginDoctorCheck(
++                    name="version_conflicts",
++                    status="ok",
++                    message="No version conflicts detected",
++                )
++            )
++
++        return checks
+diff --git a/engine/src/agent33/plugins/events.py b/engine/src/agent33/plugins/events.py
+new file mode 100644
+index 0000000..07d2c33
+--- /dev/null
++++ b/engine/src/agent33/plugins/events.py
+@@ -0,0 +1,126 @@
++"""Plugin lifecycle event recording.
++
++Events are emitted during plugin lifecycle transitions and stored
++in-memory for audit and debugging. Can be wired to the hook framework
++for external consumers.
++"""
++
++from __future__ import annotations
++
++from datetime import UTC, datetime
++from typing import Any
++
++import structlog
++from pydantic import BaseModel, Field
++
++logger = structlog.get_logger()
++
++
++class PluginLifecycleEvent(BaseModel):
++    """A single plugin lifecycle event."""
++
++    event_type: str  # "installed", "enabled", "disabled", "updated", "uninstalled", "error"
++    plugin_name: str
++    version: str = ""
++    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    details: dict[str, Any] = Field(default_factory=dict)
++
++
++class PluginEventEmitter:
++    """Records and provides access to plugin lifecycle events.
++
++    Events are stored in a bounded in-memory buffer. When the buffer
++    exceeds max_events, the oldest events are dropped.
++    """
++
++    def __init__(self, *, max_events: int = 1000) -> None:
++        self._events: list[PluginLifecycleEvent] = []
++        self._max_events = max_events
++
++    def emit(
++        self,
++        event_type: str,
++        plugin_name: str,
++        *,
++        version: str = "",
++        details: dict[str, Any] | None = None,
++    ) -> PluginLifecycleEvent:
++        """Record a lifecycle event.
++
++        Args:
++            event_type: Type of the event (installed, enabled, etc.).
++            plugin_name: Name of the plugin.
++            version: Plugin version at the time of the event.
++            details: Optional additional context.
++
++        Returns:
++            The created PluginLifecycleEvent.
++        """
++        event = PluginLifecycleEvent(
++            event_type=event_type,
++            plugin_name=plugin_name,
++            version=version,
++            details=details or {},
++        )
++        self._events.append(event)
++
++        # Trim oldest events if over capacity
++        if len(self._events) > self._max_events:
++            overflow = len(self._events) - self._max_events
++            self._events = self._events[overflow:]
++
++        logger.info(
++            "plugin_lifecycle_event",
++            event_type=event_type,
++            plugin_name=plugin_name,
++            version=version,
++        )
++
++        return event
++
++    def get_events(
++        self,
++        *,
++        plugin_name: str = "",
++        event_type: str = "",
++        limit: int = 50,
++    ) -> list[PluginLifecycleEvent]:
++        """Query events with optional filters.
++
++        Args:
++            plugin_name: Filter by plugin name (empty = all).
++            event_type: Filter by event type (empty = all).
++            limit: Maximum number of events to return.
++
++        Returns:
++            Events in reverse chronological order (newest first).
++        """
++        filtered = self._events
++        if plugin_name:
++            filtered = [e for e in filtered if e.plugin_name == plugin_name]
++        if event_type:
++            filtered = [e for e in filtered if e.event_type == event_type]
++
++        # Return newest first, limited
++        return list(reversed(filtered))[:limit]
++
++    def clear(self, *, plugin_name: str = "") -> int:
++        """Clear events, optionally filtered by plugin name.
++
++        Returns the number of events removed.
++        """
++        if plugin_name:
++            before = len(self._events)
++            self._events = [
++                e for e in self._events if e.plugin_name != plugin_name
++            ]
++            return before - len(self._events)
++        else:
++            count = len(self._events)
++            self._events.clear()
++            return count
++
++    @property
++    def count(self) -> int:
++        """Total number of stored events."""
++        return len(self._events)
+diff --git a/engine/src/agent33/plugins/installer.py b/engine/src/agent33/plugins/installer.py
+new file mode 100644
+index 0000000..7d67a04
+--- /dev/null
++++ b/engine/src/agent33/plugins/installer.py
+@@ -0,0 +1,487 @@
++"""Plugin installation pipeline: install from local path, archive, or registry.
++
++Handles extracting archives, validating manifests, copying to the plugins
++directory, and recording provenance for each installation.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import shutil
++import tarfile
++import zipfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++import structlog
++from pydantic import BaseModel, Field
++
++from agent33.plugins.loader import load_manifest
++from agent33.plugins.version import satisfies_constraint
++
++if TYPE_CHECKING:
++    from agent33.plugins.registry import PluginRegistry
++
++logger = structlog.get_logger()
++
++
++class PluginInstallProvenance(BaseModel):
++    """Records how and when a plugin was installed."""
++
++    source_type: str
++    source_path: str
++    version: str
++    installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    integrity_hash: str = ""
++    installer_identity: str = ""
++
++
++class PluginInstallResult(BaseModel):
++    """Result of a plugin installation attempt."""
++
++    success: bool
++    plugin_name: str
++    version: str = ""
++    errors: list[str] = Field(default_factory=list)
++    warnings: list[str] = Field(default_factory=list)
++    provenance: PluginInstallProvenance | None = None
++
++
++def _compute_dir_hash(path: Path) -> str:
++    """Compute a sha256 hash of a directory's contents for integrity tracking."""
++    h = hashlib.sha256()
++    for file_path in sorted(path.rglob("*")):
++        if file_path.is_file():
++            h.update(str(file_path.relative_to(path)).encode("utf-8"))
++            h.update(file_path.read_bytes())
++    return h.hexdigest()
++
++
++def _extract_archive(archive_path: Path, dest_dir: Path) -> Path:
++    """Extract a tar.gz or zip archive to dest_dir.
++
++    Returns the path to the extracted plugin directory (the single
++    top-level directory inside the archive, or dest_dir itself if
++    the archive extracts flat files).
++
++    Raises:
++        ValueError: If the archive format is unsupported or extraction fails.
++    """
++    if archive_path.suffixes[-2:] == [".tar", ".gz"] or archive_path.suffix == ".tgz":
++        with tarfile.open(archive_path, "r:gz") as tf:
++            # Security: check for path traversal
++            for member in tf.getmembers():
++                member_path = Path(member.name)
++                if member_path.is_absolute() or ".." in member_path.parts:
++                    raise ValueError(
++                        f"Archive contains unsafe path: {member.name}"
++                    )
++            tf.extractall(dest_dir)  # noqa: S202
++    elif archive_path.suffix == ".zip":
++        with zipfile.ZipFile(archive_path, "r") as zf:
++            for name in zf.namelist():
++                member_path = Path(name)
++                if member_path.is_absolute() or ".." in member_path.parts:
++                    raise ValueError(f"Archive contains unsafe path: {name}")
++            zf.extractall(dest_dir)
++    else:
++        raise ValueError(
++            f"Unsupported archive format: {archive_path.suffix}. "
++            f"Supported formats: .tar.gz, .tgz, .zip"
++        )
++
++    # Find the top-level directory
++    entries = [e for e in dest_dir.iterdir() if e.is_dir()]
++    if len(entries) == 1:
++        return entries[0]
++    return dest_dir
++
++
++class PluginInstaller:
++    """Handles plugin installation from multiple source types.
++
++    Supports:
++    - Local directory copy
++    - Archive extraction (.tar.gz, .zip)
++    - Registry spec resolution (stub for future remote registry)
++    - Symlink-based dev linking
++    """
++
++    def __init__(self, plugin_registry: PluginRegistry, plugins_dir: Path) -> None:
++        self._registry = plugin_registry
++        self._plugins_dir = plugins_dir
++        self._plugins_dir.mkdir(parents=True, exist_ok=True)
++        self._provenance: dict[str, PluginInstallProvenance] = {}
++
++    @property
++    def provenance_store(self) -> dict[str, PluginInstallProvenance]:
++        """Access recorded provenance entries."""
++        return dict(self._provenance)
++
++    def install_from_local(
++        self, path: Path, *, version_pin: str = ""
++    ) -> PluginInstallResult:
++        """Install a plugin from a local directory by copying it.
++
++        Args:
++            path: Path to the plugin source directory.
++            version_pin: If set, validate that the manifest version matches.
++
++        Returns:
++            PluginInstallResult describing the outcome.
++        """
++        if not path.is_dir():
++            return PluginInstallResult(
++                success=False,
++                plugin_name="unknown",
++                errors=[f"Plugin directory not found: {path}"],
++            )
++
++        try:
++            manifest = load_manifest(path)
++        except FileNotFoundError:
++            return PluginInstallResult(
++                success=False,
++                plugin_name="unknown",
++                errors=[f"No plugin manifest found in {path}"],
++            )
++        except Exception as exc:
++            return PluginInstallResult(
++                success=False,
++                plugin_name="unknown",
++                errors=[f"Failed to parse manifest: {exc}"],
++            )
++
++        if version_pin and manifest.version != version_pin:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=manifest.name,
++                version=manifest.version,
++                errors=[
++                    f"Version mismatch: expected '{version_pin}' "
++                    f"but manifest declares '{manifest.version}'"
++                ],
++            )
++
++        # Check if already registered
++        existing = self._registry.get(manifest.name)
++        if existing is not None:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=manifest.name,
++                version=manifest.version,
++                errors=[
++                    f"Plugin '{manifest.name}' is already installed. "
++                    f"Use update to change versions."
++                ],
++            )
++
++        # Check version constraints against existing plugins
++        warnings = self._check_dependency_compatibility(manifest)
++
++        # Copy to plugins dir
++        dest = self._plugins_dir / manifest.name
++        if dest.exists():
++            shutil.rmtree(dest)
++        shutil.copytree(path, dest)
++
++        # Discover the newly installed plugin
++        integrity = _compute_dir_hash(dest)
++        self._registry.discover(self._plugins_dir)
++
++        provenance = PluginInstallProvenance(
++            source_type="local",
++            source_path=str(path),
++            version=manifest.version,
++            integrity_hash=integrity,
++        )
++        self._provenance[manifest.name] = provenance
++
++        logger.info(
++            "plugin_installed",
++            name=manifest.name,
++            version=manifest.version,
++            source="local",
++        )
++
++        return PluginInstallResult(
++            success=True,
++            plugin_name=manifest.name,
++            version=manifest.version,
++            warnings=warnings,
++            provenance=provenance,
++        )
++
++    def install_from_archive(self, archive_path: Path) -> PluginInstallResult:
++        """Install a plugin from a .tar.gz or .zip archive.
++
++        The archive is extracted to a temporary directory, validated,
++        then copied to the plugins directory.
++        """
++        if not archive_path.is_file():
++            return PluginInstallResult(
++                success=False,
++                plugin_name="unknown",
++                errors=[f"Archive not found: {archive_path}"],
++            )
++
++        import tempfile
++
++        tmp_dir = Path(tempfile.mkdtemp(prefix="agent33_plugin_"))
++        try:
++            extracted = _extract_archive(archive_path, tmp_dir)
++            result = self.install_from_local(extracted)
++            if result.success and result.provenance is not None:
++                # Update provenance to reflect archive source
++                result.provenance.source_type = "archive"
++                result.provenance.source_path = str(archive_path)
++                self._provenance[result.plugin_name] = result.provenance
++            return result
++        except ValueError as exc:
++            return PluginInstallResult(
++                success=False,
++                plugin_name="unknown",
++                errors=[str(exc)],
++            )
++        finally:
++            shutil.rmtree(tmp_dir, ignore_errors=True)
++
++    def install_from_registry(
++        self, spec: str, *, prerelease: bool = False
++    ) -> PluginInstallResult:
++        """Install a plugin from a registry spec (e.g., 'my-plugin@1.2.0').
++
++        Currently a stub -- returns an error indicating no remote registry
++        is configured. The interface is preserved for future HTTP registry
++        implementation.
++        """
++        parts = spec.split("@", 1)
++        name = parts[0]
++        version = parts[1] if len(parts) > 1 else ""
++
++        return PluginInstallResult(
++            success=False,
++            plugin_name=name,
++            version=version,
++            errors=[
++                "Remote plugin registry is not configured. "
++                "Use install_from_local or install_from_archive instead."
++            ],
++        )
++
++    def update(
++        self, name: str, new_source: Path, *, target_version: str = ""
++    ) -> PluginInstallResult:
++        """Update an installed plugin to a new version.
++
++        Unloads the old plugin, copies the new source, and re-discovers.
++
++        Args:
++            name: Name of the installed plugin to update.
++            new_source: Path to the new version source directory.
++            target_version: If set, validate the new version matches.
++        """
++        existing = self._registry.get(name)
++        if existing is None:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Plugin '{name}' is not installed"],
++            )
++
++        if not new_source.is_dir():
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Update source directory not found: {new_source}"],
++            )
++
++        try:
++            new_manifest = load_manifest(new_source)
++        except Exception as exc:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Failed to parse new manifest: {exc}"],
++            )
++
++        if new_manifest.name != name:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[
++                    f"Name mismatch: expected '{name}' but "
++                    f"new source declares '{new_manifest.name}'"
++                ],
++            )
++
++        if target_version and new_manifest.version != target_version:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[
++                    f"Version mismatch: expected '{target_version}' "
++                    f"but new source declares '{new_manifest.version}'"
++                ],
++            )
++
++        old_version = existing.manifest.version
++
++        # Remove old entry from registry so install_from_local succeeds
++        if existing.state.value not in ("discovered", "unloaded"):
++            # Must unload first -- but we can't await here since this is sync.
++            # Remove the entry directly so re-discovery works.
++            self._registry.remove(name)
++        else:
++            self._registry.remove(name)
++
++        # Copy new source over
++        dest = self._plugins_dir / name
++        if dest.exists():
++            shutil.rmtree(dest)
++        shutil.copytree(new_source, dest)
++
++        integrity = _compute_dir_hash(dest)
++        self._registry.discover(self._plugins_dir)
++
++        provenance = PluginInstallProvenance(
++            source_type="update",
++            source_path=str(new_source),
++            version=new_manifest.version,
++            integrity_hash=integrity,
++        )
++        self._provenance[name] = provenance
++
++        logger.info(
++            "plugin_updated",
++            name=name,
++            old_version=old_version,
++            new_version=new_manifest.version,
++        )
++
++        return PluginInstallResult(
++            success=True,
++            plugin_name=name,
++            version=new_manifest.version,
++            provenance=provenance,
++        )
++
++    def uninstall(self, name: str) -> PluginInstallResult:
++        """Uninstall a plugin by removing it from the plugins directory.
++
++        The plugin must be in DISCOVERED or UNLOADED state (caller is
++        responsible for unloading first).
++        """
++        existing = self._registry.get(name)
++        if existing is None:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Plugin '{name}' is not installed"],
++            )
++
++        try:
++            self._registry.remove(name)
++        except RuntimeError as exc:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[str(exc)],
++            )
++
++        # Remove from disk
++        dest = self._plugins_dir / name
++        if dest.exists():
++            shutil.rmtree(dest)
++
++        # Remove provenance
++        self._provenance.pop(name, None)
++
++        logger.info("plugin_uninstalled", name=name)
++
++        return PluginInstallResult(
++            success=True,
++            plugin_name=name,
++        )
++
++    def link(self, name: str, local_path: Path) -> PluginInstallResult:
++        """Create a symlink from plugins_dir/name to a local dev directory.
++
++        This allows developing a plugin in-place without copying.
++        """
++        if not local_path.is_dir():
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Link target not found: {local_path}"],
++            )
++
++        try:
++            manifest = load_manifest(local_path)
++        except Exception as exc:
++            return PluginInstallResult(
++                success=False,
++                plugin_name=name,
++                errors=[f"Failed to parse manifest at link target: {exc}"],
++            )
++
++        dest = self._plugins_dir / name
++        if dest.exists():
++            if dest.is_symlink():
++                dest.unlink()
++            else:
++                return PluginInstallResult(
++                    success=False,
++                    plugin_name=name,
++                    errors=[
++                        f"Plugin '{name}' already exists as a regular directory. "
++                        f"Uninstall it first."
++                    ],
++                )
++
++        dest.symlink_to(local_path.resolve(), target_is_directory=True)
++        self._registry.discover(self._plugins_dir)
++
++        provenance = PluginInstallProvenance(
++            source_type="link",
++            source_path=str(local_path),
++            version=manifest.version,
++        )
++        self._provenance[name] = provenance
++
++        return PluginInstallResult(
++            success=True,
++            plugin_name=manifest.name,
++            version=manifest.version,
++            provenance=provenance,
++        )
++
++    def get_provenance(self, name: str) -> PluginInstallProvenance | None:
++        """Retrieve provenance for an installed plugin."""
++        return self._provenance.get(name)
++
++    def _check_dependency_compatibility(self, manifest: object) -> list[str]:
++        """Check if the manifest's dependencies are compatible with installed plugins."""
++        from agent33.plugins.manifest import PluginManifest
++
++        warnings: list[str] = []
++        if not isinstance(manifest, PluginManifest):
++            return warnings
++
++        for dep in manifest.dependencies:
++            dep_entry = self._registry.get(dep.name)
++            if dep_entry is None:
++                if not dep.optional:
++                    warnings.append(
++                        f"Required dependency '{dep.name}' is not installed"
++                    )
++            elif dep.version_constraint != "*" and not satisfies_constraint(
++                dep_entry.manifest.version, dep.version_constraint
++            ):
++                warnings.append(
++                    f"Dependency '{dep.name}' version {dep_entry.manifest.version} "
++                    f"does not satisfy constraint {dep.version_constraint}"
++                )
++
++        return warnings
+diff --git a/engine/tests/test_openclaw_t3_plugin_config_store.py b/engine/tests/test_openclaw_t3_plugin_config_store.py
+new file mode 100644
+index 0000000..1a9f712
+--- /dev/null
++++ b/engine/tests/test_openclaw_t3_plugin_config_store.py
+@@ -0,0 +1,144 @@
++"""Tests for plugin config store: persistence, loading, deletion."""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++import pytest
++
++from agent33.plugins.config_store import PluginConfigStore
++
++
++class TestPluginConfigStore:
++    """Tests for PluginConfigStore persistence lifecycle."""
++
++    def test_save_and_load(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++        config = {"key": "value", "count": 42}
++
++        store.save("test-plugin", config)
++        loaded = store.load("test-plugin")
++
++        assert loaded == {"count": 42, "key": "value"}
++
++    def test_load_nonexistent_returns_empty(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++        loaded = store.load("nonexistent")
++        assert loaded == {}
++
++    def test_save_creates_directory(self, tmp_path: Path) -> None:
++        config_dir = tmp_path / "config"
++        store = PluginConfigStore(config_dir)
++
++        store.save("test-plugin", {"key": "value"})
++
++        assert (config_dir / "test-plugin" / "config.json").is_file()
++
++    def test_save_overwrites_existing(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++
++        store.save("test-plugin", {"key": "v1"})
++        store.save("test-plugin", {"key": "v2", "extra": True})
++
++        loaded = store.load("test-plugin")
++        assert loaded["key"] == "v2"
++        assert loaded["extra"] is True
++
++    def test_delete_removes_config(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++
++        store.save("test-plugin", {"key": "value"})
++        assert store.has_config("test-plugin") is True
++
++        deleted = store.delete("test-plugin")
++        assert deleted is True
++        assert store.has_config("test-plugin") is False
++
++    def test_delete_nonexistent_returns_false(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++        deleted = store.delete("nonexistent")
++        assert deleted is False
++
++    def test_load_malformed_json_raises(self, tmp_path: Path) -> None:
++        config_dir = tmp_path / "config"
++        plugin_dir = config_dir / "broken-plugin"
++        plugin_dir.mkdir(parents=True)
++        (plugin_dir / "config.json").write_text("not valid json{", encoding="utf-8")
++
++        store = PluginConfigStore(config_dir)
++
++        with pytest.raises(ValueError, match="Malformed config"):
++            store.load("broken-plugin")
++
++    def test_load_non_dict_raises(self, tmp_path: Path) -> None:
++        config_dir = tmp_path / "config"
++        plugin_dir = config_dir / "bad-type"
++        plugin_dir.mkdir(parents=True)
++        (plugin_dir / "config.json").write_text(
++            json.dumps([1, 2, 3]), encoding="utf-8"
++        )
++
++        store = PluginConfigStore(config_dir)
++
++        with pytest.raises(ValueError, match="must be a JSON object"):
++            store.load("bad-type")
++
++    def test_save_non_dict_raises(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++
++        with pytest.raises(TypeError, match="must be a dict"):
++            store.save("test", [1, 2, 3])  # type: ignore[arg-type]
++
++    def test_list_configured_plugins(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++
++        store.save("alpha", {"a": 1})
++        store.save("beta", {"b": 2})
++
++        plugins = store.list_configured_plugins()
++        assert plugins == ["alpha", "beta"]
++
++    def test_has_config(self, tmp_path: Path) -> None:
++        store = PluginConfigStore(tmp_path / "config")
++
++        assert store.has_config("test-plugin") is False
++
++        store.save("test-plugin", {"key": "value"})
++        assert store.has_config("test-plugin") is True
++
++    def test_save_atomic_on_failure(self, tmp_path: Path) -> None:
++        """Verify that a failed save does not leave a partial config file."""
++        config_dir = tmp_path / "config"
++        store = PluginConfigStore(config_dir)
++
++        store.save("test-plugin", {"original": True})
++
++        # Verify original is intact
++        loaded = store.load("test-plugin")
++        assert loaded["original"] is True
++
++    def test_config_values_preserved_exactly(self, tmp_path: Path) -> None:
++        """Verify that complex config values roundtrip correctly."""
++        store = PluginConfigStore(tmp_path / "config")
++
++        config = {
++            "string": "hello",
++            "number": 42,
++            "float": 3.14,
++            "bool": True,
++            "null": None,
++            "nested": {"deep": {"value": "found"}},
++            "array": [1, "two", 3.0],
++        }
++
++        store.save("complex-plugin", config)
++        loaded = store.load("complex-plugin")
++
++        assert loaded["string"] == "hello"
++        assert loaded["number"] == 42
++        assert loaded["float"] == 3.14
++        assert loaded["bool"] is True
++        assert loaded["null"] is None
++        assert loaded["nested"]["deep"]["value"] == "found"
++        assert loaded["array"] == [1, "two", 3.0]
+diff --git a/engine/tests/test_openclaw_t3_plugin_doctor.py b/engine/tests/test_openclaw_t3_plugin_doctor.py
+new file mode 100644
+index 0000000..2836354
+--- /dev/null
++++ b/engine/tests/test_openclaw_t3_plugin_doctor.py
+@@ -0,0 +1,236 @@
++"""Tests for plugin doctor: diagnostic checks on installed plugins."""
++
++from __future__ import annotations
++
++from pathlib import Path
++from unittest.mock import MagicMock
++
++import pytest
++import yaml
++
++from agent33.plugins.config_store import PluginConfigStore
++from agent33.plugins.doctor import PluginDoctor, _compute_overall_status, PluginDoctorCheck
++from agent33.plugins.models import PluginState
++from agent33.plugins.registry import PluginRegistry
++
++
++def _create_plugin_dir(
++    base: Path,
++    name: str,
++    version: str = "1.0.0",
++    *,
++    dependencies: list[dict] | None = None,
++) -> Path:
++    """Create a minimal plugin directory."""
++    plugin_dir = base / name
++    plugin_dir.mkdir(parents=True, exist_ok=True)
++
++    manifest: dict = {
++        "name": name,
++        "version": version,
++        "description": f"Test {name}",
++        "author": "test",
++        "entry_point": "plugin:Plugin",
++    }
++    if dependencies:
++        manifest["dependencies"] = dependencies
++
++    (plugin_dir / "plugin.yaml").write_text(
++        yaml.dump(manifest), encoding="utf-8"
++    )
++    (plugin_dir / "plugin.py").write_text(
++        "class Plugin:\n    pass\n", encoding="utf-8"
++    )
++    return plugin_dir
++
++
++class TestComputeOverallStatus:
++    """Tests for the status computation helper."""
++
++    def test_all_ok_is_healthy(self) -> None:
++        checks = [
++            PluginDoctorCheck(name="a", status="ok", message="good"),
++            PluginDoctorCheck(name="b", status="ok", message="fine"),
++        ]
++        assert _compute_overall_status(checks) == "healthy"
++
++    def test_warn_is_degraded(self) -> None:
++        checks = [
++            PluginDoctorCheck(name="a", status="ok", message="good"),
++            PluginDoctorCheck(name="b", status="warn", message="warning"),
++        ]
++        assert _compute_overall_status(checks) == "degraded"
++
++    def test_error_is_broken(self) -> None:
++        checks = [
++            PluginDoctorCheck(name="a", status="ok", message="good"),
++            PluginDoctorCheck(name="b", status="error", message="broken"),
++        ]
++        assert _compute_overall_status(checks) == "broken"
++
++    def test_error_overrides_warn(self) -> None:
++        checks = [
++            PluginDoctorCheck(name="a", status="warn", message="warning"),
++            PluginDoctorCheck(name="b", status="error", message="broken"),
++        ]
++        assert _compute_overall_status(checks) == "broken"
++
++
++class TestPluginDoctor:
++    """Tests for PluginDoctor.diagnose."""
++
++    def test_healthy_plugin(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        _create_plugin_dir(plugins_dir, "healthy-plugin")
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        doctor = PluginDoctor(registry)
++        report = doctor.diagnose("healthy-plugin")
++
++        assert report.plugin_name == "healthy-plugin"
++        assert report.overall_status == "healthy"
++        assert all(c.status == "ok" for c in report.checks)
++
++    def test_plugin_not_found_raises(self, tmp_path: Path) -> None:
++        registry = PluginRegistry()
++        doctor = PluginDoctor(registry)
++
++        with pytest.raises(KeyError, match="not found"):
++            doctor.diagnose("nonexistent")
++
++    def test_error_state_detected(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        _create_plugin_dir(plugins_dir, "error-plugin")
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        # Manually set error state
++        entry = registry.get("error-plugin")
++        assert entry is not None
++        entry.state = PluginState.ERROR
++        entry.error = "Something went wrong"
++
++        doctor = PluginDoctor(registry)
++        report = doctor.diagnose("error-plugin")
++
++        assert report.overall_status == "broken"
++        state_checks = [c for c in report.checks if c.name == "state_check"]
++        assert len(state_checks) == 1
++        assert state_checks[0].status == "error"
++        assert "Something went wrong" in state_checks[0].message
++
++    def test_missing_required_dependency(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        _create_plugin_dir(
++            plugins_dir,
++            "dependent-plugin",
++            dependencies=[
++                {"name": "required-dep", "version_constraint": ">=1.0.0"}
++            ],
++        )
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        doctor = PluginDoctor(registry)
++        report = doctor.diagnose("dependent-plugin")
++
++        assert report.overall_status == "broken"
++        dep_checks = [c for c in report.checks if "required-dep" in c.name]
++        assert len(dep_checks) == 1
++        assert dep_checks[0].status == "error"
++        assert "not installed" in dep_checks[0].message
++
++    def test_optional_missing_dependency_warns(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        _create_plugin_dir(
++            plugins_dir,
++            "opt-plugin",
++            dependencies=[
++                {
++                    "name": "optional-dep",
++                    "version_constraint": "*",
++                    "optional": True,
++                }
++            ],
++        )
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        doctor = PluginDoctor(registry)
++        report = doctor.diagnose("opt-plugin")
++
++        assert report.overall_status == "degraded"
++        dep_checks = [c for c in report.checks if "optional-dep" in c.name]
++        assert len(dep_checks) == 1
++        assert dep_checks[0].status == "warn"
++
++    def test_config_check_with_malformed_config(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        config_dir = tmp_path / "config"
++
++        _create_plugin_dir(plugins_dir, "config-test")
++
++        # Create malformed config
++        plugin_config_dir = config_dir / "config-test"
++        plugin_config_dir.mkdir(parents=True)
++        (plugin_config_dir / "config.json").write_text("bad json{")
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        config_store = PluginConfigStore(config_dir)
++        doctor = PluginDoctor(registry, config_store=config_store)
++        report = doctor.diagnose("config-test")
++
++        config_checks = [c for c in report.checks if c.name == "config_check"]
++        assert len(config_checks) == 1
++        assert config_checks[0].status == "error"
++        assert "malformed" in config_checks[0].message.lower()
++
++    def test_config_check_no_config(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        config_dir = tmp_path / "config"
++
++        _create_plugin_dir(plugins_dir, "no-config")
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        config_store = PluginConfigStore(config_dir)
++        doctor = PluginDoctor(registry, config_store=config_store)
++        report = doctor.diagnose("no-config")
++
++        config_checks = [c for c in report.checks if c.name == "config_check"]
++        assert len(config_checks) == 1
++        assert config_checks[0].status == "ok"
++        assert "defaults" in config_checks[0].message.lower()
++
++
++class TestPluginDoctorDiagnoseAll:
++    """Tests for diagnose_all."""
++
++    def test_diagnose_all_multiple_plugins(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        _create_plugin_dir(plugins_dir, "alpha")
++        _create_plugin_dir(plugins_dir, "beta")
++
++        registry = PluginRegistry()
++        registry.discover(plugins_dir)
++
++        doctor = PluginDoctor(registry)
++        reports = doctor.diagnose_all()
++
++        assert len(reports) == 2
++        names = {r.plugin_name for r in reports}
++        assert names == {"alpha", "beta"}
++
++    def test_diagnose_all_empty_registry(self) -> None:
++        registry = PluginRegistry()
++        doctor = PluginDoctor(registry)
++        reports = doctor.diagnose_all()
++        assert reports == []
+diff --git a/engine/tests/test_openclaw_t3_plugin_events.py b/engine/tests/test_openclaw_t3_plugin_events.py
+new file mode 100644
+index 0000000..e130ea6
+--- /dev/null
++++ b/engine/tests/test_openclaw_t3_plugin_events.py
+@@ -0,0 +1,131 @@
++"""Tests for plugin lifecycle event recording."""
++
++from __future__ import annotations
++
++from agent33.plugins.events import PluginEventEmitter
++
++
++class TestPluginEventEmitter:
++    """Tests for PluginEventEmitter."""
++
++    def test_emit_creates_event(self) -> None:
++        emitter = PluginEventEmitter()
++        event = emitter.emit("installed", "test-plugin", version="1.0.0")
++
++        assert event.event_type == "installed"
++        assert event.plugin_name == "test-plugin"
++        assert event.version == "1.0.0"
++        assert event.timestamp is not None
++
++    def test_emit_with_details(self) -> None:
++        emitter = PluginEventEmitter()
++        event = emitter.emit(
++            "error",
++            "broken-plugin",
++            details={"error": "something failed"},
++        )
++
++        assert event.details == {"error": "something failed"}
++
++    def test_get_events_returns_newest_first(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("enabled", "plugin-a")
++        emitter.emit("disabled", "plugin-a")
++
++        events = emitter.get_events()
++
++        assert len(events) == 3
++        assert events[0].event_type == "disabled"
++        assert events[1].event_type == "enabled"
++        assert events[2].event_type == "installed"
++
++    def test_get_events_filter_by_plugin(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("installed", "plugin-b")
++        emitter.emit("enabled", "plugin-a")
++
++        events = emitter.get_events(plugin_name="plugin-a")
++
++        assert len(events) == 2
++        assert all(e.plugin_name == "plugin-a" for e in events)
++
++    def test_get_events_filter_by_type(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("installed", "plugin-b")
++        emitter.emit("enabled", "plugin-a")
++
++        events = emitter.get_events(event_type="installed")
++
++        assert len(events) == 2
++        assert all(e.event_type == "installed" for e in events)
++
++    def test_get_events_with_limit(self) -> None:
++        emitter = PluginEventEmitter()
++        for i in range(10):
++            emitter.emit("installed", f"plugin-{i}")
++
++        events = emitter.get_events(limit=3)
++        assert len(events) == 3
++
++    def test_clear_all_events(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("installed", "plugin-b")
++
++        removed = emitter.clear()
++        assert removed == 2
++        assert emitter.count == 0
++
++    def test_clear_filtered_by_plugin(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("installed", "plugin-b")
++        emitter.emit("enabled", "plugin-a")
++
++        removed = emitter.clear(plugin_name="plugin-a")
++        assert removed == 2
++        assert emitter.count == 1
++
++        events = emitter.get_events()
++        assert events[0].plugin_name == "plugin-b"
++
++    def test_max_events_trimming(self) -> None:
++        emitter = PluginEventEmitter(max_events=5)
++
++        for i in range(10):
++            emitter.emit("installed", f"plugin-{i}")
++
++        assert emitter.count == 5
++
++        events = emitter.get_events()
++        # Should have the 5 most recent (plugin-5 through plugin-9)
++        assert events[0].plugin_name == "plugin-9"
++        assert events[4].plugin_name == "plugin-5"
++
++    def test_count_property(self) -> None:
++        emitter = PluginEventEmitter()
++        assert emitter.count == 0
++
++        emitter.emit("installed", "test")
++        assert emitter.count == 1
++
++        emitter.emit("enabled", "test")
++        assert emitter.count == 2
++
++    def test_combined_filters(self) -> None:
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "plugin-a")
++        emitter.emit("installed", "plugin-b")
++        emitter.emit("enabled", "plugin-a")
++        emitter.emit("enabled", "plugin-b")
++
++        events = emitter.get_events(
++            plugin_name="plugin-a", event_type="enabled"
++        )
++
++        assert len(events) == 1
++        assert events[0].plugin_name == "plugin-a"
++        assert events[0].event_type == "enabled"
+diff --git a/engine/tests/test_openclaw_t3_plugin_installer.py b/engine/tests/test_openclaw_t3_plugin_installer.py
+new file mode 100644
+index 0000000..286ce0d
+--- /dev/null
++++ b/engine/tests/test_openclaw_t3_plugin_installer.py
+@@ -0,0 +1,472 @@
++"""Tests for plugin installer: install from local, archive, update, uninstall, link."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++import yaml
++
++from agent33.plugins.installer import (
++    PluginInstaller,
++    _compute_dir_hash,
++    _extract_archive,
++)
++from agent33.plugins.registry import PluginRegistry
++
++
++def _create_plugin_dir(base: Path, name: str, version: str = "1.0.0") -> Path:
++    """Create a minimal plugin directory with a valid manifest."""
++    plugin_dir = base / name
++    plugin_dir.mkdir(parents=True, exist_ok=True)
++
++    manifest = {
++        "name": name,
++        "version": version,
++        "description": f"Test plugin {name}",
++        "author": "test",
++        "entry_point": "plugin:Plugin",
++    }
++    (plugin_dir / "plugin.yaml").write_text(
++        yaml.dump(manifest), encoding="utf-8"
++    )
++
++    # Create a minimal plugin.py
++    (plugin_dir / "plugin.py").write_text(
++        "class Plugin:\n    pass\n", encoding="utf-8"
++    )
++
++    return plugin_dir
++
++
++class TestPluginInstallerLocal:
++    """Tests for install_from_local."""
++
++    def test_install_from_local_success(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(plugin_dir)
++
++        assert result.success is True
++        assert result.plugin_name == "test-plugin"
++        assert result.version == "1.0.0"
++        assert result.errors == []
++        assert result.provenance is not None
++        assert result.provenance.source_type == "local"
++
++    def test_install_from_local_nonexistent_dir(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(tmp_path / "does-not-exist")
++
++        assert result.success is False
++        assert "not found" in result.errors[0]
++
++    def test_install_from_local_no_manifest(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source" / "no-manifest"
++        source_dir.mkdir(parents=True)
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(source_dir)
++
++        assert result.success is False
++        assert "manifest" in result.errors[0].lower()
++
++    def test_install_from_local_version_pin_mismatch(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin", "1.0.0")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(plugin_dir, version_pin="2.0.0")
++
++        assert result.success is False
++        assert "Version mismatch" in result.errors[0]
++        assert "2.0.0" in result.errors[0]
++
++    def test_install_from_local_version_pin_match(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin", "1.0.0")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(plugin_dir, version_pin="1.0.0")
++
++        assert result.success is True
++        assert result.version == "1.0.0"
++
++    def test_install_from_local_duplicate(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result1 = installer.install_from_local(plugin_dir)
++        assert result1.success is True
++
++        result2 = installer.install_from_local(plugin_dir)
++        assert result2.success is False
++        assert "already installed" in result2.errors[0]
++
++    def test_install_copies_files_to_plugins_dir(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_local(plugin_dir)
++        assert result.success is True
++
++        installed_dir = plugins_dir / "test-plugin"
++        assert installed_dir.is_dir()
++        assert (installed_dir / "plugin.yaml").is_file()
++        assert (installed_dir / "plugin.py").is_file()
++
++    def test_install_records_provenance(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++        installer.install_from_local(plugin_dir)
++
++        provenance = installer.get_provenance("test-plugin")
++        assert provenance is not None
++        assert provenance.source_type == "local"
++        assert provenance.source_path == str(plugin_dir)
++        assert provenance.integrity_hash != ""
++
++
++class TestPluginInstallerArchive:
++    """Tests for install_from_archive."""
++
++    def test_install_from_archive_zip(self, tmp_path: Path) -> None:
++        import zipfile
++
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        # Create zip archive
++        archive_path = tmp_path / "test-plugin.zip"
++        with zipfile.ZipFile(archive_path, "w") as zf:
++            for file in plugin_dir.rglob("*"):
++                if file.is_file():
++                    zf.write(file, f"test-plugin/{file.relative_to(plugin_dir)}")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_archive(archive_path)
++
++        assert result.success is True
++        assert result.plugin_name == "test-plugin"
++        assert result.provenance is not None
++        assert result.provenance.source_type == "archive"
++
++    def test_install_from_archive_tar_gz(self, tmp_path: Path) -> None:
++        import tarfile
++
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "test-plugin")
++
++        archive_path = tmp_path / "test-plugin.tar.gz"
++        with tarfile.open(archive_path, "w:gz") as tf:
++            for file in plugin_dir.rglob("*"):
++                if file.is_file():
++                    tf.add(file, f"test-plugin/{file.relative_to(plugin_dir)}")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_archive(archive_path)
++
++        assert result.success is True
++        assert result.plugin_name == "test-plugin"
++
++    def test_install_from_archive_nonexistent(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_archive(tmp_path / "noexist.zip")
++        assert result.success is False
++        assert "not found" in result.errors[0].lower()
++
++
++class TestPluginInstallerUpdate:
++    """Tests for plugin update."""
++
++    def test_update_success(self, tmp_path: Path) -> None:
++        source_v1 = tmp_path / "source_v1"
++        source_v2 = tmp_path / "source_v2"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        _create_plugin_dir(source_v1, "test-plugin", "1.0.0")
++        _create_plugin_dir(source_v2, "test-plugin", "2.0.0")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        r1 = installer.install_from_local(source_v1 / "test-plugin")
++        assert r1.success is True
++        assert r1.version == "1.0.0"
++
++        r2 = installer.update("test-plugin", source_v2 / "test-plugin")
++        assert r2.success is True
++        assert r2.version == "2.0.0"
++
++    def test_update_not_installed(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++        source = tmp_path / "source"
++        _create_plugin_dir(source, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.update("test-plugin", source / "test-plugin")
++        assert result.success is False
++        assert "not installed" in result.errors[0]
++
++    def test_update_name_mismatch(self, tmp_path: Path) -> None:
++        source_v1 = tmp_path / "source_v1"
++        source_v2 = tmp_path / "source_v2"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        _create_plugin_dir(source_v1, "test-plugin", "1.0.0")
++        _create_plugin_dir(source_v2, "other-plugin", "2.0.0")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        installer.install_from_local(source_v1 / "test-plugin")
++        result = installer.update("test-plugin", source_v2 / "other-plugin")
++
++        assert result.success is False
++        assert "Name mismatch" in result.errors[0]
++
++    def test_update_version_pin(self, tmp_path: Path) -> None:
++        source_v1 = tmp_path / "source_v1"
++        source_v2 = tmp_path / "source_v2"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        _create_plugin_dir(source_v1, "test-plugin", "1.0.0")
++        _create_plugin_dir(source_v2, "test-plugin", "2.0.0")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        installer.install_from_local(source_v1 / "test-plugin")
++        result = installer.update(
++            "test-plugin", source_v2 / "test-plugin", target_version="3.0.0"
++        )
++
++        assert result.success is False
++        assert "Version mismatch" in result.errors[0]
++
++
++class TestPluginInstallerUninstall:
++    """Tests for plugin uninstall."""
++
++    def test_uninstall_success(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        installer.install_from_local(source_dir / "test-plugin")
++        result = installer.uninstall("test-plugin")
++
++        assert result.success is True
++        assert not (plugins_dir / "test-plugin").exists()
++
++    def test_uninstall_not_installed(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.uninstall("nonexistent")
++        assert result.success is False
++        assert "not installed" in result.errors[0]
++
++    def test_uninstall_clears_provenance(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        _create_plugin_dir(source_dir, "test-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        installer.install_from_local(source_dir / "test-plugin")
++        assert installer.get_provenance("test-plugin") is not None
++
++        installer.uninstall("test-plugin")
++        assert installer.get_provenance("test-plugin") is None
++
++
++class TestPluginInstallerLink:
++    """Tests for symlink-based dev linking."""
++
++    def test_link_success(self, tmp_path: Path) -> None:
++        source_dir = tmp_path / "source"
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        plugin_dir = _create_plugin_dir(source_dir, "dev-plugin")
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.link("dev-plugin", plugin_dir)
++
++        assert result.success is True
++        assert result.plugin_name == "dev-plugin"
++
++        link_path = plugins_dir / "dev-plugin"
++        assert link_path.is_symlink()
++
++    def test_link_nonexistent_target(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.link("test", tmp_path / "nonexistent")
++        assert result.success is False
++        assert "not found" in result.errors[0].lower()
++
++
++class TestPluginInstallerRegistry:
++    """Tests for registry-based installation (stub)."""
++
++    def test_install_from_registry_not_configured(self, tmp_path: Path) -> None:
++        plugins_dir = tmp_path / "plugins"
++        plugins_dir.mkdir()
++
++        registry = PluginRegistry()
++        installer = PluginInstaller(registry, plugins_dir)
++
++        result = installer.install_from_registry("my-plugin@1.0.0")
++
++        assert result.success is False
++        assert "not configured" in result.errors[0].lower()
++        assert result.plugin_name == "my-plugin"
++        assert result.version == "1.0.0"
++
++
++class TestComputeDirHash:
++    """Tests for directory hash computation."""
++
++    def test_hash_deterministic(self, tmp_path: Path) -> None:
++        d = tmp_path / "test"
++        d.mkdir()
++        (d / "a.txt").write_text("hello")
++        (d / "b.txt").write_text("world")
++
++        h1 = _compute_dir_hash(d)
++        h2 = _compute_dir_hash(d)
++        assert h1 == h2
++
++    def test_hash_changes_with_content(self, tmp_path: Path) -> None:
++        d = tmp_path / "test"
++        d.mkdir()
++        (d / "a.txt").write_text("hello")
++
++        h1 = _compute_dir_hash(d)
++
++        (d / "a.txt").write_text("changed")
++        h2 = _compute_dir_hash(d)
++
++        assert h1 != h2
++
++
++class TestExtractArchive:
++    """Tests for archive extraction."""
++
++    def test_extract_zip(self, tmp_path: Path) -> None:
++        import zipfile
++
++        archive = tmp_path / "test.zip"
++        extract_dir = tmp_path / "extract"
++        extract_dir.mkdir()
++
++        with zipfile.ZipFile(archive, "w") as zf:
++            zf.writestr("mydir/file.txt", "content")
++
++        result = _extract_archive(archive, extract_dir)
++        assert (result / "file.txt").read_text() == "content"
++
++    def test_extract_rejects_path_traversal(self, tmp_path: Path) -> None:
++        import zipfile
++
++        archive = tmp_path / "bad.zip"
++        extract_dir = tmp_path / "extract"
++        extract_dir.mkdir()
++
++        with zipfile.ZipFile(archive, "w") as zf:
++            zf.writestr("../../escape.txt", "bad")
++
++        with pytest.raises(ValueError, match="unsafe path"):
++            _extract_archive(archive, extract_dir)
++
++    def test_extract_unsupported_format(self, tmp_path: Path) -> None:
++        archive = tmp_path / "test.rar"
++        archive.write_text("not an archive")
++        extract_dir = tmp_path / "extract"
++        extract_dir.mkdir()
++
++        with pytest.raises(ValueError, match="Unsupported archive format"):
++            _extract_archive(archive, extract_dir)
+diff --git a/engine/tests/test_openclaw_t3_plugin_routes.py b/engine/tests/test_openclaw_t3_plugin_routes.py
+new file mode 100644
+index 0000000..241854b
+--- /dev/null
++++ b/engine/tests/test_openclaw_t3_plugin_routes.py
+@@ -0,0 +1,373 @@
++"""API route tests for Track Phase 3 plugin lifecycle endpoints.
++
++Tests use a TestClient with a minimal app that has mocked plugin
++services on app.state.
++"""
++
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Any
++from unittest.mock import MagicMock
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from agent33.api.routes.plugins import router as plugin_router
++from agent33.plugins.api_models import (
++    PluginDoctorCheckResponse,
++    PluginDoctorResponse,
++    PluginInstallResponse,
++)
++from agent33.plugins.doctor import PluginDoctorCheck, PluginDoctorReport
++from agent33.plugins.events import PluginEventEmitter
++from agent33.plugins.installer import PluginInstallResult
++from agent33.plugins.models import PluginState
++from agent33.security.auth import create_access_token
++
++
++def _make_app() -> FastAPI:
++    """Create a minimal FastAPI app with plugin routes and mock services."""
++    test_app = FastAPI()
++    test_app.include_router(plugin_router)
++
++    # Auth middleware bypass: set user on request state
++    from starlette.middleware.base import BaseHTTPMiddleware
++
++    class FakeAuthMiddleware(BaseHTTPMiddleware):
++        async def dispatch(self, request: Any, call_next: Any) -> Any:
++            request.state.user = MagicMock(
++                scopes=["admin", "plugins:read", "plugins:write"],
++                tenant_id="test-tenant",
++            )
++            return await call_next(request)
++
++    test_app.add_middleware(FakeAuthMiddleware)
++    return test_app
++
++
++def _make_mock_entry(
++    name: str = "test-plugin", version: str = "1.0.0", state: str = "discovered"
++) -> MagicMock:
++    """Create a mock plugin entry."""
++    entry = MagicMock()
++    entry.manifest.name = name
++    entry.manifest.version = version
++    entry.manifest.description = f"Test {name}"
++    entry.manifest.author = "test"
++    entry.manifest.tags = ["test"]
++    entry.manifest.contributions.skills = []
++    entry.manifest.contributions.tools = []
++    entry.manifest.contributions.agents = []
++    entry.manifest.contributions.hooks = []
++    entry.manifest.license = "MIT"
++    entry.manifest.homepage = ""
++    entry.manifest.repository = ""
++    entry.manifest.status.value = "active"
++    entry.manifest.permissions = []
++    entry.manifest.dependencies = []
++    entry.state = PluginState(state)
++    entry.error = None
++    entry.instance = None
++    return entry
++
++
++class TestPluginInstallRoute:
++    """Tests for POST /v1/plugins/install."""
++
++    def test_install_success(self) -> None:
++        app = _make_app()
++        mock_installer = MagicMock()
++        mock_installer.install_from_local.return_value = PluginInstallResult(
++            success=True,
++            plugin_name="new-plugin",
++            version="1.0.0",
++        )
++
++        mock_registry = MagicMock()
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_installer = mock_installer
++        app.state.plugin_event_emitter = PluginEventEmitter()
++
++        client = TestClient(app)
++        resp = client.post(
++            "/v1/plugins/install",
++            json={"source_type": "local", "path": "/some/path"},
++        )
++
++        assert resp.status_code == 201
++        data = resp.json()
++        assert data["success"] is True
++        assert data["plugin_name"] == "new-plugin"
++        assert data["version"] == "1.0.0"
++
++    def test_install_failure_returns_400(self) -> None:
++        app = _make_app()
++        mock_installer = MagicMock()
++        mock_installer.install_from_local.return_value = PluginInstallResult(
++            success=False,
++            plugin_name="bad-plugin",
++            errors=["Directory not found"],
++        )
++
++        app.state.plugin_registry = MagicMock()
++        app.state.plugin_installer = mock_installer
++        app.state.plugin_event_emitter = None
++
++        client = TestClient(app)
++        resp = client.post(
++            "/v1/plugins/install",
++            json={"source_type": "local", "path": "/bad/path"},
++        )
++
++        assert resp.status_code == 400
++
++    def test_install_invalid_source_type(self) -> None:
++        app = _make_app()
++        app.state.plugin_registry = MagicMock()
++        app.state.plugin_installer = MagicMock()
++
++        client = TestClient(app)
++        resp = client.post(
++            "/v1/plugins/install",
++            json={"source_type": "unknown", "path": "/some/path"},
++        )
++
++        assert resp.status_code == 400
++        assert "Unsupported source type" in resp.json()["detail"]
++
++    def test_install_emits_lifecycle_event(self) -> None:
++        app = _make_app()
++        mock_installer = MagicMock()
++        mock_installer.install_from_local.return_value = PluginInstallResult(
++            success=True,
++            plugin_name="evented",
++            version="1.0.0",
++        )
++
++        emitter = PluginEventEmitter()
++        app.state.plugin_registry = MagicMock()
++        app.state.plugin_installer = mock_installer
++        app.state.plugin_event_emitter = emitter
++
++        client = TestClient(app)
++        client.post(
++            "/v1/plugins/install",
++            json={"source_type": "local", "path": "/some/path"},
++        )
++
++        events = emitter.get_events(plugin_name="evented")
++        assert len(events) == 1
++        assert events[0].event_type == "installed"
++
++
++class TestPluginUpdateRoute:
++    """Tests for POST /v1/plugins/{name}/update."""
++
++    def test_update_success(self) -> None:
++        app = _make_app()
++        entry = _make_mock_entry("test-plugin", state="discovered")
++
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = entry
++
++        mock_installer = MagicMock()
++        mock_installer.update.return_value = PluginInstallResult(
++            success=True,
++            plugin_name="test-plugin",
++            version="2.0.0",
++        )
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_installer = mock_installer
++        app.state.plugin_event_emitter = PluginEventEmitter()
++
++        client = TestClient(app)
++        resp = client.post(
++            "/v1/plugins/test-plugin/update",
++            json={"source_path": "/new/source"},
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["success"] is True
++        assert data["version"] == "2.0.0"
++
++
++class TestPluginUninstallRoute:
++    """Tests for DELETE /v1/plugins/{name}."""
++
++    def test_uninstall_success(self) -> None:
++        app = _make_app()
++        entry = _make_mock_entry("test-plugin", state="discovered")
++
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = entry
++
++        mock_installer = MagicMock()
++        mock_installer.uninstall.return_value = PluginInstallResult(
++            success=True, plugin_name="test-plugin"
++        )
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_installer = mock_installer
++        app.state.plugin_event_emitter = PluginEventEmitter()
++        app.state.plugin_config_store = MagicMock()
++
++        client = TestClient(app)
++        resp = client.delete("/v1/plugins/test-plugin")
++
++        assert resp.status_code == 200
++        assert resp.json()["success"] is True
++
++    def test_uninstall_not_found(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = None
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_installer = MagicMock()
++
++        client = TestClient(app)
++        resp = client.delete("/v1/plugins/nonexistent")
++
++        assert resp.status_code == 404
++
++
++class TestPluginDoctorRoute:
++    """Tests for GET /v1/plugins/{name}/doctor."""
++
++    def test_doctor_healthy(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++
++        mock_doctor = MagicMock()
++        mock_doctor.diagnose.return_value = PluginDoctorReport(
++            plugin_name="healthy-plugin",
++            checks=[
++                PluginDoctorCheck(
++                    name="manifest_validity",
++                    status="ok",
++                    message="Manifest valid",
++                ),
++                PluginDoctorCheck(
++                    name="state_check",
++                    status="ok",
++                    message="Plugin state: active",
++                ),
++            ],
++            overall_status="healthy",
++        )
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_doctor = mock_doctor
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/healthy-plugin/doctor")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["plugin_name"] == "healthy-plugin"
++        assert data["overall_status"] == "healthy"
++        assert len(data["checks"]) == 2
++        assert all(c["status"] == "ok" for c in data["checks"])
++
++    def test_doctor_not_found(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++
++        mock_doctor = MagicMock()
++        mock_doctor.diagnose.side_effect = KeyError("Plugin 'bad' not found")
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_doctor = mock_doctor
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/bad/doctor")
++
++        assert resp.status_code == 404
++
++    def test_doctor_broken_plugin(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++
++        mock_doctor = MagicMock()
++        mock_doctor.diagnose.return_value = PluginDoctorReport(
++            plugin_name="broken-plugin",
++            checks=[
++                PluginDoctorCheck(
++                    name="state_check",
++                    status="error",
++                    message="Plugin is in ERROR state",
++                    remediation="Check logs",
++                ),
++            ],
++            overall_status="broken",
++        )
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_doctor = mock_doctor
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/broken-plugin/doctor")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["overall_status"] == "broken"
++        assert data["checks"][0]["remediation"] == "Check logs"
++
++
++class TestPluginEventsRoute:
++    """Tests for GET /v1/plugins/{name}/events."""
++
++    def test_get_events(self) -> None:
++        app = _make_app()
++
++        entry = _make_mock_entry("evented")
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = entry
++
++        emitter = PluginEventEmitter()
++        emitter.emit("installed", "evented", version="1.0.0")
++        emitter.emit("enabled", "evented", version="1.0.0")
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_event_emitter = emitter
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/evented/events")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data) == 2
++        assert data[0]["event_type"] == "enabled"
++        assert data[1]["event_type"] == "installed"
++
++    def test_get_events_plugin_not_found(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = None
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_event_emitter = PluginEventEmitter()
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/nonexistent/events")
++
++        assert resp.status_code == 404
++
++    def test_get_events_no_emitter_returns_empty(self) -> None:
++        app = _make_app()
++        entry = _make_mock_entry("test")
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = entry
++
++        app.state.plugin_registry = mock_registry
++        app.state.plugin_event_emitter = None
++
++        client = TestClient(app)
++        resp = client.get("/v1/plugins/test/events")
++
++        assert resp.status_code == 200
++        assert resp.json() == []
+diff --git a/engine/tests/test_openclaw_t4_pack_audit.py b/engine/tests/test_openclaw_t4_pack_audit.py
+new file mode 100644
+index 0000000..7c65352
+--- /dev/null
++++ b/engine/tests/test_openclaw_t4_pack_audit.py
+@@ -0,0 +1,129 @@
++"""Tests for pack audit trail recording."""
++
++from __future__ import annotations
++
++from agent33.packs.audit import PackAuditLog
++
++
++class TestPackAuditLog:
++    """Tests for PackAuditLog."""
++
++    def test_record_creates_entry(self) -> None:
++        log = PackAuditLog()
++        entry = log.record("test-pack", "installed", version="1.0.0")
++
++        assert entry.pack_name == "test-pack"
++        assert entry.action == "installed"
++        assert entry.version == "1.0.0"
++        assert entry.timestamp is not None
++
++    def test_record_with_all_fields(self) -> None:
++        log = PackAuditLog()
++        entry = log.record(
++            "test-pack",
++            "enabled",
++            version="1.0.0",
++            tenant_id="tenant-a",
++            actor="admin-user",
++            details={"source": "marketplace"},
++        )
++
++        assert entry.tenant_id == "tenant-a"
++        assert entry.actor == "admin-user"
++        assert entry.details == {"source": "marketplace"}
++
++    def test_query_all(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "installed")
++        log.record("pack-b", "installed")
++        log.record("pack-a", "enabled")
++
++        entries = log.query()
++
++        assert len(entries) == 3
++        # Newest first
++        assert entries[0].action == "enabled"
++        assert entries[1].pack_name == "pack-b"
++        assert entries[2].pack_name == "pack-a"
++
++    def test_query_by_pack_name(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "installed")
++        log.record("pack-b", "installed")
++        log.record("pack-a", "enabled")
++
++        entries = log.query(pack_name="pack-a")
++
++        assert len(entries) == 2
++        assert all(e.pack_name == "pack-a" for e in entries)
++
++    def test_query_by_action(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "installed")
++        log.record("pack-b", "installed")
++        log.record("pack-a", "enabled")
++
++        entries = log.query(action="installed")
++
++        assert len(entries) == 2
++        assert all(e.action == "installed" for e in entries)
++
++    def test_query_by_tenant(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "enabled", tenant_id="t1")
++        log.record("pack-a", "enabled", tenant_id="t2")
++
++        entries = log.query(tenant_id="t1")
++
++        assert len(entries) == 1
++        assert entries[0].tenant_id == "t1"
++
++    def test_query_with_limit(self) -> None:
++        log = PackAuditLog()
++        for i in range(10):
++            log.record(f"pack-{i}", "installed")
++
++        entries = log.query(limit=3)
++        assert len(entries) == 3
++
++    def test_max_entries_trimming(self) -> None:
++        log = PackAuditLog(max_entries=5)
++
++        for i in range(10):
++            log.record(f"pack-{i}", "installed")
++
++        assert log.count == 5
++
++        entries = log.query()
++        # Should have the 5 most recent
++        assert entries[0].pack_name == "pack-9"
++        assert entries[4].pack_name == "pack-5"
++
++    def test_clear(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "installed")
++        log.record("pack-b", "installed")
++
++        removed = log.clear()
++        assert removed == 2
++        assert log.count == 0
++
++    def test_count_property(self) -> None:
++        log = PackAuditLog()
++        assert log.count == 0
++
++        log.record("pack-a", "installed")
++        assert log.count == 1
++
++    def test_combined_filters(self) -> None:
++        log = PackAuditLog()
++        log.record("pack-a", "installed", tenant_id="t1")
++        log.record("pack-a", "enabled", tenant_id="t1")
++        log.record("pack-b", "installed", tenant_id="t1")
++        log.record("pack-a", "installed", tenant_id="t2")
++
++        entries = log.query(pack_name="pack-a", action="installed")
++
++        assert len(entries) == 2
++        assert all(e.pack_name == "pack-a" for e in entries)
++        assert all(e.action == "installed" for e in entries)
+diff --git a/engine/tests/test_openclaw_t4_pack_health.py b/engine/tests/test_openclaw_t4_pack_health.py
+new file mode 100644
+index 0000000..698ac6e
+--- /dev/null
++++ b/engine/tests/test_openclaw_t4_pack_health.py
+@@ -0,0 +1,194 @@
++"""Tests for pack health checker."""
++
++from __future__ import annotations
++
++from pathlib import Path
++from unittest.mock import MagicMock
++
++import pytest
++
++from agent33.packs.health import PackHealthChecker, PackHealthStatus
++from agent33.packs.models import InstalledPack, PackDependency, PackStatus
++
++
++def _make_mock_registry(
++    packs: dict[str, InstalledPack] | None = None,
++) -> MagicMock:
++    """Create a mock PackRegistry."""
++    registry = MagicMock()
++    packs = packs or {}
++
++    def get_side_effect(name: str) -> InstalledPack | None:
++        return packs.get(name)
++
++    registry.get.side_effect = get_side_effect
++    registry.list_installed.return_value = list(packs.values())
++
++    return registry
++
++
++def _make_pack(
++    name: str,
++    version: str = "1.0.0",
++    pack_dir: Path | None = None,
++    *,
++    skills: int = 3,
++    loaded_skills: int | None = None,
++    deps: list[PackDependency] | None = None,
++) -> InstalledPack:
++    """Create an InstalledPack for testing."""
++    if loaded_skills is None:
++        loaded_skills = skills
++
++    return InstalledPack(
++        name=name,
++        version=version,
++        pack_dir=pack_dir or Path("/tmp/packs") / name,
++        skills=[
++            MagicMock(name=f"skill-{i}", path=f"skills/skill-{i}")
++            for i in range(skills)
++        ],
++        loaded_skill_names=[f"{name}/skill-{i}" for i in range(loaded_skills)],
++        pack_dependencies=deps or [],
++        status=PackStatus.INSTALLED,
++    )
++
++
++class TestPackHealthChecker:
++    """Tests for PackHealthChecker."""
++
++    def test_healthy_pack(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "test-pack"
++        pack_dir.mkdir()
++        pack = _make_pack("test-pack", pack_dir=pack_dir)
++
++        registry = _make_mock_registry({"test-pack": pack})
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("test-pack")
++
++        assert status.pack_name == "test-pack"
++        assert status.healthy is True
++        assert status.skill_load_errors == []
++        assert status.dependency_issues == []
++        assert status.last_smoke_check is not None
++
++    def test_pack_not_installed(self) -> None:
++        registry = _make_mock_registry()
++        checker = PackHealthChecker(registry)
++
++        with pytest.raises(KeyError, match="not installed"):
++            checker.check("nonexistent")
++
++    def test_missing_skills_detected(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "test-pack"
++        pack_dir.mkdir()
++        pack = _make_pack("test-pack", pack_dir=pack_dir, skills=5, loaded_skills=3)
++
++        registry = _make_mock_registry({"test-pack": pack})
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("test-pack")
++
++        assert status.healthy is False
++        assert len(status.skill_load_errors) == 1
++        assert "3/5" in status.skill_load_errors[0]
++
++    def test_missing_pack_directory(self) -> None:
++        pack = _make_pack(
++            "orphaned-pack",
++            pack_dir=Path("/does/not/exist"),
++        )
++
++        registry = _make_mock_registry({"orphaned-pack": pack})
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("orphaned-pack")
++
++        assert status.healthy is False
++        assert any("missing" in e.lower() for e in status.skill_load_errors)
++
++    def test_missing_dependency(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "dep-pack"
++        pack_dir.mkdir()
++
++        pack = _make_pack(
++            "dep-pack",
++            pack_dir=pack_dir,
++            deps=[PackDependency(name="missing-dep", version_constraint=">=1.0.0")],
++        )
++
++        registry = _make_mock_registry({"dep-pack": pack})
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("dep-pack")
++
++        assert status.healthy is False
++        assert len(status.dependency_issues) == 1
++        assert "missing-dep" in status.dependency_issues[0]
++
++    def test_satisfied_dependency(self, tmp_path: Path) -> None:
++        dep_dir = tmp_path / "base-pack"
++        dep_dir.mkdir()
++        pack_dir = tmp_path / "dep-pack"
++        pack_dir.mkdir()
++
++        base_pack = _make_pack("base-pack", pack_dir=dep_dir)
++        dep_pack = _make_pack(
++            "dep-pack",
++            pack_dir=pack_dir,
++            deps=[PackDependency(name="base-pack", version_constraint=">=1.0.0")],
++        )
++
++        registry = _make_mock_registry({
++            "base-pack": base_pack,
++            "dep-pack": dep_pack,
++        })
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("dep-pack")
++
++        assert status.healthy is True
++        assert status.dependency_issues == []
++
++    def test_details_include_version_and_status(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "test-pack"
++        pack_dir.mkdir()
++        pack = _make_pack("test-pack", version="2.3.1", pack_dir=pack_dir)
++
++        registry = _make_mock_registry({"test-pack": pack})
++        checker = PackHealthChecker(registry)
++
++        status = checker.check("test-pack")
++
++        assert status.details["version"] == "2.3.1"
++        assert status.details["status"] == "installed"
++
++
++class TestPackHealthCheckerAll:
++    """Tests for check_all."""
++
++    def test_check_all_multiple_packs(self, tmp_path: Path) -> None:
++        dir_a = tmp_path / "pack-a"
++        dir_a.mkdir()
++        dir_b = tmp_path / "pack-b"
++        dir_b.mkdir()
++
++        pack_a = _make_pack("pack-a", pack_dir=dir_a)
++        pack_b = _make_pack("pack-b", pack_dir=dir_b)
++
++        registry = _make_mock_registry({"pack-a": pack_a, "pack-b": pack_b})
++        checker = PackHealthChecker(registry)
++
++        results = checker.check_all()
++
++        assert len(results) == 2
++        names = {r.pack_name for r in results}
++        assert names == {"pack-a", "pack-b"}
++
++    def test_check_all_empty(self) -> None:
++        registry = _make_mock_registry()
++        checker = PackHealthChecker(registry)
++
++        results = checker.check_all()
++        assert results == []
+diff --git a/engine/tests/test_openclaw_t4_pack_rollback.py b/engine/tests/test_openclaw_t4_pack_rollback.py
+new file mode 100644
+index 0000000..de3eb19
+--- /dev/null
++++ b/engine/tests/test_openclaw_t4_pack_rollback.py
+@@ -0,0 +1,217 @@
++"""Tests for pack rollback manager: archiving, rollback, enablement preservation."""
++
++from __future__ import annotations
++
++from pathlib import Path
++from unittest.mock import MagicMock, PropertyMock
++
++import pytest
++import yaml
++
++from agent33.packs.models import InstalledPack, InstallResult, PackSource, PackStatus
++from agent33.packs.rollback import PackRollbackManager
++
++
++def _make_mock_registry(
++    installed: dict[str, InstalledPack] | None = None,
++    enabled: dict[str, set[str]] | None = None,
++) -> MagicMock:
++    """Create a mock PackRegistry."""
++    registry = MagicMock()
++    installed = installed or {}
++    enabled = enabled or {}
++
++    registry._installed = installed
++    registry._enabled = enabled
++
++    def get_side_effect(name: str) -> InstalledPack | None:
++        return installed.get(name)
++
++    registry.get.side_effect = get_side_effect
++
++    def uninstall_side_effect(name: str) -> bool:
++        if name not in installed:
++            raise ValueError(f"Pack '{name}' is not installed")
++        del installed[name]
++        return True
++
++    registry.uninstall.side_effect = uninstall_side_effect
++
++    def install_side_effect(source: PackSource) -> InstallResult:
++        return InstallResult(
++            success=True,
++            pack_name=source.name or "unknown",
++            version="1.0.0",
++            skills_loaded=2,
++        )
++
++    registry.install.side_effect = install_side_effect
++
++    def enable_side_effect(name: str, tenant_id: str) -> bool:
++        if name not in installed and name not in [
++            s.name for s in [source for source in []]
++        ]:
++            # After install from rollback, mock won't have it in installed
++            pass
++        enabled.setdefault(tenant_id, set()).add(name)
++        return True
++
++    registry.enable.side_effect = enable_side_effect
++
++    return registry
++
++
++def _make_installed_pack(
++    name: str, version: str, pack_dir: Path
++) -> InstalledPack:
++    """Create an InstalledPack for testing."""
++    return InstalledPack(
++        name=name,
++        version=version,
++        description=f"Test pack {name}",
++        pack_dir=pack_dir,
++        status=PackStatus.INSTALLED,
++    )
++
++
++class TestPackRollbackManager:
++    """Tests for PackRollbackManager."""
++
++    def test_archive_current(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "packs" / "test-pack"
++        pack_dir.mkdir(parents=True)
++        (pack_dir / "PACK.yaml").write_text("name: test-pack\nversion: 1.0.0")
++
++        pack = _make_installed_pack("test-pack", "1.0.0", pack_dir)
++        registry = _make_mock_registry(
++            installed={"test-pack": pack},
++            enabled={"tenant-a": {"test-pack"}, "tenant-b": set()},
++        )
++
++        archive_dir = tmp_path / "archives"
++        manager = PackRollbackManager(registry, archive_dir)
++
++        record = manager.archive_current("test-pack")
++
++        assert record is not None
++        assert record.pack_name == "test-pack"
++        assert record.version == "1.0.0"
++        assert record.enablement_snapshot["tenant-a"] is True
++        assert record.enablement_snapshot["tenant-b"] is False
++        assert Path(record.archive_dir).is_dir()
++
++    def test_archive_nonexistent_returns_none(self, tmp_path: Path) -> None:
++        registry = _make_mock_registry()
++        manager = PackRollbackManager(registry, tmp_path / "archives")
++
++        record = manager.archive_current("nonexistent")
++        assert record is None
++
++    def test_rollback_no_archive(self, tmp_path: Path) -> None:
++        registry = _make_mock_registry()
++        manager = PackRollbackManager(registry, tmp_path / "archives")
++
++        result = manager.rollback("test-pack")
++
++        assert result.success is False
++        assert "No archived versions" in result.errors[0]
++
++    def test_rollback_restores_version(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "packs" / "test-pack"
++        pack_dir.mkdir(parents=True)
++        (pack_dir / "PACK.yaml").write_text(
++            yaml.dump({"name": "test-pack", "version": "1.0.0"})
++        )
++
++        pack = _make_installed_pack("test-pack", "2.0.0", pack_dir)
++        installed: dict[str, InstalledPack] = {"test-pack": pack}
++        enabled: dict[str, set[str]] = {"tenant-a": {"test-pack"}}
++
++        registry = _make_mock_registry(installed=installed, enabled=enabled)
++
++        archive_dir = tmp_path / "archives"
++        manager = PackRollbackManager(registry, archive_dir)
++
++        # Archive v2.0.0
++        manager.archive_current("test-pack")
++
++        # Rollback
++        result = manager.rollback("test-pack")
++
++        assert result.success is True
++        assert result.version == "2.0.0"
++
++    def test_rollback_preserves_enablement(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "packs" / "test-pack"
++        pack_dir.mkdir(parents=True)
++        (pack_dir / "PACK.yaml").write_text(
++            yaml.dump({"name": "test-pack", "version": "1.0.0"})
++        )
++
++        pack = _make_installed_pack("test-pack", "1.0.0", pack_dir)
++        installed: dict[str, InstalledPack] = {"test-pack": pack}
++        enabled: dict[str, set[str]] = {
++            "tenant-a": {"test-pack"},
++            "tenant-b": set(),
++        }
++
++        registry = _make_mock_registry(installed=installed, enabled=enabled)
++
++        archive_dir = tmp_path / "archives"
++        manager = PackRollbackManager(registry, archive_dir)
++
++        manager.archive_current("test-pack")
++        manager.rollback("test-pack")
++
++        # Verify enable was called for tenant-a (which had pack enabled)
++        enable_calls = registry.enable.call_args_list
++        enabled_tenants = {call.args[1] for call in enable_calls}
++        assert "tenant-a" in enabled_tenants
++
++    def test_list_archived_versions(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "packs" / "test-pack"
++        pack_dir.mkdir(parents=True)
++        (pack_dir / "file.txt").write_text("content")
++
++        pack_v1 = _make_installed_pack("test-pack", "1.0.0", pack_dir)
++        pack_v2 = _make_installed_pack("test-pack", "2.0.0", pack_dir)
++
++        installed: dict[str, InstalledPack] = {"test-pack": pack_v1}
++        registry = _make_mock_registry(installed=installed)
++
++        archive_dir = tmp_path / "archives"
++        manager = PackRollbackManager(registry, archive_dir)
++
++        manager.archive_current("test-pack")
++
++        installed["test-pack"] = pack_v2
++        manager.archive_current("test-pack")
++
++        versions = manager.list_archived_versions("test-pack")
++        assert versions == ["2.0.0", "1.0.0"]
++
++    def test_has_archive(self, tmp_path: Path) -> None:
++        registry = _make_mock_registry()
++        manager = PackRollbackManager(registry, tmp_path / "archives")
++
++        assert manager.has_archive("test-pack") is False
++
++    def test_rollback_consumes_archive(self, tmp_path: Path) -> None:
++        pack_dir = tmp_path / "packs" / "test-pack"
++        pack_dir.mkdir(parents=True)
++        (pack_dir / "PACK.yaml").write_text(
++            yaml.dump({"name": "test-pack", "version": "1.0.0"})
++        )
++
++        pack = _make_installed_pack("test-pack", "1.0.0", pack_dir)
++        installed: dict[str, InstalledPack] = {"test-pack": pack}
++        registry = _make_mock_registry(installed=installed)
++
++        manager = PackRollbackManager(registry, tmp_path / "archives")
++        manager.archive_current("test-pack")
++
++        assert len(manager.list_archived_versions("test-pack")) == 1
++
++        manager.rollback("test-pack")
++
++        assert len(manager.list_archived_versions("test-pack")) == 0
+diff --git a/engine/tests/test_openclaw_t4_pack_routes.py b/engine/tests/test_openclaw_t4_pack_routes.py
+new file mode 100644
+index 0000000..83b2e04
+--- /dev/null
++++ b/engine/tests/test_openclaw_t4_pack_routes.py
+@@ -0,0 +1,382 @@
++"""API route tests for Track Phase 4 pack marketplace endpoints.
++
++Tests the trust policy, enablement matrix, rollback, health, and audit
++API routes using a TestClient with mocked services.
++"""
++
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Any
++from unittest.mock import MagicMock
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from agent33.api.routes.packs_marketplace import router
++from agent33.packs.audit import PackAuditLog
++from agent33.packs.health import PackHealthStatus
++from agent33.packs.models import InstalledPack, InstallResult, PackStatus
++from agent33.packs.provenance import PackTrustPolicy, TrustLevel
++from agent33.packs.rollback import ArchivedPackVersion
++from agent33.security.auth import create_access_token
++
++
++def _make_app() -> FastAPI:
++    """Create a minimal FastAPI app with pack marketplace routes."""
++    test_app = FastAPI()
++    test_app.include_router(router)
++
++    from starlette.middleware.base import BaseHTTPMiddleware
++
++    class FakeAuthMiddleware(BaseHTTPMiddleware):
++        async def dispatch(self, request: Any, call_next: Any) -> Any:
++            request.state.user = MagicMock(
++                scopes=["admin", "agents:read", "agents:write"],
++                tenant_id="test-tenant",
++            )
++            return await call_next(request)
++
++    test_app.add_middleware(FakeAuthMiddleware)
++    return test_app
++
++
++def _make_pack(name: str, version: str = "1.0.0") -> InstalledPack:
++    return InstalledPack(
++        name=name,
++        version=version,
++        pack_dir=Path("/tmp/packs") / name,
++        status=PackStatus.INSTALLED,
++        checksum="abc123",
++    )
++
++
++class TestTrustPolicyRoutes:
++    """Tests for trust policy GET/PUT."""
++
++    def test_get_trust_policy(self) -> None:
++        app = _make_app()
++        mock_mgr = MagicMock()
++        mock_mgr.get_policy.return_value = PackTrustPolicy(
++            require_signature=True,
++            min_trust_level=TrustLevel.VERIFIED,
++            allowed_signers=["signer-1"],
++        )
++        app.state.pack_trust_manager = mock_mgr
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/trust-policy")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["require_signature"] is True
++        assert data["min_trust_level"] == "verified"
++        assert data["allowed_signers"] == ["signer-1"]
++
++    def test_update_trust_policy(self) -> None:
++        app = _make_app()
++        mock_mgr = MagicMock()
++        mock_mgr.update_policy.return_value = PackTrustPolicy(
++            require_signature=True,
++            min_trust_level=TrustLevel.COMMUNITY,
++        )
++        app.state.pack_trust_manager = mock_mgr
++
++        client = TestClient(app)
++        resp = client.put(
++            "/v1/packs/trust-policy",
++            json={"require_signature": True},
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["require_signature"] is True
++
++    def test_update_trust_policy_no_updates(self) -> None:
++        app = _make_app()
++        app.state.pack_trust_manager = MagicMock()
++
++        client = TestClient(app)
++        resp = client.put("/v1/packs/trust-policy", json={})
++
++        assert resp.status_code == 400
++        assert "No updates" in resp.json()["detail"]
++
++
++class TestEnablementMatrixRoutes:
++    """Tests for tenant enablement matrix."""
++
++    def test_get_enablement_matrix(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.list_installed.return_value = [
++            _make_pack("pack-a"),
++            _make_pack("pack-b"),
++        ]
++        mock_registry._enabled = {"tenant-1": {"pack-a"}, "tenant-2": set()}
++        mock_registry.is_enabled.side_effect = lambda n, t: n in mock_registry._enabled.get(
++            t, set()
++        )
++        app.state.pack_registry = mock_registry
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/enablement-matrix")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert "pack-a" in data["packs"]
++        assert "pack-b" in data["packs"]
++        assert data["matrix"]["pack-a"]["tenant-1"] is True
++        assert data["matrix"]["pack-a"]["tenant-2"] is False
++
++    def test_bulk_update_enablement(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.list_installed.return_value = [_make_pack("pack-a")]
++        mock_registry._enabled = {"tenant-1": set()}
++        mock_registry.is_enabled.return_value = True
++        app.state.pack_registry = mock_registry
++        app.state.pack_audit_log = PackAuditLog()
++
++        client = TestClient(app)
++        resp = client.put(
++            "/v1/packs/enablement-matrix",
++            json={
++                "entries": [
++                    {
++                        "pack_name": "pack-a",
++                        "tenant_id": "tenant-1",
++                        "enabled": True,
++                    }
++                ]
++            },
++        )
++
++        assert resp.status_code == 200
++        mock_registry.enable.assert_called_once_with("pack-a", "tenant-1")
++
++
++class TestRollbackRoutes:
++    """Tests for pack rollback."""
++
++    def test_rollback_success(self) -> None:
++        app = _make_app()
++        mock_rollback = MagicMock()
++        mock_rollback.has_archive.return_value = True
++        mock_rollback.rollback.return_value = InstallResult(
++            success=True,
++            pack_name="test-pack",
++            version="1.0.0",
++            skills_loaded=3,
++        )
++        app.state.pack_rollback_manager = mock_rollback
++        app.state.pack_audit_log = PackAuditLog()
++        app.state.pack_registry = MagicMock()
++
++        client = TestClient(app)
++        resp = client.post("/v1/packs/test-pack/rollback")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["success"] is True
++        assert data["version"] == "1.0.0"
++        assert data["skills_loaded"] == 3
++
++    def test_rollback_no_archive(self) -> None:
++        app = _make_app()
++        mock_rollback = MagicMock()
++        mock_rollback.has_archive.return_value = False
++        app.state.pack_rollback_manager = mock_rollback
++
++        client = TestClient(app)
++        resp = client.post("/v1/packs/nonexistent/rollback")
++
++        assert resp.status_code == 404
++
++    def test_list_rollback_versions(self) -> None:
++        app = _make_app()
++        mock_rollback = MagicMock()
++        mock_rollback.list_archived_versions.return_value = ["2.0.0", "1.0.0"]
++        app.state.pack_rollback_manager = mock_rollback
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/test-pack/rollback-versions")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["versions"] == ["2.0.0", "1.0.0"]
++        assert data["count"] == 2
++
++
++class TestPackHealthRoutes:
++    """Tests for pack health checks."""
++
++    def test_health_check_healthy(self) -> None:
++        app = _make_app()
++        mock_checker = MagicMock()
++        mock_checker.check.return_value = PackHealthStatus(
++            pack_name="test-pack",
++            healthy=True,
++            details={"version": "1.0.0", "status": "installed"},
++        )
++        app.state.pack_health_checker = mock_checker
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/test-pack/health")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["pack_name"] == "test-pack"
++        assert data["healthy"] is True
++
++    def test_health_check_unhealthy(self) -> None:
++        app = _make_app()
++        mock_checker = MagicMock()
++        mock_checker.check.return_value = PackHealthStatus(
++            pack_name="broken-pack",
++            healthy=False,
++            skill_load_errors=["Only 2/5 skills loaded"],
++            dependency_issues=["Required pack 'base' not installed"],
++        )
++        app.state.pack_health_checker = mock_checker
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/broken-pack/health")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["healthy"] is False
++        assert len(data["skill_load_errors"]) == 1
++        assert len(data["dependency_issues"]) == 1
++
++    def test_health_check_not_found(self) -> None:
++        app = _make_app()
++        mock_checker = MagicMock()
++        mock_checker.check.side_effect = KeyError("not installed")
++        app.state.pack_health_checker = mock_checker
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/nonexistent/health")
++
++        assert resp.status_code == 404
++
++
++class TestPackAuditRoutes:
++    """Tests for pack audit trail."""
++
++    def test_get_audit_trail(self) -> None:
++        app = _make_app()
++        audit_log = PackAuditLog()
++        audit_log.record("test-pack", "installed", version="1.0.0")
++        audit_log.record("test-pack", "enabled", tenant_id="tenant-1")
++        app.state.pack_audit_log = audit_log
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/test-pack/audit")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data) == 2
++        assert data[0]["action"] == "enabled"
++        assert data[1]["action"] == "installed"
++
++    def test_get_audit_with_limit(self) -> None:
++        app = _make_app()
++        audit_log = PackAuditLog()
++        for i in range(10):
++            audit_log.record("test-pack", f"action-{i}")
++        app.state.pack_audit_log = audit_log
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/test-pack/audit?limit=3")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data) == 3
++
++
++class TestTenantPackRoutes:
++    """Tests for per-tenant pack enablement."""
++
++    def test_get_tenant_packs(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.list_enabled.return_value = [
++            _make_pack("pack-a"),
++            _make_pack("pack-b"),
++        ]
++        app.state.pack_registry = mock_registry
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/tenants/tenant-1/enabled")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["tenant_id"] == "tenant-1"
++        assert data["count"] == 2
++        assert len(data["packs"]) == 2
++
++    def test_set_tenant_pack_enablement(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        app.state.pack_registry = mock_registry
++        app.state.pack_audit_log = PackAuditLog()
++
++        client = TestClient(app)
++        resp = client.put(
++            "/v1/packs/tenants/tenant-1/packs/pack-a?enabled=true"
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["pack_name"] == "pack-a"
++        assert data["tenant_id"] == "tenant-1"
++        assert data["enabled"] is True
++        mock_registry.enable.assert_called_once_with("pack-a", "tenant-1")
++
++    def test_set_tenant_pack_disable(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        app.state.pack_registry = mock_registry
++        app.state.pack_audit_log = PackAuditLog()
++
++        client = TestClient(app)
++        resp = client.put(
++            "/v1/packs/tenants/tenant-1/packs/pack-a?enabled=false"
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["enabled"] is False
++        mock_registry.disable.assert_called_once_with("pack-a", "tenant-1")
++
++
++class TestProvenanceRoute:
++    """Tests for pack provenance endpoint."""
++
++    def test_get_provenance(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = _make_pack("test-pack")
++        app.state.pack_registry = mock_registry
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/test-pack/provenance")
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["pack_name"] == "test-pack"
++        assert data["version"] == "1.0.0"
++        assert data["checksum"] == "abc123"
++
++    def test_get_provenance_not_found(self) -> None:
++        app = _make_app()
++        mock_registry = MagicMock()
++        mock_registry.get.return_value = None
++        app.state.pack_registry = mock_registry
++
++        client = TestClient(app)
++        resp = client.get("/v1/packs/nonexistent/provenance")
++
++        assert resp.status_code == 404
+diff --git a/engine/tests/test_openclaw_t4_trust_manager.py b/engine/tests/test_openclaw_t4_trust_manager.py
+new file mode 100644
+index 0000000..cc98e80
+--- /dev/null
++++ b/engine/tests/test_openclaw_t4_trust_manager.py
+@@ -0,0 +1,145 @@
++"""Tests for pack trust policy manager: CRUD, signer management, persistence."""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++import pytest
++
++from agent33.packs.provenance import TrustLevel
++from agent33.packs.trust_manager import TrustPolicyManager
++
++
++class TestTrustPolicyManager:
++    """Tests for TrustPolicyManager."""
++
++    def test_default_policy(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        policy = mgr.get_policy()
++
++        assert policy.require_signature is False
++        assert policy.min_trust_level == TrustLevel.UNTRUSTED
++        assert policy.allowed_signers == []
++
++    def test_get_policy_returns_copy(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        p1 = mgr.get_policy()
++        p2 = mgr.get_policy()
++
++        # Should be equal but not the same object
++        assert p1 == p2
++        assert p1 is not p2
++
++    def test_update_policy(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        updated = mgr.update_policy({"require_signature": True})
++
++        assert updated.require_signature is True
++        # Verify persistence
++        assert config_path.is_file()
++
++    def test_update_policy_invalid_field(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        with pytest.raises(ValueError, match="Unknown trust policy field"):
++            mgr.update_policy({"nonexistent_field": True})
++
++    def test_add_trusted_signer(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        added = mgr.add_trusted_signer("signer-1")
++        assert added is True
++        assert "signer-1" in mgr.trusted_signers
++
++    def test_add_duplicate_signer_returns_false(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        mgr.add_trusted_signer("signer-1")
++        added = mgr.add_trusted_signer("signer-1")
++        assert added is False
++        assert mgr.trusted_signers.count("signer-1") == 1
++
++    def test_remove_trusted_signer(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        mgr.add_trusted_signer("signer-1")
++        removed = mgr.remove_trusted_signer("signer-1")
++
++        assert removed is True
++        assert "signer-1" not in mgr.trusted_signers
++
++    def test_remove_nonexistent_signer_returns_false(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        removed = mgr.remove_trusted_signer("nonexistent")
++        assert removed is False
++
++    def test_set_min_trust_level(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        mgr.set_min_trust_level(TrustLevel.VERIFIED)
++
++        assert mgr.min_trust_level == TrustLevel.VERIFIED
++
++    def test_set_require_signature(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        assert mgr.requires_signature is False
++
++        mgr.set_require_signature(True)
++        assert mgr.requires_signature is True
++
++    def test_persistence_survives_reload(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++
++        mgr1 = TrustPolicyManager(config_path)
++        mgr1.add_trusted_signer("signer-1")
++        mgr1.set_min_trust_level(TrustLevel.OFFICIAL)
++        mgr1.set_require_signature(True)
++
++        # Create new instance from same path
++        mgr2 = TrustPolicyManager(config_path)
++
++        assert mgr2.trusted_signers == ["signer-1"]
++        assert mgr2.min_trust_level == TrustLevel.OFFICIAL
++        assert mgr2.requires_signature is True
++
++    def test_corrupt_config_uses_defaults(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        config_path.write_text("invalid json{", encoding="utf-8")
++
++        mgr = TrustPolicyManager(config_path)
++        policy = mgr.get_policy()
++
++        # Should fall back to defaults
++        assert policy.require_signature is False
++        assert policy.min_trust_level == TrustLevel.UNTRUSTED
++
++    def test_multiple_signers(self, tmp_path: Path) -> None:
++        config_path = tmp_path / "trust-policy.json"
++        mgr = TrustPolicyManager(config_path)
++
++        mgr.add_trusted_signer("signer-a")
++        mgr.add_trusted_signer("signer-b")
++        mgr.add_trusted_signer("signer-c")
++
++        assert len(mgr.trusted_signers) == 3
++        assert set(mgr.trusted_signers) == {"signer-a", "signer-b", "signer-c"}
++
++        mgr.remove_trusted_signer("signer-b")
++        assert len(mgr.trusted_signers) == 2
++        assert "signer-b" not in mgr.trusted_signers

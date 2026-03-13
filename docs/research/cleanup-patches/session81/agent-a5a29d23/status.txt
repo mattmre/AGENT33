@@ -1,0 +1,34 @@
+path=.claude/worktrees/agent-a5a29d23
+branch=feat/session59-openclaw-tracks3-4-plugins-packs
+subject=Merge pull request #159 from mattmre/codex/session64-wrap
+classification=keep-intact
+note=session59 tracks3-4 prototype
+status_count=22
+committed_patch_bytes=0
+tracked_patch_bytes=13244
+untracked_count=19
+untracked_patch_bytes=156518
+
+[git-status]
+ M engine/src/agent33/api/routes/plugins.py
+ M engine/src/agent33/plugins/api_models.py
+ M engine/src/agent33/plugins/models.py
+?? engine/src/agent33/api/routes/packs_marketplace.py
+?? engine/src/agent33/packs/audit.py
+?? engine/src/agent33/packs/health.py
+?? engine/src/agent33/packs/rollback.py
+?? engine/src/agent33/packs/trust_manager.py
+?? engine/src/agent33/plugins/config_store.py
+?? engine/src/agent33/plugins/doctor.py
+?? engine/src/agent33/plugins/events.py
+?? engine/src/agent33/plugins/installer.py
+?? engine/tests/test_openclaw_t3_plugin_config_store.py
+?? engine/tests/test_openclaw_t3_plugin_doctor.py
+?? engine/tests/test_openclaw_t3_plugin_events.py
+?? engine/tests/test_openclaw_t3_plugin_installer.py
+?? engine/tests/test_openclaw_t3_plugin_routes.py
+?? engine/tests/test_openclaw_t4_pack_audit.py
+?? engine/tests/test_openclaw_t4_pack_health.py
+?? engine/tests/test_openclaw_t4_pack_rollback.py
+?? engine/tests/test_openclaw_t4_pack_routes.py
+?? engine/tests/test_openclaw_t4_trust_manager.py

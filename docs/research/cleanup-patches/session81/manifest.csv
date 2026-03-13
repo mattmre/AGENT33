@@ -1,0 +1,5 @@
+"slug","path","branch","classification","note","status_count","committed_patch","committed_patch_bytes","tracked_patch","tracked_patch_bytes","untracked_count","untracked_patch","untracked_patch_bytes"
+"agent-a5a29d23",".claude/worktrees/agent-a5a29d23","feat/session59-openclaw-tracks3-4-plugins-packs","keep-intact","session59 tracks3-4 prototype","22","","0","working-tree-tracked.patch","13244","19","working-tree-untracked.patch","156518"
+"agent-ab53cb8a",".claude/worktrees/agent-ab53cb8a","feat/session59-wave5-refinements","keep-intact","session59 wave5 refinements prototype","12","","0","working-tree-tracked.patch","45244","4","working-tree-untracked.patch","18561"
+"agent-ac4da72a",".claude/worktrees/agent-ac4da72a","feat/session59-openclaw-tracks5-6-mutation-backup","keep-intact","session59 tracks5-6 mutation-backup prototype","12","","0","","0","16","working-tree-untracked.patch","139967"
+"agent-af722d5d",".claude/worktrees/agent-af722d5d","feat/session59-phase46-dynamic-catalog","keep-intact","session59 phase46 dynamic catalog prototype","19","","0","working-tree-tracked.patch","58437","16","working-tree-untracked.patch","125756"

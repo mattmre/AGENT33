@@ -3,8 +3,6 @@
 **Date:** 2026-03-06
 **Purpose:** Convert the active `docs/next-session.md` priority queue into a dependency-ordered execution plan with carry-forward triage, research references, PR boundaries, and fresh-agent workflow guidance.
 
-> Historical note: this document captures the *start-of-session* plan before the Session 56 carry-forward stack was repackaged. The final Session 57 outcome is the PR queue **#145–#150**, and the older carry-forward PRs **#141–#144** are now superseded as described in `docs/next-session.md` and `docs/sessions/session-57-2026-03-06.md`.
-
 ---
 
 ## Inputs Reviewed
@@ -12,7 +10,7 @@
 - `CLAUDE.md`
 - `docs/next-session.md`
 - `docs/phases/README.md`
-- Latest checked-in pre-Session 57 session log: `docs/sessions/session-55-2026-03-05.md`
+- `docs/sessions/session-57-2026-03-06.md`
 - Local git status/worktree layout
 - Session 56 PR carry-forward state (#141-#144)
 - Historical research remnants in `docs/research/`
@@ -79,12 +77,14 @@
 ## Local Remnants Classification
 
 ### Keep as active research inputs
-- `docs/research/session54-agent-orchestration-capability-gap-matrix-2026-03-05.md`
-- `docs/research/session54-agent-orchestration-priority-deltas-architecture-2026-03-05.md`
-- `docs/research/session52-priority-and-phase-roadmap.md`
+- `docs/research/session54-haystack-deep-dive-gap-analysis-2026-03-05.md`
+- `docs/research/session54-haystack-gap-remediation-implementation-plan-2026-03-05.md`
+- `docs/research/session47-priority-research-findings.md`
 
 ### Preserve as historical/session artifacts
-- Older checked-in session logs under `docs/sessions/` and `docs/sessions/archive/` (rather than relying on untracked Session 47-49 notes)
+- `docs/sessions/session-47-2026-02-26.md`
+- `docs/sessions/session-48-2026-02-27.md`
+- `docs/sessions/session-49-2026-02-27.md`
 - `docs/research/salvaged-skillsbench-code/`
 - `findings.md`, `progress.md`, `task_plan.md`
 - legacy `pr*_review_comment.md`
@@ -117,12 +117,12 @@
 - `docs/research/session55-phase26-html-preview-design.md`
 - `docs/research/session55-phase27-hub-alignment.md`
 - `docs/research/session54-delta-hitl-approvals-architecture-2026-03-05.md`
-- `docs/research/phase26-stage3-visual-pages-research-2026-02-17.md`
+- `docs/research/session56-stage3-research.md`
 
 ### Wave 2
 - `docs/research/session55-qwen-agent-analysis.md`
 - `docs/phases/qwen-adoption-phases.md`
-- `docs/sessions/session-55-2026-03-05.md`
+- `docs/sessions/session-57-2026-03-06.md`
 
 ### Wave 3
 - `docs/research/skillsbench-analysis.md`

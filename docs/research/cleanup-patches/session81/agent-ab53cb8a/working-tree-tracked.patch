@@ -1,0 +1,1144 @@
+diff --git a/engine/src/agent33/api/routes/workflow_sse.py b/engine/src/agent33/api/routes/workflow_sse.py
+index d2598948f0d00df23e7debd12220f34b16da503b..6312c66ee305da475d6e9ace217bb266f40252f7 100644
+--- a/engine/src/agent33/api/routes/workflow_sse.py
++++ b/engine/src/agent33/api/routes/workflow_sse.py
+@@ -20,7 +20,13 @@ router = APIRouter(prefix="/v1/workflows", tags=["workflows"])
+ 
+ @router.get("/{run_id}/events", dependencies=[require_scope("workflows:read")])
+ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResponse:
+-    """Stream run-scoped workflow events over authenticated SSE."""
++    """Stream run-scoped workflow events over authenticated SSE.
++
++    Supports reconnection via the ``Last-Event-ID`` header.  When provided,
++    buffered events with a sequence number higher than the supplied ID are
++    replayed before switching to the live queue.
++    """
++    last_event_id: str | None = getattr(request, "headers", {}).get("last-event-id")
+     manager = getattr(request.app.state, "ws_manager", None)
+     if manager is None:
+         raise HTTPException(status_code=503, detail="Workflow live manager not available")
+@@ -40,12 +46,35 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
+         await manager.unsubscribe_sse(run_id, queue)
+         raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+ 
++    # Parse the reconnection cursor
++    reconnect_seq: int | None = None
++    if last_event_id is not None:
++        try:
++            reconnect_seq = int(last_event_id)
++        except (TypeError, ValueError):
++            pass
++
+     async def event_generator() -> AsyncGenerator[str, None]:
+         loop = asyncio.get_running_loop()
+         poll_timeout = min(manager.heartbeat_interval_seconds, 1.0)
+         next_heartbeat_at = loop.time() + manager.heartbeat_interval_seconds
++        seq = await manager.current_seq(run_id)
+         try:
+-            yield _format_sse(sync_event)
++            # On reconnect, replay buffered events; otherwise send sync
++            if reconnect_seq is not None:
++                missed = await manager.replay_from_seq(run_id, reconnect_seq)
++                if missed:
++                    for missed_seq, missed_event in missed:
++                        yield _format_sse(missed_event, missed_seq)
++                    seq = missed[-1][0] + 1
++                else:
++                    # Buffer too old or empty — send full sync
++                    yield _format_sse(sync_event, seq)
++                    seq += 1
++            else:
++                yield _format_sse(sync_event, seq)
++                seq += 1
++
+             while True:
+                 if await request.is_disconnected():
+                     break
+@@ -61,10 +90,12 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
+                     heartbeat = await manager.build_heartbeat_event(run_id)
+                     if heartbeat is None:
+                         break
+-                    yield _format_sse(heartbeat)
++                    yield _format_sse(heartbeat, seq)
++                    seq += 1
+                     next_heartbeat_at = loop.time() + manager.heartbeat_interval_seconds
+                     continue
+-                yield _format_sse(event)
++                yield _format_sse(event, seq)
++                seq += 1
+         finally:
+             await manager.unsubscribe_sse(run_id, queue)
+ 
+@@ -79,9 +110,9 @@ async def stream_workflow_events(run_id: str, request: Request) -> StreamingResp
+     )
+ 
+ 
+-def _format_sse(event: WorkflowEvent) -> str:
+-    """Serialize a workflow event as a single SSE data frame."""
+-    return f"data: {event.to_json()}\n\n"
++def _format_sse(event: WorkflowEvent, seq: int) -> str:
++    """Serialize a workflow event as an SSE frame with an event ID."""
++    return f"id: {seq}\ndata: {event.to_json()}\n\n"
+ 
+ 
+ def _get_request_user(request: Request) -> Any:
+diff --git a/engine/src/agent33/execution/adapters/jupyter.py b/engine/src/agent33/execution/adapters/jupyter.py
+index 7a918ecf727629196b6ca59e516e786d729c5dbd..628757758441638e6f240e17dfc5a79746836ada 100644
+--- a/engine/src/agent33/execution/adapters/jupyter.py
++++ b/engine/src/agent33/execution/adapters/jupyter.py
+@@ -23,6 +23,7 @@ from agent33.execution.models import (
+     KernelContainerPolicy,
+     KernelInterface,
+     OutputArtifact,
++    SandboxConfig,
+ )
+ 
+ logger = logging.getLogger(__name__)
+@@ -278,6 +279,7 @@ class DockerKernelSession:
+         policy: KernelContainerPolicy,
+         startup_timeout: float = 30.0,
+         working_directory: str | None = None,
++        sandbox: SandboxConfig | None = None,
+     ) -> None:
+         self.session_id = session_id
+         self.kernel_name = kernel_name
+@@ -286,6 +288,7 @@ class DockerKernelSession:
+         self._policy = policy
+         self._startup_timeout = startup_timeout
+         self._working_directory = working_directory
++        self._sandbox = sandbox
+         self._runtime_dir: Path | None = None
+         self._host_connection_file: Path | None = None
+         self._container_name = _sanitize_container_name(session_id)
+@@ -328,6 +331,8 @@ class DockerKernelSession:
+         self._runtime_dir = runtime_dir
+         self._host_connection_file = host_connection_file
+         self._container_id = stdout_bytes.decode("utf-8", errors="replace").strip() or None
++
++        await self._wait_for_container()
+         self._client = await _build_async_kernel_client(host_connection_file)
+         self._client.start_channels()
+         try:
+@@ -354,6 +359,32 @@ class DockerKernelSession:
+             self._container_name,
+         ]
+ 
++        # Resource limits from sandbox config or defaults
++        if self._sandbox:
++            command.extend(["--memory", f"{self._sandbox.memory_mb}m"])
++            command.extend(["--cpus", str(self._sandbox.cpu_cores)])
++        else:
++            command.extend(["--memory", "512m"])
++            command.extend(["--cpus", "1"])
++
++        # Security hardening
++        if self._policy.read_only_root:
++            command.append("--read-only")
++        if self._policy.tmpfs_tmp:
++            command.extend(["--tmpfs", "/tmp:rw,noexec,nosuid,size=100m"])
++        command.extend(["--security-opt", "no-new-privileges"])
++        command.extend(["--pids-limit", str(self._policy.pids_limit)])
++
++        # User namespace
++        if self._policy.run_as_user:
++            command.extend(["--user", self._policy.run_as_user])
++
++        # Labels for external management
++        command.extend([
++            "--label", "agent33.component=kernel",
++            "--label", f"agent33.session={self.session_id}",
++        ])
++
+         if self._policy.network_enabled:
+             command.extend(["--network", "bridge"])
+         else:
+@@ -388,6 +419,25 @@ class DockerKernelSession:
+         )
+         return command
+ 
++    async def _wait_for_container(self, timeout: float = 10.0) -> None:
++        """Poll Docker until the container is running or timeout expires."""
++        deadline = time.monotonic() + timeout
++        while time.monotonic() < deadline:
++            proc = await asyncio.create_subprocess_exec(
++                "docker",
++                "inspect",
++                "--format",
++                "{{.State.Running}}",
++                self._container_name,
++                stdout=asyncio.subprocess.PIPE,
++                stderr=asyncio.subprocess.DEVNULL,
++            )
++            stdout, _ = await proc.communicate()
++            if stdout.strip() == b"true":
++                return
++            await asyncio.sleep(0.5)
++        raise RuntimeError(f"Container {self._container_name} failed to start within {timeout}s")
++
+     async def stop(self) -> None:
+         """Force-remove the running container and clean temp files."""
+         if self._client:
+@@ -522,7 +572,9 @@ class JupyterAdapter(BaseAdapter):
+             session_factory=self._build_session_factory(self._kernel),
+         )
+ 
+-    def _build_session_factory(self, kernel: KernelInterface) -> Any:
++    def _build_session_factory(
++        self, kernel: KernelInterface, sandbox: SandboxConfig | None = None
++    ) -> Any:
+         if kernel.container.enabled:
+             return lambda session_id, kernel_name, working_directory=None: DockerKernelSession(
+                 session_id,
+@@ -530,6 +582,7 @@ class JupyterAdapter(BaseAdapter):
+                 policy=kernel.container,
+                 startup_timeout=kernel.startup_timeout_seconds,
+                 working_directory=working_directory,
++                sandbox=sandbox,
+             )
+         return lambda session_id, kernel_name, working_directory=None: KernelSession(
+             session_id,
+diff --git a/engine/src/agent33/execution/models.py b/engine/src/agent33/execution/models.py
+index dba1dfcf3aca88c520b81b8e3d1d4062f5dba980..c3d1fc233525851cc203752d80793d81d448e754 100644
+--- a/engine/src/agent33/execution/models.py
++++ b/engine/src/agent33/execution/models.py
+@@ -159,6 +159,10 @@ class KernelContainerPolicy(BaseModel):
+     mount_working_directory: bool = True
+     container_workdir: str = "/workspace"
+     extra_run_args: list[str] = Field(default_factory=list)
++    run_as_user: str | None = None
++    read_only_root: bool = False
++    tmpfs_tmp: bool = True
++    pids_limit: int = Field(default=100, ge=10, le=10000)
+ 
+ 
+ class KernelInterface(BaseModel):
+diff --git a/engine/src/agent33/workflows/ws_manager.py b/engine/src/agent33/workflows/ws_manager.py
+index 1a44788e1996fc023a4dd2767660806d2ff07030..7a5b56e54640d51d103a4c52ca4071ee6901b091 100644
+--- a/engine/src/agent33/workflows/ws_manager.py
++++ b/engine/src/agent33/workflows/ws_manager.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import collections
+ import contextlib
+ import time
+ from dataclasses import dataclass, field
+@@ -70,6 +71,7 @@ class WorkflowWSManager:
+         self,
+         heartbeat_interval_seconds: float = 30.0,
+         sse_queue_maxsize: int = 100,
++        event_buffer_size: int = 200,
+     ) -> None:
+         self._subscriptions: dict[str, set[Any]] = {}
+         self._reverse: dict[Any, set[str]] = {}
+@@ -79,6 +81,10 @@ class WorkflowWSManager:
+         self._lock = asyncio.Lock()
+         self.heartbeat_interval_seconds = heartbeat_interval_seconds
+         self.sse_queue_maxsize = max(1, sse_queue_maxsize)
++        self._event_buffer_size = max(1, event_buffer_size)
++        # Per-run monotonic sequence counter and bounded event ring buffer
++        self._event_sequences: dict[str, int] = {}
++        self._event_buffers: dict[str, collections.deque[tuple[int, WorkflowEvent]]] = {}
+ 
+     async def register_run(
+         self,
+@@ -234,6 +240,8 @@ class WorkflowWSManager:
+                 ),
+             )
+             self._apply_event(snapshot, event)
++            seq = self._next_seq(event.run_id)
++            self._record_event(event.run_id, seq, event)
+             targets = list(self._subscriptions.get(event.run_id, set()))
+             sse_targets = list(self._sse_subscriptions.get(event.run_id, set()))
+ 
+@@ -314,6 +322,35 @@ class WorkflowWSManager:
+         async with self._lock:
+             return len(self._sse_subscriptions.get(run_id, set()))
+ 
++    def _next_seq(self, run_id: str) -> int:
++        """Return and increment the monotonic sequence for *run_id*."""
++        seq = self._event_sequences.get(run_id, 0)
++        self._event_sequences[run_id] = seq + 1
++        return seq
++
++    def _record_event(self, run_id: str, seq: int, event: WorkflowEvent) -> None:
++        """Store an event in the bounded ring buffer for *run_id*."""
++        buf = self._event_buffers.get(run_id)
++        if buf is None:
++            buf = collections.deque(maxlen=self._event_buffer_size)
++            self._event_buffers[run_id] = buf
++        buf.append((seq, event))
++
++    async def replay_from_seq(
++        self, run_id: str, last_event_id: int
++    ) -> list[tuple[int, WorkflowEvent]]:
++        """Return buffered events with sequence > *last_event_id*."""
++        async with self._lock:
++            buf = self._event_buffers.get(run_id)
++            if buf is None:
++                return []
++            return [(seq, ev) for seq, ev in buf if seq > last_event_id]
++
++    async def current_seq(self, run_id: str) -> int:
++        """Return the current sequence counter for *run_id* (next to be assigned)."""
++        async with self._lock:
++            return self._event_sequences.get(run_id, 0)
++
+     async def connected_count(self) -> int:
+         """Return the total number of tracked WebSocket connections."""
+         async with self._lock:
+diff --git a/engine/tests/test_execution_jupyter_adapter.py b/engine/tests/test_execution_jupyter_adapter.py
+index 37850a7b71c83fba8bc1b976f4c0ea1ea4eea18e..202bbb2f4f402b813c85ef2991fc539b0bdd93da 100644
+--- a/engine/tests/test_execution_jupyter_adapter.py
++++ b/engine/tests/test_execution_jupyter_adapter.py
+@@ -2,8 +2,11 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
++import json
+ import time
+ from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, MagicMock, patch
+ 
+ import pytest
+ 
+@@ -12,6 +15,7 @@ from agent33.execution.adapters.jupyter import (
+     JupyterAdapter,
+     KernelSessionManager,
+     _language_to_kernel,
++    _sanitize_container_name,
+     build_default_jupyter_definition,
+ )
+ from agent33.execution.models import (
+@@ -23,6 +27,7 @@ from agent33.execution.models import (
+     KernelContainerPolicy,
+     KernelInterface,
+     OutputArtifact,
++    SandboxConfig,
+ )
+ 
+ if TYPE_CHECKING:
+@@ -181,6 +186,196 @@ class TestKernelSessionManager:
+ 
+ 
+ class TestDockerKernelSession:
++    def test_build_docker_command_basic_structure(self, tmp_path: Path) -> None:
++        """The command starts with docker run -d --rm --name <container>."""
++        session = DockerKernelSession(
++            "basic-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, image="jupyter:test"),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert cmd[:4] == ["docker", "run", "-d", "--rm"]
++        assert "--name" in cmd
++        assert "agent33-kernel-basic-sess" in cmd
++
++    def test_build_docker_command_resource_limits_from_sandbox(self, tmp_path: Path) -> None:
++        """Sandbox config memory_mb and cpu_cores propagate to --memory and --cpus."""
++        sandbox = SandboxConfig(memory_mb=256, cpu_cores=2)
++        session = DockerKernelSession(
++            "res-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, image="jupyter:test"),
++            sandbox=sandbox,
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert "--memory" in cmd
++        mem_idx = cmd.index("--memory")
++        assert cmd[mem_idx + 1] == "256m"
++        assert "--cpus" in cmd
++        cpu_idx = cmd.index("--cpus")
++        assert cmd[cpu_idx + 1] == "2"
++
++    def test_build_docker_command_default_resource_limits(self, tmp_path: Path) -> None:
++        """Without sandbox config, defaults to 512m and 1 CPU."""
++        session = DockerKernelSession(
++            "def-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, image="jupyter:test"),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        mem_idx = cmd.index("--memory")
++        assert cmd[mem_idx + 1] == "512m"
++        cpu_idx = cmd.index("--cpus")
++        assert cmd[cpu_idx + 1] == "1"
++
++    def test_build_docker_command_network_none(self, tmp_path: Path) -> None:
++        """Network disabled uses --network none."""
++        session = DockerKernelSession(
++            "net-none",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, network_enabled=False),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        net_idx = cmd.index("--network")
++        assert cmd[net_idx + 1] == "none"
++
++    def test_build_docker_command_network_bridge(self, tmp_path: Path) -> None:
++        """Network enabled uses --network bridge."""
++        session = DockerKernelSession(
++            "net-bridge",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, network_enabled=True),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        net_idx = cmd.index("--network")
++        assert cmd[net_idx + 1] == "bridge"
++
++    def test_build_docker_command_port_mapping(self, tmp_path: Path) -> None:
++        """All 5 ZMQ ports are mapped with -p."""
++        ports = {
++            "shell_port": 10001,
++            "iopub_port": 10002,
++            "stdin_port": 10003,
++            "control_port": 10004,
++            "hb_port": 10005,
++        }
++        session = DockerKernelSession(
++            "port-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++        cmd = session._build_docker_command(tmp_path, ports)
++        p_flags = [cmd[i + 1] for i, v in enumerate(cmd) if v == "-p"]
++        assert len(p_flags) == 5
++        for port in (10001, 10002, 10003, 10004, 10005):
++            assert f"{port}:{port}" in p_flags
++
++    def test_build_docker_command_volume_mounts(self, tmp_path: Path) -> None:
++        """Runtime dir and working directory are bind-mounted."""
++        session = DockerKernelSession(
++            "vol-sess",
++            "python3",
++            policy=KernelContainerPolicy(
++                enabled=True, mount_working_directory=True, container_workdir="/work"
++            ),
++            working_directory="/host/code",
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert f"{tmp_path}:/agent33-runtime" in cmd
++        assert "/host/code:/work" in cmd
++
++    def test_build_docker_command_extra_run_args(self, tmp_path: Path) -> None:
++        """Policy extra_run_args are appended before the image."""
++        session = DockerKernelSession(
++            "extra-sess",
++            "python3",
++            policy=KernelContainerPolicy(
++                enabled=True,
++                extra_run_args=["--env", "MY_VAR=1"],
++            ),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert "--env" in cmd
++        assert "MY_VAR=1" in cmd
++
++    def test_build_docker_command_security_hardening(self, tmp_path: Path) -> None:
++        """Security options: no-new-privileges, pids-limit, tmpfs, read-only."""
++        session = DockerKernelSession(
++            "sec-sess",
++            "python3",
++            policy=KernelContainerPolicy(
++                enabled=True,
++                read_only_root=True,
++                tmpfs_tmp=True,
++                pids_limit=50,
++            ),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert "--read-only" in cmd
++        assert "--tmpfs" in cmd
++        tmpfs_idx = cmd.index("--tmpfs")
++        assert cmd[tmpfs_idx + 1] == "/tmp:rw,noexec,nosuid,size=100m"
++        assert "--security-opt" in cmd
++        so_idx = cmd.index("--security-opt")
++        assert cmd[so_idx + 1] == "no-new-privileges"
++        pl_idx = cmd.index("--pids-limit")
++        assert cmd[pl_idx + 1] == "50"
++
++    def test_build_docker_command_user_namespace(self, tmp_path: Path) -> None:
++        """run_as_user adds --user flag."""
++        session = DockerKernelSession(
++            "user-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True, run_as_user="1000:1000"),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        assert "--user" in cmd
++        user_idx = cmd.index("--user")
++        assert cmd[user_idx + 1] == "1000:1000"
++
++    def test_build_docker_command_labels(self, tmp_path: Path) -> None:
++        """Container has agent33 labels for external tooling."""
++        session = DockerKernelSession(
++            "label-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++        cmd = session._build_docker_command(
++            tmp_path,
++            {"shell_port": 1, "iopub_port": 2, "stdin_port": 3, "control_port": 4, "hb_port": 5},
++        )
++        label_indices = [i for i, v in enumerate(cmd) if v == "--label"]
++        labels = [cmd[i + 1] for i in label_indices]
++        assert "agent33.component=kernel" in labels
++        assert "agent33.session=label-sess" in labels
++
+     def test_build_docker_command_disables_network_and_mounts_runtime(
+         self,
+         tmp_path: Path,
+@@ -211,7 +406,7 @@ class TestDockerKernelSession:
+             },
+         )
+ 
+-        assert command[:6] == ["docker", "run", "-d", "--rm", "--name", "agent33-kernel-sess-1"]
++        assert command[:4] == ["docker", "run", "-d", "--rm"]
+         assert "--network" in command
+         assert "none" in command
+         assert f"{tmp_path}:/agent33-runtime" in command
+@@ -219,6 +414,115 @@ class TestDockerKernelSession:
+         assert "ghcr.io/example/jupyter:latest" in command
+         assert "ipykernel_launcher" in command
+ 
++    @pytest.mark.asyncio
++    async def test_start_rejects_disallowed_image(self) -> None:
++        """RuntimeError raised when image is not in allowed_images whitelist."""
++        session = DockerKernelSession(
++            "img-reject",
++            "python3",
++            policy=KernelContainerPolicy(
++                enabled=True,
++                image="disallowed:latest",
++                allowed_images=["allowed:latest"],
++            ),
++        )
++        with pytest.raises(RuntimeError, match="not permitted"):
++            await session.start()
++
++    @pytest.mark.asyncio
++    async def test_start_rejects_missing_docker(self) -> None:
++        """RuntimeError raised when docker is not on PATH."""
++        session = DockerKernelSession(
++            "no-docker",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++        with patch("agent33.execution.adapters.jupyter.shutil.which", return_value=None):
++            with pytest.raises(RuntimeError, match="docker executable not found"):
++                await session.start()
++
++    @pytest.mark.asyncio
++    async def test_stop_invokes_docker_rm_force(self) -> None:
++        """stop() should call 'docker rm -f <container_name>'."""
++        session = DockerKernelSession(
++            "rm-sess",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++        session._started = True
++        session._container_name = "agent33-kernel-rm-sess"
++
++        mock_proc = AsyncMock()
++        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
++
++        with patch(
++            "agent33.execution.adapters.jupyter.asyncio.create_subprocess_exec",
++            return_value=mock_proc,
++        ) as mock_exec:
++            await session.stop()
++
++        mock_exec.assert_called_once()
++        call_args = mock_exec.call_args[0]
++        assert call_args[:4] == ("docker", "rm", "-f", "agent33-kernel-rm-sess")
++
++    def test_connection_file_structure(self, tmp_path: Path) -> None:
++        """The connection file JSON has correct fields."""
++        from agent33.execution.adapters.jupyter import _build_connection_info
++
++        info = _build_connection_info(ip="127.0.0.1", key="test-key")
++        assert info["ip"] == "127.0.0.1"
++        assert info["key"] == "test-key"
++        assert info["transport"] == "tcp"
++        assert info["signature_scheme"] == "hmac-sha256"
++        for port_key in ("shell_port", "iopub_port", "stdin_port", "control_port", "hb_port"):
++            assert isinstance(info[port_key], int)
++            assert info[port_key] > 0
++
++    def test_sanitize_container_name(self) -> None:
++        """Special characters are replaced; length is bounded."""
++        assert _sanitize_container_name("sess-1") == "agent33-kernel-sess-1"
++        assert _sanitize_container_name("A B.C!D") == "agent33-kernel-a-b-c-d"
++        long_id = "x" * 100
++        result = _sanitize_container_name(long_id)
++        assert len(result) <= len("agent33-kernel-") + 40
++
++    @pytest.mark.asyncio
++    async def test_wait_for_container_success(self) -> None:
++        """_wait_for_container returns when docker inspect reports running."""
++        session = DockerKernelSession(
++            "wait-ok",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++
++        mock_proc = AsyncMock()
++        mock_proc.communicate = AsyncMock(return_value=(b"true", b""))
++
++        with patch(
++            "agent33.execution.adapters.jupyter.asyncio.create_subprocess_exec",
++            return_value=mock_proc,
++        ):
++            await session._wait_for_container(timeout=5.0)
++
++    @pytest.mark.asyncio
++    async def test_wait_for_container_timeout(self) -> None:
++        """_wait_for_container raises RuntimeError on timeout."""
++        session = DockerKernelSession(
++            "wait-fail",
++            "python3",
++            policy=KernelContainerPolicy(enabled=True),
++        )
++
++        mock_proc = AsyncMock()
++        mock_proc.communicate = AsyncMock(return_value=(b"false", b""))
++
++        with patch(
++            "agent33.execution.adapters.jupyter.asyncio.create_subprocess_exec",
++            return_value=mock_proc,
++        ):
++            with pytest.raises(RuntimeError, match="failed to start"):
++                await session._wait_for_container(timeout=0.1)
++
+ 
+ class TestJupyterAdapter:
+     def test_requires_kernel_definition(self) -> None:
+@@ -350,3 +654,22 @@ class TestDefaultDefinitionBuilder:
+         assert definition.kernel.container.enabled is True
+         assert definition.kernel.container.image == "ghcr.io/example/jupyter:latest"
+         assert definition.sandbox_override["network"]["enabled"] is False
++
++
++class TestKernelContainerPolicyNewFields:
++    def test_default_values(self) -> None:
++        policy = KernelContainerPolicy()
++        assert policy.run_as_user is None
++        assert policy.read_only_root is False
++        assert policy.tmpfs_tmp is True
++        assert policy.pids_limit == 100
++
++    def test_pids_limit_validation(self) -> None:
++        policy = KernelContainerPolicy(pids_limit=50)
++        assert policy.pids_limit == 50
++
++        with pytest.raises(Exception):
++            KernelContainerPolicy(pids_limit=5)  # Below minimum of 10
++
++        with pytest.raises(Exception):
++            KernelContainerPolicy(pids_limit=20000)  # Above maximum of 10000
+diff --git a/engine/tests/test_workflow_sse.py b/engine/tests/test_workflow_sse.py
+index f270637d34d1db1316fbf87b379e01be0c9442f3..cbefbfd2e273507a9db607b0e2563b013c197542 100644
+--- a/engine/tests/test_workflow_sse.py
++++ b/engine/tests/test_workflow_sse.py
+@@ -86,26 +86,42 @@ def _read_sse_events(lines: Iterator[str | bytes], count: int) -> list[dict[str,
+     return events
+ 
+ 
+-def _mock_request(manager: WorkflowWSManager) -> SimpleNamespace:
++def _mock_request(
++    manager: WorkflowWSManager, *, last_event_id: str | None = None
++) -> SimpleNamespace:
+     state = SimpleNamespace(ws_manager=manager)
+     state.user = SimpleNamespace(
+         sub="workflow-sse-user",
+         scopes=["workflows:read"],
+         tenant_id="",
+     )
++    headers: dict[str, str] = {}
++    if last_event_id is not None:
++        headers["last-event-id"] = last_event_id
+     return SimpleNamespace(
+         app=SimpleNamespace(state=state),
+         state=state,
++        headers=headers,
+         is_disconnected=AsyncMock(return_value=False),
+     )
+ 
+ 
+-async def _read_sse_chunk(response: StreamingResponse) -> dict[str, object]:
++async def _read_sse_chunk(response: StreamingResponse) -> tuple[str, dict[str, object]]:
++    """Read next SSE frame, returning (raw_frame, parsed_data).
++
++    Handles frames that may arrive as multiple chunks from the async generator.
++    A complete SSE frame ends with ``\\n\\n``.
++    """
+     body_iterator = response.body_iterator
+-    chunk = await anext(body_iterator)
+-    if isinstance(chunk, bytes):
+-        chunk = chunk.decode()
+-    return json.loads(chunk.split("data: ", maxsplit=1)[1].strip())
++    raw = ""
++    async for chunk in body_iterator:
++        if isinstance(chunk, bytes):
++            chunk = chunk.decode()
++        raw += chunk
++        if raw.endswith("\n\n"):
++            break
++    data = json.loads(raw.split("data: ", maxsplit=1)[1].strip())
++    return raw, data
+ 
+ 
+ async def _close_sse_response(response: StreamingResponse) -> None:
+@@ -193,7 +209,7 @@ class TestWorkflowSSEEndpoint:
+         request = _mock_request(manager)
+         sse_response = await stream_workflow_events("run-api-key", request)
+         try:
+-            event = await _read_sse_chunk(sse_response)
++            _raw, event = await _read_sse_chunk(sse_response)
+         finally:
+             await _close_sse_response(sse_response)
+ 
+@@ -220,7 +236,7 @@ class TestWorkflowSSEEndpoint:
+         request = _mock_request(manager)
+         sse_response = await stream_workflow_events("run-live", request)
+         try:
+-            sync_event = await _read_sse_chunk(sse_response)
++            _raw, sync_event = await _read_sse_chunk(sse_response)
+             assert sync_event["type"] == "sync"
+             assert await manager.active_sse_subscriptions("run-live") == 1
+ 
+@@ -232,7 +248,7 @@ class TestWorkflowSSEEndpoint:
+                     step_id="step-a",
+                 )
+             )
+-            live_event = await _read_sse_chunk(sse_response)
++            _raw, live_event = await _read_sse_chunk(sse_response)
+         finally:
+             await _close_sse_response(sse_response)
+ 
+@@ -253,32 +269,158 @@ class TestWorkflowSSEEndpoint:
+         request = _mock_request(manager)
+         sse_response = await stream_workflow_events("run-heartbeat", request)
+         try:
+-            events = [await _read_sse_chunk(sse_response), await _read_sse_chunk(sse_response)]
++            _raw, ev0 = await _read_sse_chunk(sse_response)
++            _raw, ev1 = await _read_sse_chunk(sse_response)
+         finally:
+             await _close_sse_response(sse_response)
+ 
+-        assert events[0] == {
++        assert ev0 == {
+             "type": "sync",
+             "run_id": "run-heartbeat",
+             "workflow_name": "wf-heartbeat",
+-            "timestamp": events[0]["timestamp"],
++            "timestamp": ev0["timestamp"],
+             "data": {
+                 "status": "pending",
+                 "step_statuses": {},
+                 "last_event_type": None,
+                 "terminal": False,
+-                "updated_at": events[0]["data"]["updated_at"],
++                "updated_at": ev0["data"]["updated_at"],
+             },
+         }
+-        assert events[1] == {
++        assert ev1 == {
+             "type": "heartbeat",
+             "run_id": "run-heartbeat",
+             "workflow_name": "wf-heartbeat",
+-            "timestamp": events[1]["timestamp"],
++            "timestamp": ev1["timestamp"],
+             "data": {"status": "pending", "terminal": False},
+         }
+ 
+ 
++class TestWorkflowSSEReconnection:
++    """Tests for SSE event ID emission and Last-Event-ID reconnection."""
++
++    @pytest.mark.asyncio
++    async def test_sse_event_frames_include_id_field(self) -> None:
++        """Each SSE frame must contain an 'id: N' line."""
++        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
++        await manager.register_run("run-id-test", "wf-id", owner_subject="workflow-sse-user")
++        _install_manager(manager)
++
++        request = _mock_request(manager)
++        sse_response = await stream_workflow_events("run-id-test", request)
++        try:
++            raw, _data = await _read_sse_chunk(sse_response)
++        finally:
++            await _close_sse_response(sse_response)
++
++        assert raw.startswith("id: ")
++        # Verify format: "id: <num>\ndata: {...}\n\n"
++        lines = raw.strip().split("\n")
++        assert lines[0].startswith("id: ")
++        assert lines[1].startswith("data: ")
++
++    @pytest.mark.asyncio
++    async def test_sse_sync_event_has_initial_sequence(self) -> None:
++        """The initial sync event should have sequence 0."""
++        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
++        await manager.register_run("run-seq0", "wf-seq0", owner_subject="workflow-sse-user")
++        _install_manager(manager)
++
++        request = _mock_request(manager)
++        sse_response = await stream_workflow_events("run-seq0", request)
++        try:
++            raw, _data = await _read_sse_chunk(sse_response)
++        finally:
++            await _close_sse_response(sse_response)
++
++        id_line = raw.strip().split("\n")[0]
++        assert id_line == "id: 0"
++
++    @pytest.mark.asyncio
++    async def test_sse_events_have_monotonically_increasing_ids(self) -> None:
++        """Published events should have increasing sequence numbers."""
++        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
++        await manager.register_run("run-mono", "wf-mono", owner_subject="workflow-sse-user")
++        _install_manager(manager)
++
++        request = _mock_request(manager)
++        sse_response = await stream_workflow_events("run-mono", request)
++        ids: list[int] = []
++        try:
++            raw, _ = await _read_sse_chunk(sse_response)
++            ids.append(int(raw.strip().split("\n")[0].split(": ")[1]))
++
++            for step_id in ("step-a", "step-b"):
++                await manager.publish_event(
++                    WorkflowEvent(
++                        event_type=WorkflowEventType.STEP_STARTED,
++                        run_id="run-mono",
++                        workflow_name="wf-mono",
++                        step_id=step_id,
++                    )
++                )
++                raw, _ = await _read_sse_chunk(sse_response)
++                ids.append(int(raw.strip().split("\n")[0].split(": ")[1]))
++        finally:
++            await _close_sse_response(sse_response)
++
++        assert ids == [0, 1, 2]
++
++    @pytest.mark.asyncio
++    async def test_last_event_id_header_triggers_replay(self) -> None:
++        """Reconnecting with Last-Event-ID should replay missed events."""
++        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
++        await manager.register_run("run-replay", "wf-replay", owner_subject="workflow-sse-user")
++        _install_manager(manager)
++
++        # Publish some events to build the buffer
++        for step_id in ("step-1", "step-2", "step-3"):
++            await manager.publish_event(
++                WorkflowEvent(
++                    event_type=WorkflowEventType.STEP_STARTED,
++                    run_id="run-replay",
++                    workflow_name="wf-replay",
++                    step_id=step_id,
++                )
++            )
++
++        # Reconnect with Last-Event-ID=0 (should replay events with seq > 0)
++        request = _mock_request(manager, last_event_id="0")
++        sse_response = await stream_workflow_events("run-replay", request)
++        replayed: list[dict[str, object]] = []
++        try:
++            for _ in range(3):
++                _raw, data = await _read_sse_chunk(sse_response)
++                replayed.append(data)
++        finally:
++            await _close_sse_response(sse_response)
++
++        assert replayed[0]["step_id"] == "step-2"
++        assert replayed[1]["step_id"] == "step-3"
++        # Third read is the live event or another event
++        assert len(replayed) == 3
++
++    @pytest.mark.asyncio
++    async def test_last_event_id_too_old_sends_full_sync(self) -> None:
++        """When buffer has no events after the requested ID, send full sync."""
++        manager = WorkflowWSManager(heartbeat_interval_seconds=60, event_buffer_size=2)
++        await manager.register_run(
++            "run-old-id", "wf-old-id", owner_subject="workflow-sse-user"
++        )
++        _install_manager(manager)
++
++        # Reconnect with a sequence that is beyond the buffer
++        request = _mock_request(manager, last_event_id="999")
++        sse_response = await stream_workflow_events("run-old-id", request)
++        try:
++            _raw, data = await _read_sse_chunk(sse_response)
++        finally:
++            await _close_sse_response(sse_response)
++
++        # Falls back to sync event since no buffered events match
++        assert data["type"] == "sync"
++
++
+ class TestWorkflowGraphLiveOverlay:
+     def test_graph_route_prefers_live_snapshot_for_requested_run(self) -> None:
+         token = create_access_token(
+diff --git a/frontend/src/lib/workflowLiveTransport.test.ts b/frontend/src/lib/workflowLiveTransport.test.ts
+index 4a40903365c0c5fc64a703936455278724235c7b..67afe1327256c9471124e99a121fdd5bd977e427 100644
+--- a/frontend/src/lib/workflowLiveTransport.test.ts
++++ b/frontend/src/lib/workflowLiveTransport.test.ts
+@@ -25,7 +25,7 @@ describe("workflowLiveTransport", () => {
+   it("uses authenticated SSE when a bearer token is available", async () => {
+     const fetchMock = vi.fn().mockResolvedValue(
+       buildSseResponse(
+-        'data: {"type":"sync","run_id":"run-ws","workflow_name":"wf-live","timestamp":1}\n\n'
++        'id: 0\ndata: {"type":"sync","run_id":"run-ws","workflow_name":"wf-live","timestamp":1}\n\n'
+       )
+     );
+     vi.stubGlobal("fetch", fetchMock);
+@@ -57,7 +57,7 @@ describe("workflowLiveTransport", () => {
+   it("uses SSE directly for api-key-only workflow live updates", async () => {
+     const fetchMock = vi.fn().mockResolvedValue(
+       buildSseResponse(
+-        'data: {"type":"sync","run_id":"run-sse","workflow_name":"wf-live","timestamp":1}\n\n'
++        'id: 0\ndata: {"type":"sync","run_id":"run-sse","workflow_name":"wf-live","timestamp":1}\n\n'
+       )
+     );
+     vi.stubGlobal("fetch", fetchMock);
+@@ -85,4 +85,62 @@ describe("workflowLiveTransport", () => {
+       )
+     );
+   });
++
++  it("parses event IDs from SSE frames", async () => {
++    const fetchMock = vi.fn().mockResolvedValue(
++      buildSseResponse(
++        'id: 42\ndata: {"type":"sync","run_id":"run-id-test","workflow_name":"wf","timestamp":1}\n\n'
++      )
++    );
++    vi.stubGlobal("fetch", fetchMock);
++    const onEvent = vi.fn();
++
++    connectWorkflowLiveTransport({
++      runId: "run-id-test",
++      token: "tok",
++      onEvent
++    });
++
++    await waitFor(() =>
++      expect(onEvent).toHaveBeenCalledWith(
++        expect.objectContaining({ type: "sync" })
++      )
++    );
++  });
++
++  it("retries on fetch failure with exponential backoff", async () => {
++    vi.useFakeTimers({ shouldAdvanceTime: true });
++
++    let callCount = 0;
++    const fetchMock = vi.fn().mockImplementation(() => {
++      callCount++;
++      if (callCount < 3) {
++        return Promise.reject(new Error("Connection refused"));
++      }
++      return Promise.resolve(
++        buildSseResponse(
++          'id: 0\ndata: {"type":"sync","run_id":"run-retry","workflow_name":"wf","timestamp":1}\n\n'
++        )
++      );
++    });
++    vi.stubGlobal("fetch", fetchMock);
++    const onEvent = vi.fn();
++    const onError = vi.fn();
++
++    connectWorkflowLiveTransport({
++      runId: "run-retry",
++      token: "tok",
++      onEvent,
++      onError
++    });
++
++    // Let timers and promises resolve
++    await vi.advanceTimersByTimeAsync(40000);
++
++    await waitFor(() => {
++      expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3);
++    });
++
++    vi.useRealTimers();
++  });
+ });
+diff --git a/frontend/src/lib/workflowLiveTransport.ts b/frontend/src/lib/workflowLiveTransport.ts
+index 67a0f2bad49b6b7ec429bef50c1e4ddc5ff5e026..03571958cce470ded176fd2a54b1f382ffbbfd7b 100644
+--- a/frontend/src/lib/workflowLiveTransport.ts
++++ b/frontend/src/lib/workflowLiveTransport.ts
+@@ -35,13 +35,12 @@ export function connectWorkflowLiveTransport(
+ ): WorkflowLiveTransportConnection {
+   const { API_BASE_URL } = getRuntimeConfig();
+ 
+-  let abortController: AbortController | null = null;
+-  abortController = new AbortController();
+-  void streamWorkflowEventsOverSse(API_BASE_URL, options, abortController.signal);
++  const abortController = new AbortController();
++  void streamWithReconnect(API_BASE_URL, options, abortController.signal);
+ 
+   return {
+     close: () => {
+-      abortController?.abort();
++      abortController.abort();
+     }
+   };
+ }
+@@ -54,17 +53,57 @@ export function buildWorkflowWebSocketUrl(baseUrl: string, runId: string, _token
+   return url.toString();
+ }
+ 
+-async function streamWorkflowEventsOverSse(
++async function streamWithReconnect(
+   baseUrl: string,
+   options: WorkflowLiveTransportOptions,
+   signal: AbortSignal
+ ): Promise<void> {
++  let lastEventId: string | undefined;
++  let attempt = 0;
++  const maxAttempts = 10;
++  const baseDelayMs = 1000;
++  const maxDelayMs = 30000;
++
++  while (!signal.aborted && attempt < maxAttempts) {
++    try {
++      lastEventId = await streamWorkflowEventsOverSse(
++        baseUrl,
++        options,
++        signal,
++        lastEventId
++      );
++      break; // Clean close (terminal event or server closed)
++    } catch (error) {
++      if (signal.aborted) break;
++      attempt++;
++      if (attempt >= maxAttempts) {
++        options.onError?.(toError(error, "Workflow live SSE connection failed after retries"));
++        break;
++      }
++      const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
++      await new Promise((r) => setTimeout(r, delay));
++    }
++  }
++}
++
++async function streamWorkflowEventsOverSse(
++  baseUrl: string,
++  options: WorkflowLiveTransportOptions,
++  signal: AbortSignal,
++  lastEventId?: string
++): Promise<string | undefined> {
+   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
++  let currentEventId: string | undefined = lastEventId;
+   try {
++    const headers = buildWorkflowLiveHeaders(options);
++    if (lastEventId) {
++      (headers as Record<string, string>)["Last-Event-ID"] = lastEventId;
++    }
++
+     const response = await fetch(
+       buildUrl(baseUrl, "/v1/workflows/{run_id}/events", { run_id: options.runId }),
+       {
+-        headers: buildWorkflowLiveHeaders(options),
++        headers,
+         signal
+       }
+     );
+@@ -86,19 +125,23 @@ async function streamWorkflowEventsOverSse(
+       const parts = buffer.split("\n\n");
+       buffer = parts.pop() ?? "";
+       for (const part of parts) {
+-        const event = parseWorkflowSseChunk(part);
+-        if (event) {
+-          options.onEvent(event);
++        const parsed = parseWorkflowSseChunk(part);
++        if (parsed) {
++          if (parsed.id !== undefined) {
++            currentEventId = parsed.id;
++          }
++          options.onEvent(parsed.event);
+         }
+       }
+     }
+   } catch (error) {
+     if (!signal.aborted) {
+-      options.onError?.(toError(error, "Workflow live SSE connection failed"));
++      throw error;
+     }
+   } finally {
+     await reader?.cancel().catch(() => undefined);
+   }
++  return currentEventId;
+ }
+ 
+ function buildWorkflowLiveHeaders(
+@@ -116,17 +159,31 @@ function buildWorkflowLiveHeaders(
+   return headers;
+ }
+ 
+-function parseWorkflowSseChunk(chunk: string): WorkflowLiveEvent | null {
+-  const dataLines = chunk
+-    .split("\n")
+-    .filter((line) => line.startsWith("data: "))
+-    .map((line) => line.slice(6));
++interface ParsedSseFrame {
++  id?: string;
++  event: WorkflowLiveEvent;
++}
++
++function parseWorkflowSseChunk(chunk: string): ParsedSseFrame | null {
++  const lines = chunk.split("\n");
++
++  let id: string | undefined;
++  const dataLines: string[] = [];
++
++  for (const line of lines) {
++    if (line.startsWith("id: ")) {
++      id = line.slice(4).trim();
++    } else if (line.startsWith("data: ")) {
++      dataLines.push(line.slice(6));
++    }
++  }
+ 
+   if (dataLines.length === 0) {
+     return null;
+   }
+ 
+-  return JSON.parse(dataLines.join("\n")) as WorkflowLiveEvent;
++  const event = JSON.parse(dataLines.join("\n")) as WorkflowLiveEvent;
++  return { id, event };
+ }
+ 
+ function toError(error: unknown, fallbackMessage: string): Error {

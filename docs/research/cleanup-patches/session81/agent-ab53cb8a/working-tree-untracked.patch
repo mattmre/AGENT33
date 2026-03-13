@@ -1,0 +1,607 @@
+diff --git a/frontend/src/components/AuthPanel.test.tsx b/frontend/src/components/AuthPanel.test.tsx
+new file mode 100644
+index 0000000..b206b79
+--- /dev/null
++++ b/frontend/src/components/AuthPanel.test.tsx
+@@ -0,0 +1,184 @@
++import { render, screen, waitFor } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { describe, expect, it, vi } from "vitest";
++
++const { apiRequestMock } = vi.hoisted(() => ({
++  apiRequestMock: vi.fn()
++}));
++
++vi.mock("../lib/api", () => ({
++  apiRequest: apiRequestMock,
++  getRuntimeConfig: () => ({ API_BASE_URL: "http://localhost:8000" })
++}));
++
++import { AuthPanel } from "./AuthPanel";
++
++describe("AuthPanel", () => {
++  it("renders all form fields", () => {
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={vi.fn()}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    expect(screen.getByText("Access Control")).toBeInTheDocument();
++    expect(screen.getByText("Sign In")).toBeInTheDocument();
++    expect(screen.getByPlaceholderText("Paste JWT token")).toBeInTheDocument();
++    expect(screen.getByPlaceholderText("a33_xxx...")).toBeInTheDocument();
++  });
++
++  it("calls onTokenChange when pasting into the Bearer Token textarea", async () => {
++    const user = userEvent.setup();
++    const onTokenChange = vi.fn();
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={onTokenChange}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    const textarea = screen.getByPlaceholderText("Paste JWT token");
++    await user.type(textarea, "abc");
++
++    // onTokenChange is called for each keystroke
++    expect(onTokenChange).toHaveBeenCalledTimes(3);
++    expect(onTokenChange).toHaveBeenLastCalledWith("abc");
++  });
++
++  it("calls onApiKeyChange when typing into the API Key input", async () => {
++    const user = userEvent.setup();
++    const onApiKeyChange = vi.fn();
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={vi.fn()}
++        onApiKeyChange={onApiKeyChange}
++      />
++    );
++
++    const input = screen.getByPlaceholderText("a33_xxx...");
++    await user.type(input, "key");
++
++    expect(onApiKeyChange).toHaveBeenCalledTimes(3);
++    expect(onApiKeyChange).toHaveBeenLastCalledWith("key");
++  });
++
++  it("performs login and calls onTokenChange with the returned token", async () => {
++    const user = userEvent.setup();
++    const onTokenChange = vi.fn();
++
++    apiRequestMock.mockResolvedValue({
++      ok: true,
++      status: 200,
++      data: { access_token: "jwt-from-server" }
++    });
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={onTokenChange}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    await user.click(screen.getByText("Sign In"));
++
++    await waitFor(() => {
++      expect(onTokenChange).toHaveBeenCalledWith("jwt-from-server");
++    });
++
++    expect(apiRequestMock).toHaveBeenCalledWith(
++      expect.objectContaining({
++        method: "POST",
++        path: "/v1/auth/token"
++      })
++    );
++  });
++
++  it("displays error when login fails", async () => {
++    const user = userEvent.setup();
++
++    apiRequestMock.mockResolvedValue({
++      ok: false,
++      status: 401,
++      data: null
++    });
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={vi.fn()}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    await user.click(screen.getByText("Sign In"));
++
++    await waitFor(() => {
++      expect(screen.getByText("Login failed (401)")).toBeInTheDocument();
++    });
++  });
++
++  it("displays error when response has no access_token", async () => {
++    const user = userEvent.setup();
++
++    apiRequestMock.mockResolvedValue({
++      ok: true,
++      status: 200,
++      data: { no_token_field: true }
++    });
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={vi.fn()}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    await user.click(screen.getByText("Sign In"));
++
++    await waitFor(() => {
++      expect(screen.getByText("No access_token in login response.")).toBeInTheDocument();
++    });
++  });
++
++  it("shows loading state during login", async () => {
++    const user = userEvent.setup();
++    let resolveLogin: (v: unknown) => void;
++    apiRequestMock.mockReturnValue(
++      new Promise((resolve) => {
++        resolveLogin = resolve;
++      })
++    );
++
++    render(
++      <AuthPanel
++        token=""
++        apiKey=""
++        onTokenChange={vi.fn()}
++        onApiKeyChange={vi.fn()}
++      />
++    );
++
++    await user.click(screen.getByText("Sign In"));
++    expect(screen.getByText("Signing in...")).toBeInTheDocument();
++
++    // Resolve and verify button returns to normal
++    resolveLogin!({ ok: false, status: 500, data: null });
++    await waitFor(() => {
++      expect(screen.getByText("Sign In")).toBeInTheDocument();
++    });
++  });
++});
+diff --git a/frontend/src/components/GlobalSearch.test.tsx b/frontend/src/components/GlobalSearch.test.tsx
+new file mode 100644
+index 0000000..57c2ab8
+--- /dev/null
++++ b/frontend/src/components/GlobalSearch.test.tsx
+@@ -0,0 +1,114 @@
++import { render, screen, waitFor } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++vi.mock("../lib/api", () => ({
++  getRuntimeConfig: () => ({ API_BASE_URL: "http://localhost:8000" })
++}));
++
++import { GlobalSearch } from "./GlobalSearch";
++
++describe("GlobalSearch", () => {
++  afterEach(() => {
++    delete window.__AGENT33_CONFIG__;
++  });
++
++  it("renders disabled search when no token is provided", () => {
++    render(<GlobalSearch token={null} />);
++    const input = screen.getByPlaceholderText("Sign in to use memory search");
++    expect(input).toBeDisabled();
++  });
++
++  it("renders enabled search when token is provided", () => {
++    render(<GlobalSearch token="jwt-token" />);
++    const input = screen.getByPlaceholderText("Search Semantic Memory (PGVector)...");
++    expect(input).not.toBeDisabled();
++  });
++
++  it("calls fetch with correct auth header and body on submit", async () => {
++    const user = userEvent.setup();
++    const fetchMock = vi.fn().mockResolvedValue({
++      json: () => Promise.resolve({ results: [] })
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<GlobalSearch token="my-jwt" />);
++    const input = screen.getByPlaceholderText("Search Semantic Memory (PGVector)...");
++
++    await user.type(input, "test query{enter}");
++
++    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
++    expect(fetchMock.mock.calls[0][0]).toContain("/v1/memory/search");
++    expect(fetchMock.mock.calls[0][1]).toMatchObject({
++      method: "POST",
++      headers: expect.objectContaining({
++        Authorization: "Bearer my-jwt",
++        "Content-Type": "application/json"
++      })
++    });
++    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
++    expect(body.query).toBe("test query");
++  });
++
++  it("renders search results", async () => {
++    const user = userEvent.setup();
++    const fetchMock = vi.fn().mockResolvedValue({
++      json: () =>
++        Promise.resolve({
++          results: [
++            { content: "Result one content here that is important", token_estimate: 42, level: "full" },
++            { content: "Result two content here that is also important", token_estimate: 20, level: "summary" }
++          ]
++        })
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<GlobalSearch token="tok" />);
++    const input = screen.getByPlaceholderText("Search Semantic Memory (PGVector)...");
++    await user.type(input, "search{enter}");
++
++    await waitFor(() => {
++      expect(screen.getByText("Memory Results")).toBeInTheDocument();
++    });
++    expect(screen.getByText(/Result one content/)).toBeInTheDocument();
++    expect(screen.getByText(/Result two content/)).toBeInTheDocument();
++  });
++
++  it("shows no results message when search returns empty", async () => {
++    const user = userEvent.setup();
++    const fetchMock = vi.fn().mockResolvedValue({
++      json: () => Promise.resolve({ results: [] })
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<GlobalSearch token="tok" />);
++    const input = screen.getByPlaceholderText("Search Semantic Memory (PGVector)...");
++    await user.type(input, "nothing{enter}");
++
++    await waitFor(() => {
++      expect(screen.getByText("No results found.")).toBeInTheDocument();
++    });
++  });
++
++  it("closes results panel when close button is clicked", async () => {
++    const user = userEvent.setup();
++    const fetchMock = vi.fn().mockResolvedValue({
++      json: () => Promise.resolve({ results: [] })
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<GlobalSearch token="tok" />);
++    const input = screen.getByPlaceholderText("Search Semantic Memory (PGVector)...");
++    await user.type(input, "test{enter}");
++
++    await waitFor(() => {
++      expect(screen.getByText("No results found.")).toBeInTheDocument();
++    });
++
++    // The close button renders as a special character
++    const closeBtn = screen.getByRole("button", { name: /✕/ });
++    await user.click(closeBtn);
++
++    expect(screen.queryByText("No results found.")).not.toBeInTheDocument();
++  });
++});
+diff --git a/frontend/src/components/HealthPanel.test.tsx b/frontend/src/components/HealthPanel.test.tsx
+new file mode 100644
+index 0000000..56d30af
+--- /dev/null
++++ b/frontend/src/components/HealthPanel.test.tsx
+@@ -0,0 +1,131 @@
++import { render, screen, waitFor } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++const { apiRequestMock } = vi.hoisted(() => ({
++  apiRequestMock: vi.fn()
++}));
++
++vi.mock("../lib/api", () => ({
++  apiRequest: apiRequestMock,
++  getRuntimeConfig: () => ({ API_BASE_URL: "http://localhost:8000" })
++}));
++
++import { HealthPanel } from "./HealthPanel";
++
++describe("HealthPanel", () => {
++  afterEach(() => {
++    vi.useRealTimers();
++  });
++
++  it("renders loading state initially", () => {
++    apiRequestMock.mockReturnValue(new Promise(() => {})); // never resolves
++    render(<HealthPanel />);
++    expect(screen.getByText("Loading health...")).toBeInTheDocument();
++  });
++
++  it("renders healthy status with service details", async () => {
++    apiRequestMock.mockResolvedValue({
++      ok: true,
++      status: 200,
++      data: {
++        status: "healthy",
++        services: {
++          postgres: "ok",
++          redis: "ok",
++          nats: "configured"
++        }
++      }
++    });
++
++    render(<HealthPanel />);
++
++    await waitFor(() => {
++      expect(screen.getByText("healthy")).toBeInTheDocument();
++    });
++    expect(screen.getByText("POSTGRES")).toBeInTheDocument();
++    expect(screen.getByText("REDIS")).toBeInTheDocument();
++    expect(screen.getByText("NATS")).toBeInTheDocument();
++    expect(screen.getByText("configured")).toBeInTheDocument();
++  });
++
++  it("renders degraded status", async () => {
++    apiRequestMock.mockResolvedValue({
++      ok: true,
++      status: 200,
++      data: {
++        status: "degraded",
++        services: {
++          postgres: "ok",
++          redis: "error"
++        }
++      }
++    });
++
++    render(<HealthPanel />);
++
++    await waitFor(() => {
++      expect(screen.getByText("degraded")).toBeInTheDocument();
++    });
++    expect(screen.getByText("error")).toBeInTheDocument();
++  });
++
++  it("displays error when health check fails with non-ok response", async () => {
++    apiRequestMock.mockResolvedValue({
++      ok: false,
++      status: 503,
++      data: null
++    });
++
++    render(<HealthPanel />);
++
++    await waitFor(() => {
++      expect(screen.getByText("Health check failed (503)")).toBeInTheDocument();
++    });
++  });
++
++  it("displays error when fetch throws", async () => {
++    apiRequestMock.mockRejectedValue(new Error("Network unreachable"));
++
++    render(<HealthPanel />);
++
++    await waitFor(() => {
++      expect(screen.getByText("Network unreachable")).toBeInTheDocument();
++    });
++  });
++
++  it("renders correct status icon classes", async () => {
++    apiRequestMock.mockResolvedValue({
++      ok: true,
++      status: 200,
++      data: {
++        status: "ok",
++        services: {
++          redis: "degraded",
++          nats: "unconfigured"
++        }
++      }
++    });
++
++    render(<HealthPanel />);
++
++    await waitFor(() => {
++      expect(screen.getByText("ok")).toBeInTheDocument();
++    });
++
++    // "ok" -> connected class, "degraded" -> error class, "unconfigured" -> inactive class
++    const connectedIcons = document.querySelectorAll(".rh-icon.connected");
++    expect(connectedIcons.length).toBe(1);
++
++    const errorIcons = document.querySelectorAll(".rh-icon.error");
++    expect(errorIcons.length).toBe(1);
++
++    const inactiveIcons = document.querySelectorAll(".rh-icon.inactive");
++    expect(inactiveIcons.length).toBe(1);
++  });
++
++  it("displays overall section heading", () => {
++    apiRequestMock.mockReturnValue(new Promise(() => {}));
++    render(<HealthPanel />);
++    expect(screen.getByText("Runtime Health")).toBeInTheDocument();
++  });
++});
+diff --git a/frontend/src/components/ObservationStream.test.tsx b/frontend/src/components/ObservationStream.test.tsx
+new file mode 100644
+index 0000000..9f93b2c
+--- /dev/null
++++ b/frontend/src/components/ObservationStream.test.tsx
+@@ -0,0 +1,154 @@
++import { render, screen, waitFor, cleanup } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++import { ObservationStream } from "./ObservationStream";
++
++function buildSseResponse(bodyText: string): Response {
++  const encoder = new TextEncoder();
++  const body = new ReadableStream<Uint8Array>({
++    start(controller) {
++      controller.enqueue(encoder.encode(bodyText));
++      controller.close();
++    }
++  });
++  return new Response(body, {
++    status: 200,
++    headers: { "content-type": "text/event-stream" }
++  });
++}
++
++describe("ObservationStream", () => {
++  afterEach(() => {
++    delete window.__AGENT33_CONFIG__;
++  });
++
++  it("renders nothing when no token is provided", () => {
++    const { container } = render(<ObservationStream token={null} />);
++    expect(container.innerHTML).toBe("");
++  });
++
++  it("renders nothing when there are no events yet", () => {
++    // Provide a token but no events arrive
++    const fetchMock = vi.fn().mockResolvedValue(
++      buildSseResponse("") // empty SSE stream
++    );
++    vi.stubGlobal("fetch", fetchMock);
++
++    const { container } = render(<ObservationStream token="test-token" />);
++    // Before any events, renders empty fragment
++    expect(container.innerHTML).toBe("");
++  });
++
++  it("connects with correct Authorization header", async () => {
++    const fetchMock = vi.fn().mockResolvedValue(
++      buildSseResponse("")
++    );
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<ObservationStream token="my-jwt" />);
++
++    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
++    expect(fetchMock.mock.calls[0][0]).toContain("/v1/operations/stream");
++    expect(fetchMock.mock.calls[0][1]).toMatchObject({
++      headers: { Authorization: "Bearer my-jwt" }
++    });
++  });
++
++  it("renders handoff_context_wipe events when received", async () => {
++    const event = {
++      id: "ev-1",
++      agent_name: "orchestrator",
++      event_type: "handoff_context_wipe",
++      content: "Context wiped for handoff",
++      timestamp: new Date().toISOString()
++    };
++
++    const fetchMock = vi.fn().mockResolvedValue(
++      buildSseResponse(`data: ${JSON.stringify(event)}\n\n`)
++    );
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<ObservationStream token="tok" />);
++
++    await waitFor(() => {
++      expect(screen.getByText("Live Core Mechanics")).toBeInTheDocument();
++    });
++    expect(screen.getByText("Context wiped for handoff")).toBeInTheDocument();
++    expect(screen.getByText("orchestrator")).toBeInTheDocument();
++  });
++
++  it("filters out events that do not match the allow list", async () => {
++    const irrelevantEvent = {
++      id: "ev-2",
++      agent_name: "worker",
++      event_type: "generic_event",
++      content: "Something irrelevant",
++      timestamp: new Date().toISOString()
++    };
++
++    const fetchMock = vi.fn().mockResolvedValue(
++      buildSseResponse(`data: ${JSON.stringify(irrelevantEvent)}\n\n`)
++    );
++    vi.stubGlobal("fetch", fetchMock);
++
++    const { container } = render(<ObservationStream token="tok" />);
++
++    // Wait for fetch to complete and stream to process
++    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
++
++    // Give time for any events to be processed
++    await new Promise((r) => setTimeout(r, 50));
++
++    // Should remain empty since the event type doesn't match
++    expect(container.querySelector(".observation-stream")).toBeNull();
++  });
++
++  it("buffers up to 10 events, newest first", async () => {
++    const events = Array.from({ length: 12 }, (_, i) => ({
++      id: `ev-${i}`,
++      agent_name: "orch",
++      event_type: "handoff_context_wipe",
++      content: `Wipe ${i}`,
++      timestamp: new Date().toISOString()
++    }));
++
++    const ssePayload = events
++      .map((ev) => `data: ${JSON.stringify(ev)}\n\n`)
++      .join("");
++
++    const fetchMock = vi.fn().mockResolvedValue(buildSseResponse(ssePayload));
++    vi.stubGlobal("fetch", fetchMock);
++
++    render(<ObservationStream token="tok" />);
++
++    await waitFor(() => {
++      expect(screen.getByText("Live Core Mechanics")).toBeInTheDocument();
++    });
++
++    const items = document.querySelectorAll(".observation-item");
++    expect(items.length).toBeLessThanOrEqual(10);
++  });
++
++  it("cancels reader on unmount", async () => {
++    const cancelMock = vi.fn().mockResolvedValue(undefined);
++    const mockReader = {
++      read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
++      cancel: cancelMock
++    };
++
++    const mockBody = { getReader: () => mockReader };
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      body: mockBody
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    const { unmount } = render(<ObservationStream token="tok" />);
++    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
++
++    unmount();
++
++    // Reader cancel should be called on cleanup
++    await waitFor(() => expect(cancelMock).toHaveBeenCalled());
++  });
++});

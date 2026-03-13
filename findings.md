@@ -1,0 +1,322 @@
+# Findings
+
+## 2026-03-13
+
+- Repo-only cleanup was limited to `D:\GITHUB\AGENT33`, `D:\GITHUB\AGENT33\worktrees`, and `D:\GITHUB\AGENT33\.claude\worktrees`.
+- Safe deletions completed:
+  - stale post-merge verify worktrees for Sessions 70-80
+  - merged Session 59 Phase 44-46 agent worktrees whose only dirtiness was coverage noise
+  - merged Session 64/65/68/70-80 implementation worktrees and matching local branches
+  - unused local stub branches such as `worktree-agent-*`, `codex/session64-wrap`, and old temp merge rehearsal refs
+- Remaining holdouts fall into three risk buckets:
+  - substantive uncommitted code in `.claude/worktrees/agent-a5a29d23`, `.claude/worktrees/agent-ab53cb8a`, `.claude/worktrees/agent-ac4da72a`, `.claude/worktrees/agent-af722d5d`, `worktrees/session57-wave0-integration`, `worktrees/session57-wave0-pr1`, and `worktrees/session57-wave1-pr1`
+  - closed or superseded historical branches/worktrees whose diffs are not proven preserved on `main`, including `worktrees/codex-main-final`, `worktrees/phase28`, `worktrees/phase38`, `worktrees/phase43`, `worktrees/session57-main-ci-fix`, `worktrees/session57-merge-check`, `worktrees/session57-wave1-live-base`, `worktrees/session57-wave1-pr2`, `worktrees/session57-wave1-pr3`, `worktrees/session58-phase26-wizard`, `worktrees/session60-docs-validation`, `worktrees/session61-phase38-docker-kernels`, and `worktrees/session62-skillsbench-reporting`
+  - local-only workflow edits in `worktrees/nightly-merge-main` (`.github/workflows/post-merge-smoke.yml` adds `--no-cov`; not present on current root `main`)
+- The corrected preservation audit must compare against `origin/main`, not the stale root checkout.
+- Detailed per-holdout analysis is recorded in `docs/research/session81-holdout-preservation-audit.md`.
+- Highest-risk local holdouts are the `.claude/worktrees/agent-*` prototypes plus `session57-wave0-integration`, `session57-wave0-pr1`, and `session57-wave1-pr1`; all still contain local code that differs from `origin/main`.
+- Lowest-effort salvage candidates are `worktrees/codex-main-final` and `worktrees/session62-skillsbench-reporting`; both are mostly superseded and can be reduced to small patch exports before deletion.
+- Preservation bundles for every remaining holdout now exist under `docs/research/cleanup-patches/session81/`.
+- The archive includes committed branch patches, tracked working-tree patches, untracked-file patches, per-holdout status snapshots, and a script/manifest for regeneration.
+- `nightly-merge-main` is currently preserved as a patch only; no CI PR was opened automatically for the `--no-cov` tweak.
+- The next recommended deletion set has now been executed safely after preservation:
+  - removed worktrees `codex-main-final`, `nightly-merge-main`, `session57-main-ci-fix`, `session57-merge-check`, and `session62-skillsbench-reporting`
+  - removed local branches `codex/session59-wrap`, `temp/session67-post-merge-smoke-fix`, `temp/session57-main-ci-fix`, `temp/session57-merge-check`, and `codex/session62-skillsbench-reporting`
+- The next preservation-backed closed-phase cleanup is also complete:
+  - removed worktrees `phase28`, `phase38`, and `phase43`
+  - removed local branches `feat/session56-phase28-security-adapters`, `feat/session56-phase38-token-streaming`, and `feat/session56-phase43-mcp-resources-auth`
+- Remaining repo-specific holdouts are now only the larger prototype / closed implementation trees that were classified `keep-intact` in `session81-holdout-preservation-audit.md`.
+- `task_plan.md`, `findings.md`, and `progress.md` remain intentionally retained and were not part of cleanup.
+- The deeper holdout-resolution pass is now documented in `docs/research/session82-remaining-holdout-resolution-audit.md`.
+- The remaining holdouts now break cleanly into:
+  - delete-after-archive closed stacks: `session57-wave1-live-base`, `session57-wave1-pr3`, `session58-phase26-wizard`, `session60-docs-validation`, `session61-phase38-docker-kernels`
+  - archive-only dirty Session 57 scratch trees with no missing feature gaps: `session57-wave0-integration`, `session57-wave0-pr1`, `session57-wave1-pr1`, `session57-wave1-pr2`
+  - four `.claude` prototype worktrees that contain only abandoned architecture or optional future ideas, not merge debt
+- There are no remaining unresolved merge questions in the analyzed holdouts:
+  - Session 58/60 wizard and docs work is already on `main`
+  - Session 61 Docker-kernel and streaming work is already represented on `main` in a newer form
+  - Wave 0/Wave 1 dirty scratch trees do not contain missing file paths relative to `main`
+- The only optional future-redo ideas surfaced by the audit are:
+  - pack audit / pack health operator surfaces from `agent-a5a29d23`
+  - extra frontend tests for `AuthPanel`, `GlobalSearch`, `HealthPanel`, and `ObservationStream` from `agent-ab53cb8a`
+- Follow-up decision:
+  - no cherry-picks are needed from any remaining holdout
+  - the frontend component-test redo from `agent-ab53cb8a` is tracked separately in PR `#188`; it is not part of this docs-sync branch
+  - pack audit / pack health remains intentionally deferred because it would be net-new feature work, not cleanup remediation
+- The recommended non-`.claude` deletion batch has now been executed:
+  - removed worktrees `session57-wave1-live-base`, `session57-wave1-pr3`, `session58-phase26-wizard`, `session60-docs-validation`, `session61-phase38-docker-kernels`
+  - removed worktrees `session57-wave0-integration`, `session57-wave0-pr1`, `session57-wave1-pr1`, `session57-wave1-pr2`
+  - removed their matching local branches
+- Only the four `.claude` history worktrees remain, by explicit user choice.
+
+## 2026-03-12
+
+- `docs/next-session.md` is stale relative to the March 11 session logs.
+- Session 68 and Session 69 establish the authoritative sequential order: `#169`, `#167`, `#168`, Phase 45 PR creation, OpenClaw T2 PR creation, then `#166`.
+- Root checkout contains many dirty docs and untracked files, so code changes must stay isolated to feature worktrees.
+- Dedicated worktrees already exist for the five active implementation targets.
+- GitHub state has moved ahead of the handoff: PRs `#166`, `#167`, `#168`, `#169`, `#170`, and `#171` are already merged into `origin/main`.
+- Local root `main` is 27 commits behind `origin/main`; use fresh worktrees from `origin/main` for follow-up work instead of updating the dirty root checkout.
+- `#168` major review findings are already fixed on `origin/main`:
+  - tenant-scoped review access
+  - authenticated approver identity
+  - removal of duplicate approval request model
+- Remaining actionable review debt on `origin/main` clusters into:
+  - residual Phase 44 / operator follow-ups
+  - residual Phase 45 MCP fabric follow-ups
+  - residual OpenClaw Track 2 tool catalog follow-ups
+- Slice 1 is now merged in follow-up PR `#174`.
+- Slice 2 is now merged in follow-up PR `#175`.
+- Slice 2 resolved the remaining Phase 45 review debt that was still present on `origin/main`:
+  - MCP auth now honors the configured proxy tool separator
+  - proxy child cooldown recovery now goes through the circuit-breaker API instead of mutating breaker internals
+  - authenticated MCP proxy/sync routes no longer repeat token extraction that the auth dependency already guarantees
+  - approval-token tests now assert `ApprovalTokenError`
+  - `approval_token_one_time_default` and `mcp_proxy_health_check_enabled` are now wired into runtime behavior
+- Slice 3 is now merged in follow-up PR `#176`.
+- Slice 3 resolved the remaining tool-catalog review debt that was still present on `origin/main`:
+  - schema route no longer repeats full catalog aggregation
+  - catalog service now uses shared schema resolution without per-tool loop imports
+  - tool-catalog frontend accepts API-key auth in addition to bearer tokens
+  - schema viewer now exposes valid tree semantics for assistive technology
+- Final verification from fresh `origin/main` confirms the merged remediation stack is stable.
+- There are no open PRs in GitHub right now, so the next execution loop is new implementation work, not in-place PR remediation.
+- Phase 46 is partially merged already:
+  - PR `#172` delivered discovery primitives and `resolve_workflow`
+  - PR `#173` delivered session-scoped tool activation and dynamic visibility
+  - the remaining Phase 46 work is now a closeout/reconciliation slice rather than a full greenfield phase
+- OpenClaw Track 4 is also partially merged through Phase 33 marketplace work in PR `#162`; remaining work should focus on remote sources, trust UX/policy surfaces, rollback, and enablement matrices instead of rebuilding local marketplace support.
+- Phase 25 SSE fallback is already implemented and tested; the remaining work is hardening:
+  - reconnect/backoff
+  - `Last-Event-ID` replay support
+  - optional terminal-event auto-close
+  - the newer research recommends deferring WS-first fallback unless scope changes
+- Phase 38 Stage 3 Docker kernels are already implemented in the execution layer; the remaining work is hardening and coverage:
+  - direct Docker-kernel tests
+  - container resource limits from `SandboxConfig`
+  - startup health checks
+  - additional container hardening flags
+- Phase 35 has a deliberate transport gap:
+  - current voice runtime supports a real control plane with `stub`
+  - `livekit` intentionally raises until the dependency/runtime wave is added
+  - because Phase 48 deprecates the current voice scaffold in favor of a sidecar, large direct investment in the existing scaffold should be treated carefully
+- OpenClaw Track 5 still has no first-class runtime `apply_patch` tool or operator-visible process manager on `main`.
+- OpenClaw Track 6 still lacks a platform-level backup manifest/create/verify/restore-preview architecture; current backup remains limited to the improvement learning state.
+- The remaining roadmap is now normalized into slice IDs `S1`-`S17`, which should be treated as the canonical sequential execution queue for future worktree/PR waves.
+- `S1` is now implemented and open as PR `#177` (`feat(phase46): close out skill-aware discovery resolution`).
+- The meaningful Phase 46 closeout delta landed in `S1` is:
+  - instruction-aware and path/pack-aware skill ranking
+  - `resolve_workflow` now returns workflow-oriented skill matches in addition to runtime workflows/templates
+  - tenant-aware workflow resolution for pack-provided skills in both FastAPI and MCP
+- Copilot review on `#177` surfaced two real follow-up defects before merge:
+  - MCP `resolve_workflow` could bypass tenant scoping for non-admin callers with an empty `tenant_id`
+  - skill workflow matches exposed absolute filesystem paths via `source_path`
+- Those review findings are now fixed on `main`:
+  - non-admin MCP workflow resolution now rejects missing `tenant_id`
+  - skill workflow matches expose only logical `skills/...` paths, not host filesystem paths
+- `S1` is now fully merged and verified:
+  - PR `#177`
+  - merge commit `adc90cf`
+  - fresh `origin/main` verification passed after merge
+- `S2` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session72-s2-plugin-lifecycle` on branch `codex/session72-s2-plugin-lifecycle`.
+- The committed `main` baseline already had a usable plugin SDK and basic routes; the real Track 3 gap was operational lifecycle:
+  - no local install or link flow
+  - no update flow
+  - config route stubbed without persistence
+  - no plugin event history
+  - no plugin doctor, permissions, or event endpoints
+- `S2` implementation is now open as PR `#178` and adds:
+  - file-backed plugin config and install metadata stores
+  - lifecycle event recording through the plugin registry and route-level config updates
+  - local install, local link, and update flows for plugins
+  - plugin doctor diagnostics plus permission and event inventory endpoints
+  - startup wiring so plugin config and lifecycle state persist across restarts
+- Copilot review on `#178` surfaced five real follow-up defects before merge:
+  - plugin detail could report the same permission as both granted and denied when no runtime instance existed
+  - doctor summary route ignored tenant visibility
+  - doctor detail route ignored tenant visibility
+  - `PluginDoctor` itself was tenant-unaware, making route mistakes easy
+  - API models duplicated the installer `PluginInstallMode` enum
+- Those `#178` review findings are now fixed on `main`:
+  - doctor detail and summary now scope through `tenant_id`
+  - unloaded plugin permission reporting no longer duplicates granted and denied values
+  - API install request/response models now reuse the installer enum directly
+  - regression tests cover tenant-filtered doctor access and unloaded permission semantics
+- `S2` is now fully merged and verified:
+  - PR `#178`
+  - merge commit `6059b76`
+  - fresh `origin/main` verification passed after merge
+- `S3` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session73-s3-pack-distribution` on branch `codex/session73-s3-pack-distribution`.
+- The committed `main` baseline already had a local marketplace and provenance primitives; the real Track 4 gap was operator-facing distribution:
+  - no remote marketplace source/index support
+  - no persisted trust-policy management surface
+  - no pack upgrade or rollback API
+  - no enablement matrix for operators
+- `S3` implementation is now open as PR `#179` and adds:
+  - aggregated local + remote marketplace support with cached remote archive downloads
+  - persisted pack trust policy management and trust inspection routes
+  - pack upgrade and rollback flows with archived revisions and preserved enablement
+  - operator-visible enablement matrix read/write routes
+- Copilot review on `#179` surfaced eleven real hardening issues before merge, concentrated in:
+  - rollback archive uniqueness and failed-rollback side effects
+  - remote archive safety and size enforcement
+  - aggregator metadata merging
+  - event-loop blocking in marketplace refresh
+  - secret-bearing logging and admin exposure of the enablement matrix
+  - typed provenance/trust-policy model hygiene
+- Those `#179` review findings are now patched on the branch in follow-up commit `3159fdb`; the PR is back in `ci_wait` pending the rerun checks.
+- `S3` is now fully merged and verified:
+  - PR `#179`
+  - merge commit `81c735a`
+  - fresh `origin/main` verification passed after merge
+- `S4` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session74-s4-apply-patch-foundation` on branch `codex/session74-s4-apply-patch-foundation`.
+- The committed `main` baseline already had governance, approvals, and basic file/shell tools; the real Track 5A gap was structured mutation:
+  - no first-class `apply_patch` tool
+  - no patch-specific dry-run preview
+  - no persisted mutation audit trail
+  - MCP `execute_tool` could bypass governance by calling tools directly
+- `S4` is now fully merged and verified:
+  - PR `#180`
+  - merge commit `e474bc4`
+  - added a governed builtin `apply_patch` tool with workspace containment, add/update/delete/move support, and dry-run preview
+  - added persisted mutation audit records plus `/v1/tools/mutations` read routes
+  - routed MCP `execute_tool` through governance and validated execution
+  - fresh `origin/main` verification passed after merge
+- `S5` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager` on branch `codex/session75-s5-process-manager`.
+- The committed `main` baseline still has no process-manager surface:
+  - `run_command` is fire-and-wait only
+  - operator session/process inventory remains a skeleton
+  - there are no dedicated lifecycle or log-tail routes for long-running commands
+- `S5` scope is locked to backend-first process/session management with persistence, list/detail/log-tail/cancel routes, and governance-safe command execution; frontend polish remains explicitly deferred unless the backend lands early.
+- `S5` implementation is now complete in worktree `D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-process-manager`:
+  - added a durable `ProcessManagerService` with bounded logs, stdin writes, cleanup, and restart recovery
+  - added `/v1/processes` lifecycle routes for list/start/detail/log/write/terminate/cleanup
+  - aligned process start with shell-tool governance preflight and workspace-root containment
+  - surfaced managed-process counts in operator inventory
+- `S5` validation is green locally:
+  - focused process-manager + API tests passed
+  - adjacent operator API regression passed
+  - `ruff check`, `ruff format --check`, and `mypy` passed on the touched surfaces
+- `S5` is ready for PR prep; no later slice should start before that PR is opened and merged.
+- `S5` is now fully merged and verified:
+  - PR `#181`
+  - merge commit `41565ad`
+  - fresh `origin/main` verification passed from `D:\\GITHUB\\AGENT33\\worktrees\\session75-s5-postmerge-verify`
+- The next live dependency edge is now `S6`:
+  - backup work should start from merged baseline `41565ad`
+  - process-manager scope is closed enough that Track 6 can assume durable command/runtime inventories now exist
+- `S6` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-backup-foundation` on branch `codex/session76-s6-backup-foundation`.
+- The merged baseline still only had subsystem-specific improvement-learning backup/restore:
+  - no `agent33.backup` package
+  - no `/v1/backups` API
+  - operator `/v1/operator/backups` remained a skeleton
+- `S6` scope is locked to backup manifest/create/verify plus list/detail/inventory:
+  - restore execution and restore-plan preview remain deferred to `S7`
+  - database export remains explicitly manifest-only in this slice
+- `S6` implementation is now complete in worktree `session76-s6-backup-foundation`:
+  - added `engine/src/agent33/backup/manifest.py`, `archive.py`, and `service.py`
+  - added `engine/src/agent33/api/routes/backups.py`
+  - wired `BackupService` startup in `engine/src/agent33/main.py` with new `backup_dir` config
+  - updated operator backup listing to delegate to the platform backup service when present
+- `S6` validation is green locally:
+  - focused backup + operator regression suite passed
+  - `ruff check` passed on touched files
+  - `ruff format --check` passed after formatting
+  - `mypy` passed on touched source files
+- `S6` is now fully merged and verified:
+  - PR `#182`
+  - merge commit `aa69d9f`
+  - fresh `origin/main` verification passed from `D:\\GITHUB\\AGENT33\\worktrees\\session76-s6-postmerge-verify`
+- `S7` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-restore-preview` on branch `codex/session77-s7-restore-preview`.
+- The merged `S6` baseline already provides the right restore-planning substrate:
+  - archive format is stable enough to inspect without mutation
+  - detail and verify routes exist
+  - there is still no platform restore planner or `/v1/backups/{id}/restore-plan`
+- `S7` scope is locked to read-only restore preview:
+  - no restore execution
+  - no broad governance rewrite
+  - current scope memo is `docs/research/session77-s7-restore-preview-scope.md`
+- `S7` implementation is now complete in worktree `session77-s7-restore-preview`:
+  - added `engine/src/agent33/backup/restore_planner.py`
+  - extended the backup route surface with `POST /v1/backups/{id}/restore-plan`
+  - exposed `BackupService` helpers for manifest loading and current target resolution
+  - restore plans now surface `create` / `overwrite` / `skip` actions, conflicts, and explicit pre-restore warnings
+- `S7` validation is green locally:
+  - focused restore-plan + backup route/service regressions passed
+  - `ruff check` passed on touched files
+  - `ruff format --check` passed after formatting
+  - `mypy` passed on touched source files
+- `S7` is now fully merged and verified:
+  - PR `#183`
+  - merge commit `d794fb2`
+  - fresh `origin/main` verification passed from `D:\\GITHUB\\AGENT33\\worktrees\\session77-s7-postmerge-verify`
+- `S8` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-sse-hardening` on branch `codex/session78-s8-sse-hardening`.
+- The merged `S7` baseline already had authenticated workflow SSE and frontend live graph wiring; the real Phase 25 carry-forward gap was resilience:
+  - no client reconnect/backoff on dropped SSE streams
+  - no `Last-Event-ID` resume path
+  - no stable SSE frame ids
+  - frontend tests only covered the single-connection happy path
+- `S8` scope is locked to resumable SSE hardening only:
+  - bounded replay buffer in `WorkflowWSManager`
+  - `Last-Event-ID` support in `GET /v1/workflows/{run_id}/events`
+  - frontend reconnect/backoff and terminal-stop behavior
+  - focused live-transport/frontend regression growth
+  - explicit non-goal: reintroducing WS-first transport in this slice
+- `S8` implementation is now complete in worktree `session78-s8-sse-hardening`:
+  - added per-run SSE replay buffering and cursor-aware subscription in `WorkflowWSManager`
+  - extended the workflow SSE route to emit `id:` frames and replay buffered events after reconnect
+  - hardened `frontend/src/lib/workflowLiveTransport.ts` with reconnect backoff, `Last-Event-ID` propagation, and permanent-failure short-circuiting
+  - added backend replay regressions and frontend reconnect/permanent-failure transport tests
+
+## 2026-03-13 (Sequential Queue and Phase 30 Audit)
+
+- `pr-manager` review check confirms there are currently no open GitHub PRs, so there are no live PR comments to address before starting the next slice.
+- The sequential execution queue now starts at `S10` from the merged `S9` baseline; the active work is fresh implementation, not PR remediation.
+- In this environment there is no dedicated sub-agent spawn tool, so the enforced substitute for "fresh agents" is one fresh worktree plus fresh-context reread per slice.
+- The existing roadmap docs already contain enough research to begin `S10`; additional research is only required if the merged `main` baseline differs from the Phase 30 trace-tuning memo.
+- The `S10` audit found that the planned Phase 30 production trace-tuning work is already on `main`:
+  - `AgentRuntime` already records invocation/session correlation fields and completion metadata
+  - the iterative stream route already exports routing telemetry on terminal completion and fail-closed export errors surface as SSE error events
+  - `engine/tests/test_phase30_effort_routing.py` already covers the relevant paths and passes from a fresh worktree
+- `S10` should be treated as a status-reconciliation slice, not a new backend implementation branch; the next real implementation target is `S11 / Phase 47`.
+- The `S10` closeout was still worth a docs/status PR because the tracked handoff files on `main` were materially stale even though the backend code was correct.
+- PR comment posting is not available to the current GitHub token in this environment (`AddComment` permission denied), so self-review results must be captured in the session/progress docs unless permissions change.
+- `S8` validation is green locally:
+  - backend workflow-live regression suite passed
+  - focused frontend live-transport and `OperationCard` tests passed after installing locked frontend deps with `npm ci`
+  - `ruff check`, `ruff format --check`, frontend `tsc --noEmit`, and backend `mypy` passed on the touched surfaces
+- `S8` is now fully merged and verified:
+  - PR `#184`
+  - merge commit `bcc13eb`
+  - fresh `origin/main` verification passed from `D:\\GITHUB\\AGENT33\\worktrees\\session78-s8-postmerge-verify`
+- `S9` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening` on branch `codex/session79-s9-docker-hardening`.
+- The merged baseline already has the Phase 38 Docker-backed kernel adapter and basic tests; the remaining gap is hardening, not greenfield implementation:
+  - `SandboxConfig` resource limits are not reflected in `docker run`
+  - Docker startup/cleanup checks are still thin around readiness failure
+  - direct `DockerKernelSession` regressions do not yet cover the harder lifecycle edges
+- `S9` scope is locked to runtime/container hardening only:
+  - resource flag wiring
+  - startup/cleanup health enforcement
+  - direct Docker-session regression expansion
+  - explicit non-goal: broader Jupyter UX or unrelated Phase 38 streaming changes
+- The `S9` worktree (`D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-docker-hardening`) is still aligned with `origin/main` at `bcc13eb`, so implementation can continue there without refresh or rebase.
+- The current Docker-kernel hardening delta is localized to:
+  - `engine/src/agent33/execution/adapters/jupyter.py`
+  - `engine/tests/test_execution_jupyter_adapter.py`
+- The safest S9 implementation posture is to preserve the existing Jupyter adapter contract and harden only:
+  - Docker resource flag generation from `ExecutionContract.sandbox`
+  - explicit container-state checks with cleanup on launch/readiness failure
+  - direct Docker-session regressions for the hardened lifecycle paths
+- S9 validation must run with worktree-local `PYTHONPATH` in this environment; the first pytest pass picked up a stale editable install from another worktree and reported false negatives against the wrong source tree.
+- The blocking `test` job failure on PR `#185` was not caused by the Docker adapter changes:
+  - full-suite CI exposed that `engine/tests/test_processes_api.py` only passed when `app.state.tool_governance` happened not to be initialized
+  - production-governed process start reuses shell-tool preflight, so `tools:execute` is a real start-path requirement alongside `processes:manage`
+  - the deterministic fix is to install a fresh `ToolGovernance` in that test module and assert the governed 403 path explicitly when `tools:execute` is missing
+- The S9 branch now includes that test determinism fix in commit `f6d1539`, and the PR is back in the rerun-CI phase instead of blocked on unexplained suite drift.
+- `S9` is now fully merged and verified:
+  - PR `#185`
+  - squash merge commit `f8d9cdc`
+  - fresh `origin/main` verification passed from `D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-postmerge-verify`
+- The process-governance CI failure turned out to be a genuine test determinism gap, not a Docker-kernel regression:
+  - `httpx.ASGITransport(app=app)` plus shared module-level `app` state can hide missing lifespan-initialized services in isolated runs
+  - if route behavior depends on `app.state` services such as `tool_governance`, tests should install those dependencies explicitly rather than depending on prior suite order

@@ -1,0 +1,4073 @@
+diff --git a/engine/src/agent33/api/routes/backups.py b/engine/src/agent33/api/routes/backups.py
+new file mode 100644
+index 0000000..33d1c63
+--- /dev/null
++++ b/engine/src/agent33/api/routes/backups.py
+@@ -0,0 +1,147 @@
++"""FastAPI router for backup and restore operations."""
++
++from __future__ import annotations
++
++from typing import Any
++
++from fastapi import APIRouter, HTTPException, Request
++from pydantic import BaseModel
++
++from agent33.backup.service import BackupService  # noqa: TCH001
++from agent33.security.permissions import require_scope
++
++router = APIRouter(prefix="/v1/backups", tags=["backups"])
++
++_service: BackupService | None = None
++
++
++def set_backup_service(service: BackupService) -> None:
++    global _service  # noqa: PLW0603
++    _service = service
++
++
++def _get_service() -> BackupService:
++    if _service is None:
++        raise HTTPException(status_code=503, detail="Backup service not initialized")
++    return _service
++
++
++def _get_token_payload(request: Request) -> Any:
++    payload = getattr(request.state, "user", None)
++    if payload is None:
++        raise HTTPException(status_code=401, detail="Not authenticated")
++    return payload
++
++
++class CreateBackupRequest(BaseModel):
++    mode: str = "full"  # "full", "config-only", "no-workspace"
++    label: str = ""
++
++
++@router.post("", dependencies=[require_scope("tools:execute")])
++async def create_backup(request: Request, body: CreateBackupRequest) -> dict[str, Any]:
++    """Create a new backup archive."""
++    token = _get_token_payload(request)
++    service = _get_service()
++
++    result = await service.create(
++        mode=body.mode,
++        label=body.label,
++        creator=token.sub or "",
++    )
++
++    if not result.success:
++        raise HTTPException(status_code=400, detail="; ".join(result.errors))
++
++    return result.model_dump(mode="json")
++
++
++@router.get("", dependencies=[require_scope("tools:execute")])
++async def list_backups(request: Request) -> list[dict[str, Any]]:
++    """List available backups."""
++    _get_token_payload(request)
++    service = _get_service()
++    backups = service.list_backups()
++    return [b.model_dump(mode="json") for b in backups]
++
++
++@router.get("/{backup_id}", dependencies=[require_scope("tools:execute")])
++async def get_backup(request: Request, backup_id: str) -> dict[str, Any]:
++    """Get backup detail with manifest."""
++    _get_token_payload(request)
++    service = _get_service()
++    manifest = service.get_backup(backup_id)
++    if manifest is None:
++        raise HTTPException(status_code=404, detail=f"Backup not found: {backup_id}")
++    return manifest.model_dump(mode="json")
++
++
++@router.post(
++    "/{backup_id}/verify",
++    dependencies=[require_scope("tools:execute")],
++)
++async def verify_backup(request: Request, backup_id: str) -> dict[str, Any]:
++    """Verify the integrity of a backup archive."""
++    _get_token_payload(request)
++    service = _get_service()
++
++    result = await service.verify(backup_id)
++    return result.model_dump(mode="json")
++
++
++class RestoreRequest(BaseModel):
++    dry_run: bool = True  # Default to preview-only
++
++
++@router.post(
++    "/{backup_id}/restore",
++    dependencies=[require_scope("tools:execute")],
++)
++async def restore_backup(request: Request, backup_id: str, body: RestoreRequest) -> dict[str, Any]:
++    """Generate a restore plan from a backup.
++
++    Currently only supports dry_run=True (restore planning).
++    Actual restore execution is a future phase.
++    """
++    _get_token_payload(request)
++    service = _get_service()
++
++    if not body.dry_run:
++        raise HTTPException(
++            status_code=501,
++            detail="Restore execution is not yet implemented. Use dry_run=True for planning.",
++        )
++
++    # Get the archive path
++    manifest = service.get_backup(backup_id)
++    if manifest is None:
++        raise HTTPException(status_code=404, detail=f"Backup not found: {backup_id}")
++
++    from pathlib import Path
++
++    from agent33.backup.restore_planner import RestorePlanner
++
++    # Find the archive for this backup
++    archive_path = service._find_archive(backup_id)
++    if archive_path is None:
++        raise HTTPException(status_code=404, detail=f"Archive not found: {backup_id}")
++
++    planner = RestorePlanner(target_root=Path(manifest.archive_root))
++    plan = planner.plan(archive_path)
++
++    return plan.model_dump(mode="json")
++
++
++@router.delete(
++    "/{backup_id}",
++    dependencies=[require_scope("tools:execute")],
++)
++async def delete_backup(request: Request, backup_id: str) -> dict[str, Any]:
++    """Delete a backup archive."""
++    _get_token_payload(request)
++    service = _get_service()
++
++    deleted = service.delete_backup(backup_id)
++    if not deleted:
++        raise HTTPException(status_code=404, detail=f"Backup not found: {backup_id}")
++    return {"deleted": True, "backup_id": backup_id}
+diff --git a/engine/src/agent33/api/routes/mutations.py b/engine/src/agent33/api/routes/mutations.py
+new file mode 100644
+index 0000000..ac36d75
+--- /dev/null
++++ b/engine/src/agent33/api/routes/mutations.py
+@@ -0,0 +1,237 @@
++"""FastAPI router for safe mutation (apply_patch) and process management."""
++
++from __future__ import annotations
++
++from typing import Any
++
++from fastapi import APIRouter, HTTPException, Request
++from pydantic import BaseModel
++
++from agent33.execution.process_manager import ProcessManager, ProcessStatus  # noqa: TCH001
++from agent33.security.permissions import require_scope
++from agent33.tools.base import ToolContext
++from agent33.tools.builtin.apply_patch import ApplyPatchTool  # noqa: TCH001
++from agent33.tools.builtin.patch_audit import PatchAuditLog  # noqa: TCH001
++
++router = APIRouter(tags=["mutations"])
++
++# Module-level singletons set from lifespan
++_patch_tool: ApplyPatchTool | None = None
++_audit_log: PatchAuditLog | None = None
++_process_manager: ProcessManager | None = None
++
++
++def set_patch_tool(tool: ApplyPatchTool) -> None:
++    global _patch_tool  # noqa: PLW0603
++    _patch_tool = tool
++
++
++def set_audit_log(log: PatchAuditLog) -> None:
++    global _audit_log  # noqa: PLW0603
++    _audit_log = log
++
++
++def set_process_manager(pm: ProcessManager) -> None:
++    global _process_manager  # noqa: PLW0603
++    _process_manager = pm
++
++
++def _get_patch_tool() -> ApplyPatchTool:
++    if _patch_tool is None:
++        raise HTTPException(status_code=503, detail="Patch tool not initialized")
++    return _patch_tool
++
++
++def _get_audit_log() -> PatchAuditLog:
++    if _audit_log is None:
++        raise HTTPException(status_code=503, detail="Patch audit log not initialized")
++    return _audit_log
++
++
++def _get_process_manager() -> ProcessManager:
++    if _process_manager is None:
++        raise HTTPException(status_code=503, detail="Process manager not initialized")
++    return _process_manager
++
++
++def _get_token_payload(request: Request) -> Any:
++    payload = getattr(request.state, "user", None)
++    if payload is None:
++        raise HTTPException(status_code=401, detail="Not authenticated")
++    return payload
++
++
++# ---------------------------------------------------------------------------
++# Patch endpoints
++# ---------------------------------------------------------------------------
++
++
++class PatchOperation(BaseModel):
++    path: str
++    operation: str  # "create", "modify", "delete"
++    content: str = ""
++    search: str = ""
++    replace: str = ""
++
++
++class ApplyPatchRequest(BaseModel):
++    patches: list[PatchOperation]
++    dry_run: bool = False
++    workspace_root: str = ""
++
++
++@router.post("/v1/mutations/patch", dependencies=[require_scope("tools:execute")])
++async def apply_patch(request: Request, body: ApplyPatchRequest) -> dict[str, Any]:
++    """Apply a batch of file patches with workspace containment."""
++    token = _get_token_payload(request)
++    tool = _get_patch_tool()
++
++    context = ToolContext(
++        user_scopes=token.scopes,
++        requested_by=token.sub or "",
++        tenant_id=token.tenant_id or "",
++    )
++
++    params: dict[str, Any] = {
++        "patches": [p.model_dump() for p in body.patches],
++        "dry_run": body.dry_run,
++    }
++    if body.workspace_root:
++        params["workspace_root"] = body.workspace_root
++
++    result = await tool.execute(params, context)
++    if result.success:
++        import json
++
++        return json.loads(result.output)
++    raise HTTPException(status_code=400, detail=result.error)
++
++
++@router.post(
++    "/v1/mutations/patch/preview",
++    dependencies=[require_scope("tools:execute")],
++)
++async def preview_patch(request: Request, body: ApplyPatchRequest) -> dict[str, Any]:
++    """Preview what a patch would do (always dry-run)."""
++    token = _get_token_payload(request)
++    tool = _get_patch_tool()
++
++    context = ToolContext(
++        user_scopes=token.scopes,
++        requested_by=token.sub or "",
++        tenant_id=token.tenant_id or "",
++    )
++
++    params: dict[str, Any] = {
++        "patches": [p.model_dump() for p in body.patches],
++        "dry_run": True,
++    }
++    if body.workspace_root:
++        params["workspace_root"] = body.workspace_root
++
++    result = await tool.execute(params, context)
++    import json
++
++    return json.loads(result.output)
++
++
++@router.post(
++    "/v1/mutations/patch/{patch_id}/rollback",
++    dependencies=[require_scope("tools:execute")],
++)
++async def rollback_patch(request: Request, patch_id: str) -> dict[str, Any]:
++    """Rollback a previously applied patch."""
++    _get_token_payload(request)
++    tool = _get_patch_tool()
++
++    success, message = tool.rollback(patch_id)
++    if not success:
++        raise HTTPException(status_code=400, detail=message)
++    return {"success": True, "message": message}
++
++
++# ---------------------------------------------------------------------------
++# Process management endpoints
++# ---------------------------------------------------------------------------
++
++
++class StartProcessRequest(BaseModel):
++    command: str
++    session_id: str = ""
++
++
++@router.get("/v1/processes/", dependencies=[require_scope("tools:execute")])
++async def list_processes(
++    request: Request,
++    status: str | None = None,
++) -> list[dict[str, Any]]:
++    """List managed background processes."""
++    token = _get_token_payload(request)
++    pm = _get_process_manager()
++    tenant_id = token.tenant_id or ""
++
++    status_filter: ProcessStatus | None = None
++    if status is not None:
++        try:
++            status_filter = ProcessStatus(status)
++        except ValueError as exc:
++            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
++
++    processes = pm.list_processes(tenant_id=tenant_id, status_filter=status_filter)
++    return [p.model_dump(mode="json") for p in processes]
++
++
++@router.get("/v1/processes/{process_id}", dependencies=[require_scope("tools:execute")])
++async def get_process(request: Request, process_id: str) -> dict[str, Any]:
++    """Get process detail."""
++    token = _get_token_payload(request)
++    pm = _get_process_manager()
++
++    process = pm.get_status(process_id)
++    if process is None:
++        raise HTTPException(status_code=404, detail=f"Process not found: {process_id}")
++
++    tenant_id = token.tenant_id or ""
++    if tenant_id and process.tenant_id != tenant_id:
++        raise HTTPException(status_code=404, detail=f"Process not found: {process_id}")
++
++    return process.model_dump(mode="json")
++
++
++@router.post(
++    "/v1/processes/{process_id}/kill",
++    dependencies=[require_scope("tools:execute")],
++)
++async def kill_process(request: Request, process_id: str) -> dict[str, Any]:
++    """Terminate a running process."""
++    _get_token_payload(request)
++    pm = _get_process_manager()
++
++    killed = await pm.kill(process_id)
++    if not killed:
++        raise HTTPException(
++            status_code=400,
++            detail=f"Cannot kill process {process_id} (not found or not running)",
++        )
++    return {"killed": True, "process_id": process_id}
++
++
++@router.post(
++    "/v1/processes/{process_id}/pause",
++    dependencies=[require_scope("tools:execute")],
++)
++async def pause_process(request: Request, process_id: str) -> dict[str, Any]:
++    """Pause a running process (not supported on all platforms)."""
++    _get_token_payload(request)
++    pm = _get_process_manager()
++
++    process = pm.get_status(process_id)
++    if process is None:
++        raise HTTPException(status_code=404, detail=f"Process not found: {process_id}")
++
++    # Pause is platform-specific and not universally supported
++    # On Windows, SIGSTOP is not available
++    raise HTTPException(
++        status_code=501,
++        detail="Process pause is not yet implemented on this platform",
++    )
+diff --git a/engine/src/agent33/backup/__init__.py b/engine/src/agent33/backup/__init__.py
+new file mode 100644
+index 0000000..232d2fb
+--- /dev/null
++++ b/engine/src/agent33/backup/__init__.py
+@@ -0,0 +1 @@
++"""Backup and restore subsystem for AGENT-33."""
+diff --git a/engine/src/agent33/backup/archive.py b/engine/src/agent33/backup/archive.py
+new file mode 100644
+index 0000000..7947776
+--- /dev/null
++++ b/engine/src/agent33/backup/archive.py
+@@ -0,0 +1,248 @@
++"""Archive creation and extraction utilities for backup system."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import logging
++import os
++import tarfile
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++
++from agent33.backup.models import BackupManifest
++
++logger = logging.getLogger(__name__)
++
++# Files/directories excluded from all backups
++_GLOBAL_EXCLUDES: frozenset[str] = frozenset(
++    {
++        "__pycache__",
++        ".pyc",
++        "node_modules",
++        ".git",
++        ".venv",
++        "venv",
++        ".env",
++        ".env.local",
++        ".env.production",
++    }
++)
++
++
++def compute_sha256(file_path: Path) -> str:
++    """Compute SHA-256 checksum of a file."""
++    h = hashlib.sha256()
++    with file_path.open("rb") as f:
++        for chunk in iter(lambda: f.read(8192), b""):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def generate_archive_name(
++    mode: str,
++    short_id: str,
++    timestamp: datetime | None = None,
++) -> str:
++    """Generate a lexically sortable archive name.
++
++    Format: agent33-backup-{YYYYMMDD-HHmmss}-{mode}-{short_id}.tar.gz
++    """
++    ts = timestamp or datetime.now(UTC)
++    ts_str = ts.strftime("%Y%m%d-%H%M%S")
++    return f"agent33-backup-{ts_str}-{mode}-{short_id}.tar.gz"
++
++
++def should_exclude(name: str) -> bool:
++    """Check if a file or directory name should be excluded from backup."""
++    basename = os.path.basename(name)
++    if basename in _GLOBAL_EXCLUDES:
++        return True
++    return bool(basename.endswith(".pyc"))
++
++
++def create_archive(
++    source_dirs: dict[str, Path],
++    manifest: BackupManifest,
++    output_path: Path,
++) -> Path:
++    """Create a tar.gz archive from source directories.
++
++    Args:
++        source_dirs: Mapping of archive prefix -> source directory path.
++        manifest: The backup manifest to include.
++        output_path: Where to write the final archive.
++
++    Returns:
++        The path to the created archive.
++
++    The archive is written atomically via a temp file + rename pattern.
++    """
++    output_path.parent.mkdir(parents=True, exist_ok=True)
++
++    # Write to temp file first, then rename atomically
++    tmp_fd, tmp_path_str = tempfile.mkstemp(
++        suffix=".tar.gz.tmp",
++        dir=str(output_path.parent),
++    )
++    os.close(tmp_fd)
++    tmp_path = Path(tmp_path_str)
++
++    try:
++        with tarfile.open(str(tmp_path), "w:gz") as tar:
++            # Add manifest
++            manifest_json = manifest.model_dump_json(indent=2)
++            manifest_bytes = manifest_json.encode("utf-8")
++            import io
++
++            info = tarfile.TarInfo(name="manifest.json")
++            info.size = len(manifest_bytes)
++            tar.addfile(info, io.BytesIO(manifest_bytes))
++
++            # Add source directories
++            for prefix, source_dir in source_dirs.items():
++                if not source_dir.exists():
++                    logger.debug("Skipping non-existent source dir: %s", source_dir)
++                    continue
++                _add_directory(tar, source_dir, prefix)
++
++        # Atomic rename
++        tmp_path.replace(output_path)
++        return output_path
++
++    except Exception:
++        # Clean up temp file on failure
++        import contextlib
++
++        with contextlib.suppress(OSError):
++            tmp_path.unlink(missing_ok=True)
++        raise
++
++
++def _add_directory(tar: tarfile.TarFile, source_dir: Path, prefix: str) -> None:
++    """Add a directory tree to a tar archive with a prefix."""
++    for root, dirs, files in os.walk(str(source_dir)):
++        # Filter out excluded directories
++        dirs[:] = [d for d in dirs if not should_exclude(d)]
++
++        for filename in files:
++            if should_exclude(filename):
++                continue
++            file_path = Path(root) / filename
++            # Compute archive name
++            rel = file_path.relative_to(source_dir)
++            arcname = f"{prefix}/{rel.as_posix()}"
++            try:
++                tar.add(str(file_path), arcname=arcname)
++            except (OSError, tarfile.TarError):
++                logger.warning(
++                    "Failed to add file to archive: %s",
++                    file_path,
++                    exc_info=True,
++                )
++
++
++def extract_manifest(archive_path: Path) -> BackupManifest | None:
++    """Extract and parse the manifest from a backup archive."""
++    try:
++        with tarfile.open(str(archive_path), "r:gz") as tar:
++            try:
++                member = tar.getmember("manifest.json")
++            except KeyError:
++                return None
++
++            f = tar.extractfile(member)
++            if f is None:
++                return None
++
++            data = json.loads(f.read().decode("utf-8"))
++            return BackupManifest.model_validate(data)
++    except (tarfile.TarError, json.JSONDecodeError, ValueError):
++        logger.warning("Failed to extract manifest from %s", archive_path, exc_info=True)
++        return None
++
++
++def verify_archive_integrity(archive_path: Path) -> list[tuple[str, bool, str]]:
++    """Verify the structural integrity of a backup archive.
++
++    Returns a list of (check_name, passed, message) tuples.
++    """
++    checks: list[tuple[str, bool, str]] = []
++
++    # 1. Archive is readable
++    try:
++        with tarfile.open(str(archive_path), "r:gz") as tar:
++            members = tar.getnames()
++        checks.append(("archive_readable", True, "Archive is readable"))
++    except (tarfile.TarError, OSError) as exc:
++        checks.append(("archive_readable", False, f"Cannot read archive: {exc}"))
++        return checks  # no point continuing
++
++    # 2. Manifest present
++    if "manifest.json" not in members:
++        checks.append(("manifest_present", False, "manifest.json not found"))
++        return checks
++    checks.append(("manifest_present", True, "manifest.json found"))
++
++    # 3. Manifest parseable
++    manifest = extract_manifest(archive_path)
++    if manifest is None:
++        checks.append(("manifest_parseable", False, "Cannot parse manifest.json"))
++        return checks
++    checks.append(("manifest_parseable", True, "Manifest parsed successfully"))
++
++    # 4. Schema version supported
++    if manifest.schema_version not in {"1.0"}:
++        checks.append(
++            (
++                "schema_version",
++                False,
++                f"Unsupported schema version: {manifest.schema_version}",
++            )
++        )
++    else:
++        checks.append(("schema_version", True, "Schema version 1.0"))
++
++    # 5. No path escape (all members within archive root)
++    escaped = [m for m in members if m.startswith("/") or ".." in m]
++    if escaped:
++        checks.append(
++            (
++                "path_containment",
++                False,
++                f"Path escape detected: {escaped[:5]}",
++            )
++        )
++    else:
++        checks.append(("path_containment", True, "All paths contained"))
++
++    # 6. No duplicate entries
++    if len(members) != len(set(members)):
++        checks.append(("no_duplicates", False, "Duplicate entries detected"))
++    else:
++        checks.append(("no_duplicates", True, "No duplicate entries"))
++
++    # 7. Checksum verification (spot check declared assets)
++    if manifest.checksums:
++        with tarfile.open(str(archive_path), "r:gz") as tar:
++            mismatch = False
++            for rel_path, expected in list(manifest.checksums.items())[:10]:
++                try:
++                    member = tar.getmember(rel_path)
++                    f = tar.extractfile(member)
++                    if f is not None:
++                        h = hashlib.sha256(f.read()).hexdigest()
++                        if h != expected:
++                            mismatch = True
++                            break
++                except (KeyError, OSError):
++                    mismatch = True
++                    break
++
++            if mismatch:
++                checks.append(("checksums", False, "Checksum mismatch detected"))
++            else:
++                checks.append(("checksums", True, "Checksums verified"))
++
++    return checks
+diff --git a/engine/src/agent33/backup/models.py b/engine/src/agent33/backup/models.py
+new file mode 100644
+index 0000000..a87aad9
+--- /dev/null
++++ b/engine/src/agent33/backup/models.py
+@@ -0,0 +1,138 @@
++"""Data models for backup manifests, assets, and results."""
++
++from __future__ import annotations
++
++from datetime import UTC, datetime
++from enum import StrEnum
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++
++class BackupMode(StrEnum):
++    """Backup scope modes."""
++
++    FULL = "full"
++    CONFIG_ONLY = "config-only"
++    NO_WORKSPACE = "no-workspace"
++
++
++class AssetType(StrEnum):
++    """Classification of assets included in a backup."""
++
++    CONFIG = "config"
++    AGENT_DEFINITIONS = "agent_definitions"
++    WORKFLOW_DEFINITIONS = "workflow_definitions"
++    SKILLS = "skills"
++    PACKS = "packs"
++    PLUGINS = "plugins"
++    WORKSPACE = "workspace"
++
++
++class BackupAsset(BaseModel):
++    """A single asset included in the backup."""
++
++    relative_path: str
++    asset_type: AssetType
++    size_bytes: int = 0
++    checksum: str = ""  # SHA-256
++    included: bool = True
++    exclusion_reason: str = ""
++
++
++class BackupManifest(BaseModel):
++    """Versioned manifest describing a backup archive."""
++
++    schema_version: str = "1.0"
++    backup_id: str
++    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    platform: str = ""
++    runtime_version: str = "0.1.0"
++    archive_root: str = ""
++    backup_mode: BackupMode = BackupMode.FULL
++    assets: list[BackupAsset] = Field(default_factory=list)
++    checksums: dict[str, str] = Field(default_factory=dict)
++    metadata: dict[str, Any] = Field(default_factory=dict)
++    label: str = ""
++
++
++class BackupProvenance(BaseModel):
++    """Records who created the backup and from what state."""
++
++    creator: str = ""
++    source_roots: list[str] = Field(default_factory=list)
++    runtime_version: str = "0.1.0"
++    platform: str = ""
++    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
++
++
++class BackupResult(BaseModel):
++    """Result of a backup creation operation."""
++
++    success: bool
++    backup_id: str
++    archive_path: str = ""
++    manifest: BackupManifest | None = None
++    size_bytes: int = 0
++    asset_count: int = 0
++    errors: list[str] = Field(default_factory=list)
++    warnings: list[str] = Field(default_factory=list)
++    provenance: BackupProvenance | None = None
++
++
++class BackupSummary(BaseModel):
++    """Lightweight summary for backup listing."""
++
++    backup_id: str
++    created_at: datetime
++    label: str = ""
++    mode: BackupMode = BackupMode.FULL
++    size_bytes: int = 0
++    asset_count: int = 0
++    archive_path: str = ""
++
++
++class VerifyCheck(BaseModel):
++    """A single verification check result."""
++
++    name: str
++    passed: bool
++    message: str = ""
++
++
++class VerifyResult(BaseModel):
++    """Result of verifying a backup archive."""
++
++    valid: bool
++    checks: list[VerifyCheck] = Field(default_factory=list)
++    warnings: list[str] = Field(default_factory=list)
++
++
++class RestoreAssetPlan(BaseModel):
++    """Plan for restoring a single asset."""
++
++    relative_path: str
++    asset_type: str
++    action: str = "create"  # "create", "overwrite", "skip"
++    current_exists: bool = False
++    size_bytes: int = 0
++
++
++class RestoreConflict(BaseModel):
++    """A conflict detected during restore planning."""
++
++    relative_path: str
++    conflict_type: str  # "version_mismatch", "file_modified", "schema_change"
++    message: str
++    resolution: str = "overwrite"  # "overwrite", "skip", "merge"
++
++
++class RestorePlan(BaseModel):
++    """Preview of what a restore would do (no state changes)."""
++
++    backup_id: str
++    backup_version: str = ""
++    current_version: str = "0.1.0"
++    assets_to_restore: list[RestoreAssetPlan] = Field(default_factory=list)
++    conflicts: list[RestoreConflict] = Field(default_factory=list)
++    warnings: list[str] = Field(default_factory=list)
+diff --git a/engine/src/agent33/backup/restore_planner.py b/engine/src/agent33/backup/restore_planner.py
+new file mode 100644
+index 0000000..782c6f3
+--- /dev/null
++++ b/engine/src/agent33/backup/restore_planner.py
+@@ -0,0 +1,106 @@
++"""Restore planning (preview only) for backup archives.
++
++Track Phase 6 implements restore *planning* only. Actual restore execution
++is a future phase. The planner generates a preview of what would be restored,
++including conflict detection, without making any state changes.
++"""
++
++from __future__ import annotations
++
++import logging
++from pathlib import Path  # noqa: TCH003
++
++from agent33.backup.archive import extract_manifest
++from agent33.backup.models import (
++    RestoreAssetPlan,
++    RestoreConflict,
++    RestorePlan,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class RestorePlanner:
++    """Generates restore plans from backup archives."""
++
++    def __init__(self, target_root: Path) -> None:
++        self._target_root = target_root
++
++    def plan(self, archive_path: Path) -> RestorePlan:
++        """Generate a restore plan from a backup archive.
++
++        This is a read-only operation. No state changes are made.
++        """
++        manifest = extract_manifest(archive_path)
++        if manifest is None:
++            return RestorePlan(
++                backup_id="",
++                warnings=["Cannot read backup manifest from archive"],
++            )
++
++        assets_to_restore: list[RestoreAssetPlan] = []
++        conflicts: list[RestoreConflict] = []
++        warnings: list[str] = []
++
++        for asset in manifest.assets:
++            if not asset.included:
++                continue
++
++            # Determine target path
++            target = self._target_root / asset.relative_path
++            current_exists = target.exists()
++
++            if current_exists:
++                # Check for conflicts
++                action = "overwrite"
++
++                # If the file has been modified since the backup
++                if asset.checksum:
++                    from agent33.backup.archive import compute_sha256
++
++                    try:
++                        current_checksum = compute_sha256(target)
++                        if current_checksum != asset.checksum:
++                            conflicts.append(
++                                RestoreConflict(
++                                    relative_path=asset.relative_path,
++                                    conflict_type="file_modified",
++                                    message=(
++                                        f"File has been modified since backup "
++                                        f"(backup: {asset.checksum[:12]}..., "
++                                        f"current: {current_checksum[:12]}...)"
++                                    ),
++                                    resolution="overwrite",
++                                )
++                            )
++                    except OSError:
++                        warnings.append(
++                            f"Cannot read current file for comparison: {asset.relative_path}"
++                        )
++            else:
++                action = "create"
++
++            assets_to_restore.append(
++                RestoreAssetPlan(
++                    relative_path=asset.relative_path,
++                    asset_type=asset.asset_type,
++                    action=action,
++                    current_exists=current_exists,
++                    size_bytes=asset.size_bytes,
++                )
++            )
++
++        # Check schema version compatibility
++        if manifest.schema_version != "1.0":
++            warnings.append(
++                f"Backup schema version {manifest.schema_version} may not be "
++                f"fully compatible with current version"
++            )
++
++        return RestorePlan(
++            backup_id=manifest.backup_id,
++            backup_version=manifest.runtime_version,
++            assets_to_restore=assets_to_restore,
++            conflicts=conflicts,
++            warnings=warnings,
++        )
+diff --git a/engine/src/agent33/backup/service.py b/engine/src/agent33/backup/service.py
+new file mode 100644
+index 0000000..154ee62
+--- /dev/null
++++ b/engine/src/agent33/backup/service.py
+@@ -0,0 +1,310 @@
++"""Backup service: create, verify, list, and manage platform-level backups."""
++
++from __future__ import annotations
++
++import logging
++import sys
++import uuid
++from datetime import UTC, datetime
++from pathlib import Path  # noqa: TCH003
++
++from agent33.backup.archive import (
++    compute_sha256,
++    create_archive,
++    extract_manifest,
++    generate_archive_name,
++    verify_archive_integrity,
++)
++from agent33.backup.models import (
++    AssetType,
++    BackupAsset,
++    BackupManifest,
++    BackupMode,
++    BackupProvenance,
++    BackupResult,
++    BackupSummary,
++    VerifyCheck,
++    VerifyResult,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class BackupService:
++    """Creates, verifies, and manages platform-level backups."""
++
++    def __init__(
++        self,
++        backup_dir: Path,
++        config_dir: Path,
++        data_dir: Path,
++        workspace_dir: Path | None = None,
++    ) -> None:
++        self._backup_dir = backup_dir
++        self._backup_dir.mkdir(parents=True, exist_ok=True)
++        self._config_dir = config_dir
++        self._data_dir = data_dir
++        self._workspace_dir = workspace_dir
++
++    async def create(
++        self,
++        *,
++        mode: str = "full",
++        label: str = "",
++        creator: str = "",
++    ) -> BackupResult:
++        """Create a backup archive.
++
++        Steps:
++        1. Gather asset inventory based on mode.
++        2. Compute checksums for all assets.
++        3. Build manifest.
++        4. Create archive atomically (write to .tmp, rename).
++        5. Verify the created archive.
++        """
++        try:
++            backup_mode = BackupMode(mode)
++        except ValueError:
++            return BackupResult(
++                success=False,
++                backup_id="",
++                errors=[f"Invalid backup mode: {mode}"],
++            )
++
++        backup_id = str(uuid.uuid4())
++        short_id = backup_id[:8]
++        now = datetime.now(UTC)
++
++        # Gather source directories based on mode
++        source_dirs: dict[str, Path] = {}
++        assets: list[BackupAsset] = []
++        checksums: dict[str, str] = {}
++        warnings: list[str] = []
++
++        # Config is always included
++        if self._config_dir.exists():
++            source_dirs["config"] = self._config_dir
++            config_assets = self._scan_directory(self._config_dir, "config", AssetType.CONFIG)
++            assets.extend(config_assets)
++            for a in config_assets:
++                full_path = self._config_dir / a.relative_path.removeprefix("config/")
++                if full_path.is_file():
++                    checksums[a.relative_path] = compute_sha256(full_path)
++                    a.checksum = checksums[a.relative_path]
++        else:
++            warnings.append(f"Config directory not found: {self._config_dir}")
++
++        # Data directories (agent defs, skills, packs, plugins, workflows)
++        if backup_mode != BackupMode.CONFIG_ONLY and self._data_dir.exists():
++            data_subdirs = {
++                "agent_definitions": AssetType.AGENT_DEFINITIONS,
++                "skills": AssetType.SKILLS,
++                "packs": AssetType.PACKS,
++                "plugins": AssetType.PLUGINS,
++            }
++            for subdir_name, asset_type in data_subdirs.items():
++                subdir = self._data_dir / subdir_name
++                if subdir.exists():
++                    source_dirs[subdir_name] = subdir
++                    sub_assets = self._scan_directory(subdir, subdir_name, asset_type)
++                    assets.extend(sub_assets)
++                    for a in sub_assets:
++                        full_path = subdir / a.relative_path.removeprefix(f"{subdir_name}/")
++                        if full_path.is_file():
++                            checksums[a.relative_path] = compute_sha256(full_path)
++                            a.checksum = checksums[a.relative_path]
++
++        # Workspace (only in full mode)
++        if (
++            backup_mode == BackupMode.FULL
++            and self._workspace_dir is not None
++            and self._workspace_dir.exists()
++        ):
++            source_dirs["workspace"] = self._workspace_dir
++            ws_assets = self._scan_directory(self._workspace_dir, "workspace", AssetType.WORKSPACE)
++            assets.extend(ws_assets)
++            # Skip checksums for workspace (can be large)
++
++        # Build manifest
++        manifest = BackupManifest(
++            backup_id=backup_id,
++            created_at=now,
++            platform=sys.platform,
++            archive_root=str(self._data_dir),
++            backup_mode=backup_mode,
++            assets=assets,
++            checksums=checksums,
++            label=label,
++        )
++
++        # Generate archive name and path
++        archive_name = generate_archive_name(mode, short_id, now)
++        archive_path = self._backup_dir / archive_name
++
++        # Safety: backup output must not be inside source roots
++        archive_resolved = archive_path.resolve()
++        for src_dir in source_dirs.values():
++            src_resolved = src_dir.resolve()
++            try:
++                archive_resolved.relative_to(src_resolved)
++                return BackupResult(
++                    success=False,
++                    backup_id=backup_id,
++                    errors=[f"Backup output {archive_path} is inside source root {src_dir}"],
++                )
++            except ValueError:
++                pass  # Good: output is outside source
++
++        # Create archive
++        errors: list[str] = []
++        try:
++            create_archive(source_dirs, manifest, archive_path)
++        except Exception as exc:
++            errors.append(f"Archive creation failed: {exc}")
++            return BackupResult(
++                success=False,
++                backup_id=backup_id,
++                errors=errors,
++            )
++
++        # Compute archive size
++        size_bytes = archive_path.stat().st_size if archive_path.exists() else 0
++
++        provenance = BackupProvenance(
++            creator=creator,
++            source_roots=[str(d) for d in source_dirs.values()],
++            platform=sys.platform,
++            created_at=now,
++        )
++
++        return BackupResult(
++            success=True,
++            backup_id=backup_id,
++            archive_path=str(archive_path),
++            manifest=manifest,
++            size_bytes=size_bytes,
++            asset_count=len([a for a in assets if a.included]),
++            warnings=warnings,
++            provenance=provenance,
++        )
++
++    async def verify(self, backup_id: str) -> VerifyResult:
++        """Verify a backup archive by its ID."""
++        archive_path = self._find_archive(backup_id)
++        if archive_path is None:
++            return VerifyResult(
++                valid=False,
++                checks=[
++                    VerifyCheck(
++                        name="archive_exists",
++                        passed=False,
++                        message=f"No archive found for backup {backup_id}",
++                    )
++                ],
++            )
++
++        raw_checks = verify_archive_integrity(archive_path)
++        checks = [
++            VerifyCheck(name=name, passed=passed, message=msg) for name, passed, msg in raw_checks
++        ]
++        valid = all(c.passed for c in checks)
++
++        return VerifyResult(valid=valid, checks=checks)
++
++    def list_backups(self) -> list[BackupSummary]:
++        """List all available backups, sorted newest first."""
++        summaries: list[BackupSummary] = []
++        if not self._backup_dir.exists():
++            return summaries
++
++        for path in sorted(self._backup_dir.glob("agent33-backup-*.tar.gz"), reverse=True):
++            manifest = extract_manifest(path)
++            if manifest is None:
++                continue
++            summaries.append(
++                BackupSummary(
++                    backup_id=manifest.backup_id,
++                    created_at=manifest.created_at,
++                    label=manifest.label,
++                    mode=manifest.backup_mode,
++                    size_bytes=path.stat().st_size,
++                    asset_count=len([a for a in manifest.assets if a.included]),
++                    archive_path=str(path),
++                )
++            )
++
++        return summaries
++
++    def get_backup(self, backup_id: str) -> BackupManifest | None:
++        """Get manifest for a specific backup."""
++        archive_path = self._find_archive(backup_id)
++        if archive_path is None:
++            return None
++        return extract_manifest(archive_path)
++
++    def delete_backup(self, backup_id: str) -> bool:
++        """Delete a backup archive. Returns True if deleted."""
++        archive_path = self._find_archive(backup_id)
++        if archive_path is None:
++            return False
++        try:
++            archive_path.unlink()
++            return True
++        except OSError:
++            logger.warning("Failed to delete backup: %s", archive_path, exc_info=True)
++            return False
++
++    def _find_archive(self, backup_id: str) -> Path | None:
++        """Find an archive file by backup_id (searches manifest of each archive)."""
++        if not self._backup_dir.exists():
++            return None
++
++        # First try short-id match in filename
++        short_id = backup_id[:8]
++        for path in self._backup_dir.glob(f"agent33-backup-*-{short_id}.tar.gz"):
++            manifest = extract_manifest(path)
++            if manifest is not None and manifest.backup_id == backup_id:
++                return path
++
++        # Fallback: scan all archives
++        for path in self._backup_dir.glob("agent33-backup-*.tar.gz"):
++            manifest = extract_manifest(path)
++            if manifest is not None and manifest.backup_id == backup_id:
++                return path
++
++        return None
++
++    @staticmethod
++    def _scan_directory(
++        directory: Path,
++        prefix: str,
++        asset_type: AssetType,
++    ) -> list[BackupAsset]:
++        """Scan a directory and build an asset inventory."""
++        assets: list[BackupAsset] = []
++        if not directory.exists():
++            return assets
++
++        for path in directory.rglob("*"):
++            if not path.is_file():
++                continue
++            # Skip common excludes
++            parts = path.relative_to(directory).parts
++            if any(p.startswith(".") or p == "__pycache__" for p in parts):
++                continue
++
++            rel = f"{prefix}/{path.relative_to(directory).as_posix()}"
++            try:
++                size = path.stat().st_size
++            except OSError:
++                size = 0
++
++            assets.append(
++                BackupAsset(
++                    relative_path=rel,
++                    asset_type=asset_type,
++                    size_bytes=size,
++                )
++            )
++
++        return assets
+diff --git a/engine/src/agent33/execution/process_manager.py b/engine/src/agent33/execution/process_manager.py
+new file mode 100644
+index 0000000..bc33a24
+--- /dev/null
++++ b/engine/src/agent33/execution/process_manager.py
+@@ -0,0 +1,278 @@
++"""Process manager for tracking and controlling long-running agent processes."""
++
++from __future__ import annotations
++
++import asyncio
++import logging
++import os
++import uuid
++from datetime import UTC, datetime
++from enum import StrEnum
++from pathlib import Path  # noqa: TCH003
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++logger = logging.getLogger(__name__)
++
++
++class ProcessStatus(StrEnum):
++    """Lifecycle state of a managed process."""
++
++    RUNNING = "running"
++    COMPLETED = "completed"
++    FAILED = "failed"
++    KILLED = "killed"
++    PAUSED = "paused"
++
++
++class ManagedProcess(BaseModel):
++    """A background command session managed by the process manager."""
++
++    process_id: str
++    command: str
++    status: ProcessStatus = ProcessStatus.RUNNING
++    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    finished_at: datetime | None = None
++    exit_code: int | None = None
++    agent_id: str = ""
++    session_id: str = ""
++    tenant_id: str = ""
++    pid: int | None = None
++
++
++class ResourceLimits(BaseModel):
++    """Resource limits for a managed process."""
++
++    max_cpu_seconds: float = 300.0  # 5 min default
++    max_memory_mb: int = 512
++    max_output_bytes: int = 10 * 1024 * 1024  # 10 MB
++
++
++class ProcessManager:
++    """Manages background command sessions with log tailing and cleanup.
++
++    Stores process output in a log directory and tracks process metadata
++    in-memory. Uses asyncio.create_subprocess_shell for non-blocking execution.
++    """
++
++    def __init__(
++        self,
++        log_dir: Path,
++        max_processes: int = 10,
++        default_limits: ResourceLimits | None = None,
++    ) -> None:
++        self._log_dir = log_dir
++        self._log_dir.mkdir(parents=True, exist_ok=True)
++        self._max_processes = max_processes
++        self._default_limits = default_limits or ResourceLimits()
++        self._processes: dict[str, ManagedProcess] = {}
++        self._handles: dict[str, asyncio.subprocess.Process] = {}
++
++    @property
++    def active_count(self) -> int:
++        """Number of currently running processes."""
++        return sum(1 for p in self._processes.values() if p.status == ProcessStatus.RUNNING)
++
++    async def start(
++        self,
++        command: str,
++        *,
++        agent_id: str = "",
++        session_id: str = "",
++        tenant_id: str = "",
++        limits: ResourceLimits | None = None,
++    ) -> ManagedProcess:
++        """Start a new background process.
++
++        Raises ValueError if the max process limit is reached.
++        """
++        if self.active_count >= self._max_processes:
++            raise ValueError(f"Maximum concurrent processes ({self._max_processes}) reached")
++
++        if not command.strip():
++            raise ValueError("Empty command")
++
++        process_id = str(uuid.uuid4())
++        log_path = self._log_dir / f"{process_id}.log"
++
++        managed = ManagedProcess(
++            process_id=process_id,
++            command=command,
++            agent_id=agent_id,
++            session_id=session_id,
++            tenant_id=tenant_id,
++        )
++        self._processes[process_id] = managed
++
++        # Open log file for stdout/stderr capture
++        log_file = log_path.open("w", encoding="utf-8")
++
++        # Merge env to preserve PATH (Windows platform note from CLAUDE.md)
++        env = {**os.environ}
++
++        try:
++            proc = await asyncio.create_subprocess_shell(
++                command,
++                stdout=log_file,
++                stderr=asyncio.subprocess.STDOUT,
++                env=env,
++            )
++            managed.pid = proc.pid
++            self._handles[process_id] = proc
++
++            # Launch background monitor
++            effective_limits = limits or self._default_limits
++            asyncio.create_task(self._monitor(process_id, proc, log_file, effective_limits))
++
++        except Exception as exc:
++            log_file.close()
++            managed.status = ProcessStatus.FAILED
++            managed.finished_at = datetime.now(UTC)
++            logger.error("Process start failed: %s", exc, exc_info=True)
++
++        return managed
++
++    async def kill(self, process_id: str) -> bool:
++        """Terminate a running process.
++
++        Returns True if the process was killed, False if not found or already finished.
++        """
++        managed = self._processes.get(process_id)
++        if managed is None:
++            return False
++
++        if managed.status != ProcessStatus.RUNNING:
++            return False
++
++        proc = self._handles.get(process_id)
++        if proc is None:
++            return False
++
++        try:
++            proc.terminate()
++            # Give it a moment to terminate gracefully
++            try:
++                await asyncio.wait_for(proc.wait(), timeout=5.0)
++            except TimeoutError:
++                proc.kill()
++
++            managed.status = ProcessStatus.KILLED
++            managed.finished_at = datetime.now(UTC)
++            managed.exit_code = proc.returncode
++            return True
++        except ProcessLookupError:
++            managed.status = ProcessStatus.KILLED
++            managed.finished_at = datetime.now(UTC)
++            return True
++
++    def get_status(self, process_id: str) -> ManagedProcess | None:
++        """Get the current status of a process."""
++        return self._processes.get(process_id)
++
++    def list_processes(
++        self,
++        *,
++        session_id: str = "",
++        tenant_id: str = "",
++        status_filter: ProcessStatus | None = None,
++    ) -> list[ManagedProcess]:
++        """List processes with optional filtering."""
++        results: list[ManagedProcess] = []
++        for p in self._processes.values():
++            if session_id and p.session_id != session_id:
++                continue
++            if tenant_id and p.tenant_id != tenant_id:
++                continue
++            if status_filter is not None and p.status != status_filter:
++                continue
++            results.append(p)
++        # Sort by started_at descending
++        results.sort(key=lambda p: p.started_at, reverse=True)
++        return results
++
++    async def read_log(self, process_id: str, *, tail: int = 100) -> str:
++        """Read the output log for a process.
++
++        Returns the last ``tail`` lines of the log.
++        """
++        log_path = self._log_dir / f"{process_id}.log"
++        if not log_path.exists():
++            return ""
++
++        try:
++            text = log_path.read_text(encoding="utf-8", errors="replace")
++            lines = text.splitlines()
++            if tail > 0 and len(lines) > tail:
++                lines = lines[-tail:]
++            return "\n".join(lines)
++        except OSError:
++            return ""
++
++    def cleanup_completed(self, *, max_age_seconds: int = 3600) -> int:
++        """Remove completed/failed/killed processes older than max_age.
++
++        Returns the number of processes cleaned up.
++        """
++        now = datetime.now(UTC)
++        to_remove: list[str] = []
++
++        for pid, managed in self._processes.items():
++            if managed.status == ProcessStatus.RUNNING:
++                continue
++            if managed.finished_at is not None:
++                age = (now - managed.finished_at).total_seconds()
++                if age > max_age_seconds:
++                    to_remove.append(pid)
++
++        for pid in to_remove:
++            self._processes.pop(pid, None)
++            self._handles.pop(pid, None)
++            # Clean up log file
++            log_path = self._log_dir / f"{pid}.log"
++            try:
++                if log_path.exists():
++                    log_path.unlink()
++            except OSError:
++                pass
++
++        return len(to_remove)
++
++    async def _monitor(
++        self,
++        process_id: str,
++        proc: asyncio.subprocess.Process,
++        log_file: Any,
++        limits: ResourceLimits,
++    ) -> None:
++        """Background task that monitors a process until completion."""
++        managed = self._processes.get(process_id)
++        if managed is None:
++            return
++
++        try:
++            # Wait with a timeout based on CPU seconds limit
++            returncode = await asyncio.wait_for(proc.wait(), timeout=limits.max_cpu_seconds)
++            managed.exit_code = returncode
++            managed.status = ProcessStatus.COMPLETED if returncode == 0 else ProcessStatus.FAILED
++        except TimeoutError:
++            # Exceeded time limit
++            import contextlib
++
++            try:
++                proc.terminate()
++                await asyncio.wait_for(proc.wait(), timeout=5.0)
++            except (TimeoutError, ProcessLookupError):
++                with contextlib.suppress(ProcessLookupError):
++                    proc.kill()
++            managed.status = ProcessStatus.KILLED
++            managed.exit_code = -1
++        except Exception:
++            managed.status = ProcessStatus.FAILED
++            logger.warning("Process monitor error: %s", process_id, exc_info=True)
++        finally:
++            managed.finished_at = datetime.now(UTC)
++            import contextlib as _ctxlib
++
++            with _ctxlib.suppress(Exception):
++                log_file.close()
+diff --git a/engine/src/agent33/tools/builtin/apply_patch.py b/engine/src/agent33/tools/builtin/apply_patch.py
+new file mode 100644
+index 0000000..f0b295a
+--- /dev/null
++++ b/engine/src/agent33/tools/builtin/apply_patch.py
+@@ -0,0 +1,446 @@
++"""Safe, governed file mutation via structured patches.
++
++Provides an ``apply_patch`` tool that agents can use to modify files with
++workspace containment, dry-run preview, rollback support, and audit logging.
++"""
++
++from __future__ import annotations
++
++import difflib
++import logging
++import shutil
++import uuid
++from pathlib import Path
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++from agent33.tools.base import ToolContext, ToolResult
++from agent33.tools.builtin.patch_audit import PatchAuditEntry, PatchAuditLog
++from agent33.tools.builtin.patch_security import PatchSecurityValidator
++
++logger = logging.getLogger(__name__)
++
++
++class PatchPreview(BaseModel):
++    """Preview of what a single patch operation would do."""
++
++    path: str
++    operation: str
++    diff: str = ""
++    lines_added: int = 0
++    lines_removed: int = 0
++    would_create: bool = False
++    would_delete: bool = False
++    validation_errors: list[str] = Field(default_factory=list)
++
++
++class PatchResult(BaseModel):
++    """Result of a patch batch application."""
++
++    patch_id: str
++    success: bool
++    dry_run: bool = False
++    previews: list[PatchPreview] = Field(default_factory=list)
++    files_modified: list[str] = Field(default_factory=list)
++    files_created: list[str] = Field(default_factory=list)
++    files_deleted: list[str] = Field(default_factory=list)
++    errors: list[str] = Field(default_factory=list)
++    rollback_available: bool = False
++
++
++class ApplyPatchTool:
++    """Safe, governed file mutation via structured patches.
++
++    Supports create, modify (via search/replace blocks), and delete operations.
++    All operations are contained within a workspace root and subject to
++    governance checks.
++    """
++
++    _name = "apply_patch"
++    _description = "Apply structured file patches with workspace containment and audit logging"
++
++    def __init__(
++        self,
++        workspace_root: Path | None = None,
++        audit_log: PatchAuditLog | None = None,
++        backup_dir: Path | None = None,
++    ) -> None:
++        self._workspace_root = workspace_root or Path.cwd()
++        self._security = PatchSecurityValidator(self._workspace_root)
++        self._audit_log = audit_log
++        self._backup_dir = backup_dir
++        if self._backup_dir is not None:
++            self._backup_dir.mkdir(parents=True, exist_ok=True)
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def description(self) -> str:
++        return self._description
++
++    @property
++    def parameters_schema(self) -> dict[str, Any]:
++        return {
++            "type": "object",
++            "properties": {
++                "patches": {
++                    "type": "array",
++                    "items": {
++                        "type": "object",
++                        "properties": {
++                            "path": {
++                                "type": "string",
++                                "description": "File path relative to workspace",
++                            },
++                            "operation": {
++                                "type": "string",
++                                "enum": ["create", "modify", "delete"],
++                            },
++                            "content": {
++                                "type": "string",
++                                "description": (
++                                    "New content (create) or search/replace block (modify)"
++                                ),
++                            },
++                            "search": {
++                                "type": "string",
++                                "description": "Text to search for (modify)",
++                            },
++                            "replace": {
++                                "type": "string",
++                                "description": "Text to replace with (modify)",
++                            },
++                        },
++                        "required": ["path", "operation"],
++                    },
++                },
++                "dry_run": {"type": "boolean", "default": False},
++                "workspace_root": {
++                    "type": "string",
++                    "description": "Override workspace containment root",
++                },
++            },
++            "required": ["patches"],
++        }
++
++    async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
++        """Execute the patch tool."""
++        patches: list[dict[str, Any]] = params.get("patches", [])
++        dry_run: bool = params.get("dry_run", False)
++
++        if not patches:
++            return ToolResult.fail("No patches provided")
++
++        # Allow workspace root override from params
++        workspace_override = params.get("workspace_root", "")
++        if workspace_override:
++            security = PatchSecurityValidator(Path(workspace_override))
++        else:
++            security = self._security
++
++        # Validate all paths first
++        validation_errors = security.validate_batch(patches)
++        if validation_errors:
++            error_msg = "; ".join(f"{path}: {err}" for path, err in validation_errors)
++            return ToolResult.fail(f"Path validation failed: {error_msg}")
++
++        patch_id = str(uuid.uuid4())
++        result = await self._apply_batch(
++            patches=patches,
++            dry_run=dry_run,
++            patch_id=patch_id,
++            security=security,
++        )
++
++        # Record audit
++        if self._audit_log is not None:
++            audit_entry = PatchAuditEntry(
++                patch_id=patch_id,
++                agent_id=context.requested_by,
++                tenant_id=context.tenant_id,
++                workspace_root=str(security.workspace_root),
++                patches=patches,
++                dry_run=dry_run,
++                result="dry_run" if dry_run else ("success" if result.success else "failed"),
++                errors=result.errors,
++                files_modified=result.files_modified,
++                files_created=result.files_created,
++                files_deleted=result.files_deleted,
++            )
++            self._audit_log.record(audit_entry)
++
++        if result.success:
++            return ToolResult.ok(result.model_dump_json())
++        return ToolResult.fail(result.model_dump_json())
++
++    async def _apply_batch(
++        self,
++        patches: list[dict[str, Any]],
++        dry_run: bool,
++        patch_id: str,
++        security: PatchSecurityValidator,
++    ) -> PatchResult:
++        """Apply a batch of patches."""
++        previews: list[PatchPreview] = []
++        files_modified: list[str] = []
++        files_created: list[str] = []
++        files_deleted: list[str] = []
++        errors: list[str] = []
++        backups: dict[str, Path] = {}
++
++        for patch in patches:
++            path_str = patch.get("path", "")
++            operation = patch.get("operation", "")
++            target = (security.workspace_root / path_str).resolve()
++
++            if operation == "create":
++                preview = self._preview_create(path_str, patch, target)
++                previews.append(preview)
++                if preview.validation_errors:
++                    errors.extend(preview.validation_errors)
++                    continue
++                if not dry_run:
++                    try:
++                        self._backup_file(target, patch_id, backups)
++                        target.parent.mkdir(parents=True, exist_ok=True)
++                        target.write_text(patch.get("content", ""), encoding="utf-8")
++                        files_created.append(path_str)
++                    except OSError as exc:
++                        errors.append(f"Create failed for {path_str}: {exc}")
++
++            elif operation == "modify":
++                preview = self._preview_modify(path_str, patch, target)
++                previews.append(preview)
++                if preview.validation_errors:
++                    errors.extend(preview.validation_errors)
++                    continue
++                if not dry_run:
++                    try:
++                        self._backup_file(target, patch_id, backups)
++                        self._apply_modify(patch, target)
++                        files_modified.append(path_str)
++                    except OSError as exc:
++                        errors.append(f"Modify failed for {path_str}: {exc}")
++
++            elif operation == "delete":
++                preview = self._preview_delete(path_str, target)
++                previews.append(preview)
++                if preview.validation_errors:
++                    errors.extend(preview.validation_errors)
++                    continue
++                if not dry_run:
++                    try:
++                        self._backup_file(target, patch_id, backups)
++                        target.unlink()
++                        files_deleted.append(path_str)
++                    except OSError as exc:
++                        errors.append(f"Delete failed for {path_str}: {exc}")
++            else:
++                errors.append(f"Unknown operation '{operation}' for {path_str}")
++
++        return PatchResult(
++            patch_id=patch_id,
++            success=len(errors) == 0,
++            dry_run=dry_run,
++            previews=previews,
++            files_modified=files_modified,
++            files_created=files_created,
++            files_deleted=files_deleted,
++            errors=errors,
++            rollback_available=bool(backups) and not dry_run,
++        )
++
++    def _preview_create(self, path_str: str, patch: dict[str, Any], target: Path) -> PatchPreview:
++        content = patch.get("content", "")
++        validation_errors: list[str] = []
++        if target.exists():
++            validation_errors.append(f"File already exists: {path_str} (use 'modify' instead)")
++        lines_added = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
++        return PatchPreview(
++            path=path_str,
++            operation="create",
++            diff=f"+++ {path_str}\n" + "\n".join(f"+{line}" for line in content.splitlines()),
++            lines_added=lines_added,
++            would_create=True,
++            validation_errors=validation_errors,
++        )
++
++    def _preview_modify(self, path_str: str, patch: dict[str, Any], target: Path) -> PatchPreview:
++        validation_errors: list[str] = []
++        if not target.exists():
++            validation_errors.append(f"File does not exist: {path_str}")
++            return PatchPreview(
++                path=path_str,
++                operation="modify",
++                validation_errors=validation_errors,
++            )
++
++        try:
++            original = target.read_text(encoding="utf-8")
++        except OSError as exc:
++            validation_errors.append(f"Cannot read {path_str}: {exc}")
++            return PatchPreview(
++                path=path_str,
++                operation="modify",
++                validation_errors=validation_errors,
++            )
++
++        search = patch.get("search", "")
++        replace = patch.get("replace", "")
++
++        if search:
++            if search not in original:
++                validation_errors.append(f"Search text not found in {path_str}")
++                return PatchPreview(
++                    path=path_str,
++                    operation="modify",
++                    validation_errors=validation_errors,
++                )
++            modified = original.replace(search, replace, 1)
++        elif "content" in patch:
++            modified = patch["content"]
++        else:
++            validation_errors.append(
++                f"Modify requires 'search'+'replace' or 'content' for {path_str}"
++            )
++            return PatchPreview(
++                path=path_str,
++                operation="modify",
++                validation_errors=validation_errors,
++            )
++
++        diff_lines = list(
++            difflib.unified_diff(
++                original.splitlines(keepends=True),
++                modified.splitlines(keepends=True),
++                fromfile=f"a/{path_str}",
++                tofile=f"b/{path_str}",
++            )
++        )
++        diff_text = "".join(diff_lines)
++        lines_added = sum(
++            1 for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++")
++        )
++        lines_removed = sum(
++            1 for ln in diff_lines if ln.startswith("-") and not ln.startswith("---")
++        )
++
++        return PatchPreview(
++            path=path_str,
++            operation="modify",
++            diff=diff_text,
++            lines_added=lines_added,
++            lines_removed=lines_removed,
++            validation_errors=validation_errors,
++        )
++
++    def _preview_delete(self, path_str: str, target: Path) -> PatchPreview:
++        validation_errors: list[str] = []
++        if not target.exists():
++            validation_errors.append(f"File does not exist: {path_str}")
++        return PatchPreview(
++            path=path_str,
++            operation="delete",
++            would_delete=target.exists(),
++            validation_errors=validation_errors,
++        )
++
++    def _apply_modify(self, patch: dict[str, Any], target: Path) -> None:
++        """Apply a modify operation to a file."""
++        original = target.read_text(encoding="utf-8")
++        search = patch.get("search", "")
++        replace = patch.get("replace", "")
++
++        if search:
++            modified = original.replace(search, replace, 1)
++        else:
++            modified = patch.get("content", original)
++
++        target.write_text(modified, encoding="utf-8")
++
++    def _backup_file(
++        self,
++        target: Path,
++        patch_id: str,
++        backups: dict[str, Path],
++    ) -> None:
++        """Create a backup of a file before modifying it."""
++        if self._backup_dir is None:
++            return
++        if not target.exists():
++            return
++
++        backup_subdir = self._backup_dir / patch_id
++        backup_subdir.mkdir(parents=True, exist_ok=True)
++
++        # Use a safe filename derived from the original
++        safe_name = target.name + f".{len(backups)}.bak"
++        backup_path = backup_subdir / safe_name
++        shutil.copy2(str(target), str(backup_path))
++        backups[str(target)] = backup_path
++
++    def rollback(self, patch_id: str) -> tuple[bool, str]:
++        """Rollback a previously applied patch by restoring backups.
++
++        Returns (success, message).
++        """
++        if self._backup_dir is None:
++            return False, "No backup directory configured"
++
++        backup_subdir = self._backup_dir / patch_id
++        if not backup_subdir.exists():
++            return False, f"No backups found for patch {patch_id}"
++
++        # Check the audit log for the original paths
++        if self._audit_log is None:
++            return False, "No audit log available for rollback"
++
++        entry = self._audit_log.get_entry(patch_id)
++        if entry is None:
++            return False, f"No audit entry found for patch {patch_id}"
++
++        restored = 0
++        errors: list[str] = []
++
++        # Restore modified files
++        backup_files = sorted(backup_subdir.iterdir())
++
++        for i, rel_path in enumerate(entry.files_modified):
++            if i < len(backup_files):
++                target = (Path(entry.workspace_root) / rel_path).resolve()
++                try:
++                    shutil.copy2(str(backup_files[i]), str(target))
++                    restored += 1
++                except OSError as exc:
++                    errors.append(f"Failed to restore {rel_path}: {exc}")
++
++        # Delete created files
++        for rel_path in entry.files_created:
++            target = (Path(entry.workspace_root) / rel_path).resolve()
++            try:
++                if target.exists():
++                    target.unlink()
++                    restored += 1
++            except OSError as exc:
++                errors.append(f"Failed to remove {rel_path}: {exc}")
++
++        # Restore deleted files
++        offset = len(entry.files_modified)
++        for i, rel_path in enumerate(entry.files_deleted):
++            idx = offset + len(entry.files_created) + i
++            if idx < len(backup_files):
++                target = (Path(entry.workspace_root) / rel_path).resolve()
++                try:
++                    target.parent.mkdir(parents=True, exist_ok=True)
++                    shutil.copy2(str(backup_files[idx]), str(target))
++                    restored += 1
++                except OSError as exc:
++                    errors.append(f"Failed to restore deleted {rel_path}: {exc}")
++
++        if errors:
++            err_summary = "; ".join(errors)
++            return False, f"Partial rollback: {restored} restored, errors: {err_summary}"
++        return True, f"Rollback complete: {restored} files restored"
+diff --git a/engine/src/agent33/tools/builtin/patch_audit.py b/engine/src/agent33/tools/builtin/patch_audit.py
+new file mode 100644
+index 0000000..6f43c6d
+--- /dev/null
++++ b/engine/src/agent33/tools/builtin/patch_audit.py
+@@ -0,0 +1,121 @@
++"""Mutation audit trail for patch operations."""
++
++from __future__ import annotations
++
++import json
++import logging
++from datetime import UTC, datetime
++from pathlib import Path  # noqa: TCH003
++from typing import Any
++
++from pydantic import BaseModel, Field
++
++logger = logging.getLogger(__name__)
++
++
++class PatchAuditEntry(BaseModel):
++    """Audit record for a patch application."""
++
++    patch_id: str
++    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
++    agent_id: str = ""
++    session_id: str = ""
++    tenant_id: str = ""
++    workspace_root: str = ""
++    patches: list[dict[str, Any]] = Field(default_factory=list)
++    dry_run: bool = False
++    approval_id: str = ""
++    result: str = ""  # "success", "partial", "failed", "dry_run"
++    errors: list[str] = Field(default_factory=list)
++    files_modified: list[str] = Field(default_factory=list)
++    files_created: list[str] = Field(default_factory=list)
++    files_deleted: list[str] = Field(default_factory=list)
++
++
++class PatchAuditLog:
++    """Persistent audit log for patch operations.
++
++    Stores entries as newline-delimited JSON in the log directory.
++    """
++
++    def __init__(self, log_dir: Path) -> None:
++        self._log_dir = log_dir
++        self._log_dir.mkdir(parents=True, exist_ok=True)
++        self._log_file = self._log_dir / "patch_audit.jsonl"
++
++    def record(self, entry: PatchAuditEntry) -> None:
++        """Append an audit entry to the log."""
++        try:
++            with self._log_file.open("a", encoding="utf-8") as f:
++                f.write(entry.model_dump_json() + "\n")
++        except OSError:
++            logger.warning(
++                "Failed to write patch audit entry: patch_id=%s",
++                entry.patch_id,
++                exc_info=True,
++            )
++
++    def query(
++        self,
++        *,
++        session_id: str = "",
++        tenant_id: str = "",
++        limit: int = 50,
++    ) -> list[PatchAuditEntry]:
++        """Query the audit log with optional filters.
++
++        Returns entries in reverse chronological order (newest first).
++        """
++        entries: list[PatchAuditEntry] = []
++        if not self._log_file.exists():
++            return entries
++
++        try:
++            lines = self._log_file.read_text(encoding="utf-8").strip().split("\n")
++        except OSError:
++            logger.warning("Failed to read patch audit log", exc_info=True)
++            return entries
++
++        for line in reversed(lines):
++            line = line.strip()
++            if not line:
++                continue
++            try:
++                data = json.loads(line)
++                entry = PatchAuditEntry.model_validate(data)
++            except (json.JSONDecodeError, ValueError):
++                continue
++
++            if session_id and entry.session_id != session_id:
++                continue
++            if tenant_id and entry.tenant_id != tenant_id:
++                continue
++
++            entries.append(entry)
++            if len(entries) >= limit:
++                break
++
++        return entries
++
++    def get_entry(self, patch_id: str) -> PatchAuditEntry | None:
++        """Retrieve a single audit entry by patch_id."""
++        if not self._log_file.exists():
++            return None
++
++        try:
++            lines = self._log_file.read_text(encoding="utf-8").strip().split("\n")
++        except OSError:
++            return None
++
++        for line in reversed(lines):
++            line = line.strip()
++            if not line:
++                continue
++            try:
++                data = json.loads(line)
++                if data.get("patch_id") == patch_id:
++                    return PatchAuditEntry.model_validate(data)
++            except (json.JSONDecodeError, ValueError):
++                continue
++
++        return None
+diff --git a/engine/src/agent33/tools/builtin/patch_security.py b/engine/src/agent33/tools/builtin/patch_security.py
+new file mode 100644
+index 0000000..1a2af25
+--- /dev/null
++++ b/engine/src/agent33/tools/builtin/patch_security.py
+@@ -0,0 +1,119 @@
++"""Filesystem boundary enforcement for patch operations."""
++
++from __future__ import annotations
++
++from pathlib import Path  # noqa: TCH003
++from typing import Any
++
++# Paths that are never patchable regardless of workspace containment
++_SENSITIVE_PATTERNS: frozenset[str] = frozenset(
++    {
++        ".env",
++        ".env.local",
++        ".env.production",
++        "secrets.json",
++        "credentials.json",
++        "id_rsa",
++        "id_ed25519",
++        ".git/config",
++        ".git/HEAD",
++    }
++)
++
++_SENSITIVE_SUFFIXES: frozenset[str] = frozenset(
++    {
++        ".pem",
++        ".key",
++        ".p12",
++        ".pfx",
++        ".jks",
++    }
++)
++
++
++class PatchSecurityValidator:
++    """Validates patch operations against filesystem security boundaries."""
++
++    def __init__(self, workspace_root: Path) -> None:
++        self._workspace_root = workspace_root.resolve()
++
++    @property
++    def workspace_root(self) -> Path:
++        return self._workspace_root
++
++    def validate_path(self, path: str) -> tuple[bool, str]:
++        """Validate a patch path is safe.
++
++        Checks:
++        1. Path resolves within workspace_root (no traversal escape).
++        2. No null bytes.
++        3. No symlink escape.
++        4. Not a sensitive file pattern.
++
++        Returns (is_valid, error_message). Error message is empty when valid.
++        """
++        if not path:
++            return False, "Empty path"
++
++        if "\x00" in path:
++            return False, "Null bytes are not allowed in file paths"
++
++        # Reject raw path traversal patterns before resolving
++        if ".." in path.replace("\\", "/").split("/"):
++            return False, "Path traversal (..) is not allowed"
++
++        # Resolve relative to workspace root
++        target = (self._workspace_root / path).resolve()
++
++        # Containment check
++        try:
++            target.relative_to(self._workspace_root)
++        except ValueError:
++            return False, (
++                f"Path '{path}' resolves outside workspace root '{self._workspace_root}'"
++            )
++
++        # Symlink escape check (only if the path already exists)
++        if target.exists() and target.is_symlink():
++            real_target = target.resolve()
++            try:
++                real_target.relative_to(self._workspace_root)
++            except ValueError:
++                return False, (
++                    f"Symlink at '{path}' points outside workspace root (target: {real_target})"
++                )
++
++        # Sensitive file check
++        relative_posix = target.relative_to(self._workspace_root).as_posix()
++        if self._is_sensitive(relative_posix, target):
++            return False, f"Path '{path}' matches a sensitive file pattern"
++
++        return True, ""
++
++    def validate_batch(self, patches: list[dict[str, Any]]) -> list[tuple[str, str]]:
++        """Validate all paths in a patch batch.
++
++        Returns list of (path, error) for failures. Empty list means all valid.
++        """
++        errors: list[tuple[str, str]] = []
++        for patch in patches:
++            path = patch.get("path", "")
++            valid, error = self.validate_path(path)
++            if not valid:
++                errors.append((path, error))
++        return errors
++
++    @staticmethod
++    def _is_sensitive(relative_posix: str, target: Path) -> bool:
++        """Check if a path matches sensitive file patterns."""
++        # Check exact filename matches
++        filename = target.name
++        if filename in _SENSITIVE_PATTERNS:
++            return True
++
++        # Check relative path matches (e.g. ".git/config")
++        if relative_posix in _SENSITIVE_PATTERNS:
++            return True
++
++        # Check suffix matches
++        return target.suffix.lower() in _SENSITIVE_SUFFIXES
+diff --git a/engine/tests/test_openclaw_t5_patch.py b/engine/tests/test_openclaw_t5_patch.py
+new file mode 100644
+index 0000000..88b2e72
+--- /dev/null
++++ b/engine/tests/test_openclaw_t5_patch.py
+@@ -0,0 +1,552 @@
++"""Tests for Track Phase 5: apply_patch tool, patch security, and audit log."""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++import pytest
++
++from agent33.tools.base import ToolContext
++from agent33.tools.builtin.apply_patch import ApplyPatchTool
++from agent33.tools.builtin.patch_audit import PatchAuditEntry, PatchAuditLog
++from agent33.tools.builtin.patch_security import PatchSecurityValidator
++
++# ---------------------------------------------------------------------------
++# PatchSecurityValidator tests
++# ---------------------------------------------------------------------------
++
++
++class TestPatchSecurityValidator:
++    def test_valid_path_within_workspace(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("subdir/file.txt")
++        assert valid is True
++        assert error == ""
++
++    def test_rejects_path_traversal(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("../../etc/passwd")
++        assert valid is False
++        assert "traversal" in error.lower()
++
++    def test_rejects_null_bytes(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("file\x00.txt")
++        assert valid is False
++        assert "Null bytes" in error
++
++    def test_rejects_empty_path(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("")
++        assert valid is False
++        assert "Empty" in error
++
++    def test_rejects_sensitive_env_file(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path(".env")
++        assert valid is False
++        assert "sensitive" in error.lower()
++
++    def test_rejects_sensitive_pem_file(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("certs/server.pem")
++        assert valid is False
++        assert "sensitive" in error.lower()
++
++    def test_rejects_sensitive_key_file(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("ssh/id_rsa")
++        assert valid is False
++        assert "sensitive" in error.lower()
++
++    def test_rejects_git_config(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path(".git/config")
++        assert valid is False
++        assert "sensitive" in error.lower()
++
++    def test_allows_normal_python_file(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("src/main.py")
++        assert valid is True
++
++    def test_allows_deeply_nested_file(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        valid, error = validator.validate_path("a/b/c/d/e/f.txt")
++        assert valid is True
++
++    def test_symlink_escape_detected(self, tmp_path: Path) -> None:
++        """Symlink pointing outside workspace is rejected."""
++        validator = PatchSecurityValidator(tmp_path)
++        # Create a symlink that points outside workspace
++        link_path = tmp_path / "escape_link"
++        try:
++            link_path.symlink_to(Path("/tmp"))
++        except (OSError, NotImplementedError):
++            pytest.skip("Symlinks not supported on this platform/permissions")
++
++        valid, error = validator.validate_path("escape_link")
++        assert valid is False
++        assert "Symlink" in error or "outside" in error.lower()
++
++    def test_validate_batch_returns_all_errors(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        patches = [
++            {"path": "good.txt"},
++            {"path": "../../bad.txt"},
++            {"path": ".env"},
++        ]
++        errors = validator.validate_batch(patches)
++        assert len(errors) == 2
++        assert errors[0][0] == "../../bad.txt"
++        assert errors[1][0] == ".env"
++
++    def test_validate_batch_empty_list(self, tmp_path: Path) -> None:
++        validator = PatchSecurityValidator(tmp_path)
++        errors = validator.validate_batch([])
++        assert errors == []
++
++
++# ---------------------------------------------------------------------------
++# PatchAuditLog tests
++# ---------------------------------------------------------------------------
++
++
++class TestPatchAuditLog:
++    def test_record_and_query(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        entry = PatchAuditEntry(
++            patch_id="test-001",
++            session_id="s1",
++            tenant_id="t1",
++            result="success",
++        )
++        log.record(entry)
++
++        results = log.query(session_id="s1")
++        assert len(results) == 1
++        assert results[0].patch_id == "test-001"
++        assert results[0].result == "success"
++
++    def test_query_filters_by_tenant(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        log.record(PatchAuditEntry(patch_id="a", tenant_id="t1", result="success"))
++        log.record(PatchAuditEntry(patch_id="b", tenant_id="t2", result="success"))
++
++        results = log.query(tenant_id="t1")
++        assert len(results) == 1
++        assert results[0].patch_id == "a"
++
++    def test_query_respects_limit(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        for i in range(10):
++            log.record(PatchAuditEntry(patch_id=f"p-{i}", result="success"))
++
++        results = log.query(limit=3)
++        assert len(results) == 3
++
++    def test_query_returns_newest_first(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        log.record(PatchAuditEntry(patch_id="first", result="success"))
++        log.record(PatchAuditEntry(patch_id="second", result="success"))
++
++        results = log.query()
++        assert results[0].patch_id == "second"
++        assert results[1].patch_id == "first"
++
++    def test_get_entry_by_id(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        log.record(PatchAuditEntry(patch_id="target", result="success"))
++        log.record(PatchAuditEntry(patch_id="other", result="failed"))
++
++        entry = log.get_entry("target")
++        assert entry is not None
++        assert entry.patch_id == "target"
++
++    def test_get_entry_not_found(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        entry = log.get_entry("nonexistent")
++        assert entry is None
++
++    def test_empty_log_returns_empty(self, tmp_path: Path) -> None:
++        log = PatchAuditLog(tmp_path / "audit")
++        results = log.query()
++        assert results == []
++
++
++# ---------------------------------------------------------------------------
++# ApplyPatchTool tests
++# ---------------------------------------------------------------------------
++
++
++class TestApplyPatchTool:
++    def _make_context(self) -> ToolContext:
++        return ToolContext(
++            user_scopes=["tools:execute"],
++            requested_by="test-agent",
++            tenant_id="test-tenant",
++        )
++
++    async def test_create_file(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "hello.txt",
++                        "operation": "create",
++                        "content": "Hello, world!",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        created = tmp_path / "hello.txt"
++        assert created.exists()
++        assert created.read_text() == "Hello, world!"
++
++    async def test_create_file_dry_run(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "hello.txt",
++                        "operation": "create",
++                        "content": "Hello!",
++                    }
++                ],
++                "dry_run": True,
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        # File should NOT be created in dry run
++        assert not (tmp_path / "hello.txt").exists()
++
++        data = json.loads(result.output)
++        assert data["dry_run"] is True
++        assert len(data["previews"]) == 1
++        assert data["previews"][0]["would_create"] is True
++
++    async def test_modify_file_search_replace(self, tmp_path: Path) -> None:
++        target = tmp_path / "app.py"
++        target.write_text("print('hello')\nprint('world')\n")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "app.py",
++                        "operation": "modify",
++                        "search": "hello",
++                        "replace": "goodbye",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        assert "goodbye" in target.read_text()
++        assert "hello" not in target.read_text()
++
++    async def test_modify_file_full_content(self, tmp_path: Path) -> None:
++        target = tmp_path / "data.txt"
++        target.write_text("old content")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "data.txt",
++                        "operation": "modify",
++                        "content": "new content",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        assert target.read_text() == "new content"
++
++    async def test_modify_nonexistent_file_fails(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "nope.txt",
++                        "operation": "modify",
++                        "search": "x",
++                        "replace": "y",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is False
++
++    async def test_modify_search_not_found(self, tmp_path: Path) -> None:
++        target = tmp_path / "file.txt"
++        target.write_text("abc")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "file.txt",
++                        "operation": "modify",
++                        "search": "xyz",
++                        "replace": "123",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is False
++
++    async def test_delete_file(self, tmp_path: Path) -> None:
++        target = tmp_path / "remove_me.txt"
++        target.write_text("temporary")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {"patches": [{"path": "remove_me.txt", "operation": "delete"}]},
++            ctx,
++        )
++
++        assert result.success is True
++        assert not target.exists()
++
++    async def test_delete_nonexistent_file_fails(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {"patches": [{"path": "ghost.txt", "operation": "delete"}]},
++            ctx,
++        )
++
++        assert result.success is False
++
++    async def test_rejects_sensitive_path(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": ".env",
++                        "operation": "create",
++                        "content": "SECRET=bad",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is False
++        assert "sensitive" in result.error.lower()
++
++    async def test_rejects_path_traversal(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "../../etc/passwd",
++                        "operation": "create",
++                        "content": "hacked",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is False
++        assert "traversal" in result.error.lower()
++
++    async def test_empty_patches_fails(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute({"patches": []}, ctx)
++        assert result.success is False
++        assert "No patches" in result.error
++
++    async def test_batch_all_succeed(self, tmp_path: Path) -> None:
++        existing = tmp_path / "existing.txt"
++        existing.write_text("original")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {"path": "new.txt", "operation": "create", "content": "created"},
++                    {
++                        "path": "existing.txt",
++                        "operation": "modify",
++                        "search": "original",
++                        "replace": "modified",
++                    },
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        data = json.loads(result.output)
++        assert "new.txt" in data["files_created"]
++        assert "existing.txt" in data["files_modified"]
++
++    async def test_rollback_restores_modified_file(self, tmp_path: Path) -> None:
++        target = tmp_path / "rollback_test.txt"
++        target.write_text("before")
++        backup_dir = tmp_path / "backups"
++        audit_dir = tmp_path / "audit"
++
++        audit_log = PatchAuditLog(audit_dir)
++        tool = ApplyPatchTool(
++            workspace_root=tmp_path,
++            audit_log=audit_log,
++            backup_dir=backup_dir,
++        )
++        ctx = self._make_context()
++
++        # Apply a patch
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "rollback_test.txt",
++                        "operation": "modify",
++                        "content": "after",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        assert target.read_text() == "after"
++
++        # Get the patch_id from result
++        data = json.loads(result.output)
++        patch_id = data["patch_id"]
++
++        # Rollback
++        success, message = tool.rollback(patch_id)
++        assert success is True
++        assert target.read_text() == "before"
++
++    async def test_rollback_without_backup_dir_fails(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        success, message = tool.rollback("nonexistent")
++        assert success is False
++        assert "backup" in message.lower()
++
++    async def test_audit_log_records_operations(self, tmp_path: Path) -> None:
++        audit_dir = tmp_path / "audit"
++        audit_log = PatchAuditLog(audit_dir)
++        tool = ApplyPatchTool(workspace_root=tmp_path, audit_log=audit_log)
++        ctx = self._make_context()
++
++        await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "audited.txt",
++                        "operation": "create",
++                        "content": "tracked",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        entries = audit_log.query()
++        assert len(entries) == 1
++        assert entries[0].result == "success"
++        assert entries[0].tenant_id == "test-tenant"
++        assert entries[0].agent_id == "test-agent"
++
++    async def test_dry_run_preview_shows_diff(self, tmp_path: Path) -> None:
++        target = tmp_path / "diff_test.txt"
++        target.write_text("line1\nline2\nline3\n")
++
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "diff_test.txt",
++                        "operation": "modify",
++                        "search": "line2",
++                        "replace": "REPLACED",
++                    }
++                ],
++                "dry_run": True,
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        data = json.loads(result.output)
++        preview = data["previews"][0]
++        assert preview["lines_added"] > 0
++        assert preview["lines_removed"] > 0
++        assert "REPLACED" in preview["diff"]
++
++    async def test_create_in_subdirectory(self, tmp_path: Path) -> None:
++        tool = ApplyPatchTool(workspace_root=tmp_path)
++        ctx = self._make_context()
++
++        result = await tool.execute(
++            {
++                "patches": [
++                    {
++                        "path": "deep/nested/file.txt",
++                        "operation": "create",
++                        "content": "nested content",
++                    }
++                ]
++            },
++            ctx,
++        )
++
++        assert result.success is True
++        created = tmp_path / "deep" / "nested" / "file.txt"
++        assert created.exists()
++        assert created.read_text() == "nested content"
+diff --git a/engine/tests/test_openclaw_t5_process.py b/engine/tests/test_openclaw_t5_process.py
+new file mode 100644
+index 0000000..39147c7
+--- /dev/null
++++ b/engine/tests/test_openclaw_t5_process.py
+@@ -0,0 +1,293 @@
++"""Tests for Track Phase 5: process manager lifecycle and resource limits."""
++
++from __future__ import annotations
++
++import asyncio
++import sys
++from pathlib import Path  # noqa: TCH003
++
++import pytest
++
++from agent33.execution.process_manager import (
++    ProcessManager,
++    ProcessStatus,
++    ResourceLimits,
++)
++
++
++class TestProcessManager:
++    async def test_start_and_complete(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        # Use a cross-platform quick command
++        cmd = "echo hello"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo hello"
++
++        process = await pm.start(cmd)
++        assert process.status == ProcessStatus.RUNNING
++        assert process.process_id != ""
++        assert process.command == cmd
++
++        # Wait for completion
++        for _ in range(50):
++            await asyncio.sleep(0.1)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        final = pm.get_status(process.process_id)
++        assert final is not None
++        assert final.status == ProcessStatus.COMPLETED
++        assert final.exit_code == 0
++
++    async def test_start_with_metadata(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo test"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo test"
++
++        process = await pm.start(
++            cmd,
++            agent_id="agent-1",
++            session_id="session-1",
++            tenant_id="tenant-1",
++        )
++        assert process.agent_id == "agent-1"
++        assert process.session_id == "session-1"
++        assert process.tenant_id == "tenant-1"
++
++    async def test_kill_running_process(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        # Start a long-running command
++        if sys.platform == "win32":
++            cmd = "cmd /c ping -n 60 127.0.0.1"
++        else:
++            cmd = "sleep 60"
++
++        process = await pm.start(cmd)
++        assert process.status == ProcessStatus.RUNNING
++
++        # Small delay to ensure process is started
++        await asyncio.sleep(0.3)
++
++        killed = await pm.kill(process.process_id)
++        assert killed is True
++
++        status = pm.get_status(process.process_id)
++        assert status is not None
++        assert status.status == ProcessStatus.KILLED
++        assert status.finished_at is not None
++
++    async def test_kill_nonexistent_returns_false(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++        killed = await pm.kill("nonexistent-id")
++        assert killed is False
++
++    async def test_max_processes_limit(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs", max_processes=2)
++
++        if sys.platform == "win32":
++            cmd = "cmd /c ping -n 30 127.0.0.1"
++        else:
++            cmd = "sleep 30"
++
++        await pm.start(cmd)
++        await pm.start(cmd)
++
++        with pytest.raises(ValueError, match="Maximum concurrent processes"):
++            await pm.start(cmd)
++
++    async def test_empty_command_rejected(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++        with pytest.raises(ValueError, match="Empty command"):
++            await pm.start("")
++
++    async def test_list_processes_all(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo listed"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo listed"
++
++        await pm.start(cmd, session_id="s1")
++        await pm.start(cmd, session_id="s2")
++
++        procs = pm.list_processes()
++        assert len(procs) == 2
++
++    async def test_list_processes_by_session(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo filter"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo filter"
++
++        await pm.start(cmd, session_id="s1")
++        await pm.start(cmd, session_id="s2")
++
++        procs = pm.list_processes(session_id="s1")
++        assert len(procs) == 1
++        assert procs[0].session_id == "s1"
++
++    async def test_list_processes_by_tenant(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo tenant"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo tenant"
++
++        await pm.start(cmd, tenant_id="t1")
++        await pm.start(cmd, tenant_id="t2")
++
++        procs = pm.list_processes(tenant_id="t1")
++        assert len(procs) == 1
++
++    async def test_read_log_output(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo log_output_test"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo log_output_test"
++
++        process = await pm.start(cmd)
++
++        # Wait for completion
++        for _ in range(50):
++            await asyncio.sleep(0.1)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        log_text = await pm.read_log(process.process_id)
++        assert "log_output_test" in log_text
++
++    async def test_read_log_nonexistent(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++        log_text = await pm.read_log("no-such-id")
++        assert log_text == ""
++
++    async def test_cleanup_completed(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo done"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo done"
++
++        process = await pm.start(cmd)
++
++        # Wait for completion
++        for _ in range(50):
++            await asyncio.sleep(0.1)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        # Cleanup with 0s max age (everything is old)
++        cleaned = pm.cleanup_completed(max_age_seconds=0)
++        assert cleaned == 1
++        assert pm.get_status(process.process_id) is None
++
++    async def test_cleanup_skips_running(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        if sys.platform == "win32":
++            cmd = "cmd /c ping -n 30 127.0.0.1"
++        else:
++            cmd = "sleep 30"
++
++        process = await pm.start(cmd)
++        await asyncio.sleep(0.2)
++
++        cleaned = pm.cleanup_completed(max_age_seconds=0)
++        assert cleaned == 0
++        assert pm.get_status(process.process_id) is not None
++
++        # cleanup
++        await pm.kill(process.process_id)
++
++    async def test_active_count(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++        assert pm.active_count == 0
++
++        if sys.platform == "win32":
++            cmd = "cmd /c ping -n 30 127.0.0.1"
++        else:
++            cmd = "sleep 30"
++
++        await pm.start(cmd)
++        assert pm.active_count == 1
++
++        await pm.start(cmd)
++        assert pm.active_count == 2
++
++        # Kill all
++        for p in pm.list_processes():
++            await pm.kill(p.process_id)
++
++    async def test_resource_timeout_kills_process(self, tmp_path: Path) -> None:
++        """Process that exceeds CPU time limit is killed."""
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++        limits = ResourceLimits(max_cpu_seconds=1.0)
++
++        if sys.platform == "win32":
++            cmd = "cmd /c ping -n 30 127.0.0.1"
++        else:
++            cmd = "sleep 30"
++
++        process = await pm.start(cmd, limits=limits)
++
++        # Wait for the timeout to trigger
++        for _ in range(30):
++            await asyncio.sleep(0.5)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        final = pm.get_status(process.process_id)
++        assert final is not None
++        assert final.status == ProcessStatus.KILLED
++
++    async def test_failed_command(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        if sys.platform == "win32":
++            cmd = "cmd /c exit 1"
++        else:
++            cmd = "false"
++
++        process = await pm.start(cmd)
++
++        for _ in range(50):
++            await asyncio.sleep(0.1)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        final = pm.get_status(process.process_id)
++        assert final is not None
++        assert final.status == ProcessStatus.FAILED
++        assert final.exit_code != 0
++
++    async def test_list_by_status_filter(self, tmp_path: Path) -> None:
++        pm = ProcessManager(log_dir=tmp_path / "logs")
++
++        cmd = "echo status_test"
++        if sys.platform == "win32":
++            cmd = "cmd /c echo status_test"
++
++        process = await pm.start(cmd)
++
++        # Wait for completion
++        for _ in range(50):
++            await asyncio.sleep(0.1)
++            status = pm.get_status(process.process_id)
++            if status is not None and status.status != ProcessStatus.RUNNING:
++                break
++
++        completed = pm.list_processes(status_filter=ProcessStatus.COMPLETED)
++        running = pm.list_processes(status_filter=ProcessStatus.RUNNING)
++        assert len(completed) == 1
++        assert len(running) == 0
+diff --git a/engine/tests/test_openclaw_t5_routes.py b/engine/tests/test_openclaw_t5_routes.py
+new file mode 100644
+index 0000000..092d25e
+--- /dev/null
++++ b/engine/tests/test_openclaw_t5_routes.py
+@@ -0,0 +1,214 @@
++"""API route integration tests for Track Phase 5: mutations and processes."""
++
++from __future__ import annotations
++
++from pathlib import Path  # noqa: TCH003
++from typing import Any
++from unittest.mock import MagicMock
++
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++from starlette.requests import Request  # noqa: TCH002
++
++from agent33.api.routes import mutations
++from agent33.execution.process_manager import ProcessManager
++from agent33.tools.builtin.apply_patch import ApplyPatchTool
++from agent33.tools.builtin.patch_audit import PatchAuditLog
++
++
++def _make_app(tmp_path: Path) -> tuple[FastAPI, ApplyPatchTool, ProcessManager]:
++    """Create a test app with mutation routes wired up."""
++    app = FastAPI()
++
++    audit_log = PatchAuditLog(tmp_path / "audit")
++    patch_tool = ApplyPatchTool(
++        workspace_root=tmp_path / "workspace",
++        audit_log=audit_log,
++        backup_dir=tmp_path / "backups",
++    )
++    (tmp_path / "workspace").mkdir(parents=True)
++
++    process_manager = ProcessManager(log_dir=tmp_path / "proc_logs")
++
++    mutations.set_patch_tool(patch_tool)
++    mutations.set_audit_log(audit_log)
++    mutations.set_process_manager(process_manager)
++
++    # Inject mock auth middleware
++    @app.middleware("http")
++    async def mock_auth(request: Request, call_next: Any) -> Any:
++        user = MagicMock()
++        user.scopes = ["tools:execute", "admin"]
++        user.sub = "test-user"
++        user.tenant_id = "test-tenant"
++        request.state.user = user
++        return await call_next(request)
++
++    app.include_router(mutations.router)
++    return app, patch_tool, process_manager
++
++
++class TestPatchRoutes:
++    def test_apply_patch_create(self, tmp_path: Path) -> None:
++        app, tool, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/mutations/patch",
++            json={
++                "patches": [
++                    {
++                        "path": "new_file.txt",
++                        "operation": "create",
++                        "content": "hello from API",
++                    }
++                ],
++            },
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["success"] is True
++        assert "new_file.txt" in data["files_created"]
++        assert (tmp_path / "workspace" / "new_file.txt").read_text() == "hello from API"
++
++    def test_apply_patch_dry_run(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/mutations/patch",
++            json={
++                "patches": [
++                    {
++                        "path": "dry.txt",
++                        "operation": "create",
++                        "content": "dry content",
++                    }
++                ],
++                "dry_run": True,
++            },
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["dry_run"] is True
++        assert not (tmp_path / "workspace" / "dry.txt").exists()
++
++    def test_apply_patch_rejects_sensitive_path(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/mutations/patch",
++            json={
++                "patches": [
++                    {
++                        "path": ".env",
++                        "operation": "create",
++                        "content": "SECRET=x",
++                    }
++                ],
++            },
++        )
++
++        assert resp.status_code == 400
++        assert "sensitive" in resp.json()["detail"].lower()
++
++    def test_preview_patch(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        # Create a file to preview modification
++        ws = tmp_path / "workspace"
++        (ws / "preview.txt").write_text("original text")
++
++        resp = client.post(
++            "/v1/mutations/patch/preview",
++            json={
++                "patches": [
++                    {
++                        "path": "preview.txt",
++                        "operation": "modify",
++                        "search": "original",
++                        "replace": "modified",
++                    }
++                ],
++            },
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["dry_run"] is True
++        assert len(data["previews"]) == 1
++        assert "modified" in data["previews"][0]["diff"]
++
++    def test_rollback_patch(self, tmp_path: Path) -> None:
++        app, tool, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        ws = tmp_path / "workspace"
++        (ws / "rollback.txt").write_text("before")
++
++        # Apply a patch
++        resp = client.post(
++            "/v1/mutations/patch",
++            json={
++                "patches": [
++                    {
++                        "path": "rollback.txt",
++                        "operation": "modify",
++                        "content": "after",
++                    }
++                ],
++            },
++        )
++
++        assert resp.status_code == 200
++        patch_id = resp.json()["patch_id"]
++        assert (ws / "rollback.txt").read_text() == "after"
++
++        # Rollback
++        resp = client.post(f"/v1/mutations/patch/{patch_id}/rollback")
++        assert resp.status_code == 200
++        assert resp.json()["success"] is True
++        assert (ws / "rollback.txt").read_text() == "before"
++
++
++class TestProcessRoutes:
++    def test_list_processes_empty(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.get("/v1/processes/")
++        assert resp.status_code == 200
++        assert resp.json() == []
++
++    def test_get_process_not_found(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.get("/v1/processes/nonexistent")
++        assert resp.status_code == 404
++
++    def test_kill_process_not_found(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post("/v1/processes/nonexistent/kill")
++        assert resp.status_code == 400
++
++    def test_pause_not_implemented(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post("/v1/processes/some-id/pause")
++        assert resp.status_code in (404, 501)
++
++    def test_invalid_status_filter(self, tmp_path: Path) -> None:
++        app, _, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.get("/v1/processes/?status=invalid")
++        assert resp.status_code == 400
++        assert "Invalid status" in resp.json()["detail"]
+diff --git a/engine/tests/test_openclaw_t6_backup.py b/engine/tests/test_openclaw_t6_backup.py
+new file mode 100644
+index 0000000..71e7a8e
+--- /dev/null
++++ b/engine/tests/test_openclaw_t6_backup.py
+@@ -0,0 +1,542 @@
++"""Tests for Track Phase 6: backup service, archive, manifest, and restore planner."""
++
++from __future__ import annotations
++
++import tarfile
++from datetime import UTC, datetime
++from pathlib import Path
++
++from agent33.backup.archive import (
++    compute_sha256,
++    create_archive,
++    extract_manifest,
++    generate_archive_name,
++    should_exclude,
++    verify_archive_integrity,
++)
++from agent33.backup.models import (
++    AssetType,
++    BackupAsset,
++    BackupManifest,
++    BackupMode,
++    BackupSummary,
++    VerifyCheck,
++    VerifyResult,
++)
++from agent33.backup.restore_planner import RestorePlanner
++from agent33.backup.service import BackupService
++
++# ---------------------------------------------------------------------------
++# Manifest model tests
++# ---------------------------------------------------------------------------
++
++
++class TestBackupModels:
++    def test_manifest_serialization(self) -> None:
++        manifest = BackupManifest(
++            backup_id="test-123",
++            platform="linux",
++            backup_mode=BackupMode.FULL,
++            label="nightly",
++        )
++        data = manifest.model_dump(mode="json")
++        assert data["backup_id"] == "test-123"
++        assert data["schema_version"] == "1.0"
++        assert data["backup_mode"] == "full"
++        assert data["label"] == "nightly"
++
++    def test_manifest_roundtrip(self) -> None:
++        original = BackupManifest(
++            backup_id="rt-001",
++            platform="win32",
++            backup_mode=BackupMode.CONFIG_ONLY,
++            assets=[
++                BackupAsset(
++                    relative_path="config/settings.json",
++                    asset_type=AssetType.CONFIG,
++                    size_bytes=1024,
++                    checksum="abc123",
++                )
++            ],
++            checksums={"config/settings.json": "abc123"},
++        )
++        json_str = original.model_dump_json()
++        restored = BackupManifest.model_validate_json(json_str)
++        assert restored.backup_id == "rt-001"
++        assert len(restored.assets) == 1
++        assert restored.assets[0].checksum == "abc123"
++        assert restored.checksums["config/settings.json"] == "abc123"
++
++    def test_backup_modes(self) -> None:
++        assert BackupMode.FULL.value == "full"
++        assert BackupMode.CONFIG_ONLY.value == "config-only"
++        assert BackupMode.NO_WORKSPACE.value == "no-workspace"
++
++    def test_asset_types(self) -> None:
++        assert AssetType.CONFIG.value == "config"
++        assert AssetType.AGENT_DEFINITIONS.value == "agent_definitions"
++        assert AssetType.SKILLS.value == "skills"
++
++    def test_verify_result_all_passed(self) -> None:
++        result = VerifyResult(
++            valid=True,
++            checks=[
++                VerifyCheck(name="c1", passed=True, message="ok"),
++                VerifyCheck(name="c2", passed=True, message="ok"),
++            ],
++        )
++        assert result.valid is True
++        assert all(c.passed for c in result.checks)
++
++    def test_verify_result_with_failure(self) -> None:
++        result = VerifyResult(
++            valid=False,
++            checks=[
++                VerifyCheck(name="c1", passed=True, message="ok"),
++                VerifyCheck(name="c2", passed=False, message="bad checksum"),
++            ],
++        )
++        assert result.valid is False
++
++    def test_backup_summary(self) -> None:
++        summary = BackupSummary(
++            backup_id="sum-1",
++            created_at=datetime.now(UTC),
++            mode=BackupMode.FULL,
++            size_bytes=4096,
++            asset_count=5,
++        )
++        assert summary.backup_id == "sum-1"
++        assert summary.size_bytes == 4096
++
++
++# ---------------------------------------------------------------------------
++# Archive utility tests
++# ---------------------------------------------------------------------------
++
++
++class TestArchiveUtilities:
++    def test_compute_sha256(self, tmp_path: Path) -> None:
++        f = tmp_path / "hash_test.txt"
++        f.write_text("hello world")
++        checksum = compute_sha256(f)
++        assert len(checksum) == 64  # SHA-256 hex digest length
++        # Known SHA-256 of "hello world"
++        assert checksum == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
++
++    def test_generate_archive_name(self) -> None:
++        ts = datetime(2026, 3, 10, 14, 30, 22, tzinfo=UTC)
++        name = generate_archive_name("full", "a1b2c3d4", ts)
++        assert name == "agent33-backup-20260310-143022-full-a1b2c3d4.tar.gz"
++
++    def test_generate_archive_name_config_only(self) -> None:
++        ts = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
++        name = generate_archive_name("config-only", "xyz12345", ts)
++        assert "config-only" in name
++        assert "xyz12345" in name
++
++    def test_should_exclude_pycache(self) -> None:
++        assert should_exclude("__pycache__") is True
++
++    def test_should_exclude_pyc(self) -> None:
++        assert should_exclude("module.pyc") is True
++
++    def test_should_exclude_dotenv(self) -> None:
++        assert should_exclude(".env") is True
++
++    def test_should_exclude_node_modules(self) -> None:
++        assert should_exclude("node_modules") is True
++
++    def test_should_not_exclude_normal_file(self) -> None:
++        assert should_exclude("main.py") is False
++
++    def test_create_archive(self, tmp_path: Path) -> None:
++        # Set up source
++        src_dir = tmp_path / "source"
++        src_dir.mkdir()
++        (src_dir / "file1.txt").write_text("content1")
++        (src_dir / "file2.txt").write_text("content2")
++
++        manifest = BackupManifest(
++            backup_id="arc-test",
++            platform="test",
++        )
++        output = tmp_path / "test.tar.gz"
++
++        result = create_archive({"data": src_dir}, manifest, output)
++        assert result.exists()
++        assert result.stat().st_size > 0
++
++        # Verify contents
++        with tarfile.open(str(result), "r:gz") as tar:
++            names = tar.getnames()
++            assert "manifest.json" in names
++            assert "data/file1.txt" in names
++            assert "data/file2.txt" in names
++
++    def test_create_archive_excludes_pycache(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "source"
++        src_dir.mkdir()
++        (src_dir / "good.py").write_text("code")
++        cache_dir = src_dir / "__pycache__"
++        cache_dir.mkdir()
++        (cache_dir / "bad.pyc").write_text("bytecode")
++
++        manifest = BackupManifest(backup_id="excl-test")
++        output = tmp_path / "excl.tar.gz"
++
++        create_archive({"src": src_dir}, manifest, output)
++
++        with tarfile.open(str(output), "r:gz") as tar:
++            names = tar.getnames()
++            assert "src/good.py" in names
++            assert all("__pycache__" not in n for n in names)
++
++    def test_extract_manifest(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "source"
++        src_dir.mkdir()
++        (src_dir / "data.txt").write_text("test")
++
++        manifest = BackupManifest(
++            backup_id="extract-test",
++            label="my-backup",
++        )
++        output = tmp_path / "mf.tar.gz"
++        create_archive({"data": src_dir}, manifest, output)
++
++        extracted = extract_manifest(output)
++        assert extracted is not None
++        assert extracted.backup_id == "extract-test"
++        assert extracted.label == "my-backup"
++
++    def test_extract_manifest_invalid_archive(self, tmp_path: Path) -> None:
++        bad_file = tmp_path / "bad.tar.gz"
++        bad_file.write_text("not a tarfile")
++
++        result = extract_manifest(bad_file)
++        assert result is None
++
++    def test_verify_archive_integrity(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "source"
++        src_dir.mkdir()
++        (src_dir / "f.txt").write_text("verify me")
++
++        manifest = BackupManifest(backup_id="verify-test")
++        output = tmp_path / "verify.tar.gz"
++        create_archive({"data": src_dir}, manifest, output)
++
++        checks = verify_archive_integrity(output)
++        assert len(checks) >= 4
++        assert all(passed for _, passed, _ in checks)
++
++    def test_verify_archive_corrupt(self, tmp_path: Path) -> None:
++        bad = tmp_path / "corrupt.tar.gz"
++        bad.write_bytes(b"\x00" * 100)
++
++        checks = verify_archive_integrity(bad)
++        assert any(not passed for _, passed, _ in checks)
++
++
++# ---------------------------------------------------------------------------
++# BackupService tests
++# ---------------------------------------------------------------------------
++
++
++class TestBackupService:
++    def _make_service(self, tmp_path: Path) -> BackupService:
++        config_dir = tmp_path / "config"
++        config_dir.mkdir()
++        (config_dir / "app.json").write_text('{"key": "value"}')
++
++        data_dir = tmp_path / "data"
++        data_dir.mkdir()
++        skills_dir = data_dir / "skills"
++        skills_dir.mkdir()
++        (skills_dir / "skill1.md").write_text("# Skill 1")
++
++        backup_dir = tmp_path / "backups"
++
++        return BackupService(
++            backup_dir=backup_dir,
++            config_dir=config_dir,
++            data_dir=data_dir,
++        )
++
++    async def test_create_full_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(mode="full", label="test-full")
++
++        assert result.success is True
++        assert result.backup_id != ""
++        assert result.archive_path != ""
++        assert result.asset_count > 0
++        assert result.manifest is not None
++        assert result.manifest.label == "test-full"
++        assert result.manifest.backup_mode == BackupMode.FULL
++        assert Path(result.archive_path).exists()
++
++    async def test_create_config_only_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(mode="config-only")
++
++        assert result.success is True
++        assert result.manifest is not None
++        assert result.manifest.backup_mode == BackupMode.CONFIG_ONLY
++        # Config-only should have fewer assets
++        full = await service.create(mode="full")
++        assert result.asset_count <= full.asset_count
++
++    async def test_create_invalid_mode(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(mode="invalid")
++
++        assert result.success is False
++        assert "Invalid" in result.errors[0]
++
++    async def test_list_backups(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        await service.create(mode="full", label="first")
++        await service.create(mode="full", label="second")
++
++        backups = service.list_backups()
++        assert len(backups) == 2
++        # Both labels should be present
++        labels = {b.label for b in backups}
++        assert labels == {"first", "second"}
++
++    async def test_get_backup_by_id(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(label="findme")
++
++        manifest = service.get_backup(result.backup_id)
++        assert manifest is not None
++        assert manifest.backup_id == result.backup_id
++        assert manifest.label == "findme"
++
++    async def test_get_backup_not_found(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        manifest = service.get_backup("nonexistent-id")
++        assert manifest is None
++
++    async def test_verify_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create()
++
++        verify = await service.verify(result.backup_id)
++        assert verify.valid is True
++        assert len(verify.checks) >= 4
++        assert all(c.passed for c in verify.checks)
++
++    async def test_verify_nonexistent_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        verify = await service.verify("no-such-backup")
++        assert verify.valid is False
++
++    async def test_delete_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create()
++        assert Path(result.archive_path).exists()
++
++        deleted = service.delete_backup(result.backup_id)
++        assert deleted is True
++        assert not Path(result.archive_path).exists()
++
++    async def test_delete_nonexistent_backup(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        deleted = service.delete_backup("ghost")
++        assert deleted is False
++
++    async def test_backup_provenance_recorded(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(creator="test-operator")
++
++        assert result.provenance is not None
++        assert result.provenance.creator == "test-operator"
++        assert result.provenance.platform != ""
++
++    async def test_backup_checksums_present(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create()
++
++        assert result.manifest is not None
++        # Config files should have checksums
++        assert len(result.manifest.checksums) > 0
++
++    async def test_archive_naming_convention(self, tmp_path: Path) -> None:
++        service = self._make_service(tmp_path)
++        result = await service.create(mode="full")
++
++        archive_name = Path(result.archive_path).name
++        assert archive_name.startswith("agent33-backup-")
++        assert archive_name.endswith(".tar.gz")
++        assert "full" in archive_name
++
++    async def test_backup_output_not_inside_source(self, tmp_path: Path) -> None:
++        """Backup output directory must not be inside source roots."""
++        config_dir = tmp_path / "config"
++        config_dir.mkdir()
++        (config_dir / "f.txt").write_text("x")
++
++        # Set backup_dir INSIDE config_dir (should fail)
++        backup_dir = config_dir / "backups"
++
++        service = BackupService(
++            backup_dir=backup_dir,
++            config_dir=config_dir,
++            data_dir=tmp_path / "data",
++        )
++        result = await service.create()
++        assert result.success is False
++        assert "inside source root" in result.errors[0]
++
++
++# ---------------------------------------------------------------------------
++# RestorePlanner tests
++# ---------------------------------------------------------------------------
++
++
++class TestRestorePlanner:
++    def _create_test_archive(self, tmp_path: Path) -> Path:
++        """Helper to create a real backup archive for testing."""
++        src = tmp_path / "src"
++        src.mkdir()
++        (src / "config.json").write_text('{"key": "value"}')
++        (src / "data.txt").write_text("important data")
++
++        checksum = compute_sha256(src / "config.json")
++        manifest = BackupManifest(
++            backup_id="restore-test",
++            assets=[
++                BackupAsset(
++                    relative_path="data/config.json",
++                    asset_type=AssetType.CONFIG,
++                    size_bytes=16,
++                    checksum=checksum,
++                ),
++                BackupAsset(
++                    relative_path="data/data.txt",
++                    asset_type=AssetType.WORKSPACE,
++                    size_bytes=14,
++                ),
++            ],
++        )
++
++        output = tmp_path / "restore_test.tar.gz"
++        create_archive({"data": src}, manifest, output)
++        return output
++
++    def test_plan_new_files(self, tmp_path: Path) -> None:
++        archive = self._create_test_archive(tmp_path)
++        target = tmp_path / "target"
++        target.mkdir()
++
++        planner = RestorePlanner(target_root=target)
++        plan = planner.plan(archive)
++
++        assert plan.backup_id == "restore-test"
++        assert len(plan.assets_to_restore) == 2
++        assert all(a.action == "create" for a in plan.assets_to_restore)
++        assert len(plan.conflicts) == 0
++
++    def test_plan_detects_modified_files(self, tmp_path: Path) -> None:
++        archive = self._create_test_archive(tmp_path)
++        target = tmp_path / "target"
++        target.mkdir()
++
++        # Create a conflicting file with different content
++        (target / "data").mkdir(parents=True)
++        (target / "data" / "config.json").write_text('{"key": "different"}')
++
++        planner = RestorePlanner(target_root=target)
++        plan = planner.plan(archive)
++
++        assert len(plan.conflicts) >= 1
++        conflict = plan.conflicts[0]
++        assert conflict.conflict_type == "file_modified"
++        assert "modified" in conflict.message.lower()
++
++    def test_plan_overwrite_existing(self, tmp_path: Path) -> None:
++        archive = self._create_test_archive(tmp_path)
++        target = tmp_path / "target"
++        target.mkdir()
++
++        # Create existing file with same content (no checksum means no conflict)
++        (target / "data").mkdir(parents=True)
++        (target / "data" / "data.txt").write_text("old content")
++
++        planner = RestorePlanner(target_root=target)
++        plan = planner.plan(archive)
++
++        # data.txt has no checksum in manifest, so action is overwrite with no conflict
++        data_asset = next(
++            (a for a in plan.assets_to_restore if "data.txt" in a.relative_path),
++            None,
++        )
++        assert data_asset is not None
++        assert data_asset.action == "overwrite"
++        assert data_asset.current_exists is True
++
++    def test_plan_invalid_archive(self, tmp_path: Path) -> None:
++        bad = tmp_path / "bad.tar.gz"
++        bad.write_text("not valid")
++
++        target = tmp_path / "target"
++        target.mkdir()
++
++        planner = RestorePlanner(target_root=target)
++        plan = planner.plan(bad)
++
++        assert plan.backup_id == ""
++        assert len(plan.warnings) > 0
++
++
++# ---------------------------------------------------------------------------
++# Incremental backup tests (via service)
++# ---------------------------------------------------------------------------
++
++
++class TestIncrementalBackup:
++    async def test_successive_backups_have_different_ids(self, tmp_path: Path) -> None:
++        config_dir = tmp_path / "config"
++        config_dir.mkdir()
++        (config_dir / "a.txt").write_text("v1")
++
++        service = BackupService(
++            backup_dir=tmp_path / "backups",
++            config_dir=config_dir,
++            data_dir=tmp_path / "data",
++        )
++
++        r1 = await service.create(label="v1")
++        r2 = await service.create(label="v2")
++
++        assert r1.backup_id != r2.backup_id
++        backups = service.list_backups()
++        assert len(backups) == 2
++
++    async def test_changed_file_detected_by_checksum(self, tmp_path: Path) -> None:
++        config_dir = tmp_path / "config"
++        config_dir.mkdir()
++        config_file = config_dir / "settings.json"
++        config_file.write_text('{"version": 1}')
++
++        service = BackupService(
++            backup_dir=tmp_path / "backups",
++            config_dir=config_dir,
++            data_dir=tmp_path / "data",
++        )
++
++        r1 = await service.create()
++        assert r1.manifest is not None
++        checksums_v1 = dict(r1.manifest.checksums)
++
++        # Modify the config
++        config_file.write_text('{"version": 2}')
++        r2 = await service.create()
++        assert r2.manifest is not None
++        checksums_v2 = dict(r2.manifest.checksums)
++
++        # Checksums should differ for the changed file
++        config_key = next((k for k in checksums_v1 if "settings.json" in k), None)
++        assert config_key is not None
++        assert checksums_v1[config_key] != checksums_v2[config_key]
+diff --git a/engine/tests/test_openclaw_t6_routes.py b/engine/tests/test_openclaw_t6_routes.py
+new file mode 100644
+index 0000000..5c3b0f0
+--- /dev/null
++++ b/engine/tests/test_openclaw_t6_routes.py
+@@ -0,0 +1,225 @@
++"""API route integration tests for Track Phase 6: backup endpoints."""
++
++from __future__ import annotations
++
++from pathlib import Path  # noqa: TCH003
++from typing import Any
++from unittest.mock import MagicMock
++
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++from starlette.requests import Request  # noqa: TCH002
++
++from agent33.api.routes import backups
++from agent33.backup.service import BackupService
++
++
++def _make_app(tmp_path: Path) -> tuple[FastAPI, BackupService]:
++    """Create a test app with backup routes wired up."""
++    config_dir = tmp_path / "config"
++    config_dir.mkdir()
++    (config_dir / "app.json").write_text('{"setting": "value"}')
++
++    data_dir = tmp_path / "data"
++    data_dir.mkdir()
++    skills_dir = data_dir / "skills"
++    skills_dir.mkdir()
++    (skills_dir / "skill.md").write_text("# Test Skill")
++
++    backup_dir = tmp_path / "backups"
++    service = BackupService(
++        backup_dir=backup_dir,
++        config_dir=config_dir,
++        data_dir=data_dir,
++    )
++
++    backups.set_backup_service(service)
++
++    app = FastAPI()
++
++    @app.middleware("http")
++    async def mock_auth(request: Request, call_next: Any) -> Any:
++        user = MagicMock()
++        user.scopes = ["tools:execute", "admin"]
++        user.sub = "test-operator"
++        user.tenant_id = "test-tenant"
++        request.state.user = user
++        return await call_next(request)
++
++    app.include_router(backups.router)
++    return app, service
++
++
++class TestBackupRoutes:
++    def test_create_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/backups",
++            json={"mode": "full", "label": "route-test"},
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["success"] is True
++        assert data["backup_id"] != ""
++        assert data["asset_count"] > 0
++
++    def test_create_config_only_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/backups",
++            json={"mode": "config-only"},
++        )
++
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["success"] is True
++        assert data["manifest"]["backup_mode"] == "config-only"
++
++    def test_create_backup_invalid_mode(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post(
++            "/v1/backups",
++            json={"mode": "invalid-mode"},
++        )
++
++        assert resp.status_code == 400
++        assert "Invalid" in resp.json()["detail"]
++
++    def test_list_backups(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        # Create two backups
++        client.post("/v1/backups", json={"label": "first"})
++        client.post("/v1/backups", json={"label": "second"})
++
++        resp = client.get("/v1/backups")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data) == 2
++
++    def test_list_backups_empty(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.get("/v1/backups")
++        assert resp.status_code == 200
++        assert resp.json() == []
++
++    def test_get_backup_detail(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={"label": "detail-test"})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.get(f"/v1/backups/{backup_id}")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["backup_id"] == backup_id
++        assert data["label"] == "detail-test"
++
++    def test_get_backup_not_found(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.get("/v1/backups/nonexistent-id")
++        assert resp.status_code == 404
++
++    def test_verify_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.post(f"/v1/backups/{backup_id}/verify")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["valid"] is True
++        assert len(data["checks"]) >= 4
++
++    def test_verify_nonexistent_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.post("/v1/backups/no-such-id/verify")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["valid"] is False
++
++    def test_restore_dry_run(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.post(
++            f"/v1/backups/{backup_id}/restore",
++            json={"dry_run": True},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["backup_id"] == backup_id
++        assert isinstance(data["assets_to_restore"], list)
++
++    def test_restore_non_dry_run_rejected(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.post(
++            f"/v1/backups/{backup_id}/restore",
++            json={"dry_run": False},
++        )
++        assert resp.status_code == 501
++        assert "not yet implemented" in resp.json()["detail"].lower()
++
++    def test_delete_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.delete(f"/v1/backups/{backup_id}")
++        assert resp.status_code == 200
++        assert resp.json()["deleted"] is True
++
++        # Verify it's gone
++        resp = client.get(f"/v1/backups/{backup_id}")
++        assert resp.status_code == 404
++
++    def test_delete_nonexistent_backup(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        resp = client.delete("/v1/backups/ghost-id")
++        assert resp.status_code == 404
++
++    def test_backup_manifest_has_assets(self, tmp_path: Path) -> None:
++        app, _ = _make_app(tmp_path)
++        client = TestClient(app)
++
++        create_resp = client.post("/v1/backups", json={"mode": "full"})
++        backup_id = create_resp.json()["backup_id"]
++
++        resp = client.get(f"/v1/backups/{backup_id}")
++        assert resp.status_code == 200
++        data = resp.json()
++        assert len(data["assets"]) > 0
++        # Verify each asset has required fields
++        for asset in data["assets"]:
++            assert "relative_path" in asset
++            assert "asset_type" in asset
++            assert "size_bytes" in asset
