@@ -17,6 +17,36 @@ function buildSseResponse(bodyText: string): Response {
   })
 }
 
+function encodeEvent(event: Record<string, unknown>): string {
+  return `data: ${JSON.stringify(event)}\n\n`
+}
+
+function buildMockStreamResponse(chunks: string[]) {
+  const encoder = new TextEncoder()
+  let index = 0
+  const reader = {
+    read: vi.fn().mockImplementation(async () => {
+      if (index < chunks.length) {
+        const value = encoder.encode(chunks[index])
+        index += 1
+        return { done: false, value }
+      }
+      return { done: true, value: undefined }
+    }),
+    cancel: vi.fn().mockResolvedValue(undefined)
+  }
+
+  return {
+    reader,
+    response: {
+      ok: true,
+      body: {
+        getReader: () => reader
+      }
+    }
+  }
+}
+
 describe("ObservationStream", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -73,15 +103,14 @@ describe("ObservationStream", () => {
       timestamp: new Date().toISOString()
     }
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(buildSseResponse(`data: ${JSON.stringify(irrelevantEvent)}\n\n`))
+    const { reader, response } = buildMockStreamResponse([encodeEvent(irrelevantEvent)])
+    const fetchMock = vi.fn().mockResolvedValue(response)
     vi.stubGlobal("fetch", fetchMock)
 
     const { container } = render(<ObservationStream token="tok" />)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2))
 
     expect(container.querySelector(".observation-stream")).toBeNull()
   })
@@ -95,24 +124,37 @@ describe("ObservationStream", () => {
       timestamp: new Date().toISOString()
     }))
 
-    const ssePayload = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")
-    const fetchMock = vi.fn().mockResolvedValue(buildSseResponse(ssePayload))
+    const { response } = buildMockStreamResponse(events.map((event) => encodeEvent(event)))
+    const fetchMock = vi.fn().mockResolvedValue(response)
     vi.stubGlobal("fetch", fetchMock)
 
-    render(<ObservationStream token="tok" />)
+    const { container } = render(<ObservationStream token="tok" />)
 
     await waitFor(() => {
-      expect(screen.getByText("Live Core Mechanics")).toBeInTheDocument()
+      expect(screen.getByText("Wipe 11")).toBeInTheDocument()
     })
 
-    expect(document.querySelectorAll(".observation-item").length).toBeLessThanOrEqual(10)
-    expect(screen.getByText("Wipe 11")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(container.querySelectorAll(".observation-item")).toHaveLength(10)
+    })
+
+    const contents = Array.from(
+      container.querySelectorAll<HTMLElement>(".observation-item .observation-content")
+    )
+    expect(contents[0]).toHaveTextContent("Wipe 11")
+    expect(contents[9]).toHaveTextContent("Wipe 2")
   })
 
   it("cancels the stream reader on unmount", async () => {
     const cancelMock = vi.fn().mockResolvedValue(undefined)
+    let resolveRead: (value: { done: boolean; value: undefined }) => void = () => {}
     const mockReader = {
-      read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+      read: vi.fn().mockImplementation(
+        () =>
+          new Promise<{ done: boolean; value: undefined }>((resolve) => {
+            resolveRead = resolve
+          })
+      ),
       cancel: cancelMock
     }
 
@@ -124,9 +166,11 @@ describe("ObservationStream", () => {
 
     const { unmount } = render(<ObservationStream token="tok" />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await waitFor(() => expect(mockReader.read).toHaveBeenCalledTimes(1))
 
     unmount()
 
     await waitFor(() => expect(cancelMock).toHaveBeenCalled())
+    resolveRead({ done: true, value: undefined })
   })
 })
