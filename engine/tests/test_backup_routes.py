@@ -139,3 +139,31 @@ async def test_backup_routes_create_list_detail_verify(async_client: httpx.Async
     verify = await async_client.post(f"/v1/backups/{backup_id}/verify", headers=read_headers)
     assert verify.status_code == 200
     assert verify.json()["valid"] is True
+
+
+@pytest.mark.asyncio()
+async def test_backup_routes_restore_plan(async_client: httpx.AsyncClient) -> None:
+    write_headers = _auth_headers(scopes=["operator:read", "operator:write"])
+    read_headers = _auth_headers(scopes=["operator:read"])
+
+    created = await async_client.post(
+        "/v1/backups",
+        json={"mode": "no-workspace", "label": "restore-api"},
+        headers=write_headers,
+    )
+    assert created.status_code == 200
+    backup_id = created.json()["backup_id"]
+
+    agent_defs_dir = app.state.backup_service.resolve_target_path("config/agent-definitions")
+    assert agent_defs_dir is not None
+    (agent_defs_dir / "alpha.yaml").write_text("name: changed\n", encoding="utf-8")
+    restore_plan = await async_client.post(
+        f"/v1/backups/{backup_id}/restore-plan",
+        headers=read_headers,
+    )
+
+    assert restore_plan.status_code == 200
+    payload = restore_plan.json()
+    assert payload["backup_id"] == backup_id
+    assert any(asset["action"] == "overwrite" for asset in payload["assets_to_restore"])
+    assert any(conflict["conflict_type"] == "file_modified" for conflict in payload["conflicts"])

@@ -13,6 +13,12 @@ from agent33.backup.manifest import (
     VerifyCheck,
     VerifyResult,
 )
+from agent33.backup.restore_planner import (
+    RestoreAssetPlan,
+    RestoreConflict,
+    RestorePlan,
+    RestorePlanner,
+)
 from agent33.backup.service import BackupService
 
 __all__ = [
@@ -26,6 +32,10 @@ __all__ = [
     "BackupResult",
     "BackupService",
     "BackupSummary",
+    "RestoreAssetPlan",
+    "RestoreConflict",
+    "RestorePlan",
+    "RestorePlanner",
     "VerifyCheck",
     "VerifyResult",
 ]

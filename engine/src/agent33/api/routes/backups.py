@@ -15,6 +15,7 @@ from agent33.backup.manifest import (
     BackupResult,
     VerifyResult,
 )
+from agent33.backup.restore_planner import RestorePlan, RestorePlanner, RestorePlanningError
 from agent33.backup.service import BackupService
 from agent33.security.permissions import require_scope
 
@@ -120,3 +121,26 @@ async def verify_backup(
     if archive_path is None:
         raise HTTPException(status_code=404, detail="Backup not found")
     return await svc.verify(archive_path)
+
+
+@router.post(
+    "/{backup_id}/restore-plan",
+    response_model=RestorePlan,
+    dependencies=[require_scope("operator:read")],
+)
+async def restore_plan(
+    backup_id: str,
+    svc: BackupServiceDependency,
+) -> RestorePlan:
+    """Generate a read-only restore preview for an existing backup archive."""
+    archive_path = svc.resolve_backup_path(backup_id)
+    if archive_path is None:
+        raise HTTPException(status_code=404, detail="Backup not found")
+    planner = RestorePlanner(svc)
+    try:
+        return await planner.plan(backup_id, archive_path)
+    except RestorePlanningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
