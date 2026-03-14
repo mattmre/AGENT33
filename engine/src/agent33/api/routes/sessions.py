@@ -510,7 +510,7 @@ async def session_catalog(
         limit=limit,
         offset=offset,
     )
-    return result.model_dump()
+    return dict(result.model_dump())
 
 
 @router.get(
@@ -524,7 +524,7 @@ async def session_lineage(session_id: str, request: Request) -> dict[str, Any]:
         tree = await builder.build_tree(session_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
-    return tree.model_dump()
+    return dict(tree.model_dump())
 
 
 @router.get("/spawn-templates", dependencies=[require_scope("sessions:read")])
