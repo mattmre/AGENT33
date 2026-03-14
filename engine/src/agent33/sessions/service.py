@@ -16,6 +16,8 @@ from agent33.sessions.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from agent33.sessions.storage import FileSessionStorage
 
 logger = logging.getLogger(__name__)
@@ -42,10 +44,20 @@ class OperatorSessionService:
         self._max_retained = max_sessions_retained
         # In-memory cache of active sessions for fast lookup
         self._active: dict[str, OperatorSession] = {}
+        self._status_snapshot_builder: (
+            Callable[[OperatorSession], Awaitable[dict[str, Any]]] | None
+        ) = None
 
     @property
     def storage(self) -> FileSessionStorage:
         return self._storage
+
+    def set_status_snapshot_builder(
+        self,
+        builder: Callable[[OperatorSession], Awaitable[dict[str, Any]]] | None,
+    ) -> None:
+        """Attach or clear the status-line snapshot builder."""
+        self._status_snapshot_builder = builder
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -87,6 +99,8 @@ class OperatorSessionService:
         )
         self._storage.append_event(session_id, event)
         session.event_count = 1
+        await self._refresh_status_cache(session)
+        self._storage.save_session(session)
 
         self._active[session_id] = session
 
@@ -146,6 +160,7 @@ class OperatorSessionService:
         )
         self._storage.append_event(session_id, event)
         session.event_count = self._storage.event_count(session_id)
+        await self._refresh_status_cache(session)
 
         # Fire hooks, save, clean up
         await self._fire_hooks("session.end", session)
@@ -199,6 +214,7 @@ class OperatorSessionService:
         )
         self._storage.append_event(session_id, event)
         session.event_count = self._storage.event_count(session_id)
+        await self._refresh_status_cache(session)
 
         self._storage.save_session(session)
         self._storage.write_lock(session_id)
@@ -233,6 +249,8 @@ class OperatorSessionService:
             data={"event_count": session.event_count},
         )
         self._storage.append_event(session_id, event)
+        session.event_count = self._storage.event_count(session_id)
+        await self._refresh_status_cache(session)
 
         self._storage.save_session(session)
         self._storage.save_checkpoint(session)
@@ -484,6 +502,7 @@ class OperatorSessionService:
                 tenant_id=session.tenant_id,
                 metadata={
                     "session_id": session.session_id,
+                    "session_base_dir": str(self._storage.base_dir),
                     "purpose": session.purpose,
                     "status": session.status.value,
                 },
@@ -497,6 +516,19 @@ class OperatorSessionService:
             logger.warning(
                 "session_hook_fire_failed event=%s session=%s",
                 event_type,
+                session.session_id,
+                exc_info=True,
+            )
+
+    async def _refresh_status_cache(self, session: OperatorSession) -> None:
+        """Update the persisted status-line cache when a builder is configured."""
+        if self._status_snapshot_builder is None:
+            return
+        try:
+            session.cache["status_line"] = await self._status_snapshot_builder(session)
+        except Exception:
+            logger.warning(
+                "status_snapshot_refresh_failed session_id=%s",
                 session.session_id,
                 exc_info=True,
             )

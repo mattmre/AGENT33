@@ -155,6 +155,16 @@ class FakeNATSBus:
         self.is_connected = connected
 
 
+class FakeAsyncHealthService:
+    """Minimal async health snapshot mock."""
+
+    def __init__(self, status: str = "ok") -> None:
+        self._status = status
+
+    async def health_snapshot(self) -> dict[str, str]:
+        return {"status": self._status}
+
+
 def _make_operator_service(
     *,
     agent_count: int = 3,
@@ -187,6 +197,13 @@ def _make_operator_service(
         redis=MagicMock() if redis_available else None,
         nats_bus=FakeNATSBus(nats_connected),
         long_term_memory=MagicMock(),
+        multimodal_service=SimpleNamespace(
+            list_voice_sessions=lambda limit=1000: [
+                SimpleNamespace(state=SimpleNamespace(value="active"))
+            ]
+        ),
+        voice_sidecar_probe=FakeAsyncHealthService("ok"),
+        status_line_service=FakeAsyncHealthService("ok"),
     )
 
     settings = Settings()
@@ -275,6 +292,8 @@ class TestOperatorStatus:
         assert "health" in data
         assert "status" in data["health"]
         assert "services" in data["health"]
+        assert data["health"]["services"]["voice_sidecar"] == "ok"
+        assert data["health"]["services"]["status_line"] == "ok"
 
     def test_returns_inventories(self, operator_read_client: TestClient) -> None:
         resp = operator_read_client.get("/v1/operator/status")
@@ -288,6 +307,7 @@ class TestOperatorStatus:
         assert inv["packs"]["count"] == 1
         assert inv["skills"]["count"] == 4
         assert inv["hooks"]["count"] == 7
+        assert inv["voice_sessions"]["active"] == 1
 
     def test_returns_runtime_info(self, operator_read_client: TestClient) -> None:
         resp = operator_read_client.get("/v1/operator/status")

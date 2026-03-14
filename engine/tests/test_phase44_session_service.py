@@ -204,6 +204,19 @@ class TestSessionCheckpoint:
         with pytest.raises(KeyError):
             await svc.checkpoint("nope")
 
+    async def test_checkpoint_refreshes_status_line_cache(self, tmp_path: Path) -> None:
+        svc = _make_service(tmp_path)
+        svc.set_status_snapshot_builder(
+            AsyncMock(return_value={"rendered": "main@abc123 | tools:0 voice:ok"})
+        )
+        session = await svc.start_session()
+
+        await svc.checkpoint(session.session_id)
+
+        updated = await svc.get_session(session.session_id)
+        assert updated is not None
+        assert updated.cache["status_line"]["rendered"] == "main@abc123 | tools:0 voice:ok"
+
 
 class TestTaskTracking:
     """Tests for task CRUD within sessions."""

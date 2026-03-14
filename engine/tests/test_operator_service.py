@@ -62,12 +62,26 @@ def _build_service(
         long_term_memory=ltm,
         embedding_cache=None,
         bm25_index=None,
+        multimodal_service=SimpleNamespace(
+            list_voice_sessions=lambda limit=1000: [
+                SimpleNamespace(state=SimpleNamespace(value="active"))
+            ]
+        ),
+        voice_sidecar_probe=SimpleNamespace(health_snapshot=_async_return({"status": "ok"})),
+        status_line_service=SimpleNamespace(health_snapshot=_async_return({"status": "ok"})),
     )
     return OperatorService(
         app_state=state,
         settings=Settings(),
         start_time=time.time() - 60,
     )
+
+
+def _async_return(value: Any) -> Any:
+    async def _inner() -> Any:
+        return value
+
+    return _inner
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +115,13 @@ class TestGetStatus:
         svc = _build_service(nats_connected=False)
         status = await svc.get_status()
         assert status.health["status"] == "degraded"
+
+    async def test_status_includes_voice_and_status_line_surfaces(self) -> None:
+        svc = _build_service()
+        status = await svc.get_status()
+        assert status.health["services"]["voice_sidecar"] == "ok"
+        assert status.health["services"]["status_line"] == "ok"
+        assert status.inventories["voice_sessions"].active == 1
 
 
 # ---------------------------------------------------------------------------

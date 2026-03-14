@@ -88,6 +88,9 @@ class ScriptHook(BaseHook):
         session_id = context.metadata.get("session_id", "")
         if session_id:
             env["AGENT33_SESSION_ID"] = str(session_id)
+        session_base_dir = context.metadata.get("session_base_dir", "")
+        if session_base_dir:
+            env["AGENT33_SESSION_BASE_DIR"] = str(session_base_dir)
 
         # Serialize context to JSON for stdin
         stdin_data = json.dumps(

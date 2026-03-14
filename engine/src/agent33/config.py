@@ -69,12 +69,17 @@ class Settings(BaseSettings):
     elevenlabs_api_key: SecretStr = SecretStr("")
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     voice_daemon_enabled: bool = True
-    voice_daemon_transport: str = "stub"  # stub | livekit
+    voice_daemon_transport: str = "stub"  # stub | sidecar | livekit
     voice_daemon_url: str = ""
     voice_daemon_api_key: SecretStr = SecretStr("")
     voice_daemon_api_secret: SecretStr = SecretStr("")
     voice_daemon_room_prefix: str = "agent33-voice"
     voice_daemon_max_sessions: int = 25
+    voice_sidecar_url: str = ""
+    voice_sidecar_probe_timeout_seconds: float = 2.0
+    voice_sidecar_voices_path: str = "config/voice/voices.json"
+    voice_sidecar_artifacts_dir: str = "var/voice-sidecar"
+    voice_sidecar_playback_backend: str = "noop"
 
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
@@ -326,8 +331,8 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_voice_daemon_transport(cls, value: str) -> str:
         normalized = value.strip().lower()
-        if normalized not in {"stub", "livekit"}:
-            raise ValueError("voice_daemon_transport must be one of: stub, livekit")
+        if normalized not in {"stub", "sidecar", "livekit"}:
+            raise ValueError("voice_daemon_transport must be one of: stub, sidecar, livekit")
         return normalized
 
     @field_validator("tool_discovery_mode")

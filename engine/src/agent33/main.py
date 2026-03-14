@@ -533,12 +533,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Script hook discovery (Phase 44) ----------------------------------
     script_hook_discovery = None
     if settings.script_hooks_enabled and hook_registry is not None:
-        from agent33.hooks.script_discovery import ScriptHookDiscovery
+        from agent33.hooks.script_discovery import (
+            ScriptHookDiscovery,
+            resolve_project_hooks_dir,
+        )
 
         project_hooks = (
             Path(settings.script_hooks_project_dir)
             if settings.script_hooks_project_dir.strip()
-            else Path.cwd() / ".claude" / "hooks"
+            else resolve_project_hooks_dir(Path.cwd())
         )
         user_hooks = (
             Path(settings.script_hooks_user_dir)
@@ -594,6 +597,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.warning("crash_detection_failed", exc_info=True)
 
         logger.info("operator_session_service_initialized", base_dir=str(base_dir))
+
+    # -- Voice sidecar probe / status-line services ------------------------
+    voice_sidecar_probe = None
+    if settings.voice_sidecar_url.strip() or settings.voice_daemon_transport == "sidecar":
+        from agent33.voice.client import VoiceSidecarProbe
+
+        sidecar_url = settings.voice_sidecar_url.strip() or settings.voice_daemon_url.strip()
+        voice_sidecar_probe = VoiceSidecarProbe(
+            base_url=sidecar_url,
+            enabled=settings.voice_daemon_enabled,
+            transport=settings.voice_daemon_transport,
+            timeout_seconds=settings.voice_sidecar_probe_timeout_seconds,
+        )
+        app.state.voice_sidecar_probe = voice_sidecar_probe
+
+    from agent33.operator.status_line import StatusLineService
+
+    status_line_service = StatusLineService(
+        app_state=app.state,
+        workspace_root=Path.cwd(),
+        voice_probe=voice_sidecar_probe,
+    )
+    app.state.status_line_service = status_line_service
+    if operator_session_service is not None:
+        operator_session_service.set_status_snapshot_builder(status_line_service.build_snapshot)
 
     # -- WebSocket manager for workflow events ------------------------------
     from agent33.workflows.ws_manager import WorkflowWSManager
@@ -852,14 +880,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     configured_multimodal_service = multimodal.get_multimodal_service()
+    daemon_factory = None
+    if settings.voice_daemon_transport == "sidecar":
+        from agent33.voice.client import SidecarVoiceDaemon
+
+        daemon_factory = SidecarVoiceDaemon
     configured_multimodal_service.configure_voice_runtime(
         enabled=settings.voice_daemon_enabled,
         transport=settings.voice_daemon_transport,
-        url=settings.voice_daemon_url,
+        url=settings.voice_sidecar_url.strip() or settings.voice_daemon_url,
         api_key=settings.voice_daemon_api_key.get_secret_value(),
         api_secret=settings.voice_daemon_api_secret.get_secret_value(),
         room_prefix=settings.voice_daemon_room_prefix,
         max_sessions=settings.voice_daemon_max_sessions,
+        daemon_factory=daemon_factory,
     )
     app.state.multimodal_service = configured_multimodal_service
     logger.info(
