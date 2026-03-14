@@ -8,6 +8,12 @@ import pytest
 
 from agent33.tools.base import ToolContext
 from agent33.tools.builtin.search import SearchTool
+from agent33.web_research.models import (
+    ResearchSearchResponse,
+    ResearchTrustLevel,
+    WebResearchCitation,
+    WebResearchResult,
+)
 
 
 @pytest.fixture
@@ -29,49 +35,66 @@ async def test_missing_query(tool: SearchTool, context: ToolContext) -> None:
     assert not result.success
 
 
-@patch("agent33.tools.builtin.search.settings")
-async def test_search_returns_results(
-    mock_settings: AsyncMock, tool: SearchTool, context: ToolContext
-) -> None:
-    mock_settings.searxng_url = "http://searxng:8080"
+async def test_search_returns_results(tool: SearchTool, context: ToolContext) -> None:
+    citation = WebResearchCitation(
+        title="Result 1",
+        url="https://example.com/1",
+        display_url="example.com/1",
+        domain="example.com",
+        provider_id="searxng",
+        trust_level=ResearchTrustLevel.SEARCH_INDEXED,
+        trust_reason="Indexed by searxng",
+    )
+    results = [
+        WebResearchResult(
+            title="Result 1",
+            url="https://example.com/1",
+            snippet="Snippet 1",
+            provider_id="searxng",
+            rank=1,
+            domain="example.com",
+            display_url="example.com/1",
+            trust_level=ResearchTrustLevel.SEARCH_INDEXED,
+            trust_reason="Indexed by searxng",
+            citation=citation,
+        ),
+        WebResearchResult(
+            title="Result 2",
+            url="https://example.com/2",
+            snippet="Snippet 2",
+            provider_id="searxng",
+            rank=2,
+            domain="example.com",
+            display_url="example.com/2",
+            trust_level=ResearchTrustLevel.SEARCH_INDEXED,
+            trust_reason="Indexed by searxng",
+            citation=citation,
+        ),
+    ]
+    response = ResearchSearchResponse(query="test query", provider_id="searxng", results=results)
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "results": [
-            {"title": "Result 1", "url": "https://example.com/1", "content": "Snippet 1"},
-            {"title": "Result 2", "url": "https://example.com/2", "content": "Snippet 2"},
-        ]
-    }
-    mock_resp.raise_for_status = MagicMock()
+    mock_service = MagicMock()
+    mock_service.search = AsyncMock(return_value=response)
 
-    with patch("agent33.tools.builtin.search.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.get.return_value = mock_resp
-        mock_client_cls.return_value = mock_client
-
+    with patch(
+        "agent33.tools.builtin.search.create_default_web_research_service",
+        return_value=mock_service,
+    ):
         result = await tool.execute({"query": "test query"}, context)
         assert result.success
         assert "Result 1" in result.output
         assert "Result 2" in result.output
+        assert "search-indexed" in result.output
 
 
-@patch("agent33.tools.builtin.search.settings")
-async def test_search_connection_error(
-    mock_settings: AsyncMock, tool: SearchTool, context: ToolContext
-) -> None:
-    mock_settings.searxng_url = "http://searxng:8080"
+async def test_search_connection_error(tool: SearchTool, context: ToolContext) -> None:
+    mock_service = MagicMock()
+    mock_service.search = AsyncMock(side_effect=ValueError("Could not connect to SearXNG"))
 
-    with patch("agent33.tools.builtin.search.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        import httpx
-
-        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
-        mock_client_cls.return_value = mock_client
-
+    with patch(
+        "agent33.tools.builtin.search.create_default_web_research_service",
+        return_value=mock_service,
+    ):
         result = await tool.execute({"query": "test"}, context)
         assert not result.success
+        assert "Could not connect" in result.error

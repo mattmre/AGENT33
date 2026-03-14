@@ -45,6 +45,7 @@ from agent33.api.routes import (
     processes,
     reasoning,
     releases,
+    research,
     reviews,
     sessions,
     synthetic_envs,
@@ -597,6 +598,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.warning("crash_detection_failed", exc_info=True)
 
         logger.info("operator_session_service_initialized", base_dir=str(base_dir))
+
+    # -- Web research service (Track 7) ------------------------------------
+    from agent33.web_research.service import create_default_web_research_service
+
+    web_research_service = create_default_web_research_service()
+    app.state.web_research_service = web_research_service
+    research.set_research_service(web_research_service)
+    logger.info("web_research_service_initialized")
 
     # -- Voice sidecar probe / status-line services ------------------------
     voice_sidecar_probe = None
@@ -1207,6 +1216,7 @@ app.include_router(traces.router)
 app.include_router(evaluations.router)
 app.include_router(autonomy.router)
 app.include_router(releases.router)
+app.include_router(research.router)
 app.include_router(improvements.router)
 app.include_router(training.router)
 app.include_router(benchmarks.router)
