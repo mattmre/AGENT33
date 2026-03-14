@@ -20,6 +20,7 @@ class OperatorSessionStatus(StrEnum):
     COMPLETED = "completed"
     CRASHED = "crashed"
     SUSPENDED = "suspended"
+    ARCHIVED = "archived"
 
 
 # ---------------------------------------------------------------------------

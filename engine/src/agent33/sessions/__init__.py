@@ -1,11 +1,16 @@
-"""Operator session safety and continuity (Phase 44).
+"""Operator session safety and continuity (Phase 44 + Track 8).
 
 Public API:
     OperatorSession, OperatorSessionStatus, TaskEntry,
-    SessionEvent, SessionEventType, SessionHookContext,
-    OperatorSessionService, FileSessionStorage.
+    SessionEvent, SessionEventType,
+    OperatorSessionService, FileSessionStorage,
+    SessionCatalog, SessionLineageBuilder,
+    SessionSpawnService, SessionArchiveService.
 """
 
+from agent33.sessions.archive import SessionArchiveService
+from agent33.sessions.catalog import SessionCatalog
+from agent33.sessions.lineage import SessionLineageBuilder
 from agent33.sessions.models import (
     OperatorSession,
     OperatorSessionStatus,
@@ -14,6 +19,7 @@ from agent33.sessions.models import (
     TaskEntry,
 )
 from agent33.sessions.service import OperatorSessionService
+from agent33.sessions.spawn import SessionSpawnService
 from agent33.sessions.storage import FileSessionStorage
 
 __all__ = [
@@ -21,7 +27,11 @@ __all__ = [
     "OperatorSession",
     "OperatorSessionService",
     "OperatorSessionStatus",
+    "SessionArchiveService",
+    "SessionCatalog",
     "SessionEvent",
     "SessionEventType",
+    "SessionLineageBuilder",
+    "SessionSpawnService",
     "TaskEntry",
 ]
