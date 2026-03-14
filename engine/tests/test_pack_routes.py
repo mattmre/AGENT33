@@ -165,6 +165,48 @@ class TestPackRoutesWithRegistry:
         assert data["author"] == "tester"
         assert data["enabled_for_tenant"] is False
 
+    def test_get_pack_includes_skill_category_and_provenance(self, tmp_path: Path) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        pack_dir = packs_dir / "metadata-pack"
+        pack_dir.mkdir(parents=True, exist_ok=True)
+        (pack_dir / "PACK.yaml").write_text(
+            textwrap.dedent(
+                """\
+                name: metadata-pack
+                version: 1.0.0
+                description: Metadata pack
+                author: tester
+                skills:
+                  - name: planning-with-files
+                    path: skills/workflow/planning-with-files
+                """
+            ),
+            encoding="utf-8",
+        )
+        skill_dir = pack_dir / "skills" / "workflow" / "planning-with-files"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(
+            textwrap.dedent(
+                """\
+                ---
+                name: planning-with-files
+                description: Planning support
+                provenance: imported-evokore
+                ---
+                # Planning
+                """
+            ),
+            encoding="utf-8",
+        )
+        pack_reg.discover()
+
+        resp = client.get("/v1/packs/metadata-pack")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["skills"][0]["category"] == "workflow"
+        assert data["skills"][0]["provenance"] == "imported-evokore"
+
     def test_get_pack_not_found(self, tmp_path: Path) -> None:
         client, _, _, _ = self._setup(tmp_path)
         resp = client.get("/v1/packs/nonexistent")

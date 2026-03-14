@@ -53,6 +53,8 @@ class PackSkillInfo(BaseModel):
     name: str
     path: str = ""
     description: str = ""
+    category: str = ""
+    provenance: str = ""
     required: bool = True
 
 

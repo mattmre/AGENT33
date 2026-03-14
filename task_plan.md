@@ -25,8 +25,8 @@ If execution stops mid-slice, resume in this order:
 
 - Active queue owner: remaining-roadmap sequential execution
 - Current slice: `S11 - Phase 47 capability pack expansion and workflow weaving`
-- Current phase: `research`
-- Resume artifact: `docs/phases/PHASE-44-48-EVOKORE-INTEGRATION-ROADMAP.md` (`Phase 47` section)
+- Current phase: `pr_prep`
+- Resume artifact: `docs/research/session84-s11-phase47-scope.md`
 - Next write required after any progress: update this pointer and append the exact command/test status to `progress.md`
 
 ## Constraints
@@ -92,7 +92,7 @@ Merge gates for every slice:
 | 9 | S8: Phase 25 SSE hardening + frontend test expansion | fresh worktree from updated `origin/main` | Complete | Merged as PR `#184`; post-merge verification passed from fresh `origin/main` |
 | 10 | S9: Phase 38 Stage 3 Docker kernel hardening | fresh worktree from updated `origin/main` | Complete | Merged as PR `#185`; post-merge verification passed from fresh `origin/main` |
 | 11 | S10: Phase 30 Stage 3 production trace tuning | fresh worktree from updated `origin/main` | Complete | Session 80 audit confirmed the Phase 30 trace-tuning slice is already present on `main`; targeted validation passed from fresh worktree `session80-s10-phase30-trace-tuning` |
-| 12 | S11: Phase 47 capability pack expansion and workflow weaving | fresh worktree from updated `origin/main` | Pending | Next active slice after the S10 audit/reconciliation closeout |
+| 12 | S11: Phase 47 capability pack expansion and workflow weaving | fresh worktree from updated `origin/main` | In Progress | Session 84 scope/implementation work is complete and targeted validation is green in `worktrees/session84-s11-phase47`; next step is PR prep |
 | 13 | S12: Phase 35 / 48 voice convergence decision | fresh worktree from updated `origin/main` | Pending | Avoid over-investing in the current scaffold if Phase 48 sidecar replaces it |
 | 14 | S13: Phase 48 operator UX and production hardening | fresh worktree from updated `origin/main` | Pending | Voice sidecar, status line, release hardening |
 | 15 | S14: OpenClaw Track 7 web research and trust | fresh worktree from updated `origin/main` | Pending | Provider abstraction, trust labels, research UI |
@@ -324,6 +324,21 @@ Every slice must move through these phases in order. Do not start implementation
 - Non-goals:
   - unrelated plugin lifecycle work already covered by S2
 - Phase steps: same as standard sequence
+- Interim status:
+  - active worktree: `worktrees/session84-s11-phase47`
+  - branch: `codex/session84-s11-phase47`
+  - scope memo: `docs/research/session84-s11-phase47-scope.md`
+  - implementation is complete:
+    - recursive hierarchical skill discovery and category inference
+    - imported capability packs under `engine/packs/`
+    - workflow templates under `core/workflows/capability-packs/`
+    - pack API metadata enrichment for skill category/provenance
+    - workflow bridge propagation of `active_skills`
+  - targeted validation passed:
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m pytest engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py -q --no-cov`
+    - `python -m ruff check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
+    - `python -m ruff format --check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
+    - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m mypy engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
 
 ### S12: Phase 35 / 48 Voice Convergence Decision
 

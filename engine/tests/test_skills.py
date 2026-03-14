@@ -373,6 +373,24 @@ class TestSkillRegistry:
         assert registry.get("review") is not None
         assert registry.get("deploy") is not None
 
+    def test_discover_recurses_into_hierarchical_categories(self, tmp_path: Path) -> None:
+        from agent33.skills.registry import SkillRegistry
+
+        nested_dir = tmp_path / "skills" / "workflow" / "planning" / "planning-with-files"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "SKILL.md").write_text(
+            "---\nname: planning-with-files\ndescription: Planning skill\n---\nInstructions.\n",
+            encoding="utf-8",
+        )
+
+        registry = SkillRegistry()
+        count = registry.discover(tmp_path)
+
+        assert count == 1
+        skill = registry.get("planning-with-files")
+        assert skill is not None
+        assert skill.category == "workflow/planning"
+
     def test_discover_nonexistent_dir(self) -> None:
         from agent33.skills.registry import SkillRegistry
 

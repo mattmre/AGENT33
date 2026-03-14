@@ -497,3 +497,60 @@ class TestWorkflowBridgeRegistryLookup:
         bridge_fn = captured_bridge["__default__"]
         result = await bridge_fn({"agent_name": "any-agent", "task": "go"})
         assert result == {"result": "fallback"}
+
+    async def test_bridge_passes_explicit_active_skills_to_runtime_prompt(self) -> None:
+        """Workflow bridge should allow templates to activate imported skills."""
+        from agent33.agents.registry import AgentRegistry
+        from agent33.skills.definition import SkillDefinition
+        from agent33.skills.injection import SkillInjector
+        from agent33.skills.registry import SkillRegistry
+
+        registry = AgentRegistry()
+        registry.register(_make_definition(name="code-worker"))
+
+        skill_registry = SkillRegistry()
+        skill_registry.register(
+            SkillDefinition(
+                name="workflow-ops/pr-manager",
+                description="PR review automation",
+                instructions="Use the PR manager workflow.",
+            )
+        )
+
+        mock_router = MagicMock()
+        mock_router.complete = AsyncMock(
+            return_value=LLMResponse(
+                content='{"result": "ok"}',
+                model="test-model",
+                prompt_tokens=20,
+                completion_tokens=20,
+            )
+        )
+
+        captured_bridge = {}
+
+        def fake_register(name: str, handler: object) -> None:
+            captured_bridge[name] = handler
+
+        from agent33.main import _register_agent_runtime_bridge
+
+        _register_agent_runtime_bridge(
+            mock_router,
+            fake_register,
+            registry=registry,
+            skill_injector=SkillInjector(skill_registry),
+        )
+
+        bridge_fn = captured_bridge["__default__"]
+        await bridge_fn(
+            {
+                "agent_name": "code-worker",
+                "task": "review the PR",
+                "active_skills": ["workflow-ops/pr-manager"],
+            }
+        )
+
+        messages = mock_router.complete.call_args[0][0]
+        system_msg = messages[0].content
+        assert "# Active Skill: workflow-ops/pr-manager" in system_msg
+        assert "Use the PR manager workflow." in system_msg

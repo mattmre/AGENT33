@@ -46,6 +46,26 @@ def _get_pack_registry(request: Request) -> Any:
     return getattr(request.app.state, "pack_registry", None)
 
 
+def _get_skill_registry(request: Request) -> Any:
+    """Retrieve the skill registry from app state."""
+    skill_registry = getattr(request.app.state, "skill_registry", None)
+    if skill_registry is not None:
+        return skill_registry
+
+    pack_registry = _get_pack_registry(request)
+    return getattr(pack_registry, "_skill_registry", None)
+
+
+def _default_skill_provenance(pack: Any) -> str:
+    """Return a fallback provenance label derived from pack metadata."""
+    tags = set(getattr(pack, "tags", []) or [])
+    if "evokore" in tags:
+        return "imported-evokore"
+    if "imported" in tags:
+        return "imported-pack"
+    return ""
+
+
 def _get_pack_trust_manager(request: Request) -> Any:
     """Retrieve the pack trust manager from app state."""
     return getattr(request.app.state, "pack_trust_manager", None)
@@ -78,8 +98,26 @@ def _pack_to_summary(pack: Any) -> PackSummary:
     )
 
 
-def _pack_to_detail(pack: Any) -> PackDetail:
+def _pack_to_detail(pack: Any, skill_registry: Any = None) -> PackDetail:
     """Convert InstalledPack to PackDetail."""
+    skills: list[PackSkillInfo] = []
+    for skill_info in pack.skills:
+        loaded_skill = None
+        if skill_registry is not None:
+            loaded_skill = skill_registry.get(
+                f"{pack.name}/{skill_info.name}"
+            ) or skill_registry.get(skill_info.name)
+        skills.append(
+            PackSkillInfo(
+                name=skill_info.name,
+                path=skill_info.path,
+                description=skill_info.description,
+                category=getattr(loaded_skill, "category", "") or "",
+                provenance=getattr(loaded_skill, "provenance", "")
+                or _default_skill_provenance(pack),
+                required=skill_info.required,
+            )
+        )
     return PackDetail(
         name=pack.name,
         version=pack.version,
@@ -88,15 +126,7 @@ def _pack_to_detail(pack: Any) -> PackDetail:
         license=pack.license,
         tags=pack.tags,
         category=pack.category,
-        skills=[
-            PackSkillInfo(
-                name=s.name,
-                path=s.path,
-                description=s.description,
-                required=s.required,
-            )
-            for s in pack.skills
-        ],
+        skills=skills,
         loaded_skill_names=pack.loaded_skill_names,
         engine_min_version=pack.engine_min_version,
         installed_at=pack.installed_at,
@@ -173,7 +203,7 @@ async def get_pack(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
 
     tenant = _tenant_id(request)
-    detail = _pack_to_detail(pack)
+    detail = _pack_to_detail(pack, _get_skill_registry(request))
     return {
         **detail.model_dump(mode="json"),
         "enabled_for_tenant": registry.is_enabled(name, tenant),

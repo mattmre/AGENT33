@@ -1060,6 +1060,7 @@ def _register_agent_runtime_bridge(
     async def _bridge(inputs: dict[str, Any]) -> dict[str, Any]:
         agent_name = inputs.pop("agent_name", "workflow-agent")
         model = inputs.pop("model", None)
+        active_skills_raw = inputs.pop("active_skills", None)
 
         # Try to look up actual registered definition first
         definition = None
@@ -1083,11 +1084,22 @@ def _register_agent_runtime_bridge(
                 },
                 constraints=AgentConstraints(),
             )
+        if active_skills_raw is None:
+            active_skills = list(definition.skills)
+        elif isinstance(active_skills_raw, list):
+            active_skills = [
+                str(skill).strip() for skill in active_skills_raw if str(skill).strip()
+            ]
+        else:
+            normalized = str(active_skills_raw).strip()
+            active_skills = [normalized] if normalized else list(definition.skills)
+
         runtime = AgentRuntime(
             definition=definition,
             router=model_router,
             model=model,
             skill_injector=skill_injector,
+            active_skills=active_skills,
             progressive_recall=progressive_recall,
             effort_router=effort_router,
             routing_metrics_emitter=routing_metrics_emitter,

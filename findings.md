@@ -327,3 +327,35 @@
 - The process-governance CI failure turned out to be a genuine test determinism gap, not a Docker-kernel regression:
   - `httpx.ASGITransport(app=app)` plus shared module-level `app` state can hide missing lifespan-initialized services in isolated runs
   - if route behavior depends on `app.state` services such as `tool_governance`, tests should install those dependencies explicitly rather than depending on prior suite order
+
+## 2026-03-14 (S11 Phase 47 Capability Packs)
+
+- `S11` started from fresh worktree `D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47` on branch `codex/session84-s11-phase47`.
+- The merged baseline already had the right scaffolding for Phase 47:
+  - skills loader and registry support `SKILL.md` and YAML definitions
+  - pack manifests, marketplace install flows, and pack APIs already exist
+  - workflow discovery/runtime already understand explicit `active_skills`
+- The real Phase 47 gap was shipped content and metadata, not a new pack/runtime architecture:
+  - no real imported capability packs were present under `engine/packs`
+  - skill discovery did not recurse through hierarchical category layouts
+  - pack detail responses did not surface imported skill category/provenance
+  - the workflow bridge path in `main.py` still dropped `active_skills`
+- `docs/research/session84-s11-phase47-scope.md` is now the authoritative scope lock for the slice.
+- `S11` implementation is complete in the worktree and is intentionally limited to the minimum complete import wave:
+  - recursive skill discovery plus category inference from `skills/...` directory layout
+  - imported packs `hive-family`, `workflow-ops`, and `platform-builder`
+  - imported skills: `hive`, `hive-concepts`, `hive-create`, `hive-patterns`, `hive-test`, `planning-with-files`, `docs-architect`, `pr-manager`, `webapp-testing`, `mcp-builder`, and `repo-ingestor`
+  - workflow templates that explicitly wire those skills through the existing workflow runtime
+  - pack API metadata enrichment for skill category and provenance
+  - workflow bridge propagation of `active_skills`
+- One real route integration bug surfaced during validation:
+  - the packs API looked only at `app.state.skill_registry`
+  - pack-route tests and pack runtime wiring already treat the pack registry's embedded skill registry as authoritative
+  - the correct fix was to fall back from `app.state.skill_registry` to `pack_registry._skill_registry`, not to weaken the metadata assertion
+- Imported `SKILL.md` files should not be mass-edited to inject `provenance` inside YAML frontmatter without parsing:
+  - a raw line insertion can corrupt folded frontmatter blocks
+  - the safe approach in this slice is to preserve imported files verbatim and derive fallback provenance from pack tags at the API layer
+- `S11` targeted validation is green locally:
+  - focused `pytest` passed on `test_skills`, `test_pack_loader`, `test_pack_routes`, and `test_governance_prompt`
+  - `ruff check`, `ruff format --check`, and `mypy` passed on the touched skill/pack/runtime modules
+- The next step is `pr_prep`; no later slice should start before the imported-pack PR is opened, reviewed, merged, and verified from fresh `origin/main`.
