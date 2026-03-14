@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, SecretStr
+
+if TYPE_CHECKING:
+    from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ class ConfigApplyService:
     because existing connections are not automatically re-established.
     """
 
-    def __init__(self, settings_cls: type) -> None:
+    def __init__(self, settings_cls: type[BaseSettings]) -> None:
         self._settings_cls = settings_cls
 
     def validate_only(self, changes: dict[str, Any]) -> list[str]:
@@ -138,7 +141,7 @@ class ConfigApplyService:
             try:
                 self._write_env_file(request.changes, result.applied)
             except Exception as exc:
-                logger.warning("config_apply_env_write_failed", error=str(exc))
+                logger.warning("config_apply_env_write_failed: %s", str(exc))
                 result.validation_errors.append(f"Failed to write .env: {exc}")
 
         return result

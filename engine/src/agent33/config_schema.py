@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, SecretStr
+
+if TYPE_CHECKING:
+    from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +128,7 @@ def _type_label(annotation: Any) -> str:
     return str(annotation)
 
 
-def introspect_settings_schema(settings_cls: type) -> ConfigSchemaResponse:
+def introspect_settings_schema(settings_cls: type[BaseSettings]) -> ConfigSchemaResponse:
     """Introspect a Pydantic Settings class and return grouped field schemas.
 
     Uses ``model_fields`` to extract field names, types, defaults, and
