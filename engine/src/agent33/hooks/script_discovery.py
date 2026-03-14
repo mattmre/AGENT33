@@ -20,6 +20,14 @@ _SUPPORTED_EXTENSIONS = {".py", ".sh", ".ps1", ".js"}
 _EVENT_TYPE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def resolve_project_hooks_dir(project_root: Path) -> Path:
+    """Resolve the default project hooks directory."""
+    scripts_hooks = project_root / "scripts" / "hooks"
+    if scripts_hooks.is_dir():
+        return scripts_hooks
+    return project_root / ".claude" / "hooks"
+
+
 class ScriptHookDiscovery:
     """Discovers and registers file-based hooks from filesystem paths.
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from agent33.hooks.models import HookContext, HookEventType
 from agent33.hooks.protocol import BaseHook
 from agent33.hooks.registry import HookRegistry
-from agent33.hooks.script_discovery import ScriptHookDiscovery
+from agent33.hooks.script_discovery import ScriptHookDiscovery, resolve_project_hooks_dir
 from agent33.hooks.script_hook import ScriptHook
 
 
@@ -611,3 +611,13 @@ class TestScriptHookDiscovery:
         )
         count = discovery.discover()
         assert count == 4
+
+    def test_resolve_project_hooks_dir_prefers_scripts_hooks(self, tmp_path: Path) -> None:
+        scripts_hooks = tmp_path / "scripts" / "hooks"
+        scripts_hooks.mkdir(parents=True)
+        resolved = resolve_project_hooks_dir(tmp_path)
+        assert resolved == scripts_hooks
+
+    def test_resolve_project_hooks_dir_falls_back_to_dot_claude(self, tmp_path: Path) -> None:
+        resolved = resolve_project_hooks_dir(tmp_path)
+        assert resolved == tmp_path / ".claude" / "hooks"

@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from agent33.config import settings
 
@@ -22,7 +22,7 @@ def _get_adapters() -> dict[str, Any]:
 
 
 @router.get("/health")
-async def health() -> dict[str, Any]:
+async def health(request: Request) -> dict[str, Any]:
     """Aggregate health check for all services."""
     checks: dict[str, str] = {}
 
@@ -111,6 +111,20 @@ async def health() -> dict[str, Any]:
             checks[f"channel:{platform}"] = result.status
         except Exception:
             checks[f"channel:{platform}"] = "unavailable"
+
+    voice_probe = getattr(request.app.state, "voice_sidecar_probe", None)
+    if voice_probe is not None:
+        voice_snapshot = await voice_probe.health_snapshot()
+        checks["voice_sidecar"] = str(voice_snapshot.get("status", "unavailable"))
+    else:
+        checks["voice_sidecar"] = "unconfigured"
+
+    status_line_service = getattr(request.app.state, "status_line_service", None)
+    if status_line_service is not None:
+        status_line_snapshot = await status_line_service.health_snapshot()
+        checks["status_line"] = str(status_line_snapshot.get("status", "unavailable"))
+    else:
+        checks["status_line"] = "unconfigured"
 
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "healthy" if all_ok else "degraded", "services": checks}

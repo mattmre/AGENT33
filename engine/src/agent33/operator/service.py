@@ -141,6 +141,20 @@ class OperatorService:
         else:
             inventories["processes"] = SubsystemInventory(count=0, loaded=False)
 
+        multimodal_service = getattr(self._app_state, "multimodal_service", None)
+        if multimodal_service is not None:
+            voice_sessions = multimodal_service.list_voice_sessions(limit=1000)
+            active_voice_sessions = [
+                session for session in voice_sessions if session.state.value == "active"
+            ]
+            inventories["voice_sessions"] = SubsystemInventory(
+                count=len(voice_sessions),
+                loaded=True,
+                active=len(active_voice_sessions),
+            )
+        else:
+            inventories["voice_sessions"] = SubsystemInventory(count=0, loaded=False)
+
         # Runtime info
         now = time.time()
         start_dt = datetime.fromtimestamp(self._start_time, tz=UTC)
@@ -172,6 +186,26 @@ class OperatorService:
             health["status"] = "degraded"
         else:
             health["services"]["postgres"] = "ok"
+
+        voice_probe = getattr(self._app_state, "voice_sidecar_probe", None)
+        if voice_probe is not None:
+            voice_snapshot = await voice_probe.health_snapshot()
+            voice_status = str(voice_snapshot.get("status", "unavailable"))
+            health["services"]["voice_sidecar"] = voice_status
+            if voice_status in {"degraded", "unavailable"}:
+                health["status"] = "degraded"
+        else:
+            health["services"]["voice_sidecar"] = "unconfigured"
+
+        status_line_service = getattr(self._app_state, "status_line_service", None)
+        if status_line_service is not None:
+            status_line_snapshot = await status_line_service.health_snapshot()
+            status_line_status = str(status_line_snapshot.get("status", "unavailable"))
+            health["services"]["status_line"] = status_line_status
+            if status_line_status in {"degraded", "unavailable"}:
+                health["status"] = "degraded"
+        else:
+            health["services"]["status_line"] = "unconfigured"
 
         return SystemStatus(
             health=health,

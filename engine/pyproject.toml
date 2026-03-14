@@ -85,6 +85,7 @@ dev = [
 
 [project.scripts]
 agent33 = "agent33.cli.main:app"
+agent33-voice-sidecar = "agent33.voice.__main__:app"
 
 [project.entry-points."agent33.tools"]
 tldr_read = "agent33.tools.tldr_enforcer:TLDRReadEnforcerTool"

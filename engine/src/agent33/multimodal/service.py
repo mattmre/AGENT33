@@ -8,7 +8,7 @@ import binascii
 import logging
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,6 +32,22 @@ _ROOM_COMPONENT_PATTERN = re.compile(r"[^a-z0-9-]+")
 _ROOM_DASH_PATTERN = re.compile(r"-+")
 _ROOM_COMPONENT_LIMIT = 48
 _VOICE_START_FAILURE_MESSAGE = "voice runtime could not start session"
+
+
+class VoiceDaemonProtocol(Protocol):
+    """Shared interface for the in-process shim and the standalone sidecar client."""
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+    def health_check(self) -> bool: ...
+
+    async def process_audio_chunk(self, chunk: bytes) -> str | None: ...
+
+    async def synthesize_speech(self, text: str) -> bytes | None: ...
+
+    def snapshot(self) -> dict[str, object]: ...
 
 
 class PolicyViolationError(Exception):
@@ -58,7 +74,7 @@ class MultimodalService:
         self._results: dict[str, MultimodalResult] = {}
         self._policies: dict[str, MultimodalPolicy] = {}
         self._voice_sessions: dict[str, VoiceSession] = {}
-        self._voice_daemons: dict[str, LiveVoiceDaemon] = {}
+        self._voice_daemons: dict[str, VoiceDaemonProtocol] = {}
         self._voice_lock = asyncio.Lock()
         self._voice_runtime_enabled = True
         self._voice_transport = "stub"
@@ -67,7 +83,7 @@ class MultimodalService:
         self._voice_api_secret = ""
         self._voice_room_prefix = "agent33-voice"
         self._voice_max_sessions = 25
-        self._voice_daemon_factory: Callable[..., LiveVoiceDaemon] = LiveVoiceDaemon
+        self._voice_daemon_factory: Callable[..., VoiceDaemonProtocol] = LiveVoiceDaemon
         self._adapters: dict[ModalityType, MultimodalAdapter] = {
             ModalityType.SPEECH_TO_TEXT: STTAdapter(),
             ModalityType.TEXT_TO_SPEECH: TTSAdapter(),
@@ -84,7 +100,7 @@ class MultimodalService:
         api_secret: str,
         room_prefix: str,
         max_sessions: int,
-        daemon_factory: Callable[..., LiveVoiceDaemon] | None = None,
+        daemon_factory: Callable[..., VoiceDaemonProtocol] | None = None,
     ) -> None:
         """Configure the runtime backing tenant-scoped voice sessions."""
         self._voice_runtime_enabled = enabled

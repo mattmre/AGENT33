@@ -2,22 +2,28 @@
 
 ## Purpose
 
-Operate the Phase 35 live voice control plane safely until full LiveKit media transport is enabled.
+Operate the Phase 48 voice stack safely across the compatibility runtime and the standalone sidecar.
 
 ## Current Runtime Modes
 
 - `stub`: session lifecycle works end to end for UI, policy, auth, and shutdown handling
+- `sidecar`: session lifecycle is delegated to the standalone `agent33.voice` FastAPI sidecar
 - `livekit`: intentionally rejected in the current runtime and reserved for the Phase 48 sidecar
 
 ## Required Engine Settings
 
 - `VOICE_DAEMON_ENABLED=true|false`
-- `VOICE_DAEMON_TRANSPORT=stub|livekit`
+- `VOICE_DAEMON_TRANSPORT=stub|sidecar|livekit`
 - `VOICE_DAEMON_URL`
 - `VOICE_DAEMON_API_KEY`
 - `VOICE_DAEMON_API_SECRET`
 - `VOICE_DAEMON_ROOM_PREFIX`
 - `VOICE_DAEMON_MAX_SESSIONS`
+- `VOICE_SIDECAR_URL`
+- `VOICE_SIDECAR_PROBE_TIMEOUT_SECONDS`
+- `VOICE_SIDECAR_VOICES_PATH`
+- `VOICE_SIDECAR_ARTIFACTS_DIR`
+- `VOICE_SIDECAR_PLAYBACK_BACKEND`
 
 For local validation, use:
 
@@ -26,6 +32,29 @@ VOICE_DAEMON_ENABLED=true
 VOICE_DAEMON_TRANSPORT=stub
 VOICE_DAEMON_ROOM_PREFIX=agent33-voice
 VOICE_DAEMON_MAX_SESSIONS=25
+```
+
+For standalone sidecar validation, use:
+
+```env
+VOICE_DAEMON_ENABLED=true
+VOICE_DAEMON_TRANSPORT=sidecar
+VOICE_SIDECAR_URL=http://127.0.0.1:8790
+VOICE_SIDECAR_VOICES_PATH=config/voice/voices.json
+VOICE_SIDECAR_ARTIFACTS_DIR=var/voice-sidecar
+VOICE_SIDECAR_PLAYBACK_BACKEND=noop
+```
+
+Start the sidecar locally with:
+
+```bash
+python -m agent33.voice main --host 127.0.0.1 --port 8790
+```
+
+or, when the engine package entrypoint is installed:
+
+```bash
+agent33-voice-sidecar main --host 127.0.0.1 --port 8790
 ```
 
 ## Tenant Policy Controls
@@ -91,7 +120,23 @@ Use this to confirm:
 - session state
 - daemon health boolean
 - transport mode
-- basic daemon counters
+- basic daemon counters or sidecar snapshot details
+
+### Check sidecar and status-line health
+
+Use:
+
+- `GET /health`
+- `GET /v1/operator/status`
+
+Expected additional health services:
+
+- `voice_sidecar`
+- `status_line`
+
+Expected additional operator inventory:
+
+- `voice_sessions`
 
 ### Stop a session
 
@@ -125,6 +170,19 @@ Resolution:
 - switch back to `stub` for the current runtime
 - keep LiveKit credentials only for the future sidecar deployment path
 
+### `503 voice runtime could not start session` with `VOICE_DAEMON_TRANSPORT=sidecar`
+
+Cause:
+
+- the main API runtime could not create the remote sidecar session
+- `VOICE_SIDECAR_URL` is unset, unreachable, or the sidecar returned an error
+
+Resolution:
+
+- confirm the sidecar is running and `GET {VOICE_SIDECAR_URL}/health` returns `200`
+- confirm `VOICE_DAEMON_TRANSPORT=sidecar`
+- inspect `var/voice-sidecar/<session_id>/` artifacts on the sidecar host for session evidence
+
 ### `503 voice runtime could not start session`
 
 Cause:
@@ -148,4 +206,4 @@ Resolution:
 
 ## Shutdown Behavior
 
-Active voice daemon sessions are stopped during FastAPI lifespan shutdown. This prevents stale active sessions from surviving process restarts inside the in-memory runtime.
+Active voice daemon sessions are stopped during FastAPI lifespan shutdown. When `VOICE_DAEMON_TRANSPORT=sidecar`, the compatibility daemon asks the standalone sidecar to stop the remote session first and the sidecar persists per-session artifacts under `VOICE_SIDECAR_ARTIFACTS_DIR`.
