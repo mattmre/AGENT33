@@ -358,4 +358,6 @@
 - `S11` targeted validation is green locally:
   - focused `pytest` passed on `test_skills`, `test_pack_loader`, `test_pack_routes`, and `test_governance_prompt`
   - `ruff check`, `ruff format --check`, and `mypy` passed on the touched skill/pack/runtime modules
-- The next step is `pr_prep`; no later slice should start before the imported-pack PR is opened, reviewed, merged, and verified from fresh `origin/main`.
+- `S11` is now open as PR `#190` `feat(packs): import phase47 capability packs`.
+- Initial self-review on `#190` found no new blocking defect beyond the already-fixed pack-detail skill-registry fallback issue.
+- The slice is now in `ci_wait`; no later slice should start before PR `#190` is reviewed, merged, and verified from fresh `origin/main`.

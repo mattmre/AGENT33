@@ -25,7 +25,7 @@ If execution stops mid-slice, resume in this order:
 
 - Active queue owner: remaining-roadmap sequential execution
 - Current slice: `S11 - Phase 47 capability pack expansion and workflow weaving`
-- Current phase: `pr_prep`
+- Current phase: `ci_wait`
 - Resume artifact: `docs/research/session84-s11-phase47-scope.md`
 - Next write required after any progress: update this pointer and append the exact command/test status to `progress.md`
 
@@ -327,6 +327,7 @@ Every slice must move through these phases in order. Do not start implementation
 - Interim status:
   - active worktree: `worktrees/session84-s11-phase47`
   - branch: `codex/session84-s11-phase47`
+  - PR: `#190` `feat(packs): import phase47 capability packs`
   - scope memo: `docs/research/session84-s11-phase47-scope.md`
   - implementation is complete:
     - recursive hierarchical skill discovery and category inference
@@ -339,6 +340,10 @@ Every slice must move through these phases in order. Do not start implementation
     - `python -m ruff check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
     - `python -m ruff format --check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
     - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m mypy engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+  - current state:
+    - branch pushed to `origin/codex/session84-s11-phase47`
+    - PR `#190` is open
+    - self-review found no additional blocking fixes beyond the committed S11 implementation
 
 ### S12: Phase 35 / 48 Voice Convergence Decision
 

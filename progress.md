@@ -746,6 +746,11 @@
   - `python -m ruff check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
   - `python -m ruff format --check engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
   - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m mypy engine/src/agent33/skills engine/src/agent33/packs/api_models.py engine/src/agent33/api/routes/packs.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- S11 PR and self-review state:
+  - pushed branch `codex/session84-s11-phase47`
+  - opened PR `#190` `feat(packs): import phase47 capability packs`
+  - performed full self-review because there were no actionable PR review comments yet
+  - self-review found no additional blocking fix beyond the already-patched pack-detail registry fallback
 - Current pointer advanced:
-  - `S11` implementation and validation complete
-  - `S11` next step is `pr_prep`
+  - `S11` is now in `ci_wait`
+  - `S11` next step is merge after green CI and any review fixes
