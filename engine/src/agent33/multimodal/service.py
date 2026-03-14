@@ -24,7 +24,7 @@ from agent33.multimodal.models import (
     VoiceSessionHealth,
     VoiceSessionState,
 )
-from agent33.multimodal.voice_daemon import LiveVoiceDaemon
+from agent33.multimodal.voice_daemon import VOICE_LIVEKIT_DEFERRED_MESSAGE, LiveVoiceDaemon
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,6 @@ _ROOM_COMPONENT_PATTERN = re.compile(r"[^a-z0-9-]+")
 _ROOM_DASH_PATTERN = re.compile(r"-+")
 _ROOM_COMPONENT_LIMIT = 48
 _VOICE_START_FAILURE_MESSAGE = "voice runtime could not start session"
-_VOICE_LIVEKIT_DEFERRED_MESSAGE = (
-    "livekit transport is deferred to the Phase 48 voice sidecar; "
-    "use the stub transport in the current runtime"
-)
 
 
 class PolicyViolationError(Exception):
@@ -404,7 +400,7 @@ class MultimodalService:
         if policy.max_voice_concurrent_sessions <= 0:
             raise PolicyViolationError("voice sessions are disabled by tenant concurrency policy")
         if self._voice_transport == "livekit":
-            raise VoiceRuntimeUnavailableError(_VOICE_LIVEKIT_DEFERRED_MESSAGE)
+            raise VoiceRuntimeUnavailableError(VOICE_LIVEKIT_DEFERRED_MESSAGE)
 
     def _require_voice_session(
         self,
