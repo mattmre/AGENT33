@@ -16,6 +16,7 @@ from agent33.operator.models import (
     SystemStatus,
     ToolSummaryResponse,
 )
+from agent33.operator.onboarding import OnboardingService, OnboardingStatus
 from agent33.operator.service import OperatorService
 from agent33.security.permissions import require_scope
 
@@ -161,3 +162,26 @@ async def operator_backups(
 ) -> BackupListResponse:
     """Backup catalog (skeleton until Track Phase 6)."""
     return svc.get_backups()
+
+
+# ---------------------------------------------------------------------------
+# Onboarding
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/onboarding",
+    response_model=OnboardingStatus,
+    dependencies=[require_scope("operator:read")],
+)
+async def operator_onboarding(request: Request) -> OnboardingStatus:
+    """Onboarding checklist: evaluates deployment readiness steps."""
+    onboarding_svc: OnboardingService | None = getattr(
+        request.app.state, "onboarding_service", None
+    )
+    if onboarding_svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Onboarding service not initialized",
+        )
+    return onboarding_svc.check()

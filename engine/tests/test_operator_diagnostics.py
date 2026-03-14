@@ -310,7 +310,7 @@ class TestCheckConfig:
 
 
 class TestRunAllChecks:
-    async def test_runs_all_10_checks(self) -> None:
+    async def test_runs_all_16_checks(self) -> None:
         state = SimpleNamespace(
             long_term_memory=None,
             redis=None,
@@ -322,9 +322,9 @@ class TestRunAllChecks:
             pack_registry=None,
         )
         results = await run_all_checks(state)
-        assert len(results) == 10
+        assert len(results) == 16
         ids = [r.id for r in results]
-        for i in range(1, 11):
+        for i in range(1, 17):
             expected_id = f"DOC-{i:02d}"
             assert expected_id in ids, f"Missing check {expected_id}"
 

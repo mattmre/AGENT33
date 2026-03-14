@@ -177,10 +177,10 @@ class TestGetConfig:
 
 
 class TestRunDoctor:
-    async def test_returns_10_checks(self) -> None:
+    async def test_returns_all_checks(self) -> None:
         svc = _build_service()
         result = await svc.run_doctor()
-        assert len(result.checks) == 10
+        assert len(result.checks) == 16
 
     async def test_overall_matches_worst(self) -> None:
         svc = _build_service()
