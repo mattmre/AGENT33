@@ -16,7 +16,7 @@ outputs:
 steps:
   - id: implement
     name: Plan and implement the slice
-    action: invoke_agent
+    action: invoke-agent
     agent: orchestrator
     inputs:
       agent_name: orchestrator

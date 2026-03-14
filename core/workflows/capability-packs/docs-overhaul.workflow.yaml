@@ -13,7 +13,7 @@ outputs:
 steps:
   - id: document
     name: Architect the docs suite
-    action: invoke_agent
+    action: invoke-agent
     agent: researcher
     inputs:
       agent_name: researcher

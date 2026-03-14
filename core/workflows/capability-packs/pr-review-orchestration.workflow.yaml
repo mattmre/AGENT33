@@ -13,7 +13,7 @@ outputs:
 steps:
   - id: review
     name: Execute PR review workflow
-    action: invoke_agent
+    action: invoke-agent
     agent: qa
     inputs:
       agent_name: qa

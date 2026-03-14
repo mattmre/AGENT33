@@ -258,11 +258,24 @@ class TestSkillSubsystem:
 
         assert isinstance(app.state.skill_injector, SkillInjector)
 
-    def test_skill_registry_starts_empty_when_no_dir(self, patched_app):
-        """When the skills directory doesn't exist, registry should be empty."""
+    def test_skill_registry_loads_imported_pack_skills_when_no_standalone_dir(self, patched_app):
+        """Standalone-skill absence should not block imported pack skills from loading."""
         app, _, _ = patched_app
-        # Default skill_definitions_dir = "skills" which doesn't exist in test env
-        assert app.state.skill_registry.count == 0
+
+        pack_count = app.state.pack_registry.count
+        loaded_names = {skill.name for skill in app.state.skill_registry.list_all()}
+
+        # Default skill_definitions_dir = "skills" still doesn't exist in this test env.
+        # When pack_definitions_dir resolves to shipped capability packs, those pack skills
+        # should populate the registry; otherwise the registry should remain empty.
+        if pack_count == 0:
+            assert app.state.skill_registry.count == 0
+            return
+
+        assert "workflow-ops/pr-manager" in loaded_names
+        assert "workflow-ops/planning-with-files" in loaded_names
+        assert "platform-builder/mcp-builder" in loaded_names
+        assert pack_count >= 3
 
 
 class TestAgentWorkflowBridge:

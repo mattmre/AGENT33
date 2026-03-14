@@ -13,7 +13,7 @@ outputs:
 steps:
   - id: research
     name: Ingest and analyze the target
-    action: invoke_agent
+    action: invoke-agent
     agent: researcher
     inputs:
       agent_name: researcher
