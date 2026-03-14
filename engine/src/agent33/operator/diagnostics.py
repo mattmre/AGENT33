@@ -385,6 +385,232 @@ async def check_config(app_state: Any) -> DiagnosticCheck:
     )
 
 
+async def check_sessions(app_state: Any) -> DiagnosticCheck:
+    """DOC-11: Operator session service availability."""
+    try:
+        session_svc = getattr(app_state, "operator_session_service", None)
+        if session_svc is None:
+            return DiagnosticCheck(
+                id="DOC-11",
+                category="sessions",
+                status=CheckStatus.WARNING,
+                message="Operator session service not initialized",
+                remediation="Set OPERATOR_SESSION_ENABLED=true to enable session management",
+            )
+        return DiagnosticCheck(
+            id="DOC-11",
+            category="sessions",
+            status=CheckStatus.OK,
+            message="Operator session service is available",
+        )
+    except Exception as exc:
+        logger.debug("DOC-11 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-11",
+            category="sessions",
+            status=CheckStatus.ERROR,
+            message=f"Session service check failed: {exc}",
+            remediation="Check operator session configuration",
+        )
+
+
+async def check_hooks(app_state: Any) -> DiagnosticCheck:
+    """DOC-12: Hook registry and loaded hooks."""
+    try:
+        hook_registry = getattr(app_state, "hook_registry", None)
+        if hook_registry is None:
+            return DiagnosticCheck(
+                id="DOC-12",
+                category="hooks",
+                status=CheckStatus.WARNING,
+                message="Hook registry not initialized",
+                remediation="Set HOOKS_ENABLED=true to enable the hook system",
+            )
+        count = hook_registry.count()
+        if count == 0:
+            return DiagnosticCheck(
+                id="DOC-12",
+                category="hooks",
+                status=CheckStatus.WARNING,
+                message="Hook registry loaded but contains 0 hooks",
+                remediation="Add hook definitions or check HOOKS_DEFINITIONS_DIR",
+            )
+        return DiagnosticCheck(
+            id="DOC-12",
+            category="hooks",
+            status=CheckStatus.OK,
+            message=f"{count} hook(s) registered",
+        )
+    except Exception as exc:
+        logger.debug("DOC-12 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-12",
+            category="hooks",
+            status=CheckStatus.ERROR,
+            message=f"Hook registry check failed: {exc}",
+            remediation="Check hooks configuration and definitions directory",
+        )
+
+
+async def check_scheduler(app_state: Any) -> DiagnosticCheck:
+    """DOC-13: Workflow scheduler status and job count."""
+    try:
+        scheduler = getattr(app_state, "workflow_scheduler", None)
+        if scheduler is None:
+            return DiagnosticCheck(
+                id="DOC-13",
+                category="scheduler",
+                status=CheckStatus.WARNING,
+                message="Workflow scheduler not initialized",
+                remediation="Scheduler is initialized during app lifespan startup",
+            )
+        jobs = scheduler.list_jobs()
+        running = scheduler._scheduler.running if hasattr(scheduler, "_scheduler") else False
+        if not running:
+            return DiagnosticCheck(
+                id="DOC-13",
+                category="scheduler",
+                status=CheckStatus.WARNING,
+                message=f"Scheduler exists but not running ({len(jobs)} job(s))",
+                remediation="The scheduler should be started during application startup",
+            )
+        return DiagnosticCheck(
+            id="DOC-13",
+            category="scheduler",
+            status=CheckStatus.OK,
+            message=f"Scheduler running with {len(jobs)} job(s)",
+        )
+    except Exception as exc:
+        logger.debug("DOC-13 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-13",
+            category="scheduler",
+            status=CheckStatus.ERROR,
+            message=f"Scheduler check failed: {exc}",
+            remediation="Check scheduler configuration",
+        )
+
+
+async def check_mcp(app_state: Any) -> DiagnosticCheck:
+    """DOC-14: MCP proxy reachability."""
+    try:
+        proxy_manager = getattr(app_state, "proxy_manager", None)
+        if proxy_manager is None:
+            return DiagnosticCheck(
+                id="DOC-14",
+                category="mcp",
+                status=CheckStatus.WARNING,
+                message="MCP proxy manager not initialized",
+                remediation="Set MCP_PROXY_ENABLED=true and provide MCP_PROXY_CONFIG_PATH",
+            )
+        settings = _settings_for_state(app_state)
+        if not settings.mcp_proxy_enabled:
+            return DiagnosticCheck(
+                id="DOC-14",
+                category="mcp",
+                status=CheckStatus.OK,
+                message="MCP proxy is disabled (not required)",
+            )
+        return DiagnosticCheck(
+            id="DOC-14",
+            category="mcp",
+            status=CheckStatus.OK,
+            message="MCP proxy manager is available",
+        )
+    except Exception as exc:
+        logger.debug("DOC-14 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-14",
+            category="mcp",
+            status=CheckStatus.ERROR,
+            message=f"MCP proxy check failed: {exc}",
+            remediation="Check MCP proxy configuration",
+        )
+
+
+async def check_voice(app_state: Any) -> DiagnosticCheck:
+    """DOC-15: Voice sidecar status."""
+    try:
+        settings = _settings_for_state(app_state)
+        if not settings.voice_daemon_enabled:
+            return DiagnosticCheck(
+                id="DOC-15",
+                category="voice",
+                status=CheckStatus.OK,
+                message="Voice daemon is disabled (not required)",
+            )
+        probe = getattr(app_state, "voice_sidecar_probe", None)
+        if probe is None:
+            if settings.voice_daemon_transport == "stub":
+                return DiagnosticCheck(
+                    id="DOC-15",
+                    category="voice",
+                    status=CheckStatus.OK,
+                    message="Voice daemon using stub transport",
+                )
+            return DiagnosticCheck(
+                id="DOC-15",
+                category="voice",
+                status=CheckStatus.WARNING,
+                message="Voice sidecar probe not initialized",
+                remediation="Set VOICE_SIDECAR_URL or VOICE_DAEMON_URL for sidecar transport",
+            )
+        snapshot = await probe.health_snapshot()
+        probe_status = str(snapshot.get("status", "unknown"))
+        if probe_status == "ok":
+            return DiagnosticCheck(
+                id="DOC-15",
+                category="voice",
+                status=CheckStatus.OK,
+                message="Voice sidecar is healthy",
+            )
+        return DiagnosticCheck(
+            id="DOC-15",
+            category="voice",
+            status=CheckStatus.WARNING,
+            message=f"Voice sidecar status: {probe_status}",
+            remediation="Check voice sidecar logs and connectivity",
+        )
+    except Exception as exc:
+        logger.debug("DOC-15 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-15",
+            category="voice",
+            status=CheckStatus.ERROR,
+            message=f"Voice check failed: {exc}",
+            remediation="Check voice daemon configuration and sidecar connectivity",
+        )
+
+
+async def check_backup(app_state: Any) -> DiagnosticCheck:
+    """DOC-16: Backup service availability."""
+    try:
+        backup_svc = getattr(app_state, "backup_service", None)
+        if backup_svc is None:
+            return DiagnosticCheck(
+                id="DOC-16",
+                category="backup",
+                status=CheckStatus.WARNING,
+                message="Backup service not initialized",
+                remediation="Set BACKUP_DIR to enable the backup service",
+            )
+        return DiagnosticCheck(
+            id="DOC-16",
+            category="backup",
+            status=CheckStatus.OK,
+            message="Backup service is available",
+        )
+    except Exception as exc:
+        logger.debug("DOC-16 failed: %s", exc)
+        return DiagnosticCheck(
+            id="DOC-16",
+            category="backup",
+            status=CheckStatus.ERROR,
+            message=f"Backup service check failed: {exc}",
+            remediation="Check backup configuration",
+        )
+
+
 ALL_CHECKS: list[tuple[str, DiagnosticCheckFn]] = [
     ("DOC-01", check_database),
     ("DOC-02", check_redis),
@@ -396,6 +622,12 @@ ALL_CHECKS: list[tuple[str, DiagnosticCheckFn]] = [
     ("DOC-08", check_packs),
     ("DOC-09", check_security),
     ("DOC-10", check_config),
+    ("DOC-11", check_sessions),
+    ("DOC-12", check_hooks),
+    ("DOC-13", check_scheduler),
+    ("DOC-14", check_mcp),
+    ("DOC-15", check_voice),
+    ("DOC-16", check_backup),
 ]
 
 

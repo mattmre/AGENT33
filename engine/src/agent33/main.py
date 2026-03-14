@@ -27,6 +27,7 @@ from agent33.api.routes import (
     comparative,
     component_security,
     context,
+    cron,
     dashboard,
     evaluations,
     explanations,
@@ -60,6 +61,9 @@ from agent33.api.routes import (
     workflow_templates,
     workflow_ws,
     workflows,
+)
+from agent33.api.routes import (
+    config as config_routes,
 )
 from agent33.api.routes import (
     discovery as discovery_routes,
@@ -965,6 +969,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.operator_service = operator_service
     logger.info("operator_service_initialized")
 
+    # --- Cron CRUD and job history (Track 9) ---
+    from agent33.automation.cron_models import JobDefinition, JobHistoryStore
+
+    cron_job_store: dict[str, JobDefinition] = {}
+    job_history_store = JobHistoryStore()
+    app.state.cron_job_store = cron_job_store
+    app.state.job_history_store = job_history_store
+    logger.info("cron_job_store_initialized")
+
+    # --- Config apply service (Track 9) ---
+    from agent33.config_apply import ConfigApplyService
+
+    config_apply_service = ConfigApplyService(settings_cls=type(settings))
+    app.state.config_apply_service = config_apply_service
+    logger.info("config_apply_service_initialized")
+
+    # --- Onboarding service (Track 9) ---
+    from agent33.operator.onboarding import OnboardingService
+
+    onboarding_service = OnboardingService(app_state=app.state, settings=settings)
+    app.state.onboarding_service = onboarding_service
+    logger.info("onboarding_service_initialized")
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -1283,6 +1310,8 @@ app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(context.router)
 app.include_router(operator.router)
+app.include_router(cron.router)
+app.include_router(config_routes.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
 app.include_router(workflow_ws.router)
