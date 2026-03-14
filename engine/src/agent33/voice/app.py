@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException, WebSocket
 from pydantic import BaseModel, Field
 
 from agent33.voice.service import VoiceSidecarService
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 class StartVoiceSidecarSessionRequest(BaseModel):
@@ -30,7 +33,7 @@ def create_voice_sidecar_app(service: VoiceSidecarService | None = None) -> Fast
     )
 
     @asynccontextmanager
-    async def _lifespan(app: FastAPI):  # noqa: ARG001
+    async def _lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
         yield
         await resolved_service.shutdown()
 
