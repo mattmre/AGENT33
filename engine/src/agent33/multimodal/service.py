@@ -24,7 +24,7 @@ from agent33.multimodal.models import (
     VoiceSessionHealth,
     VoiceSessionState,
 )
-from agent33.multimodal.voice_daemon import LiveVoiceDaemon
+from agent33.multimodal.voice_daemon import VOICE_LIVEKIT_DEFERRED_MESSAGE, LiveVoiceDaemon
 
 logger = logging.getLogger(__name__)
 
@@ -399,12 +399,8 @@ class MultimodalService:
             raise PolicyViolationError(f"voice sessions are disabled for tenant '{tenant_id}'")
         if policy.max_voice_concurrent_sessions <= 0:
             raise PolicyViolationError("voice sessions are disabled by tenant concurrency policy")
-        if self._voice_transport == "livekit" and (
-            not self._voice_url or not self._voice_api_key or not self._voice_api_secret
-        ):
-            raise VoiceRuntimeUnavailableError(
-                "livekit transport is configured without complete runtime credentials"
-            )
+        if self._voice_transport == "livekit":
+            raise VoiceRuntimeUnavailableError(VOICE_LIVEKIT_DEFERRED_MESSAGE)
 
     def _require_voice_session(
         self,

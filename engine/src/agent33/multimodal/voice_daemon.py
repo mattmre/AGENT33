@@ -4,8 +4,8 @@ This daemon connects to a LiveKit room to facilitate ultra-low-latency,
 interruptible voice conversations natively inside the browser, serving as the
 agent's ears and mouth for multimodal humanistic interaction.
 
-Phase 35 status: scaffold with full lifecycle interface.  The actual LiveKit
-SDK wiring is deferred until the dependency is added to the project.
+Phase 35 status: scaffold with full lifecycle interface. Direct LiveKit SDK
+wiring is intentionally deferred in favor of the Phase 48 sidecar.
 """
 
 from __future__ import annotations
@@ -15,6 +15,11 @@ from datetime import UTC, datetime
 import structlog
 
 logger = structlog.get_logger()
+
+VOICE_LIVEKIT_DEFERRED_MESSAGE = (
+    "livekit transport is deferred to the Phase 48 voice sidecar; "
+    "use the stub transport in the current runtime"
+)
 
 
 class LiveVoiceDaemon:
@@ -70,11 +75,7 @@ class LiveVoiceDaemon:
             logger.debug("voice_daemon.start_skipped", room=self._room_name)
             return
         if self._transport == "livekit":
-            raise RuntimeError(
-                "LiveKit transport requires the livekit-agents runtime, which is not yet "
-                "installed in this repository. Use the default stub transport until the "
-                "dependency lands."
-            )
+            raise RuntimeError(VOICE_LIVEKIT_DEFERRED_MESSAGE)
         if self._transport != "stub":
             raise ValueError(f"Unsupported voice daemon transport: {self._transport}")
         self._active = True
