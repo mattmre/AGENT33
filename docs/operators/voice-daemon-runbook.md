@@ -7,7 +7,7 @@ Operate the Phase 35 live voice control plane safely until full LiveKit media tr
 ## Current Runtime Modes
 
 - `stub`: session lifecycle works end to end for UI, policy, auth, and shutdown handling
-- `livekit`: intentionally blocked unless the runtime dependency is installed and configured
+- `livekit`: intentionally rejected in the current runtime and reserved for the Phase 48 sidecar
 
 ## Required Engine Settings
 
@@ -114,28 +114,27 @@ Resolution:
 
 - enable the runtime or leave the voice tab disabled for the environment
 
-### `503 livekit transport is configured without complete runtime credentials`
+### `503 livekit transport is deferred to the Phase 48 voice sidecar; use the stub transport in the current runtime`
 
 Cause:
 
-- `VOICE_DAEMON_TRANSPORT=livekit` without `VOICE_DAEMON_URL`, `VOICE_DAEMON_API_KEY`,
-  or `VOICE_DAEMON_API_SECRET`
+- `VOICE_DAEMON_TRANSPORT=livekit` was selected in the current in-process control plane
 
 Resolution:
 
-- complete the runtime settings or switch back to `stub`
+- switch back to `stub` for the current runtime
+- keep LiveKit credentials only for the future sidecar deployment path
 
 ### `503 voice runtime could not start session`
 
 Cause:
 
 - the configured transport failed during daemon startup
-- `livekit` was selected before the runtime dependency wave was installed
 
 Resolution:
 
 - inspect engine logs for the specific startup failure
-- switch back to `stub` until the LiveKit runtime lands
+- switch back to `stub` until the failing transport or daemon factory is fixed
 
 ### `400 voice session limit exceeded`
 

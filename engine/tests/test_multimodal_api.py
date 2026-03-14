@@ -538,6 +538,27 @@ def test_voice_session_route_returns_503_when_runtime_disabled(writer_client: Te
     assert "disabled" in response.json()["detail"]
 
 
+def test_voice_session_route_rejects_direct_livekit_transport(writer_client: TestClient) -> None:
+    _service.configure_voice_runtime(
+        enabled=True,
+        transport="livekit",
+        url="wss://livekit.example.com",
+        api_key="livekit-key",
+        api_secret="livekit-secret",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+    )
+
+    response = writer_client.post("/v1/multimodal/voice/sessions", json={})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "livekit transport is deferred to the Phase 48 voice sidecar; "
+        "use the stub transport in the current runtime"
+    )
+    assert _service._voice_sessions == {}
+
+
 def test_voice_session_route_redacts_runtime_start_errors(writer_client: TestClient) -> None:
     class _FailingVoiceDaemon:
         def __init__(self, **_: object) -> None:
