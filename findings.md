@@ -363,7 +363,10 @@
 - Full-suite CI on `#190` exposed two follow-up defects that the original focused validation did not cover:
   - `engine/tests/test_integration_wiring.py` still assumed the skill registry must be empty when `skill_definitions_dir` is absent, which is no longer true when shipped packs are discoverable from `pack_definitions_dir`
   - the new capability-pack workflow YAML files used `invoke_agent`, but the validated workflow action enum is `invoke-agent`
+- A second CI rerun exposed a packaging-specific follow-up defect:
+  - `hive-family` only surfaced as two loaded packs in CI because `engine/.gitignore` ignores `build/`, so the imported `skills/build/hive-create/` tree existed locally but was not tracked in git
 - The correct remediation is:
   - make the integration assertion conditional on whether pack discovery actually loaded bundled packs in the current runtime cwd
   - add a direct workflow-template regression so malformed Phase 47 templates fail in targeted tests instead of only during full app startup
+  - force-add the ignored `skills/build/hive-create/` subtree so the shipped pack contents match the manifest in clean CI checkouts
 - The slice is now in `ci_wait`; no later slice should start before PR `#190` is reviewed, merged, and verified from fresh `origin/main`.

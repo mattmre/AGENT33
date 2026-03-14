@@ -762,10 +762,15 @@
     - shipped packs discoverable -> imported pack skills must be present
   - corrected all five capability-pack workflow templates to use `action: invoke-agent`
   - added direct workflow-template coverage in `engine/tests/test_workflow_templates.py` for the new Phase 47 files
+- Second S11 CI regression and remediation:
+  - rerun CI still failed because `app.state.pack_registry.count` was `2` in the clean checkout
+  - root cause: `engine/.gitignore` ignores `build/`, so `engine/packs/hive-family/skills/build/hive-create/` existed locally but was not tracked in git
+  - fixed by force-adding the missing `hive-create` subtree to the PR branch
 - S11 post-CI local validation passed:
   - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m pytest engine/tests/test_integration_wiring.py engine/tests/test_workflow_templates.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py -q --no-cov`
   - `python -m ruff check engine/tests/test_integration_wiring.py engine/tests/test_workflow_templates.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
   - `python -m ruff format --check engine/tests/test_integration_wiring.py engine/tests/test_workflow_templates.py engine/tests/test_skills.py engine/tests/test_pack_loader.py engine/tests/test_pack_routes.py engine/tests/test_governance_prompt.py`
+  - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session84-s11-phase47\\engine\\src'; python -m pytest tests/test_pack_loader.py tests/test_integration_wiring.py tests/test_workflow_templates.py -q --no-cov` (run from `engine/` to mirror CI package-root discovery)
 - Current pointer advanced:
   - `S11` is now in `ci_wait`
   - `S11` next step is merge after green CI and any review fixes
