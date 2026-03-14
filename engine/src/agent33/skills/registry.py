@@ -42,13 +42,24 @@ class SkillRegistry:
             logger.warning("Skill directory not found: %s", path)
             return 0
 
+        return self._discover_path(path)
+
+    def _discover_path(self, path: Path) -> int:
+        """Recursively scan a directory tree for skill definitions."""
         loaded = 0
+        if self._directory_contains_skill_definition(path):
+            try:
+                skill = load_from_directory(path)
+                self.register(skill)
+                return 1
+            except Exception:
+                logger.warning("Failed to load skill from %s", path, exc_info=True)
+                return 0
+
         for entry in sorted(path.iterdir()):
             try:
                 if entry.is_dir():
-                    skill = load_from_directory(entry)
-                    self.register(skill)
-                    loaded += 1
+                    loaded += self._discover_path(entry)
                 elif entry.suffix in (".yaml", ".yml"):
                     skill = load_from_yaml(entry)
                     self.register(skill)
@@ -61,6 +72,13 @@ class SkillRegistry:
                 logger.warning("Failed to load skill from %s", entry, exc_info=True)
 
         return loaded
+
+    @staticmethod
+    def _directory_contains_skill_definition(path: Path) -> bool:
+        """Return True when the directory itself is a skill root."""
+        return any(
+            (path / candidate).is_file() for candidate in ("SKILL.md", "skill.yaml", "skill.yml")
+        )
 
     # ------------------------------------------------------------------
     # CRUD
@@ -114,6 +132,8 @@ class SkillRegistry:
             if (
                 query_lower in skill.name.lower()
                 or query_lower in skill.description.lower()
+                or query_lower in skill.category.lower()
+                or query_lower in skill.provenance.lower()
                 or any(query_lower in t.lower() for t in skill.tags)
             ):
                 results.append(skill)

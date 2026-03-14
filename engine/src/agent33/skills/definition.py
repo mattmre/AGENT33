@@ -111,6 +111,8 @@ class SkillDefinition(BaseModel):
 
     # Metadata
     tags: list[str] = Field(default_factory=list)
+    category: str = ""
+    provenance: str = ""
     author: str = ""
     status: SkillStatus = Field(default=SkillStatus.ACTIVE)
     dependencies: list[SkillDependency] = Field(default_factory=list)

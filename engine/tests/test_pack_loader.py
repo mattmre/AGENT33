@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import textwrap
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from agent33.packs.loader import (
     compute_pack_checksum,
@@ -199,6 +196,24 @@ class TestLoadPackSkills:
         assert len(skills) == 2
         assert len(errors) == 0
         assert {s.name for s in skills} == {"skill-a", "skill-b"}
+
+    def test_repo_phase47_imported_packs_load_successfully(self) -> None:
+        repo_packs_dir = Path(__file__).resolve().parents[1] / "packs"
+        expected_packs = {"hive-family", "platform-builder", "workflow-ops"}
+
+        discovered = {
+            pack_dir.name
+            for pack_dir in repo_packs_dir.iterdir()
+            if (pack_dir / "PACK.yaml").is_file()
+        }
+        assert expected_packs.issubset(discovered)
+
+        for pack_name in expected_packs:
+            pack_dir = repo_packs_dir / pack_name
+            manifest = load_pack_manifest(pack_dir)
+            skills, errors = load_pack_skills(pack_dir, manifest)
+            assert errors == []
+            assert len(skills) == len(manifest.skills)
 
 
 class TestValidatePackDirectory:

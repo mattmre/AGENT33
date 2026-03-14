@@ -19,6 +19,30 @@ _FRONTMATTER_RE = re.compile(
 )
 
 
+def _infer_skill_category(base_path: Path) -> str:
+    """Infer a hierarchical category from the skill's on-disk location."""
+    parts = list(base_path.parts)
+    lowered = [part.lower() for part in parts]
+    if "skills" not in lowered:
+        return ""
+
+    skills_index = lowered.index("skills")
+    category_parts = [
+        part
+        for part in parts[skills_index + 1 : -1]
+        if part not in {"", ".", "/", "\\"} and not part.endswith(":")
+    ]
+    return "/".join(category_parts)
+
+
+def _finalize_loaded_skill(skill: SkillDefinition, base_path: Path) -> SkillDefinition:
+    """Attach derived runtime metadata after parsing a skill file."""
+    updates: dict[str, Any] = {"base_path": base_path}
+    if not skill.category:
+        updates["category"] = _infer_skill_category(base_path)
+    return skill.model_copy(update=updates)
+
+
 def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     """Extract YAML frontmatter and markdown body from a SKILL.md file.
 
@@ -54,8 +78,8 @@ def load_from_skillmd(path: Path) -> SkillDefinition:
     content = path.read_text(encoding="utf-8")
     metadata, body = parse_frontmatter(content)
     metadata["instructions"] = body
-    metadata.setdefault("base_path", path.parent)
-    return SkillDefinition.model_validate(metadata)
+    skill = SkillDefinition.model_validate(metadata)
+    return _finalize_loaded_skill(skill, path.parent)
 
 
 def load_from_yaml(path: Path) -> SkillDefinition:
@@ -65,8 +89,8 @@ def load_from_yaml(path: Path) -> SkillDefinition:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"Skill YAML must be a mapping: {path}")
-    raw.setdefault("base_path", path.parent)
-    return SkillDefinition.model_validate(raw)
+    skill = SkillDefinition.model_validate(raw)
+    return _finalize_loaded_skill(skill, path.parent)
 
 
 def load_from_directory(path: Path) -> SkillDefinition:

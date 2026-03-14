@@ -17,6 +17,7 @@ from agent33.api.routes import workflow_templates, workflows
 from agent33.main import app
 from agent33.security import auth
 from agent33.security.auth import create_access_token
+from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.template_catalog import TemplateCatalog
 
 
@@ -90,6 +91,33 @@ execution:
 metadata:
   author: test{tag_block}
 """
+
+
+@pytest.mark.parametrize(
+    ("filename", "workflow_name", "expected_agent"),
+    [
+        ("docs-overhaul.workflow.yaml", "docs-overhaul", "researcher"),
+        ("implementation-session.workflow.yaml", "implementation-session", "orchestrator"),
+        ("pr-review-orchestration.workflow.yaml", "pr-review-orchestration", "qa"),
+        ("repo-ingestion.workflow.yaml", "repo-ingestion", "researcher"),
+        ("webapp-lifecycle-testing.workflow.yaml", "webapp-lifecycle-testing", "qa"),
+    ],
+)
+def test_phase47_capability_pack_templates_load(
+    filename: str,
+    workflow_name: str,
+    expected_agent: str,
+) -> None:
+    template_path = (
+        Path(__file__).resolve().parents[2] / "core" / "workflows" / "capability-packs" / filename
+    )
+
+    workflow = WorkflowDefinition.load_from_file(template_path)
+
+    assert workflow.name == workflow_name
+    assert len(workflow.steps) == 1
+    assert workflow.steps[0].action.value == "invoke-agent"
+    assert workflow.steps[0].agent == expected_agent
 
 
 # ---------------------------------------------------------------------------
