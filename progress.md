@@ -653,12 +653,13 @@
     - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-postmerge-verify\\engine\\src'; python -m pytest engine/tests/test_phase30_effort_routing.py -q --no-cov`
     - `python -m ruff check engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py engine/tests/test_phase30_effort_routing.py`
     - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session80-s10-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/agents/runtime.py engine/src/agent33/api/routes/agents.py engine/src/agent33/observability/effort_telemetry.py --config-file engine/pyproject.toml`
-  - queue advanced: `S10` complete, `S11` next in `research`
     - `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session79-s9-postmerge-verify\\engine\\src'; python -m mypy engine/src/agent33/execution/adapters/jupyter.py --config-file engine/pyproject.toml`
+  - queue advanced: `S10` complete, `S11` next in `research`
 - Current pointer advanced:
-  - `S9` complete
-  - `S10` next in `research`
-## 2026-03-13
+  - `S10` complete
+  - `S11` next in `research`
+
+### Session 83
 
 - Reviewed and remediated the two cleanup follow-up PRs sequentially with `pr-manager`:
   - `#187` docs/session/research cleanup sync

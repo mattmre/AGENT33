@@ -8,7 +8,7 @@ Execute the remaining roadmap work sequentially from the post-Session 70 merged 
 
 - There are no open GitHub PRs as of `2026-03-13`; `#186`, `#187`, and `#188` are merged, so the next `pr-manager` loop starts directly at fresh `S11` implementation work rather than PR remediation.
 - Phase 46 is fully closed in the sequential queue via PR `#177`; the remaining roadmap now begins at `S11` because `S10` was reconciled as already complete on `main`.
-- The root checkout is on updated `origin/main`; the only intentional local leftovers are the four `.claude` history worktrees plus two untracked interrupted-analysis artifacts (`temp_report.txt`, `temp_search_results.txt`) that should not be deleted without approval.
+- The root checkout is up to date with `origin/main`; the only intentional local leftovers are the four `.claude` history worktrees plus two untracked interrupted-analysis artifacts (`temp_report.txt`, `temp_search_results.txt`) that should not be deleted without approval.
 - Repo-only cleanup on `2026-03-13` removed the stale post-merge verify worktrees, merged implementation worktrees, and local review worktrees for `#187`/`#188`; only the intentional `.claude` prototype holdouts remain outside root.
 
 ## Resume Protocol
