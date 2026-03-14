@@ -25,6 +25,7 @@ from agent33.operator.models import (
     ResetTarget,
     RuntimeInfo,
     SessionListResponse,
+    SessionSummary,
     SubsystemInventory,
     SystemStatus,
     ToolSummaryItem,
@@ -518,11 +519,40 @@ class OperatorService:
     ) -> SessionListResponse:
         """Return a lightweight session catalog.
 
-        Reads from Redis session tracking if available. Returns empty list
-        with ``degraded=True`` if no session store is accessible.
+        Delegates to SessionCatalog when available (Track 8). Falls back to
+        degraded skeleton if neither the catalog nor Redis is accessible.
         """
-        # Sessions don't have a dedicated registry yet. Return empty with
-        # degraded flag so the frontend knows this is a skeleton.
+        session_catalog = getattr(self._app_state, "session_catalog", None)
+        if session_catalog is not None:
+            from agent33.sessions.models import OperatorSessionStatus
+
+            status_enum = OperatorSessionStatus(status_filter) if status_filter else None
+            catalog_resp = await session_catalog.list_catalog(
+                status=status_enum,
+                limit=limit,
+                offset=offset,
+            )
+            summaries: list[SessionSummary] = []
+            for entry in catalog_resp.entries:
+                summaries.append(
+                    SessionSummary(
+                        session_id=entry.session_id,
+                        type="operator",
+                        status=entry.status,
+                        agent=entry.agent_name,
+                        started_at=entry.started_at,
+                        last_activity=entry.ended_at,
+                        message_count=entry.event_count,
+                        tenant_id=entry.tenant_id,
+                    )
+                )
+            return SessionListResponse(
+                sessions=summaries,
+                count=len(summaries),
+                total=catalog_resp.total,
+                degraded=False,
+            )
+
         redis_conn = getattr(self._app_state, "redis", None)
         if redis_conn is None:
             return SessionListResponse(
@@ -532,9 +562,6 @@ class OperatorService:
                 degraded=True,
             )
 
-        # If Redis is available but we don't have a session tracking layer
-        # yet, return empty with degraded=False (infrastructure is present,
-        # session tracking to be built in Track Phase 8).
         return SessionListResponse(
             sessions=[],
             count=0,

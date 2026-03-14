@@ -301,6 +301,12 @@ class Settings(BaseSettings):
     operator_session_max_retained: int = 100
     operator_session_crash_recovery_enabled: bool = True
 
+    # Track 8: Context engine and session catalog
+    context_engine_default: str = "builtin"
+    context_compaction_enabled: bool = True
+    session_spawn_templates_dir: str = ""
+    session_archive_retention_days: int = 90
+
     # Phase 44: Script hooks
     script_hooks_enabled: bool = True
     script_hooks_project_dir: str = ""  # default: <cwd>/.claude/hooks/

@@ -25,12 +25,40 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _session_service: Any = None
+_session_catalog: Any = None
+_session_lineage_builder: Any = None
+_session_spawn_service: Any = None
+_session_archive_service: Any = None
 
 
 def set_session_service(service: Any) -> None:
     """Set the session service instance (called from lifespan)."""
     global _session_service  # noqa: PLW0603
     _session_service = service
+
+
+def set_session_catalog(catalog: Any) -> None:
+    """Set the session catalog instance (called from lifespan)."""
+    global _session_catalog  # noqa: PLW0603
+    _session_catalog = catalog
+
+
+def set_session_lineage_builder(builder: Any) -> None:
+    """Set the session lineage builder (called from lifespan)."""
+    global _session_lineage_builder  # noqa: PLW0603
+    _session_lineage_builder = builder
+
+
+def set_session_spawn_service(service: Any) -> None:
+    """Set the session spawn service (called from lifespan)."""
+    global _session_spawn_service  # noqa: PLW0603
+    _session_spawn_service = service
+
+
+def set_session_archive_service(service: Any) -> None:
+    """Set the session archive service (called from lifespan)."""
+    global _session_archive_service  # noqa: PLW0603
+    _session_archive_service = service
 
 
 def _get_session_service(request: Request) -> Any:
@@ -402,3 +430,150 @@ async def get_replay_summary(
     svc, _session = await _get_accessible_session(request, session_id)
     summary = await svc.get_replay_summary(session_id)
     return ReplaySummaryResponse(**summary)
+
+
+# ---------------------------------------------------------------------------
+# Track 8: Catalog, Lineage, Spawn, Archive endpoints
+# ---------------------------------------------------------------------------
+
+
+def _get_catalog(request: Request) -> Any:
+    """Extract session catalog from app state or module-level fallback."""
+    if hasattr(request.app.state, "session_catalog"):
+        cat = request.app.state.session_catalog
+    else:
+        cat = _session_catalog
+    if cat is None:
+        raise HTTPException(status_code=503, detail="Session catalog not initialized")
+    return cat
+
+
+def _get_lineage_builder(request: Request) -> Any:
+    """Extract lineage builder from app state or module-level fallback."""
+    if hasattr(request.app.state, "session_lineage_builder"):
+        builder = request.app.state.session_lineage_builder
+    else:
+        builder = _session_lineage_builder
+    if builder is None:
+        raise HTTPException(status_code=503, detail="Session lineage builder not initialized")
+    return builder
+
+
+def _get_spawn_service(request: Request) -> Any:
+    """Extract spawn service from app state or module-level fallback."""
+    if hasattr(request.app.state, "session_spawn_service"):
+        svc = request.app.state.session_spawn_service
+    else:
+        svc = _session_spawn_service
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Session spawn service not initialized")
+    return svc
+
+
+def _get_archive_service(request: Request) -> Any:
+    """Extract archive service from app state or module-level fallback."""
+    if hasattr(request.app.state, "session_archive_service"):
+        svc = request.app.state.session_archive_service
+    else:
+        svc = _session_archive_service
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Session archive service not initialized")
+    return svc
+
+
+class SpawnRequestBody(BaseModel):
+    """Body for POST /v1/sessions/spawn."""
+
+    parent_session_id: str
+    template_id: str = ""
+    agent_name: str = ""
+    purpose: str = ""
+    model_override: str = ""
+    effort_override: str = ""
+
+
+@router.get("/catalog", dependencies=[require_scope("sessions:read")])
+async def session_catalog(
+    request: Request,
+    status: str | None = Query(default=None, description="Filter by status"),
+    agent_name: str | None = Query(default=None, description="Filter by agent name"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """Return a paginated catalog of enriched session entries."""
+    catalog = _get_catalog(request)
+    status_enum = OperatorSessionStatus(status) if status else None
+    result = await catalog.list_catalog(
+        status=status_enum,
+        agent_name=agent_name,
+        tenant_id=_tenant_filter(request),
+        limit=limit,
+        offset=offset,
+    )
+    return dict(result.model_dump())
+
+
+@router.get(
+    "/{session_id}/lineage",
+    dependencies=[require_scope("sessions:read")],
+)
+async def session_lineage(session_id: str, request: Request) -> dict[str, Any]:
+    """Return the lineage tree rooted at or containing the given session."""
+    builder = _get_lineage_builder(request)
+    try:
+        tree = await builder.build_tree(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    return dict(tree.model_dump())
+
+
+@router.get("/spawn-templates", dependencies=[require_scope("sessions:read")])
+async def list_spawn_templates(request: Request) -> list[dict[str, Any]]:
+    """List available spawn templates."""
+    svc = _get_spawn_service(request)
+    templates = svc.list_templates()
+    return [t.model_dump() for t in templates]
+
+
+@router.post(
+    "/spawn",
+    status_code=201,
+    dependencies=[require_scope("sessions:write")],
+)
+async def spawn_session(body: SpawnRequestBody, request: Request) -> SessionResponse:
+    """Spawn a child session from a parent, optionally using a template."""
+    svc = _get_spawn_service(request)
+    from agent33.sessions.spawn import SpawnRequest
+
+    spawn_req = SpawnRequest(
+        parent_session_id=body.parent_session_id,
+        template_id=body.template_id,
+        agent_name=body.agent_name,
+        purpose=body.purpose,
+        model_override=body.model_override,
+        effort_override=body.effort_override,
+    )
+    try:
+        child = await svc.spawn(spawn_req, tenant_id=_tenant_id_for_create(request))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return _session_to_response(child)
+
+
+@router.post(
+    "/{session_id}/archive",
+    dependencies=[require_scope("sessions:write")],
+)
+async def archive_session(session_id: str, request: Request) -> SessionResponse:
+    """Archive a completed/crashed/suspended session."""
+    _svc, _session = await _get_accessible_session(request, session_id)
+    archive_svc = _get_archive_service(request)
+    try:
+        session = await archive_svc.archive(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return _session_to_response(session)

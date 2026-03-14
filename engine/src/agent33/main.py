@@ -26,6 +26,7 @@ from agent33.api.routes import (
     chat,
     comparative,
     component_security,
+    context,
     dashboard,
     evaluations,
     explanations,
@@ -598,6 +599,47 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.warning("crash_detection_failed", exc_info=True)
 
         logger.info("operator_session_service_initialized", base_dir=str(base_dir))
+
+    # -- Track 8: Session catalog, lineage, spawn, archive -----------------
+    if operator_session_service is not None:
+        from agent33.sessions.archive import SessionArchiveService
+        from agent33.sessions.catalog import SessionCatalog
+        from agent33.sessions.lineage import SessionLineageBuilder
+        from agent33.sessions.spawn import SessionSpawnService
+
+        session_catalog = SessionCatalog(operator_session_service)
+        app.state.session_catalog = session_catalog
+        sessions.set_session_catalog(session_catalog)
+
+        session_lineage_builder = SessionLineageBuilder(operator_session_service)
+        app.state.session_lineage_builder = session_lineage_builder
+        sessions.set_session_lineage_builder(session_lineage_builder)
+
+        session_spawn_service = SessionSpawnService(
+            session_service=operator_session_service,
+            templates_dir=settings.session_spawn_templates_dir,
+        )
+        app.state.session_spawn_service = session_spawn_service
+        sessions.set_session_spawn_service(session_spawn_service)
+
+        session_archive_service = SessionArchiveService(operator_session_service)
+        app.state.session_archive_service = session_archive_service
+        sessions.set_session_archive_service(session_archive_service)
+
+        logger.info("track8_session_services_initialized")
+
+    # -- Track 8: Context engine registry -----------------------------------
+    from agent33.context.registry import ContextEngineRegistry
+
+    context_engine_registry = ContextEngineRegistry(
+        default_engine=settings.context_engine_default,
+    )
+    app.state.context_engine_registry = context_engine_registry
+    context.set_context_engine_registry(context_engine_registry)
+    logger.info(
+        "context_engine_registry_initialized",
+        default_engine=settings.context_engine_default,
+    )
 
     # -- Web research service (Track 7) ------------------------------------
     from agent33.web_research.service import create_default_web_research_service
@@ -1239,6 +1281,7 @@ app.include_router(tool_mutations.router)
 app.include_router(processes.router)
 app.include_router(backups.router)
 app.include_router(sessions.router)
+app.include_router(context.router)
 app.include_router(operator.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
