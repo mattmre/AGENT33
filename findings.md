@@ -280,6 +280,13 @@
   - `engine/tests/test_phase30_effort_routing.py` already covers the relevant paths and passes from a fresh worktree
 - `S10` should be treated as a status-reconciliation slice, not a new backend implementation branch; the next real implementation target is `S11 / Phase 47`.
 - The `S10` closeout was still worth a docs/status PR because the tracked handoff files on `main` were materially stale even though the backend code was correct.
+- PR review/merge follow-up on `#187` and `#188` is complete:
+  - `#187` required handoff-doc fixes plus a one-commit history rewrite because GitGuardian kept failing on the original PR commit even after the manifest content was cleaned up
+  - `#188` required replacing brittle exact call-count assertions and timer-based stream waits with deterministic reader/DOM-state synchronization
+- After merging `#187` and `#188`, the local repo returned to the intended low-clutter state:
+  - only `main` plus four `.claude` history branches remain locally
+  - only root plus the four `.claude` history worktrees remain
+  - `temp_report.txt` and `temp_search_results.txt` are intentional interrupted-analysis leftovers from another CLI and should remain untouched unless explicitly approved for deletion
 - PR comment posting is not available to the current GitHub token in this environment (`AddComment` permission denied), so self-review results must be captured in the session/progress docs unless permissions change.
 - `S8` validation is green locally:
   - backend workflow-live regression suite passed
