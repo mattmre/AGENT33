@@ -131,6 +131,24 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
     else:
         checks["status_line"] = "unconfigured"
 
+    # Connector fleet (MCP proxy + boundary connectors)
+    proxy_manager = getattr(app_state, "proxy_manager", None)
+    if proxy_manager is not None:
+        fleet = proxy_manager.health_summary()
+        fleet_total = fleet.get("total", 0)
+        fleet_healthy = fleet.get("healthy", 0)
+        fleet_degraded = fleet.get("degraded", 0)
+        if fleet_total == 0:
+            checks["connectors"] = "idle"
+        elif fleet_healthy == fleet_total:
+            checks["connectors"] = "ok"
+        elif fleet_degraded > 0 or fleet_healthy > 0:
+            checks["connectors"] = "degraded"
+        else:
+            checks["connectors"] = "unavailable"
+    else:
+        checks["connectors"] = "unconfigured"
+
     all_ok = all(v == "ok" for v in checks.values())
     health_result: dict[str, Any] = {
         "status": "healthy" if all_ok else "degraded",
