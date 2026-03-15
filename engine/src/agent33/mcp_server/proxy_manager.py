@@ -194,6 +194,129 @@ class ProxyManager:
         return await handle.call_tool(unprefixed_name, arguments)
 
     # ------------------------------------------------------------------
+    # Fleet restart
+    # ------------------------------------------------------------------
+
+    async def restart_all(self) -> dict[str, Any]:
+        """Restart every enabled server.  Returns per-server results."""
+        restarted: list[str] = []
+        failed: list[dict[str, str]] = []
+
+        for server_id, handle in list(self._children.items()):
+            if not handle.config.enabled:
+                continue
+            try:
+                await handle.stop()
+                await handle.start()
+                restarted.append(server_id)
+            except Exception as exc:
+                failed.append({"id": server_id, "error": str(exc)})
+
+        return {
+            "restarted": restarted,
+            "failed": failed,
+            "total": len(restarted) + len(failed),
+            "success_count": len(restarted),
+            "failure_count": len(failed),
+        }
+
+    # ------------------------------------------------------------------
+    # Hot-reload: config diffing and application
+    # ------------------------------------------------------------------
+
+    def _server_config_changed(self, old: ProxyServerConfig, new: ProxyServerConfig) -> bool:
+        """Return True if the config for a server has materially changed."""
+        return old.model_dump(exclude={"id"}) != new.model_dump(exclude={"id"})
+
+    def diff_config(self, new_config: ProxyFleetConfig) -> dict[str, list[str]]:
+        """Compute a diff between the current fleet and *new_config*.
+
+        Returns ``{"to_add": [...], "to_remove": [...], "to_restart": [...],
+        "unchanged": [...]}``.  Pure computation -- no side effects.
+        """
+        current_ids = set(self._children.keys())
+        new_by_id = {s.id: s for s in new_config.proxy_servers}
+        new_ids = set(new_by_id.keys())
+
+        to_add = sorted(new_ids - current_ids)
+        to_remove = sorted(current_ids - new_ids)
+        to_restart: list[str] = []
+        unchanged: list[str] = []
+
+        for sid in sorted(current_ids & new_ids):
+            old_cfg = self._children[sid].config
+            new_cfg = new_by_id[sid]
+            if self._server_config_changed(old_cfg, new_cfg):
+                to_restart.append(sid)
+            else:
+                unchanged.append(sid)
+
+        return {
+            "to_add": to_add,
+            "to_remove": to_remove,
+            "to_restart": to_restart,
+            "unchanged": unchanged,
+        }
+
+    async def reload_config(self, new_config: ProxyFleetConfig) -> dict[str, Any]:
+        """Apply *new_config* to the running fleet.
+
+        - Adds servers that are new in the config.
+        - Removes servers no longer present.
+        - Restarts servers whose config has changed.
+        - Leaves unchanged servers untouched.
+
+        Returns a structured result dict.
+        """
+        diff = self.diff_config(new_config)
+        new_by_id = {s.id: s for s in new_config.proxy_servers}
+        errors: list[dict[str, str]] = []
+
+        # 1. Add new servers
+        added: list[str] = []
+        for sid in diff["to_add"]:
+            try:
+                await self.add_server(new_by_id[sid])
+                added.append(sid)
+            except Exception as exc:
+                errors.append({"id": sid, "operation": "add", "error": str(exc)})
+
+        # 2. Restart changed servers (stop old, replace config, start new)
+        restarted: list[str] = []
+        for sid in diff["to_restart"]:
+            try:
+                handle = self._children[sid]
+                await handle.stop()
+                # Replace with new handle using updated config
+                new_handle = ChildServerHandle(config=new_by_id[sid])
+                self._children[sid] = new_handle
+                if new_by_id[sid].enabled:
+                    await new_handle.start()
+                restarted.append(sid)
+            except Exception as exc:
+                errors.append({"id": sid, "operation": "restart", "error": str(exc)})
+
+        # 3. Remove old servers
+        removed: list[str] = []
+        for sid in diff["to_remove"]:
+            try:
+                await self.remove_server(sid)
+                removed.append(sid)
+            except Exception as exc:
+                errors.append({"id": sid, "operation": "remove", "error": str(exc)})
+
+        # Update internal config reference
+        self._config = new_config
+
+        return {
+            "added": added,
+            "restarted": restarted,
+            "removed": removed,
+            "unchanged": diff["unchanged"],
+            "errors": errors,
+        }
+
+    # ------------------------------------------------------------------
     # Health summary
     # ------------------------------------------------------------------
 
