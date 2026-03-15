@@ -729,6 +729,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await proxy_manager.start_all()
     app.state.proxy_manager = proxy_manager
     mcp_proxy.set_proxy_manager(proxy_manager)
+    mcp_proxy.set_config_path(settings.mcp_proxy_config_path)
 
     mcp_bridge = MCPServiceBridge(
         agent_registry=agent_registry,
