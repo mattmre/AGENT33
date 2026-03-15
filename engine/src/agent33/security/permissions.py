@@ -39,6 +39,8 @@ SCOPES: set[str] = {
     "cron:write",
     "processes:read",
     "processes:manage",
+    "provenance:read",
+    "provenance:export",
 }
 
 

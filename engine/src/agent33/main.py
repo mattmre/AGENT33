@@ -45,6 +45,7 @@ from agent33.api.routes import (
     outcomes,
     packs,
     processes,
+    provenance,
     reasoning,
     releases,
     research,
@@ -1067,6 +1068,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     proxy_manager.set_native_tool_names({tool.name for tool in tool_registry.list_all()})
     logger.info("discovery_service_initialized")
 
+    # -- Provenance & runtime version -----------------------------------------
+    from agent33.provenance.collector import ProvenanceCollector as _ProvenanceCollector
+    from agent33.provenance.timeline import AuditTimelineService as _AuditTimelineService
+    from agent33.provenance.audit_export import AuditExporter as _AuditExporter
+    from agent33.runtime.version import resolve_version as _resolve_version
+
+    _provenance_collector = _ProvenanceCollector(
+        max_receipts=settings.provenance_max_receipts,
+    )
+    _audit_timeline_service = _AuditTimelineService(_provenance_collector)
+    _audit_exporter = _AuditExporter(_provenance_collector)
+    app.state.provenance_collector = _provenance_collector
+    app.state.audit_timeline_service = _audit_timeline_service
+    app.state.audit_exporter = _audit_exporter
+
+    _runtime_version_info = _resolve_version()
+    app.state.runtime_version_info = _runtime_version_info
+    logger.info(
+        "provenance_and_runtime_initialized",
+        version=_runtime_version_info.version,
+        git_hash=_runtime_version_info.git_short_hash,
+    )
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
@@ -1316,3 +1340,4 @@ app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
 app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
+app.include_router(provenance.router)
