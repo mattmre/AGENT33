@@ -244,6 +244,12 @@ class Settings(BaseSettings):
     agent_tool_loop_max_retries: int = 3
     agent_tool_loop_backoff_base_ms: float = 100
 
+    # Skill match calibration (S29)
+    skill_match_fuzzy_threshold: float = 0.7
+    skill_match_semantic_threshold: float = 0.5
+    skill_match_contextual_threshold: float = 0.4
+    skill_match_max_candidates: int = 10
+
     # Hook framework
     hooks_enabled: bool = True
     hooks_definitions_dir: str = "hook-definitions"
