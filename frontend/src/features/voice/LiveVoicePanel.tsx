@@ -197,6 +197,7 @@ export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX
         <button
           onClick={() => void (isActive ? stopSession() : startSession())}
           disabled={!token || isBusy || isHydrating}
+          aria-label={isBusy ? "Working on voice session" : isActive ? "Disconnect voice session" : "Connect microphone for voice session"}
           style={{
             background: isActive ? "#ff6b6b" : "linear-gradient(120deg, #1d3746, #36586a 40%, #5d6a3a 100%)",
             color: "#fff",
@@ -216,10 +217,10 @@ export function LiveVoicePanel({ token, onOpenSetup }: LiveVoicePanelProps): JSX
         ) : null}
 
         {isActive ? (
-          <div className="audio-visualizer" style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "24px" }}>
-            <span className="bar" style={{ width: "4px", height: "12px", background: "#8be9a8", display: "inline-block" }}></span>
-            <span className="bar" style={{ width: "4px", height: "20px", background: "#8be9a8", display: "inline-block", animation: "pulse 1s infinite alternate" }}></span>
-            <span className="bar" style={{ width: "4px", height: "8px", background: "#8be9a8", display: "inline-block" }}></span>
+          <div className="audio-visualizer" role="status" aria-label="Listening for voice input" style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "24px" }}>
+            <span className="bar" aria-hidden="true" style={{ width: "4px", height: "12px", background: "#8be9a8", display: "inline-block" }}></span>
+            <span className="bar" aria-hidden="true" style={{ width: "4px", height: "20px", background: "#8be9a8", display: "inline-block", animation: "pulse 1s infinite alternate" }}></span>
+            <span className="bar" aria-hidden="true" style={{ width: "4px", height: "8px", background: "#8be9a8", display: "inline-block" }}></span>
             <span style={{ fontSize: "0.8rem", color: "#8be9a8", marginLeft: "8px" }}>Listening...</span>
           </div>
         ) : null}

@@ -110,7 +110,7 @@ describe("GlobalSearch", () => {
       expect(screen.getByText("No results found.")).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole("button", { name: "✕" }))
+    await user.click(screen.getByRole("button", { name: "Close search results" }))
 
     expect(screen.queryByText("No results found.")).not.toBeInTheDocument()
   })

@@ -106,6 +106,7 @@ export function CitationCard({
           }}
         >
           <span
+            aria-hidden="true"
             style={{
               display: "inline-block",
               width: "8px",
@@ -134,6 +135,7 @@ export function CitationCard({
           className="citation-expand-toggle"
           data-testid="expand-toggle"
           onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
           style={{
             background: "none",
             border: "none",

@@ -34,7 +34,7 @@ function TrendSparkline({ values }: { values: number[] }): JSX.Element {
     return <span className="trend-empty">Not enough samples</span>;
   }
   return (
-    <svg className="trend-sparkline" viewBox="0 0 100 32" preserveAspectRatio="none">
+    <svg className="trend-sparkline" viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label={`Trend sparkline with ${values.length} data points`}>
       <polyline points={sparklinePoints(values, 100, 28)} fill="none" stroke="currentColor" />
     </svg>
   );
@@ -180,7 +180,7 @@ export function OutcomesDashboardPanel({
         </div>
       </header>
 
-      {error ? <p className="outcomes-error">{error}</p> : null}
+      {error ? <p className="outcomes-error" role="alert">{error}</p> : null}
 
       {dashboard ? (
         <div className="outcomes-summary">
@@ -249,6 +249,15 @@ export function OutcomesDashboardPanel({
             onClick={() => {
               void refreshTrend(trend.metric_type);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                void refreshTrend(trend.metric_type);
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-pressed={selectedTrend?.metric_type === trend.metric_type}
           >
             <header>
               <h3>{metricLabel(trend.metric_type)}</h3>

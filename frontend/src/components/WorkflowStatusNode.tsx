@@ -81,6 +81,8 @@ function WorkflowStatusNodeRaw({ data }: NodeProps<WorkflowStatusNodeData>): JSX
     <div
       className={isRunning ? "wf-node-running" : undefined}
       style={{ ...nodeBaseStyle, ...borderStyle }}
+      role="group"
+      aria-label={`${data.label}: ${statusLabel(data.status)}`}
     >
       <Handle type="target" position={Position.Top} style={{ background: color }} />
 
@@ -92,6 +94,7 @@ function WorkflowStatusNodeRaw({ data }: NodeProps<WorkflowStatusNodeData>): JSX
           color,
           background: `${color}18`
         }}
+        role="status"
       >
         {statusLabel(data.status)}
       </span>

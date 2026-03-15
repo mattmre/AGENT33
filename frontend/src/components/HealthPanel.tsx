@@ -46,23 +46,23 @@ export function HealthPanel(): JSX.Element {
     switch (s) {
       case "ok":
       case "healthy":
-        return <span className="rh-icon connected" title="Connected and Working">🟢</span>;
+        return <span className="rh-icon connected" role="img" aria-label="Connected and working"><span aria-hidden="true">🟢</span></span>;
       case "degraded":
       case "unavailable":
       case "error":
-        return <span className="rh-icon error" title="Not working">🔴</span>;
+        return <span className="rh-icon error" role="img" aria-label="Not working"><span aria-hidden="true">🔴</span></span>;
       case "configured":
-        return <span className="rh-icon pending" title="Setup and not connected">🟡</span>;
+        return <span className="rh-icon pending" role="img" aria-label="Set up and not connected"><span aria-hidden="true">🟡</span></span>;
       case "unconfigured":
       default:
-        return <span className="rh-icon inactive" title="Not setup">⚪</span>;
+        return <span className="rh-icon inactive" role="img" aria-label="Not set up"><span aria-hidden="true">⚪</span></span>;
     }
   }
 
   return (
     <section className="health-panel">
       <h2>Runtime Health</h2>
-      {error ? <pre className="error-box">{error}</pre> : null}
+      {error ? <pre className="error-box" role="alert">{error}</pre> : null}
       {health ? (
         <div className="runtime-health-grid">
           <div className="runtime-health-card">

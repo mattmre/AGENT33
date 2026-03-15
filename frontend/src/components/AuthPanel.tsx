@@ -87,7 +87,7 @@ export function AuthPanel({
           placeholder="a33_xxx..."
         />
       </label>
-      {error ? <pre className="error-box">{error}</pre> : null}
+      {error ? <pre className="error-box" role="alert">{error}</pre> : null}
     </section>
   );
 }
