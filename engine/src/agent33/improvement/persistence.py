@@ -12,7 +12,11 @@ from typing import Protocol
 import structlog
 from pydantic import BaseModel, Field, ValidationError
 
-from agent33.improvement.models import LearningSignal, ResearchIntake  # noqa: TC001
+from agent33.improvement.models import (  # noqa: TC001
+    LearningSignal,
+    MetricsSnapshot,
+    ResearchIntake,
+)
 
 logger = structlog.get_logger()
 
@@ -26,6 +30,7 @@ class LearningPersistenceState(BaseModel):
     signals: list[LearningSignal] = Field(default_factory=list)
     generated_intakes: list[ResearchIntake] = Field(default_factory=list)
     signal_intake_map: dict[str, str] = Field(default_factory=dict)
+    metrics_snapshots: list[MetricsSnapshot] = Field(default_factory=list)
 
 
 class LearningStateBackupEnvelope(BaseModel):

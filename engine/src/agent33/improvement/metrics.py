@@ -16,6 +16,23 @@ from agent33.improvement.models import (
 
 logger = logging.getLogger(__name__)
 
+
+def percentile(values: list[float], p: float) -> float:
+    """Compute the p-th percentile of a sorted list of values.
+
+    ``p`` is in the range [0, 1].  Returns 0.0 for empty inputs.
+    """
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    if p <= 0:
+        return sorted_values[0]
+    if p >= 1:
+        return sorted_values[-1]
+    index = int(round((len(sorted_values) - 1) * p))
+    return sorted_values[index]
+
+
 # ---------------------------------------------------------------------------
 # Canonical metric definitions
 # ---------------------------------------------------------------------------

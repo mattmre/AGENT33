@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from agent33.api.routes.tenant_access import require_tenant_context
 from agent33.config import settings
+from agent33.improvement.analytics import AnalyticsService
 from agent33.improvement.models import (
     ChecklistPeriod,
     ImprovementMetric,
@@ -97,6 +98,7 @@ def _build_improvement_service() -> ImprovementService:
             max_generated_intakes=settings.improvement_learning_max_generated_intakes,
             auto_intake_min_quality=settings.improvement_learning_auto_intake_min_quality,
         ),
+        max_metrics_snapshots=settings.improvement_learning_max_metrics_snapshots,
     )
 
 
@@ -108,10 +110,22 @@ def get_improvement_service() -> ImprovementService:
     return _service
 
 
+_analytics: AnalyticsService | None = None
+
+
+def get_analytics_service() -> AnalyticsService:
+    """Return (lazily created) analytics service singleton."""
+    global _analytics  # noqa: PLW0603
+    if _analytics is None:
+        _analytics = AnalyticsService(get_improvement_service())
+    return _analytics
+
+
 def _reset_service() -> None:
     """Reset singleton for testing."""
-    global _service  # noqa: PLW0603
+    global _service, _analytics  # noqa: PLW0603
     _service = _build_improvement_service()
+    _analytics = None
 
 
 # ---------------------------------------------------------------------------
@@ -830,3 +844,99 @@ def restore_learning_state_endpoint(req: RestoreLearningStateRequest) -> dict[st
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+# ---------------------------------------------------------------------------
+# Analytics Dashboard endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/analytics/dashboard")
+def analytics_dashboard(
+    request: Request,
+    tenant_id: str | None = None,
+    periods: int = 8,
+    bucket_size: float = Query(default=0.1, ge=0.01, le=0.5),
+) -> dict[str, Any]:
+    """Return the composite analytics dashboard summary."""
+    _ensure_learning_enabled()
+    resolved = _resolve_tenant_id(request, tenant_id)
+    svc = get_analytics_service()
+    return svc.dashboard_summary(
+        tenant_id=resolved, periods=periods, bucket_size=bucket_size
+    ).model_dump(mode="json")
+
+
+@router.get("/analytics/intake-funnel")
+def analytics_intake_funnel(
+    request: Request,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Return intake funnel breakdown."""
+    resolved = _resolve_tenant_id(request, tenant_id)
+    svc = get_analytics_service()
+    return svc.intake_funnel(tenant_id=resolved).model_dump(mode="json")
+
+
+@router.get("/analytics/lesson-actions")
+def analytics_lesson_actions() -> dict[str, Any]:
+    """Return lesson action completion report."""
+    svc = get_analytics_service()
+    return svc.lesson_action_completion().model_dump(mode="json")
+
+
+@router.get("/analytics/checklist-completion")
+def analytics_checklist_completion(
+    period: str | None = None,
+) -> dict[str, Any]:
+    """Return checklist completion report."""
+    svc = get_analytics_service()
+    try:
+        return svc.checklist_completion(period=period).model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.get("/analytics/signal-intake-conversion")
+def analytics_signal_intake_conversion(
+    request: Request,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Return signal-to-intake conversion report."""
+    _ensure_learning_enabled()
+    resolved = _resolve_tenant_id(request, tenant_id)
+    svc = get_analytics_service()
+    return svc.signal_to_intake_conversion(tenant_id=resolved).model_dump(mode="json")
+
+
+@router.get("/analytics/quality-distribution")
+def analytics_quality_distribution(
+    request: Request,
+    tenant_id: str | None = None,
+    bucket_size: float = Query(default=0.1, ge=0.01, le=0.5),
+) -> dict[str, Any]:
+    """Return quality score distribution histogram."""
+    _ensure_learning_enabled()
+    resolved = _resolve_tenant_id(request, tenant_id)
+    svc = get_analytics_service()
+    return svc.quality_distribution(tenant_id=resolved, bucket_size=bucket_size).model_dump(
+        mode="json"
+    )
+
+
+@router.get("/analytics/metrics-timeseries")
+def analytics_metrics_timeseries(
+    metric_id: str | None = None,
+    periods: int = 8,
+) -> list[dict[str, Any]]:
+    """Return metrics time series data."""
+    svc = get_analytics_service()
+    series = svc.metrics_time_series(metric_id=metric_id, periods=periods)
+    return [s.model_dump(mode="json") for s in series]
+
+
+@router.get("/analytics/refresh-cadence")
+def analytics_refresh_cadence() -> dict[str, Any]:
+    """Return roadmap refresh cadence report."""
+    svc = get_analytics_service()
+    return svc.refresh_cadence().model_dump(mode="json")

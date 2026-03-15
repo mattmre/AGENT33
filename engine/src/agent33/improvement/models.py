@@ -419,3 +419,128 @@ class RoadmapRefresh(BaseModel):
     activities: list[str] = Field(default_factory=list)
     outcome: str = ""
     changes_made: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Analytics Dashboard models
+# ---------------------------------------------------------------------------
+
+
+class IntakeFunnelStep(BaseModel):
+    """A single step in the intake funnel."""
+
+    step: str
+    count: int
+    conversion_rate: float
+
+
+class IntakeFunnelReport(BaseModel):
+    """Intake funnel breakdown showing counts and conversion rates at each stage."""
+
+    tenant_id: str | None = None
+    total_submitted: int
+    steps: list[IntakeFunnelStep] = Field(default_factory=list)
+    terminal_counts: dict[str, int] = Field(default_factory=dict)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class LessonActionCompletionReport(BaseModel):
+    """Aggregate lesson-action completion metrics."""
+
+    total_lessons: int
+    total_actions: int
+    completed_actions: int
+    pending_actions: int
+    in_progress_actions: int
+    wont_fix_actions: int
+    completion_rate: float
+    by_event_type: dict[str, dict[str, int]] = Field(default_factory=dict)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ChecklistCompletionReport(BaseModel):
+    """Aggregate checklist item completion metrics."""
+
+    period: str | None = None
+    total_checklists: int
+    total_items: int
+    completed_items: int
+    completion_rate: float
+    by_period: dict[str, dict[str, int]] = Field(default_factory=dict)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SignalToIntakeReport(BaseModel):
+    """Signal-to-intake conversion metrics."""
+
+    total_signals: int
+    signals_with_intake: int
+    conversion_rate: float
+    by_signal_type: dict[str, dict[str, int]] = Field(default_factory=dict)
+    by_severity: dict[str, dict[str, int]] = Field(default_factory=dict)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class QualityBucket(BaseModel):
+    """A single histogram bucket for quality score distribution."""
+
+    range_start: float
+    range_end: float
+    count: int
+
+
+class QualityDistribution(BaseModel):
+    """Histogram and statistics for quality score distribution."""
+
+    bucket_size: float
+    buckets: list[QualityBucket] = Field(default_factory=list)
+    total_signals: int
+    mean: float
+    median: float
+    p75: float
+    p90: float
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class MetricsTimeSeriesPoint(BaseModel):
+    """A single data point in a metrics time series."""
+
+    captured_at: datetime
+    period: str
+    value: float
+
+
+class MetricsTimeSeries(BaseModel):
+    """Chart-ready time series for one improvement metric."""
+
+    metric_id: str
+    metric_name: str
+    unit: str
+    points: list[MetricsTimeSeriesPoint] = Field(default_factory=list)
+    trend: str
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class RefreshCadenceReport(BaseModel):
+    """Roadmap refresh cadence analytics."""
+
+    total_refreshes: int
+    completed_refreshes: int
+    by_scope: dict[str, int] = Field(default_factory=dict)
+    average_days_between: float | None = None
+    last_refresh_at: datetime | None = None
+    days_since_last_refresh: float | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DashboardSummary(BaseModel):
+    """Composite analytics dashboard summary."""
+
+    intake_funnel: IntakeFunnelReport
+    lesson_actions: LessonActionCompletionReport
+    checklist_completion: ChecklistCompletionReport
+    signal_to_intake: SignalToIntakeReport
+    quality_distribution: QualityDistribution
+    refresh_cadence: RefreshCadenceReport
+    metrics_overview: list[MetricsTimeSeries] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
