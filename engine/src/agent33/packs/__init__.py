@@ -9,6 +9,14 @@ Existing standalone skills continue to work unchanged.
 
 from __future__ import annotations
 
+from agent33.packs.audit import (
+    PackAuditEvent,
+    PackAuditService,
+    PackComplianceReport,
+    PackHealthCheck,
+    PackHealthStatus,
+    PackHealthSummary,
+)
 from agent33.packs.categories import CategoryRegistry, MarketplaceCategory
 from agent33.packs.conflicts import (
     ConflictKind,
@@ -57,6 +65,12 @@ from agent33.packs.provenance_models import (
 
 __all__ = [
     "CategoryRegistry",
+    "PackAuditEvent",
+    "PackAuditService",
+    "PackComplianceReport",
+    "PackHealthCheck",
+    "PackHealthStatus",
+    "PackHealthSummary",
     "ConflictKind",
     "CurationRecord",
     "CurationService",

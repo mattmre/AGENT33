@@ -191,6 +191,149 @@ async def search_packs(
     }
 
 
+# ---------------------------------------------------------------------------
+# Pack health & audit endpoints (Phase 33 / S24)
+#
+# These routes use fixed prefixes (/health, /audit, /compliance) and MUST
+# be registered before the /{name} catch-all route so FastAPI matches them
+# first.
+# ---------------------------------------------------------------------------
+
+
+def _get_pack_audit(request: Request) -> Any:
+    """Retrieve PackAuditService from app state."""
+    return getattr(request.app.state, "pack_audit", None)
+
+
+@router.get("/health", dependencies=[require_scope("agents:read")])
+async def get_pack_health_summary(request: Request) -> dict[str, Any]:
+    """Return aggregate health metrics for all installed packs."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    summary = svc.check_all_health()
+    result: dict[str, Any] = summary.model_dump(mode="json")
+    return result
+
+
+@router.get("/health/details", dependencies=[require_scope("agents:read")])
+async def get_pack_health_details(request: Request) -> dict[str, Any]:
+    """Return per-pack health check details for all installed packs."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    details = svc.get_health_details()
+    return {
+        "details": [d.model_dump(mode="json") for d in details],
+        "count": len(details),
+    }
+
+
+@router.get("/health/{name}", dependencies=[require_scope("agents:read")])
+async def get_pack_health(name: str, request: Request) -> dict[str, Any]:
+    """Return health check result for a single pack."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    try:
+        check = svc.check_pack_health(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    result: dict[str, Any] = check.model_dump(mode="json")
+    return result
+
+
+@router.get("/audit", dependencies=[require_scope("agents:read")])
+async def get_audit_log(
+    request: Request,
+    pack_name: str = Query(default="", description="Filter by pack name"),
+    event_type: str = Query(default="", description="Filter by event type"),
+    limit: int = Query(default=50, ge=1, le=500, description="Max events to return"),
+) -> dict[str, Any]:
+    """Return pack audit log with optional filters."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    events = svc.get_audit_log(
+        pack_name=pack_name or None,
+        event_type=event_type or None,
+        limit=limit,
+    )
+    return {
+        "events": [e.model_dump(mode="json") for e in events],
+        "count": len(events),
+    }
+
+
+@router.get("/audit/{name}", dependencies=[require_scope("agents:read")])
+async def get_pack_audit_log(
+    name: str,
+    request: Request,
+    event_type: str = Query(default="", description="Filter by event type"),
+    limit: int = Query(default=50, ge=1, le=500, description="Max events to return"),
+) -> dict[str, Any]:
+    """Return audit log filtered to a specific pack."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    events = svc.get_audit_log(
+        pack_name=name,
+        event_type=event_type or None,
+        limit=limit,
+    )
+    return {
+        "events": [e.model_dump(mode="json") for e in events],
+        "count": len(events),
+    }
+
+
+@router.get("/compliance/{name}", dependencies=[require_scope("agents:read")])
+async def get_pack_compliance(name: str, request: Request) -> dict[str, Any]:
+    """Return compliance report for a single pack."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    try:
+        report = svc.compliance_check(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    result: dict[str, Any] = report.model_dump(mode="json")
+    return result
+
+
+@router.post("/compliance/check-all", dependencies=[require_scope("admin")])
+async def check_all_compliance(request: Request) -> dict[str, Any]:
+    """Batch compliance check for all installed packs."""
+    svc = _get_pack_audit(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Pack audit service not initialized")
+    registry = _get_pack_registry(request)
+    if registry is None:
+        return {"reports": [], "count": 0}
+
+    packs = registry.list_installed()
+    reports = []
+    for pack in packs:
+        try:
+            report = svc.compliance_check(pack.name)
+            reports.append(report.model_dump(mode="json"))
+        except Exception:
+            logger.warning("compliance_check_failed", pack_name=pack.name, exc_info=True)
+
+    compliant_count = sum(1 for r in reports if r.get("compliant"))
+    return {
+        "reports": reports,
+        "count": len(reports),
+        "compliant": compliant_count,
+        "non_compliant": len(reports) - compliant_count,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Single-pack detail (catch-all /{name} — must come after fixed paths above)
+# ---------------------------------------------------------------------------
+
+
 @router.get("/{name}", dependencies=[require_scope("agents:read")])
 async def get_pack(name: str, request: Request) -> dict[str, Any]:
     """Get details of an installed pack."""

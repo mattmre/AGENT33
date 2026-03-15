@@ -566,6 +566,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.trust_analytics = trust_analytics
     logger.info("trust_analytics_initialized")
 
+    # -- Pack audit service (Phase 33 / S24) -------------------------------
+    from agent33.packs.audit import PackAuditService
+
+    pack_audit = PackAuditService(
+        pack_registry,
+        trust_analytics=trust_analytics,
+        curation_service=curation_service,
+        provenance_collector=None,  # wired later after provenance init
+    )
+    app.state.pack_audit = pack_audit
+    logger.info("pack_audit_service_initialized")
+
     # -- Hook registry -----------------------------------------------------
     hook_registry = None
     if settings.hooks_enabled:
@@ -1126,6 +1138,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Back-wire provenance collector into trust analytics (initialized earlier)
     if hasattr(app.state, "trust_analytics"):
         app.state.trust_analytics._provenance_collector = _provenance_collector
+
+    # Back-wire provenance collector into pack audit service (initialized earlier)
+    if hasattr(app.state, "pack_audit"):
+        app.state.pack_audit._provenance_collector = _provenance_collector
 
     _runtime_version_info = _resolve_version()
     app.state.runtime_version_info = _runtime_version_info
