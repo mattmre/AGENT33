@@ -373,6 +373,10 @@ class Settings(BaseSettings):
     script_hooks_default_timeout_ms: float = 5000.0
     script_hooks_max_timeout_ms: float = 30000.0
 
+    # Alembic migration checker (S34)
+    alembic_config_path: str = "alembic.ini"
+    alembic_auto_check_on_startup: bool = False
+
     # Workflow transport (S33: WS-first / SSE fallback)
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
