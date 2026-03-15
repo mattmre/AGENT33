@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     voice_elevenlabs_default_voice_id: str = ""
     voice_elevenlabs_model_id: str = "eleven_multilingual_v2"
 
+    # LiveKit media transport (S32)
+    voice_livekit_enabled: bool = False
+    voice_livekit_api_key: SecretStr = SecretStr("")
+    voice_livekit_api_secret: SecretStr = SecretStr("")
+    voice_livekit_ws_url: str = ""
+
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
     airllm_model_path: str = ""

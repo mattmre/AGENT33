@@ -126,7 +126,7 @@ async def test_livekit_transport_raises_dependency_gap() -> None:
         api_secret="livekit-secret",
         transport="livekit",
     )
-    with pytest.raises(RuntimeError, match="Phase 48 voice sidecar"):
+    with pytest.raises(RuntimeError, match="voice sidecar"):
         await daemon.start()
 
 

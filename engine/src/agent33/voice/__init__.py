@@ -8,6 +8,13 @@ from agent33.voice.elevenlabs import (
     ElevenLabsTransport,
     ElevenLabsTransportError,
 )
+from agent33.voice.livekit_transport import (
+    LiveKitConfig,
+    LiveKitParticipant,
+    LiveKitRoom,
+    LiveKitTransport,
+    LiveKitTransportError,
+)
 from agent33.voice.service import VoiceSidecarService
 
 __all__ = [
@@ -15,6 +22,11 @@ __all__ = [
     "ElevenLabsConfig",
     "ElevenLabsTransport",
     "ElevenLabsTransportError",
+    "LiveKitConfig",
+    "LiveKitParticipant",
+    "LiveKitRoom",
+    "LiveKitTransport",
+    "LiveKitTransportError",
     "SidecarVoiceDaemon",
     "VoiceSidecarProbe",
     "VoiceSidecarService",

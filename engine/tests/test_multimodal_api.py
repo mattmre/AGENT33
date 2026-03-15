@@ -553,8 +553,9 @@ def test_voice_session_route_rejects_direct_livekit_transport(writer_client: Tes
 
     assert response.status_code == 503
     assert response.json()["detail"] == (
-        "livekit transport is deferred to the Phase 48 voice sidecar; "
-        "use the stub transport in the current runtime"
+        "livekit transport is available via the voice sidecar (S32); "
+        "set voice_livekit_enabled=True and configure voice_livekit_api_key, "
+        "voice_livekit_api_secret, voice_livekit_ws_url to enable it"
     )
     assert _service._voice_sessions == {}
 

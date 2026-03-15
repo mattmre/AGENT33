@@ -17,8 +17,14 @@ import structlog
 logger = structlog.get_logger()
 
 VOICE_LIVEKIT_DEFERRED_MESSAGE = (
-    "livekit transport is deferred to the Phase 48 voice sidecar; "
-    "use the stub transport in the current runtime"
+    "livekit transport is available via the voice sidecar (S32); "
+    "set voice_livekit_enabled=True and configure voice_livekit_api_key, "
+    "voice_livekit_api_secret, voice_livekit_ws_url to enable it"
+)
+
+VOICE_LIVEKIT_SIDECAR_AVAILABLE_MESSAGE = (
+    "livekit transport is configured and available in the voice sidecar; "
+    "connect to the sidecar's /v1/voice/livekit/ endpoints for room management"
 )
 
 
@@ -75,6 +81,10 @@ class LiveVoiceDaemon:
             logger.debug("voice_daemon.start_skipped", room=self._room_name)
             return
         if self._transport == "livekit":
+            logger.info(
+                "voice_daemon.livekit_redirect",
+                msg=VOICE_LIVEKIT_DEFERRED_MESSAGE,
+            )
             raise RuntimeError(VOICE_LIVEKIT_DEFERRED_MESSAGE)
         if self._transport != "stub":
             raise ValueError(f"Unsupported voice daemon transport: {self._transport}")
