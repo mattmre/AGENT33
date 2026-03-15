@@ -25,7 +25,15 @@ from agent33.connectors.middleware import (
     RetryMiddleware,
     TimeoutMiddleware,
 )
-from agent33.connectors.models import ConnectorRequest
+from agent33.connectors.models import (
+    CircuitBreakerSnapshot,
+    CircuitEvent,
+    ConnectorHealthSummary,
+    ConnectorMetricsSummary,
+    ConnectorRequest,
+    ConnectorStatus,
+)
+from agent33.connectors.monitoring import ConnectorMetricsCollector
 
 __all__ = [
     "AllowAllConnectorPolicy",
@@ -34,12 +42,18 @@ __all__ = [
     "get_policy_pack",
     "CircuitBreaker",
     "CircuitBreakerMiddleware",
+    "CircuitBreakerSnapshot",
+    "CircuitEvent",
     "CircuitOpenError",
     "CircuitState",
     "ConnectorExecutor",
     "ConnectorGovernancePolicy",
+    "ConnectorHealthSummary",
+    "ConnectorMetricsCollector",
+    "ConnectorMetricsSummary",
     "ConnectorMiddleware",
     "ConnectorRequest",
+    "ConnectorStatus",
     "GovernanceDecision",
     "GovernanceMiddleware",
     "MetricsMiddleware",

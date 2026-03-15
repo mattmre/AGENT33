@@ -156,6 +156,19 @@ class OperatorService:
         else:
             inventories["voice_sessions"] = SubsystemInventory(count=0, loaded=False)
 
+        # Proxy servers (MCP fleet)
+        proxy_manager = getattr(self._app_state, "proxy_manager", None)
+        if proxy_manager is not None:
+            servers = proxy_manager.list_servers()
+            healthy_count = sum(1 for s in servers if s.get("state") in {"healthy", "degraded"})
+            inventories["proxy_servers"] = SubsystemInventory(
+                count=len(servers),
+                loaded=True,
+                active=healthy_count,
+            )
+        else:
+            inventories["proxy_servers"] = SubsystemInventory(count=0, loaded=False)
+
         # Runtime info
         now = time.time()
         start_dt = datetime.fromtimestamp(self._start_time, tz=UTC)

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,6 +35,20 @@ class CircuitBreaker:
     consecutive_failures: int = 0
     opened_at: float | None = None
     half_open_successes: int = 0
+    total_trips: int = 0
+    last_trip_at: float | None = None
+    on_state_change: Callable[[CircuitState, CircuitState], None] | None = field(
+        default=None, repr=False
+    )
+
+    def _transition(self, new_state: CircuitState) -> None:
+        """Apply a state transition and fire the callback if set."""
+        old_state = self.state
+        if old_state == new_state:
+            return
+        self.state = new_state
+        if self.on_state_change is not None:
+            self.on_state_change(old_state, new_state)
 
     def before_call(self) -> None:
         """Check whether the next call is allowed."""
@@ -45,7 +59,7 @@ class CircuitBreaker:
         elapsed = self.clock() - self.opened_at
         if elapsed < self.recovery_timeout_seconds:
             raise CircuitOpenError("Circuit is open")
-        self.state = CircuitState.HALF_OPEN
+        self._transition(CircuitState.HALF_OPEN)
         self.half_open_successes = 0
 
     def record_success(self) -> None:
@@ -53,13 +67,13 @@ class CircuitBreaker:
         if self.state == CircuitState.HALF_OPEN:
             self.half_open_successes += 1
             if self.half_open_successes >= self.half_open_success_threshold:
-                self.state = CircuitState.CLOSED
+                self._transition(CircuitState.CLOSED)
                 self.consecutive_failures = 0
                 self.opened_at = None
                 self.half_open_successes = 0
             return
 
-        self.state = CircuitState.CLOSED
+        self._transition(CircuitState.CLOSED)
         self.consecutive_failures = 0
 
     def record_failure(self) -> None:
@@ -73,7 +87,21 @@ class CircuitBreaker:
             self._open()
 
     def _open(self) -> None:
-        self.state = CircuitState.OPEN
+        self._transition(CircuitState.OPEN)
         self.opened_at = self.clock()
+        self.total_trips += 1
+        self.last_trip_at = self.opened_at
         self.consecutive_failures = 0
         self.half_open_successes = 0
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return a serializable dict of the breaker's current state."""
+        return {
+            "state": self.state.value,
+            "consecutive_failures": self.consecutive_failures,
+            "total_trips": self.total_trips,
+            "last_trip_at": self.last_trip_at,
+            "failure_threshold": self.failure_threshold,
+            "recovery_timeout_seconds": self.recovery_timeout_seconds,
+            "half_open_success_threshold": self.half_open_success_threshold,
+        }

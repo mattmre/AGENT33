@@ -492,7 +492,7 @@ async def check_scheduler(app_state: Any) -> DiagnosticCheck:
 
 
 async def check_mcp(app_state: Any) -> DiagnosticCheck:
-    """DOC-14: MCP proxy reachability."""
+    """DOC-14: MCP proxy reachability and fleet health."""
     try:
         proxy_manager = getattr(app_state, "proxy_manager", None)
         if proxy_manager is None:
@@ -511,11 +511,46 @@ async def check_mcp(app_state: Any) -> DiagnosticCheck:
                 status=CheckStatus.OK,
                 message="MCP proxy is disabled (not required)",
             )
+
+        # Probe individual server health states
+        servers = proxy_manager.list_servers()
+        if not servers:
+            return DiagnosticCheck(
+                id="DOC-14",
+                category="mcp",
+                status=CheckStatus.OK,
+                message="MCP proxy manager is available (0 servers configured)",
+            )
+
+        issues: list[str] = []
+        for srv in servers:
+            srv_id = srv.get("id", "unknown")
+            srv_state = srv.get("state", "unknown")
+            circuit_state = srv.get("circuit_state", "closed")
+
+            if circuit_state == "open":
+                issues.append(f"Server '{srv_id}' has circuit breaker OPEN")
+            if srv_state in {"unhealthy", "cooldown"}:
+                issues.append(f"Server '{srv_id}' is {srv_state.upper()}")
+
+        if issues:
+            return DiagnosticCheck(
+                id="DOC-14",
+                category="mcp",
+                status=CheckStatus.WARNING,
+                message=f"MCP fleet issues: {'; '.join(issues)}",
+                remediation=(
+                    "Check MCP proxy server logs and upstream connectivity. "
+                    "Servers with open circuit breakers will auto-recover "
+                    "after the recovery timeout."
+                ),
+            )
+
         return DiagnosticCheck(
             id="DOC-14",
             category="mcp",
             status=CheckStatus.OK,
-            message="MCP proxy manager is available",
+            message=f"MCP proxy fleet healthy ({len(servers)} server(s))",
         )
     except Exception as exc:
         logger.debug("DOC-14 failed: %s", exc)

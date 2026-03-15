@@ -26,6 +26,7 @@ from agent33.api.routes import (
     chat,
     comparative,
     component_security,
+    connectors,
     context,
     cron,
     dashboard,
@@ -225,6 +226,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     app.state.alert_manager = alert_manager
     dashboard.set_alert_manager(alert_manager)
+
+    # -- Connector metrics collector (Phase 32 UX) -------------------------
+    from agent33.connectors.monitoring import ConnectorMetricsCollector
+
+    connector_metrics = ConnectorMetricsCollector()
+    app.state.connector_metrics = connector_metrics
+    logger.info("connector_metrics_collector_initialized")
 
     # -- Agent runtime / workflow integration ------------------------------
     from agent33.llm.router import ModelRouter
@@ -1363,3 +1371,4 @@ app.include_router(workflow_templates.router)
 app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
+app.include_router(connectors.router)
