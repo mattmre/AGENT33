@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-from agent33.evaluation.ctrf import CTRFGenerator
+from agent33.evaluation.ctrf import CTRFGenerator, CTRFReport, CTRFReportGenerator
 from agent33.evaluation.experiment import ExperimentRunner
 from agent33.evaluation.gates import GateEnforcer
 from agent33.evaluation.golden_tasks import GOLDEN_CASES, GOLDEN_TASKS, tasks_by_tag
@@ -60,6 +60,7 @@ class EvaluationService:
         self._multi_trial_runs: dict[str, MultiTrialRun] = {}
         self._multi_trial_run_order: list[str] = []
         self._ctrf = CTRFGenerator()
+        self._ctrf_typed = CTRFReportGenerator()
         self._trial_evaluator = trial_evaluator or DeterministicFallbackEvaluator()
 
     def set_trial_evaluator(self, evaluator: TrialEvaluatorAdapter) -> None:
@@ -278,6 +279,61 @@ class EvaluationService:
         if run is None:
             return None
         return self._ctrf.generate_report(run)
+
+    # ------------------------------------------------------------------
+    # Typed CTRF report generation
+    # ------------------------------------------------------------------
+
+    def generate_ctrf_for_run(self, run_id: str) -> CTRFReport | None:
+        """Generate a typed CTRF report from an evaluation run.
+
+        Returns ``None`` if the run does not exist or has not been completed.
+        """
+        run = self._runs.get(run_id)
+        if run is None or run.completed_at is None:
+            return None
+
+        start_ms = int(run.started_at.timestamp() * 1000)
+        stop_ms = int(run.completed_at.timestamp() * 1000)
+        results_dicts = [r.model_dump() for r in run.task_results]
+        return self._ctrf_typed.from_evaluation_run(results_dicts, start_ms, stop_ms)
+
+    def generate_ctrf_for_gate(self, run_id: str) -> CTRFReport | None:
+        """Generate a typed CTRF report from a completed run's gate results.
+
+        Returns ``None`` if the run does not exist, has no gate report,
+        or has not been completed.
+        """
+        run = self._runs.get(run_id)
+        if run is None or run.completed_at is None or run.gate_report is None:
+            return None
+
+        start_ms = int(run.started_at.timestamp() * 1000)
+        stop_ms = int(run.completed_at.timestamp() * 1000)
+        gate_dicts = [r.model_dump() for r in run.gate_report.check_results]
+        return self._ctrf_typed.from_gate_results(gate_dicts, start_ms, stop_ms)
+
+    def generate_ctrf_for_golden_tasks(self, run_id: str) -> CTRFReport | None:
+        """Generate a typed CTRF report for golden task results in a run.
+
+        Returns ``None`` if the run does not exist or has not been completed.
+        """
+        run = self._runs.get(run_id)
+        if run is None or run.completed_at is None:
+            return None
+
+        start_ms = int(run.started_at.timestamp() * 1000)
+        stop_ms = int(run.completed_at.timestamp() * 1000)
+        task_dicts = [r.model_dump() for r in run.task_results]
+        return self._ctrf_typed.from_golden_tasks(task_dicts, start_ms, stop_ms)
+
+    def get_latest_ctrf(self) -> CTRFReport | None:
+        """Return a CTRF report from the most recently completed run."""
+        completed = [r for r in self._runs.values() if r.completed_at is not None]
+        if not completed:
+            return None
+        latest = max(completed, key=lambda r: r.completed_at or r.started_at)
+        return self.generate_ctrf_for_run(latest.run_id)
 
 
 @dataclass(frozen=True, slots=True)

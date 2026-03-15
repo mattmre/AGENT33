@@ -314,6 +314,9 @@ class Settings(BaseSettings):
     comparative_min_population_size: int = 2  # min agents for round-robin
     comparative_confidence_level: float = 0.95  # stat. significance threshold
 
+    # CTRF reporting (SkillsBench integration)
+    evaluation_ctrf_output_dir: str = "var/ctrf-reports"
+
     # Phase 44: Operator session
     operator_session_enabled: bool = True
     operator_session_base_dir: str = ""  # default: ~/.agent33/sessions/
