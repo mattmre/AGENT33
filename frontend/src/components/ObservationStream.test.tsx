@@ -173,4 +173,99 @@ describe("ObservationStream", () => {
     await waitFor(() => expect(cancelMock).toHaveBeenCalled())
     resolveRead({ done: true, value: undefined })
   })
+
+  it("renders a2a subordinate events with the correct type label", async () => {
+    const event = {
+      id: "ev-a2a",
+      agent_name: "director",
+      event_type: "tool_call",
+      content: "Invoking deploy_a2a_subordinate for task-42",
+      timestamp: new Date().toISOString()
+    }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(buildSseResponse(`data: ${JSON.stringify(event)}\n\n`))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<ObservationStream token="tok" />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Invoking deploy_a2a_subordinate for task-42")).toBeInTheDocument()
+    })
+    expect(screen.getByText("director")).toBeInTheDocument()
+  })
+
+  it("renders AST extraction events with the correct type label", async () => {
+    const event = {
+      id: "ev-ast",
+      agent_name: "code-worker",
+      event_type: "tool_call",
+      content: "Running tldr_read_enforcer on module.py",
+      timestamp: new Date().toISOString()
+    }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(buildSseResponse(`data: ${JSON.stringify(event)}\n\n`))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<ObservationStream token="tok" />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Running tldr_read_enforcer on module.py")).toBeInTheDocument()
+    })
+    expect(screen.getByText("code-worker")).toBeInTheDocument()
+  })
+
+  it("does not crash when fetch rejects with a network error", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("Connection refused"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { container } = render(<ObservationStream token="tok" />)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
+    expect(container.innerHTML).toBe("")
+  })
+
+  it("does not connect when response.ok is false", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      body: null
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { container } = render(<ObservationStream token="tok" />)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
+    expect(container.innerHTML).toBe("")
+  })
+
+  it("displays formatted timestamps on events", async () => {
+    const timestamp = "2026-03-15T14:30:00.000Z"
+    const event = {
+      id: "ev-ts",
+      agent_name: "orch",
+      event_type: "handoff_context_wipe",
+      content: "Context wiped",
+      timestamp
+    }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(buildSseResponse(`data: ${JSON.stringify(event)}\n\n`))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<ObservationStream token="tok" />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Context wiped")).toBeInTheDocument()
+    })
+
+    const timeEl = document.querySelector(".observation-time")
+    expect(timeEl).not.toBeNull()
+    expect(timeEl?.textContent).toBeTruthy()
+  })
 })

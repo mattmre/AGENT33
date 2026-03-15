@@ -133,4 +133,129 @@ describe("AuthPanel", () => {
       expect(screen.getByText("Login failed (401)")).toBeInTheDocument()
     })
   })
+
+  it("sends username and password as JSON in the login request body", async () => {
+    const user = userEvent.setup()
+
+    apiRequestMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { access_token: "tok" }
+    })
+
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    const usernameInput = screen.getByLabelText("Username")
+    const passwordInput = screen.getByLabelText("Password")
+
+    await user.clear(usernameInput)
+    await user.type(usernameInput, "testuser")
+    await user.clear(passwordInput)
+    await user.type(passwordInput, "secret123")
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => {
+      expect(apiRequestMock).toHaveBeenCalledTimes(1)
+    })
+
+    const callBody = JSON.parse(apiRequestMock.mock.calls[0][0].body as string)
+    expect(callBody).toEqual({ username: "testuser", password: "secret123" })
+  })
+
+  it("shows loading state while login request is in flight", async () => {
+    const user = userEvent.setup()
+    let resolveLogin: (value: unknown) => void = () => {}
+
+    apiRequestMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLogin = resolve
+        })
+    )
+
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(screen.getByRole("button", { name: "Signing in..." })).toBeDisabled()
+
+    resolveLogin({
+      ok: true,
+      status: 200,
+      data: { access_token: "tok" }
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Sign In" })).toBeEnabled()
+    })
+  })
+
+  it("shows an error when login throws a network error", async () => {
+    const user = userEvent.setup()
+
+    apiRequestMock.mockRejectedValue(new Error("Network timeout"))
+
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("Network timeout")).toBeInTheDocument()
+    })
+  })
+
+  it("shows an error when response contains no access_token", async () => {
+    const user = userEvent.setup()
+
+    apiRequestMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { something_else: "value" }
+    })
+
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("No access_token in login response.")).toBeInTheDocument()
+    })
+  })
+
+  it("shows an error when access_token is an empty string", async () => {
+    const user = userEvent.setup()
+
+    apiRequestMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { access_token: "  " }
+    })
+
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("No access_token in login response.")).toBeInTheDocument()
+    })
+  })
+
+  it("does not render error box when there is no error", () => {
+    render(
+      <AuthPanel token="" apiKey="" onTokenChange={vi.fn()} onApiKeyChange={vi.fn()} />
+    )
+
+    expect(document.querySelector(".error-box")).toBeNull()
+  })
 })
