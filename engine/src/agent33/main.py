@@ -1069,9 +1069,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("discovery_service_initialized")
 
     # -- Provenance & runtime version -----------------------------------------
+    from agent33.provenance.audit_export import AuditExporter as _AuditExporter
     from agent33.provenance.collector import ProvenanceCollector as _ProvenanceCollector
     from agent33.provenance.timeline import AuditTimelineService as _AuditTimelineService
-    from agent33.provenance.audit_export import AuditExporter as _AuditExporter
     from agent33.runtime.version import resolve_version as _resolve_version
 
     _provenance_collector = _ProvenanceCollector(
