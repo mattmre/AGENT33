@@ -312,6 +312,10 @@ class Settings(BaseSettings):
     process_manager_max_processes: int = 10
     backup_dir: str = "var/backups"
 
+    # Workflow template marketplace (S41)
+    workflow_marketplace_enabled: bool = True
+    workflow_templates_dir: str = "workflow-templates"
+
     # Continuous improvement learning signals (Phase 31)
     improvement_learning_enabled: bool = False
     improvement_learning_summary_default_limit: int = 50
