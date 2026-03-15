@@ -60,6 +60,7 @@ from agent33.api.routes import (
     training,
     visualizations,
     webhooks,
+    workflow_marketplace,
     workflow_sse,
     workflow_templates,
     workflow_transport,
@@ -1145,6 +1146,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         path=str(_core_workflows_dir),
     )
 
+    # -- Workflow template marketplace (S41) --------------------------------
+    if settings.workflow_marketplace_enabled:
+        from agent33.workflows.marketplace import WorkflowMarketplace
+
+        _wm_dir = settings.workflow_templates_dir
+        wf_marketplace = WorkflowMarketplace(_wm_dir if _wm_dir else None)
+        wf_marketplace.discover_builtin_templates()
+        app.state.workflow_marketplace = wf_marketplace
+        workflow_marketplace.set_workflow_marketplace(wf_marketplace)
+        logger.info(
+            "workflow_marketplace_initialized",
+            count=wf_marketplace.count,
+            path=_wm_dir,
+        )
+
     # -- Discovery service (Phase 46A) --------------------------------------
     from agent33.discovery.service import DiscoveryService
     from agent33.tools.discovery_runtime import (
@@ -1545,6 +1561,7 @@ app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
+app.include_router(workflow_marketplace.router)
 app.include_router(workflow_transport.router)
 app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
