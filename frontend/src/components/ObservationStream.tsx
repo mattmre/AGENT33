@@ -75,7 +75,7 @@ export function ObservationStream({ token }: { token: string | null }): JSX.Elem
     if (events.length === 0) return <></>;
 
     return (
-        <div className="observation-stream">
+        <div className="observation-stream" role="log" aria-label="Live core mechanics" aria-live="polite">
             <h3>Live Core Mechanics</h3>
             <div className="observation-list">
                 {events.map((ev) => (
@@ -84,8 +84,8 @@ export function ObservationStream({ token }: { token: string | null }): JSX.Elem
                             <span className="observation-time">{new Date(ev.timestamp).toLocaleTimeString()}</span>
                             {ev.agent_name && <span className="observation-agent">{ev.agent_name}</span>}
                             <span className="observation-type">
-                                {ev.event_type === "handoff_context_wipe" ? "🔄 Handoff Wipe" :
-                                    ev.content.includes("a2a") ? "🤖 A2A Subordinate" : "📄 AST Extraction"}
+                                {ev.event_type === "handoff_context_wipe" ? <><span aria-hidden="true">🔄</span> Handoff Wipe</> :
+                                    ev.content.includes("a2a") ? <><span aria-hidden="true">🤖</span> A2A Subordinate</> : <><span aria-hidden="true">📄</span> AST Extraction</>}
                             </span>
                         </div>
                         <pre className="observation-content">{ev.content}</pre>

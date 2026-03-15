@@ -4,6 +4,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { DomainPanel } from "./components/DomainPanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { GlobalSearch } from "./components/GlobalSearch";
+import { SkipLink } from "./components/SkipLink";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
 import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
@@ -77,19 +78,21 @@ export default function App(): JSX.Element {
 
   return (
     <div className="consumer-app-shell">
+      <SkipLink />
       {/* Clean Top Navigation */}
       <header className="consumer-topbar">
         <div className="brand">
-          <div className="logo-orb"></div>
+          <div className="logo-orb" aria-hidden="true"></div>
           <h1>AGENT-33</h1>
         </div>
         <GlobalSearch token={token || null} />
-        <nav className="main-nav">
+        <nav className="main-nav" aria-label="Main navigation">
           {APP_TABS.map((tab) => (
             <button
               key={tab.id}
               className={activeTab === tab.id ? "active" : ""}
               onClick={() => setActiveTab(tab.id)}
+              aria-current={activeTab === tab.id ? "page" : undefined}
             >
               {tab.label}
             </button>
@@ -97,7 +100,7 @@ export default function App(): JSX.Element {
         </nav>
       </header>
 
-      <div className="consumer-content">
+      <div className="consumer-content" id="main-content" role="main">
         {/* Chat Central -> Render new ChatInterface */}
         {activeTab === "chat" && (
           <div className="consumer-chat-layout">
@@ -207,15 +210,16 @@ export default function App(): JSX.Element {
         {activeTab === "advanced" && (
           <div className="legacy-control-plane app-shell">
             <div className="content">
-              <aside className="sidebar">
+              <aside className="sidebar" aria-label="Sidebar">
                 <HealthPanel />
-                <nav className="domain-nav">
+                <nav className="domain-nav" aria-label="Technical domains">
                   <h2>Technical Domains</h2>
                   {domains.map((domain) => (
                     <button
                       key={domain.id}
                       className={domain.id === selectedDomainId ? "active" : ""}
                       onClick={() => setSelectedDomainId(domain.id)}
+                      aria-current={domain.id === selectedDomainId ? "true" : undefined}
                     >
                       {domain.title}
                     </button>
@@ -227,7 +231,7 @@ export default function App(): JSX.Element {
                 <DomainPanel domain={selectedDomain} token={token} apiKey={apiKey} onResult={onResult} />
               </main>
 
-              <aside className="activity-panel">
+              <aside className="activity-panel" aria-label="Activity log">
                 <ObservationStream token={token} />
                 <h2>System Calls</h2>
                 {activity.length === 0 ? <p>No calls yet.</p> : null}
@@ -238,6 +242,7 @@ export default function App(): JSX.Element {
                       <h3>{item.label}</h3>
                       <p>
                         <span className={item.status < 400 ? "status-ok" : "status-error"}>
+                          <span className="sr-only">{item.status < 400 ? "Success" : "Error"}:</span>
                           {item.status}
                         </span>
                         {" in "}

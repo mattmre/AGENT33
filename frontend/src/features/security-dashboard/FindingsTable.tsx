@@ -105,23 +105,23 @@ export function FindingsTable({ findings }: FindingsTableProps): JSX.Element {
         </span>
       </div>
 
-      <table className="findings-table">
+      <table className="findings-table" aria-label="Security findings">
         <thead>
           <tr>
-            <th onClick={() => toggleSort("severity")} className="sortable">
+            <th onClick={() => toggleSort("severity")} className="sortable" role="columnheader" aria-sort={sortKey === "severity" ? (sortAsc ? "ascending" : "descending") : "none"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("severity"); }}}>
               Severity {sortKey === "severity" ? (sortAsc ? "^" : "v") : ""}
             </th>
-            <th onClick={() => toggleSort("category")} className="sortable">
+            <th onClick={() => toggleSort("category")} className="sortable" role="columnheader" aria-sort={sortKey === "category" ? (sortAsc ? "ascending" : "descending") : "none"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("category"); }}}>
               Category {sortKey === "category" ? (sortAsc ? "^" : "v") : ""}
             </th>
-            <th onClick={() => toggleSort("title")} className="sortable">
+            <th onClick={() => toggleSort("title")} className="sortable" role="columnheader" aria-sort={sortKey === "title" ? (sortAsc ? "ascending" : "descending") : "none"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("title"); }}}>
               Title {sortKey === "title" ? (sortAsc ? "^" : "v") : ""}
             </th>
-            <th onClick={() => toggleSort("file_path")} className="sortable">
+            <th onClick={() => toggleSort("file_path")} className="sortable" role="columnheader" aria-sort={sortKey === "file_path" ? (sortAsc ? "ascending" : "descending") : "none"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("file_path"); }}}>
               File {sortKey === "file_path" ? (sortAsc ? "^" : "v") : ""}
             </th>
             <th>Line</th>
-            <th onClick={() => toggleSort("tool")} className="sortable">
+            <th onClick={() => toggleSort("tool")} className="sortable" role="columnheader" aria-sort={sortKey === "tool" ? (sortAsc ? "ascending" : "descending") : "none"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("tool"); }}}>
               Tool {sortKey === "tool" ? (sortAsc ? "^" : "v") : ""}
             </th>
           </tr>
@@ -134,6 +134,14 @@ export function FindingsTable({ findings }: FindingsTableProps): JSX.Element {
               onClick={() =>
                 setExpandedId(expandedId === f.id ? null : f.id)
               }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setExpandedId(expandedId === f.id ? null : f.id);
+                }
+              }}
+              tabIndex={0}
+              aria-expanded={expandedId === f.id}
             >
               <td>
                 <span className={severityClass(f.severity)}>

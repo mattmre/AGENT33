@@ -190,7 +190,7 @@ export function OperationsHubPanel({
       </header>
       <div className="ops-hub-content">
         <div className="ops-hub-list">
-          {hubError ? <p className="ops-hub-error">{hubError}</p> : null}
+          {hubError ? <p className="ops-hub-error" role="alert">{hubError}</p> : null}
           {loadingHub && processes.length === 0 ? (
             <p className="ops-hub-loading">Loading processes...</p>
           ) : null}
@@ -202,6 +202,15 @@ export function OperationsHubPanel({
               key={process.id}
               className={`ops-hub-process-item ${selectedProcessId === process.id ? "selected" : ""}`}
               onClick={() => setSelectedProcessId(process.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelectedProcessId(process.id);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-pressed={selectedProcessId === process.id}
             >
               <div className="process-item-header">
                 <h3>{process.name}</h3>
@@ -223,7 +232,7 @@ export function OperationsHubPanel({
             <p className="ops-hub-placeholder">Select a process to view details.</p>
           ) : null}
           {loadingDetail ? <p className="ops-hub-loading">Loading detail...</p> : null}
-          {detailError ? <p className="ops-hub-error">{detailError}</p> : null}
+          {detailError ? <p className="ops-hub-error" role="alert">{detailError}</p> : null}
           {selectedProcess !== null && !loadingDetail ? (
             <div className="process-detail">
               <h3>{selectedProcess.name}</h3>

@@ -298,8 +298,8 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
     };
 
     return (
-        <div className="chat-interface">
-            <div className="chat-messages">
+        <div className="chat-interface" role="region" aria-label="Chat interface">
+            <div className="chat-messages" role="log" aria-label="Chat messages" aria-live="polite">
                 {messages.map((msg, index) => {
                     if (msg.role === "system") return null;
                     return (
@@ -309,10 +309,11 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                     <button
                                         className="inline-action-btn"
                                         onClick={() => handleTranslate(index)}
+                                        aria-label={`Translate from ${translateFrom} to ${translateTo}`}
                                         title={`Translate from ${translateFrom} to ${translateTo}`}
                                         disabled={msg.isTranslating}
                                     >
-                                        🌐
+                                        <span aria-hidden="true">🌐</span>
                                     </button>
                                 </div>
                             )}
@@ -325,7 +326,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                     </div>
                                 )}
                                 {msg.isTranslating && (
-                                    <div className="chat-translation translating">
+                                    <div className="chat-translation translating" aria-live="polite">
                                         <hr />
                                         <i>Translating {translateFrom} to {translateTo}...</i>
                                     </div>
@@ -337,18 +338,20 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         <button
                                             className="inline-action-btn"
                                             onClick={() => speakText(msg.content)}
+                                            aria-label="Read aloud"
                                             title="Read aloud"
                                         >
-                                            🔊
+                                            <span aria-hidden="true">🔊</span>
                                         </button>
                                     )}
                                     <button
                                         className="inline-action-btn"
                                         onClick={() => handleTranslate(index)}
+                                        aria-label={`Translate from ${translateFrom} to ${translateTo}`}
                                         title={`Translate from ${translateFrom} to ${translateTo}`}
                                         disabled={msg.isTranslating}
                                     >
-                                        🌐
+                                        <span aria-hidden="true">🌐</span>
                                     </button>
                                 </div>
                             )}
@@ -356,8 +359,8 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                     );
                 })}
                 {loading && (
-                    <div className="chat-bubble-container assistant">
-                        <div className="chat-bubble assistant typing-indicator">
+                    <div className="chat-bubble-container assistant" aria-live="polite">
+                        <div className="chat-bubble assistant typing-indicator" role="status" aria-label="Assistant is typing">
                             <span></span><span></span><span></span>
                         </div>
                     </div>
@@ -369,36 +372,41 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                 <button
                     className={`mic-btn ${isRecording ? "recording" : ""}`}
                     onClick={toggleRecording}
+                    aria-label={isRecording ? "Stop dictation" : "Start dictation"}
+                    aria-pressed={isRecording}
                     title={isRecording ? "Stop dictation" : "Start dictation"}
                 >
-                    🎤
+                    <span aria-hidden="true">🎤</span>
                 </button>
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
+                    aria-label="Message input"
                     placeholder="Message AGENT-33 (or click the mic to speak)..."
                     rows={1}
                     disabled={loading}
                 />
-                <button onClick={handleSend} disabled={(!input.trim() && !isRecording) || loading} className="chat-send-bin" title="Send (Enter)">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                <button onClick={handleSend} disabled={(!input.trim() && !isRecording) || loading} className="chat-send-bin" aria-label="Send message" title="Send (Enter)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" aria-hidden="true">
                         <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
                     </svg>
                 </button>
                 <button
                     className="settings-gear-btn"
                     onClick={() => setShowSettingsModal(prev => !prev)}
+                    aria-label="Chat settings"
+                    aria-expanded={showSettingsModal}
                     title="Chat Settings"
                 >
-                    ⚙️
+                    <span aria-hidden="true">⚙️</span>
                 </button>
 
                 {showSettingsModal && (
-                    <div className="settings-popover">
+                    <div className="settings-popover" role="dialog" aria-label="Chat settings" aria-modal="false">
                         <div className="settings-popover-header">
                             <h2>Chat Settings</h2>
-                            <button className="settings-close-btn" onClick={() => setShowSettingsModal(false)}>✕</button>
+                            <button className="settings-close-btn" onClick={() => setShowSettingsModal(false)} aria-label="Close settings">✕</button>
                         </div>
 
                         <div className="chat-tab-group compact">
@@ -431,8 +439,8 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         </label>
                                     </div>
 
-                                    <span>From:</span>
-                                    <select className="voice-select inline" value={translateFrom} onChange={(e) => setTranslateFrom(e.target.value)}>
+                                    <span id="translate-from-label">From:</span>
+                                    <select className="voice-select inline" aria-labelledby="translate-from-label" value={translateFrom} onChange={(e) => setTranslateFrom(e.target.value)}>
                                         <option value="English">English</option>
                                         <option value="Spanish">Spanish</option>
                                         <option value="French">French</option>
@@ -446,8 +454,8 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         <option value="Portuguese">Portuguese</option>
                                     </select>
 
-                                    <span>To:</span>
-                                    <select className="voice-select inline" value={translateTo} onChange={(e) => setTranslateTo(e.target.value)}>
+                                    <span id="translate-to-label">To:</span>
+                                    <select className="voice-select inline" aria-labelledby="translate-to-label" value={translateTo} onChange={(e) => setTranslateTo(e.target.value)}>
                                         <option value="English">English</option>
                                         <option value="Spanish">Spanish</option>
                                         <option value="French">French</option>
@@ -484,6 +492,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         <div className="audio-actions-row">
                                             <select
                                                 className="voice-select"
+                                                aria-label="Voice selection"
                                                 value={selectedVoiceURI}
                                                 onChange={(e) => setSelectedVoiceURI(e.target.value)}
                                             >
@@ -496,6 +505,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
 
                                             <select
                                                 className="voice-select voice-speed inline"
+                                                aria-label="Playback speed"
                                                 value={playbackRate}
                                                 onChange={(e) => {
                                                     const newRate = parseFloat(e.target.value);
@@ -526,18 +536,20 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                             <button
                                                 className="replay-audio-btn"
                                                 onClick={() => lastSpokenText && speakText(lastSpokenText)}
+                                                aria-label="Replay last audio message"
                                                 title="Replay last audio message"
                                                 disabled={!lastSpokenText}
                                             >
-                                                🔄
+                                                <span aria-hidden="true">🔄</span>
                                             </button>
 
                                             <button
                                                 className="stop-audio-btn"
                                                 onClick={() => window.speechSynthesis.cancel()}
+                                                aria-label="Stop playing audio"
                                                 title="Stop playing audio"
                                             >
-                                                ⏹️
+                                                <span aria-hidden="true">⏹️</span>
                                             </button>
                                         </div>
                                     )}

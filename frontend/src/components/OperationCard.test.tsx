@@ -135,7 +135,7 @@ describe("OperationCard", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(2));
     expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
@@ -192,7 +192,7 @@ describe("OperationCard", () => {
     );
 
     await userEvent.selectOptions(screen.getByLabelText("Mode"), "repeat");
-    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));
     expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
@@ -240,7 +240,7 @@ describe("OperationCard", () => {
     );
 
     await userEvent.selectOptions(await screen.findByLabelText("Workflow Preset"), "metrics-review");
-    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(2));
     expect(apiRequestMock.mock.calls[0][0].pathParams).toEqual({ name: "hello-flow" });
@@ -269,7 +269,7 @@ describe("OperationCard", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "Apply preset" }));
-    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));
     expect(JSON.parse(apiRequestMock.mock.calls[0][0].body as string)).toMatchObject({
@@ -314,7 +314,7 @@ describe("OperationCard", () => {
 
     await userEvent.selectOptions(await screen.findByLabelText("Workflow Preset"), "metrics-review");
     await userEvent.click(await screen.findByRole("button", { name: "Apply preset" }));
-    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(2));
     expect(apiRequestMock.mock.calls[0][0].pathParams).toEqual({

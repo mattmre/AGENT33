@@ -25,7 +25,7 @@ describe("LiveVoicePanel", () => {
     render(<LiveVoicePanel token={null} />);
 
     expect(screen.getByText("Sign in first to enable live voice sessions.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Connect microphone/i })).toBeDisabled();
   });
 
   it("hydrates an existing active voice session", async () => {
@@ -92,13 +92,13 @@ describe("LiveVoicePanel", () => {
     const user = userEvent.setup();
     render(<LiveVoicePanel token="test-token" />);
 
-    await user.click(await screen.findByRole("button", { name: "Connect Microphone" }));
+    await user.click(await screen.findByRole("button", { name: /Connect microphone/i }));
     expect(await screen.findByText("Disconnect")).toBeInTheDocument();
     expect(screen.getByText("Health: healthy")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getByRole("button", { name: /Disconnect/i }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Connect microphone/i })).toBeInTheDocument();
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -140,7 +140,7 @@ describe("LiveVoicePanel", () => {
     const user = userEvent.setup();
     render(<LiveVoicePanel token="test-token" />);
 
-    await user.click(await screen.findByRole("button", { name: "Connect Microphone" }));
+    await user.click(await screen.findByRole("button", { name: /Connect microphone/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("voice runtime is disabled");
   });
@@ -153,7 +153,7 @@ describe("LiveVoicePanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("voice backend offline");
     expect(screen.getByText("Ready to start")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Connect microphone/i })).toBeEnabled();
   });
 
   it("renders thrown start errors and clears the busy state", async () => {
@@ -166,11 +166,11 @@ describe("LiveVoicePanel", () => {
     const user = userEvent.setup();
     render(<LiveVoicePanel token="test-token" />);
 
-    await user.click(await screen.findByRole("button", { name: "Connect Microphone" }));
+    await user.click(await screen.findByRole("button", { name: /Connect microphone/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("network dropped during start");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Connect Microphone" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Connect microphone/i })).toBeEnabled();
     });
   });
 
@@ -196,11 +196,11 @@ describe("LiveVoicePanel", () => {
     const user = userEvent.setup();
     render(<LiveVoicePanel token="test-token" />);
 
-    await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await user.click(await screen.findByRole("button", { name: /Disconnect/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("stop request failed");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Disconnect/i })).toBeEnabled();
     });
   });
 });

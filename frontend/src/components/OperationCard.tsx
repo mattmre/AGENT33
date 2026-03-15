@@ -418,7 +418,7 @@ export function OperationCard({
         <ul className="health-checklist">
           {Object.entries(payload.services as Record<string, string>).map(([service, status]) => (
             <li key={service} className={`health-item status-${String(status).toLowerCase()}`}>
-              <span className="health-indicator">
+              <span className="health-indicator" aria-hidden="true">
                 {status === "ok" || status === "configured" ? "🟢" : status === "degraded" ? "🟡" : "🔴"}
               </span>
               <span className="health-name">{service}</span>
@@ -436,7 +436,7 @@ export function OperationCard({
         <ul className="health-checklist">
           {Object.entries(payload.channels as Record<string, Record<string, string>>).map(([platform, data]) => (
             <li key={platform} className={`health-item status-${data.status?.toLowerCase()}`}>
-              <span className="health-indicator">
+              <span className="health-indicator" aria-hidden="true">
                 {data.status === "ok" ? "🟢" : "🔴"}
               </span>
               <span className="health-name">{platform}</span>
@@ -687,18 +687,19 @@ export function OperationCard({
         </label>
       ) : null}
       <div className="operation-actions">
-        <button onClick={runOperation} disabled={isRunning}>
+        <button onClick={runOperation} disabled={isRunning} aria-label={`Run ${operation.title}`}>
           {isRunning ? "Running..." : "Run"}
         </button>
         {result ? (
           <span className={result.ok ? "status-ok" : "status-error"}>
+            <span className="sr-only">{result.ok ? "Success" : "Error"}:</span>
             {result.status} in {result.durationMs}ms
           </span>
         ) : null}
       </div>
       {responseSummary ? <p className="operation-note">{responseSummary}</p> : null}
-      {error ? <pre className="error-box">{error}</pre> : null}
-      {workflowGraphError ? <pre className="error-box">{workflowGraphError}</pre> : null}
+      {error ? <pre className="error-box" role="alert">{error}</pre> : null}
+      {workflowGraphError ? <pre className="error-box" role="alert">{workflowGraphError}</pre> : null}
       {((isWorkflowGraph && result && result.ok) || (isWorkflowExecute && workflowGraphData)) ? (
         <WorkflowGraph
           data={

@@ -60,6 +60,8 @@ export const ExplanationView: React.FC<ExplanationViewProps> = ({
         <span
           className={`fact-check-badge fact-check-${explanation.fact_check_status}`}
           data-testid="fact-check-status"
+          role="status"
+          aria-label={`Fact check status: ${explanation.fact_check_status}`}
         >
           {explanation.fact_check_status}
         </span>

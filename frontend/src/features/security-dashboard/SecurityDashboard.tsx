@@ -163,7 +163,7 @@ export function SecurityDashboard({ token }: { token: string | null }) {
         </button>
       </div>
 
-      {error && <div className="error-box">{error}</div>}
+      {error && <div className="error-box" role="alert">{error}</div>}
 
       <div className="severity-summary">
         <span className="severity-badge severity-critical">

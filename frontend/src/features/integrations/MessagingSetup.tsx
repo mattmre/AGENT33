@@ -22,7 +22,7 @@ export function MessagingSetup(): JSX.Element {
             <div className="setup-grid">
                 {/* Telegram Card */}
                 <div className="setup-card">
-                    <div className="card-icon telegram-icon">📱</div>
+                    <div className="card-icon telegram-icon" aria-hidden="true">📱</div>
                     <h3>Telegram</h3>
                     <p>Connect via official Telegram Bot API.</p>
                     <label>
@@ -39,7 +39,7 @@ export function MessagingSetup(): JSX.Element {
 
                 {/* Discord Card */}
                 <div className="setup-card">
-                    <div className="card-icon discord-icon">🎮</div>
+                    <div className="card-icon discord-icon" aria-hidden="true">🎮</div>
                     <h3>Discord</h3>
                     <p>Connect via Discord Developer Portal.</p>
                     <label>
@@ -56,7 +56,7 @@ export function MessagingSetup(): JSX.Element {
 
                 {/* Signal Card */}
                 <div className="setup-card">
-                    <div className="card-icon signal-icon">💬</div>
+                    <div className="card-icon signal-icon" aria-hidden="true">💬</div>
                     <h3>Signal</h3>
                     <p>Requires a self-hosted signal-cli REST bridge.</p>
                     <label>
@@ -73,7 +73,7 @@ export function MessagingSetup(): JSX.Element {
 
                 {/* iMessage Card */}
                 <div className="setup-card">
-                    <div className="card-icon imessage-icon">🍏</div>
+                    <div className="card-icon imessage-icon" aria-hidden="true">🍏</div>
                     <h3>iMessage</h3>
                     <p>Requires BlueBubbles or a macOS AppleScript bridge.</p>
                     <label>

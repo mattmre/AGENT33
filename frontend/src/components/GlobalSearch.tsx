@@ -39,10 +39,11 @@ export function GlobalSearch({ token }: { token: string | null }) {
     };
 
     return (
-        <div className="global-search" style={{ position: "relative", marginLeft: "20px", flex: 1 }}>
+        <div className="global-search" role="search" style={{ position: "relative", marginLeft: "20px", flex: 1 }}>
             <form onSubmit={searchMemory} style={{ display: "flex", alignItems: "center" }}>
                 <input
-                    type="text"
+                    type="search"
+                    aria-label="Search semantic memory"
                     placeholder={canSearch ? "Search Semantic Memory (PGVector)..." : "Sign in to use memory search"}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
@@ -52,10 +53,10 @@ export function GlobalSearch({ token }: { token: string | null }) {
             </form>
 
             {isOpen && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", color: "black", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", zIndex: 100, borderRadius: "4px", marginTop: "5px", padding: "10px", maxHeight: "400px", overflowY: "auto" }}>
+                <div role="region" aria-label="Search results" aria-live="polite" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", color: "black", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", zIndex: 100, borderRadius: "4px", marginTop: "5px", padding: "10px", maxHeight: "400px", overflowY: "auto" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #ddd", paddingBottom: "5px", marginBottom: "10px" }}>
                         <strong style={{ color: "#333" }}>{loading ? "Searching..." : "Memory Results"}</strong>
-                        <button onClick={() => setIsOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
+                        <button onClick={() => setIsOpen(false)} aria-label="Close search results" style={{ background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
                     </div>
                     {!canSearch ? <div style={{ color: "#666" }}>Add a token in Integrations to enable search.</div> : null}
                     {results.length === 0 && !loading && <div style={{ color: "#666" }}>No results found.</div>}
