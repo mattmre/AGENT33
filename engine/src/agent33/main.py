@@ -61,6 +61,7 @@ from agent33.api.routes import (
     webhooks,
     workflow_sse,
     workflow_templates,
+    workflow_transport,
     workflow_ws,
     workflows,
 )
@@ -772,6 +773,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ws_manager = ws_manager
     workflows.set_ws_manager(ws_manager)
     logger.info("workflow_ws_manager_initialized")
+
+    # -- Workflow transport manager (S33: WS-first / SSE fallback) ----------
+    from agent33.workflows.transport import (
+        TransportConfig,
+        TransportType,
+        WorkflowTransportManager,
+    )
+
+    _transport_config = TransportConfig(
+        preferred=TransportType(settings.workflow_transport_preferred),
+        ws_ping_interval=settings.workflow_ws_ping_interval,
+        ws_ping_timeout=settings.workflow_ws_ping_timeout,
+    )
+    workflow_transport_manager = WorkflowTransportManager(
+        config=_transport_config,
+        ws_manager=ws_manager,
+    )
+    app.state.workflow_transport_manager = workflow_transport_manager
+    logger.info(
+        "workflow_transport_manager_initialized",
+        preferred=settings.workflow_transport_preferred,
+    )
 
     # -- MCP bridge / server / transport ------------------------------------
     from agent33.mcp_server.bridge import MCPServiceBridge
@@ -1487,6 +1510,7 @@ app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
+app.include_router(workflow_transport.router)
 app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)

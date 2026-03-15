@@ -373,6 +373,19 @@ class Settings(BaseSettings):
     script_hooks_default_timeout_ms: float = 5000.0
     script_hooks_max_timeout_ms: float = 30000.0
 
+    # Workflow transport (S33: WS-first / SSE fallback)
+    workflow_transport_preferred: str = "auto"  # auto | websocket | sse
+    workflow_ws_ping_interval: float = 30.0
+    workflow_ws_ping_timeout: float = 10.0
+
+    @field_validator("workflow_transport_preferred")
+    @classmethod
+    def _validate_workflow_transport_preferred(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"auto", "websocket", "sse"}:
+            raise ValueError("workflow_transport_preferred must be one of: auto, websocket, sse")
+        return normalized
+
     @field_validator(
         "improvement_learning_file_corruption_behavior",
         "improvement_learning_db_corruption_behavior",
