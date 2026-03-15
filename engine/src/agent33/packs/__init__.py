@@ -9,6 +9,7 @@ Existing standalone skills continue to work unchanged.
 
 from __future__ import annotations
 
+from agent33.packs.categories import CategoryRegistry, MarketplaceCategory
 from agent33.packs.conflicts import (
     ConflictKind,
     Resolution,
@@ -17,6 +18,16 @@ from agent33.packs.conflicts import (
     detect_conflicts,
     resolve_conflicts,
 )
+from agent33.packs.curation import (
+    CurationRecord,
+    CurationStateMachine,
+    CurationStatus,
+    InvalidCurationTransitionError,
+    QualityAssessment,
+    QualityCheck,
+    assess_pack_quality,
+)
+from agent33.packs.curation_service import CurationService
 from agent33.packs.manifest import PackManifest
 from agent33.packs.marketplace import (
     LocalPackMarketplace,
@@ -45,25 +56,35 @@ from agent33.packs.provenance_models import (
 )
 
 __all__ = [
+    "CategoryRegistry",
     "ConflictKind",
+    "CurationRecord",
+    "CurationService",
+    "CurationStateMachine",
+    "CurationStatus",
     "InstalledPack",
     "InstallResult",
+    "InvalidCurationTransitionError",
     "LocalPackMarketplace",
+    "MarketplaceCategory",
+    "MarketplacePackRecord",
+    "MarketplacePackVersion",
     "PackDependency",
     "PackGovernance",
     "PackManifest",
     "PackProvenance",
-    "MarketplacePackRecord",
-    "MarketplacePackVersion",
     "PackSkillEntry",
     "PackSource",
     "PackStatus",
     "PackTrustPolicy",
+    "QualityAssessment",
+    "QualityCheck",
     "Resolution",
     "ResolutionAction",
     "TrustDecision",
     "TrustLevel",
     "VersionConflict",
+    "assess_pack_quality",
     "detect_conflicts",
     "evaluate_trust",
     "resolve_conflicts",

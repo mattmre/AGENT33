@@ -183,6 +183,13 @@ class Settings(BaseSettings):
     pack_max_size_mb: int = 50
     pack_checksums_required: bool = False
     pack_rollback_archive_dir: str = "var/pack-rollback-archive"
+    pack_curation_enabled: bool = False
+    pack_min_quality_score: float = 0.5
+    pack_require_review_for_listing: bool = True
+    pack_default_categories: str = (
+        "automation,data-analysis,devops,security,testing,"
+        "ai-ml,integration,workflow,research,general"
+    )
 
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs

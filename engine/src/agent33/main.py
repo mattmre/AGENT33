@@ -535,6 +535,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.pack_trust_manager = pack_trust_manager
     app.state.pack_rollback_manager = pack_rollback_manager
 
+    # -- Marketplace curation (Phase 33) -----------------------------------
+    from agent33.packs.categories import CategoryRegistry
+    from agent33.packs.curation_service import CurationService
+
+    category_registry = CategoryRegistry(
+        orchestration_state_store, settings.pack_default_categories
+    )
+    curation_service = CurationService(
+        pack_registry,
+        category_registry,
+        orchestration_state_store,
+        settings.pack_min_quality_score,
+        settings.pack_require_review_for_listing,
+    )
+    app.state.category_registry = category_registry
+    app.state.curation_service = curation_service
+    logger.info("marketplace_curation_initialized")
+
     # -- Hook registry -----------------------------------------------------
     hook_registry = None
     if settings.hooks_enabled:

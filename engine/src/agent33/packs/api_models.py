@@ -228,3 +228,50 @@ class EnablementMatrixUpdateRequest(BaseModel):
     """Bulk enablement updates for installed packs."""
 
     matrix: dict[str, dict[str, bool]] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Curation request/response models (Phase 33)
+# ---------------------------------------------------------------------------
+
+
+class CurationSubmitRequest(BaseModel):
+    """Request body for submitting a pack for curation."""
+
+    pack_name: str = Field(..., min_length=1, description="Name of the installed pack")
+    version: str = Field(default="", description="Version to submit (empty = current)")
+
+
+class CurationReviewRequest(BaseModel):
+    """Request body for completing a curation review."""
+
+    decision: str = Field(
+        ...,
+        min_length=1,
+        description="Review decision: 'approved' or 'changes_requested'",
+    )
+    reviewer_id: str = Field(..., min_length=1, description="Reviewer identifier")
+    notes: str = Field(default="", description="Optional review notes")
+
+
+class DeprecateRequest(BaseModel):
+    """Request body for deprecating a curated pack."""
+
+    reason: str = Field(default="", description="Deprecation reason")
+
+
+class CategoryCreateRequest(BaseModel):
+    """Request body for creating a marketplace category."""
+
+    slug: str = Field(..., min_length=1, max_length=64, description="Category slug")
+    label: str = Field(..., min_length=1, max_length=128, description="Display label")
+    description: str = Field(default="", description="Category description")
+    parent_slug: str = Field(default="", description="Parent category slug (empty = top-level)")
+
+
+class CategoryUpdateRequest(BaseModel):
+    """Request body for updating a marketplace category."""
+
+    label: str = Field(default="", description="Updated display label")
+    description: str = Field(default="", description="Updated description")
+    parent_slug: str = Field(default="", description="Updated parent slug")
