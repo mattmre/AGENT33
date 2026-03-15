@@ -250,6 +250,11 @@ class Settings(BaseSettings):
     skill_match_contextual_threshold: float = 0.4
     skill_match_max_candidates: int = 10
 
+    # GPU / Custom Docker image execution (S30)
+    execution_gpu_enabled: bool = False
+    execution_default_docker_image: str = "python:3.11-slim"
+    execution_gpu_runtime: str = "nvidia"  # nvidia | amd
+
     # Hook framework
     hooks_enabled: bool = True
     hooks_definitions_dir: str = "hook-definitions"
@@ -389,6 +394,14 @@ class Settings(BaseSettings):
         normalized = value.strip().lower()
         if normalized not in {"legacy", "dynamic"}:
             raise ValueError("tool_discovery_mode must be one of: legacy, dynamic")
+        return normalized
+
+    @field_validator("execution_gpu_runtime")
+    @classmethod
+    def _validate_execution_gpu_runtime(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"nvidia", "amd"}:
+            raise ValueError("execution_gpu_runtime must be one of: nvidia, amd")
         return normalized
 
     @field_validator(

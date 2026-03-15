@@ -46,6 +46,12 @@ class SandboxConfig(BaseModel):
     network: NetworkPolicy = Field(default_factory=NetworkPolicy)
     processes: ProcessPolicy = Field(default_factory=ProcessPolicy)
 
+    # GPU passthrough (serializable dict to avoid circular imports)
+    gpu: dict[str, Any] | None = None
+    # Docker image override
+    custom_image: str | None = None
+    image_pull_policy: str = "if-not-present"
+
 
 # ---------------------------------------------------------------------------
 # Execution inputs / outputs

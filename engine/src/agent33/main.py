@@ -71,6 +71,9 @@ from agent33.api.routes import (
     discovery as discovery_routes,
 )
 from agent33.api.routes import (
+    execution as execution_routes,
+)
+from agent33.api.routes import (
     plugins as plugins_routes,
 )
 from agent33.api.routes import (
@@ -289,6 +292,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.code_executor = code_executor
     execute_code.set_executor(code_executor)
     logger.info("code_executor_initialized")
+
+    # -- GPU Docker manager (S30) ------------------------------------------
+    from agent33.execution.gpu import GPUDockerManager
+
+    gpu_docker_manager = GPUDockerManager(
+        default_image=settings.execution_default_docker_image,
+    )
+    app.state.gpu_docker_manager = gpu_docker_manager
+    logger.info(
+        "gpu_docker_manager_initialized",
+        gpu_enabled=settings.execution_gpu_enabled,
+        default_image=settings.execution_default_docker_image,
+    )
 
     model_router = ModelRouter()
 
@@ -1476,3 +1492,4 @@ app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(skill_matching_routes.router)
+app.include_router(execution_routes.router)
