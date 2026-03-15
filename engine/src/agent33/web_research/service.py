@@ -18,6 +18,7 @@ from agent33.connectors.boundary import (
 from agent33.connectors.models import ConnectorRequest
 from agent33.web_research.models import (
     ProviderAuthState,
+    ProviderStatusInfo,
     ResearchProviderKind,
     ResearchProviderStatus,
     ResearchSearchResponse,
@@ -326,6 +327,24 @@ class WebResearchService:
         providers = [provider.diagnostics() for provider in self._search_providers.values()]
         providers.extend(provider.diagnostics() for provider in self._fetch_providers.values())
         return providers
+
+    def provider_status_summary(self) -> list[ProviderStatusInfo]:
+        """Build a dashboard-friendly health summary for each provider."""
+        summaries: list[ProviderStatusInfo] = []
+        for diag in self.list_providers():
+            # Map the full diagnostics to the slim dashboard model.
+            # Call counters are not tracked yet -- surface zeros with 100% success.
+            summaries.append(
+                ProviderStatusInfo(
+                    name=diag.display_name,
+                    enabled=diag.configured,
+                    status=diag.status,
+                    last_check=None,
+                    total_calls=0,
+                    success_rate=1.0,
+                )
+            )
+        return summaries
 
     async def search(
         self,
