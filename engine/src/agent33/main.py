@@ -1151,6 +1151,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         git_hash=_runtime_version_info.git_short_hash,
     )
 
+    # -- Benchmark harness (S26) ----------------------------------------------
+    from agent33.evaluation.benchmark import BenchmarkHarness
+    from agent33.evaluation.benchmark_catalog import DEFAULT_BENCHMARK_CATALOG
+
+    _benchmark_catalog = list(DEFAULT_BENCHMARK_CATALOG)
+    if settings.evaluation_benchmark_catalog_path.strip():
+        _custom_catalog_path = Path(settings.evaluation_benchmark_catalog_path)
+        if _custom_catalog_path.exists():
+            try:
+                _benchmark_catalog = BenchmarkHarness.load_catalog_from_file(_custom_catalog_path)
+                logger.info(
+                    "benchmark_catalog_loaded_from_file",
+                    path=str(_custom_catalog_path),
+                    count=len(_benchmark_catalog),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "benchmark_catalog_load_failed",
+                    path=str(_custom_catalog_path),
+                    error=str(exc),
+                )
+        else:
+            logger.warning(
+                "benchmark_catalog_path_not_found",
+                path=str(_custom_catalog_path),
+            )
+
+    benchmark_harness = BenchmarkHarness(task_catalog=_benchmark_catalog)
+    app.state.benchmark_harness = benchmark_harness
+    evaluations.set_benchmark_harness(benchmark_harness)
+    logger.info("benchmark_harness_initialized", tasks=len(_benchmark_catalog))
+
     # -- Tuning loop scheduler (Phase 31) ------------------------------------
     if settings.improvement_tuning_loop_enabled and settings.improvement_learning_enabled:
         try:

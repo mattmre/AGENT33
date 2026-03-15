@@ -428,3 +428,158 @@ async def generate_ctrf(body: GenerateCTRFRequest) -> dict[str, Any]:
         )
 
     return report.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------
+# Benchmark harness routes (S26)
+# ---------------------------------------------------------------------------
+
+_benchmark_harness: Any = None
+
+
+def set_benchmark_harness(harness: Any) -> None:
+    """Set the benchmark harness instance (called from lifespan)."""
+    global _benchmark_harness  # noqa: PLW0603
+    _benchmark_harness = harness
+
+
+def _get_harness() -> Any:
+    """Return the benchmark harness or raise 503."""
+    if _benchmark_harness is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Benchmark harness not initialized",
+        )
+    return _benchmark_harness
+
+
+class BenchmarkConfigRequest(BaseModel):
+    trials_per_task: int = 5
+    categories: list[str] = Field(default_factory=list)
+    task_ids: list[str] = Field(default_factory=list)
+    timeout_seconds: int = 300
+    with_skills: bool = True
+    model_id: str = ""
+    agent_id: str = ""
+
+
+class BenchmarkCompareRequest(BaseModel):
+    run_a_id: str
+    run_b_id: str
+
+
+@router.get(
+    "/benchmark/catalog",
+    dependencies=[require_scope("agents:read")],
+)
+async def list_benchmark_catalog(
+    category: str | None = None,
+) -> list[dict[str, Any]]:
+    """List available benchmark tasks with optional category filter."""
+    from agent33.evaluation.benchmark import BenchmarkConfig
+
+    harness = _get_harness()
+    config = BenchmarkConfig(
+        categories=[category] if category else None,
+    )
+    tasks = harness.filter_catalog(config)
+    return [t.model_dump() for t in tasks]
+
+
+@router.post(
+    "/benchmark/run",
+    status_code=201,
+    dependencies=[require_scope("admin")],
+)
+async def start_benchmark_run(body: BenchmarkConfigRequest) -> dict[str, Any]:
+    """Start a benchmark run with the given configuration."""
+    from agent33.evaluation.benchmark import BenchmarkConfig
+
+    harness = _get_harness()
+    config = BenchmarkConfig(
+        trials_per_task=body.trials_per_task,
+        categories=body.categories if body.categories else None,
+        task_ids=body.task_ids if body.task_ids else None,
+        timeout_seconds=body.timeout_seconds,
+        with_skills=body.with_skills,
+    )
+    run = harness.run_benchmark(config, model_id=body.model_id, agent_id=body.agent_id)
+    return {
+        "run_id": run.run_id,
+        "status": run.status,
+        "total_tasks": run.total_tasks,
+        "passed_tasks": run.passed_tasks,
+        "failed_tasks": run.failed_tasks,
+        "overall_pass_rate": run.overall_pass_rate,
+    }
+
+
+@router.get(
+    "/benchmark/runs",
+    dependencies=[require_scope("agents:read")],
+)
+async def list_benchmark_runs(limit: int = 50) -> list[dict[str, Any]]:
+    """List benchmark runs, most recent first."""
+    harness = _get_harness()
+    runs = harness.list_runs(limit=limit)
+    return [
+        {
+            "run_id": r.run_id,
+            "status": r.status,
+            "model_id": r.model_id,
+            "agent_id": r.agent_id,
+            "with_skills": r.with_skills,
+            "total_tasks": r.total_tasks,
+            "overall_pass_rate": r.overall_pass_rate,
+            "started_at": r.started_at.isoformat(),
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        }
+        for r in runs
+    ]
+
+
+@router.get(
+    "/benchmark/runs/{run_id}",
+    dependencies=[require_scope("agents:read")],
+)
+async def get_benchmark_run(run_id: str) -> dict[str, Any]:
+    """Get detailed benchmark run results."""
+    harness = _get_harness()
+    run = harness.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Benchmark run not found: {run_id}")
+    result: dict[str, Any] = run.model_dump(mode="json")
+    return result
+
+
+@router.get(
+    "/benchmark/runs/{run_id}/ctrf",
+    dependencies=[require_scope("agents:read")],
+)
+async def get_benchmark_run_ctrf(run_id: str) -> dict[str, Any]:
+    """Get CTRF report for a benchmark run."""
+    harness = _get_harness()
+    run = harness.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Benchmark run not found: {run_id}")
+    report = harness.to_ctrf(run)
+    result: dict[str, Any] = report.model_dump(mode="json")
+    return result
+
+
+@router.post(
+    "/benchmark/compare",
+    dependencies=[require_scope("agents:read")],
+)
+async def compare_benchmark_runs(body: BenchmarkCompareRequest) -> dict[str, Any]:
+    """Compare two benchmark runs."""
+    from agent33.evaluation.benchmark import BenchmarkHarness
+
+    harness = _get_harness()
+    run_a = harness.get_run(body.run_a_id)
+    if run_a is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {body.run_a_id}")
+    run_b = harness.get_run(body.run_b_id)
+    if run_b is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {body.run_b_id}")
+    return BenchmarkHarness.compare_runs(run_a, run_b)

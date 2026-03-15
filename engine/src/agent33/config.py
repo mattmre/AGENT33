@@ -317,6 +317,10 @@ class Settings(BaseSettings):
     # CTRF reporting (SkillsBench integration)
     evaluation_ctrf_output_dir: str = "var/ctrf-reports"
 
+    # Benchmark harness (S26)
+    evaluation_benchmark_catalog_path: str = ""  # path to custom catalog JSON
+    evaluation_benchmark_default_trials: int = 5
+
     # Phase 44: Operator session
     operator_session_enabled: bool = True
     operator_session_base_dir: str = ""  # default: ~/.agent33/sessions/
