@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from agent33.automation.scheduler import WorkflowScheduler
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import check_permission, require_scope
+from agent33.workflows.dag_layout import compute_dag_layout
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 
@@ -203,6 +204,50 @@ async def delete_schedule(job_id: str) -> dict[str, Any]:
     return {"job_id": job_id, "removed": True}
 
 
+# -- DAG visualization endpoints (must be before /{name} catch-all) ------------
+
+
+@router.get("/runs/{run_id}/dag", dependencies=[require_scope("workflows:read")])
+async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
+    """Return a positioned DAG layout with live run state overlay."""
+    tenant_id, scopes = get_request_tenant_context(req)
+
+    # Find the execution history entry for this run
+    entry = next(
+        (
+            e
+            for e in _execution_history
+            if e.get("run_id") == run_id
+            and execution_history_entry_visible(
+                e,
+                requester_tenant_id=tenant_id,
+                requester_scopes=scopes,
+            )
+        ),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+
+    workflow_name = entry["workflow_name"]
+    workflow = _registry.get(workflow_name)
+    if workflow is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow '{workflow_name}' no longer registered",
+        )
+
+    # Build run_state from step_statuses recorded in history
+    run_state: dict[str, dict[str, Any]] = {}
+    step_statuses = entry.get("step_statuses") or {}
+    for step_id, status in step_statuses.items():
+        run_state[step_id] = {"status": status}
+
+    layout = compute_dag_layout(workflow, run_state=run_state)
+    layout.run_id = run_id
+    return layout.model_dump(mode="json")
+
+
 # -- Dynamic workflow routes (must be after static routes like /schedules) -----
 
 
@@ -213,6 +258,17 @@ async def get_workflow(name: str) -> dict[str, Any]:
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
     return workflow.model_dump()
+
+
+@router.get("/{name}/dag", dependencies=[require_scope("workflows:read")])
+async def get_workflow_dag(name: str) -> dict[str, Any]:
+    """Return a positioned DAG layout for a workflow definition."""
+    workflow = _registry.get(name)
+    if workflow is None:
+        raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
+
+    layout = compute_dag_layout(workflow)
+    return layout.model_dump(mode="json")
 
 
 @router.post("/", status_code=201, dependencies=[require_scope("workflows:write")])
