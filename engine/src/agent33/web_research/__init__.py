@@ -1,6 +1,7 @@
 """Provider-aware web research services."""
 
 from agent33.web_research.models import (
+    ProviderStatusInfo,
     ResearchFetchRequest,
     ResearchProviderStatus,
     ResearchSearchRequest,
@@ -16,6 +17,7 @@ from agent33.web_research.service import (
 )
 
 __all__ = [
+    "ProviderStatusInfo",
     "ResearchFetchRequest",
     "ResearchProviderStatus",
     "ResearchSearchRequest",

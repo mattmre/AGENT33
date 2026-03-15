@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime  # noqa: TCH003 — Pydantic needs runtime access
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -69,6 +70,17 @@ class ResearchProviderStatus(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     is_default: bool = False
     detail: str = ""
+
+
+class ProviderStatusInfo(BaseModel):
+    """Dashboard-facing provider health summary with call metrics."""
+
+    name: str
+    enabled: bool
+    status: str
+    last_check: datetime | None = None
+    total_calls: int = 0
+    success_rate: float = 1.0
 
 
 class ResearchSearchRequest(BaseModel):

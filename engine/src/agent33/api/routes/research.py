@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from agent33.security.permissions import require_scope
 from agent33.web_research import (
+    ProviderStatusInfo,
     ResearchFetchRequest,
     ResearchProviderStatus,
     ResearchSearchRequest,
@@ -47,6 +48,16 @@ def _get_research_service(request: Request) -> WebResearchService:
 async def list_research_providers(request: Request) -> list[ResearchProviderStatus]:
     """List configured research providers and their diagnostics."""
     return _get_research_service(request).list_providers()
+
+
+@router.get(
+    "/providers/status",
+    response_model=list[ProviderStatusInfo],
+    dependencies=[require_scope("agents:read")],
+)
+async def provider_status_summary(request: Request) -> list[ProviderStatusInfo]:
+    """Return dashboard-friendly provider health summaries."""
+    return _get_research_service(request).provider_status_summary()
 
 
 @router.post(
