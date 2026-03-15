@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     voice_sidecar_artifacts_dir: str = "var/voice-sidecar"
     voice_sidecar_playback_backend: str = "noop"
 
+    # ElevenLabs audio transport (S31)
+    voice_elevenlabs_enabled: bool = False
+    voice_elevenlabs_api_key: SecretStr = SecretStr("")
+    voice_elevenlabs_default_voice_id: str = ""
+    voice_elevenlabs_model_id: str = "eleven_multilingual_v2"
+
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
     airllm_model_path: str = ""
