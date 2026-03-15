@@ -248,6 +248,9 @@ class Settings(BaseSettings):
     jupyter_kernel_mount_workdir: bool = True
     jupyter_kernel_container_workdir: str = "/workspace"
 
+    # Agent profiling (S40)
+    agent_profiler_max_profiles: int = 1000
+
     # Context window budgeting (S27)
     agent_default_context_window: int = 128000
     agent_context_warn_threshold: float = 0.8

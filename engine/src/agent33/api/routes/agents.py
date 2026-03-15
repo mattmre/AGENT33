@@ -386,6 +386,79 @@ async def get_tool_loop_scores(
         return empty
 
 
+# -- profiling endpoints ---------------------------------------------------
+
+
+@router.get("/profiling/summaries", dependencies=[require_scope("agents:read")])
+async def profiling_summaries(
+    request: Request,
+) -> list[dict[str, Any]]:
+    """Return performance summaries for all profiled agents."""
+    profiler = getattr(request.app.state, "agent_profiler", None)
+    if profiler is None:
+        return []
+    summaries = profiler.get_all_summaries()
+    return [s.model_dump(mode="json") for s in summaries]
+
+
+@router.get("/profiling/bottlenecks", dependencies=[require_scope("agents:read")])
+async def profiling_bottlenecks(
+    request: Request,
+) -> list[dict[str, Any]]:
+    """Detect agents with performance bottlenecks (one phase > 60% of duration)."""
+    profiler = getattr(request.app.state, "agent_profiler", None)
+    if profiler is None:
+        return []
+    result: list[dict[str, Any]] = profiler.detect_bottlenecks()
+    return result
+
+
+@router.get("/profiling/hot-paths", dependencies=[require_scope("agents:read")])
+async def profiling_hot_paths(
+    request: Request,
+) -> list[dict[str, Any]]:
+    """Identify the slowest agent/model combinations."""
+    profiler = getattr(request.app.state, "agent_profiler", None)
+    if profiler is None:
+        return []
+    result: list[dict[str, Any]] = profiler.get_hot_paths()
+    return result
+
+
+@router.get("/profiling/profiles", dependencies=[require_scope("agents:read")])
+async def profiling_profiles(
+    request: Request,
+    agent_name: str | None = Query(default=None, description="Filter by agent name"),
+    limit: int = Query(default=50, ge=1, le=500, description="Max profiles to return"),
+) -> list[dict[str, Any]]:
+    """Return raw invocation profiles, newest first."""
+    profiler = getattr(request.app.state, "agent_profiler", None)
+    if profiler is None:
+        return []
+    profiles = profiler.get_profiles(agent_name=agent_name, limit=limit)
+    return [p.model_dump(mode="json") for p in profiles]
+
+
+@router.get("/profiling/{agent_name}", dependencies=[require_scope("agents:read")])
+async def profiling_agent_summary(
+    agent_name: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Return the performance summary for a single agent."""
+    profiler = getattr(request.app.state, "agent_profiler", None)
+    if profiler is None:
+        raise HTTPException(status_code=404, detail="Profiler not initialized")
+    try:
+        summary = profiler.get_agent_summary(agent_name)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No profiles for agent '{agent_name}'",
+        ) from None
+    result: dict[str, Any] = summary.model_dump(mode="json")
+    return result
+
+
 @router.get("/", dependencies=[require_scope("agents:read")])
 async def list_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
