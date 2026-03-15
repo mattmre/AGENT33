@@ -371,3 +371,60 @@ async def get_experiment_skills_impact(run_id: str) -> dict[str, Any]:
         "run_id": run.run_id,
         "impacts": [i.model_dump(mode="json") for i in run.skills_impacts],
     }
+
+
+# ---------------------------------------------------------------------------
+# CTRF reporting routes
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/ctrf/latest",
+    dependencies=[require_scope("agents:read")],
+)
+async def get_latest_ctrf() -> dict[str, Any]:
+    """Get the latest completed evaluation run as a CTRF JSON report."""
+    report = _service.get_latest_ctrf()
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No completed evaluation runs found",
+        )
+    return report.model_dump(mode="json")
+
+
+class GenerateCTRFRequest(BaseModel):
+    run_id: str = ""
+    report_type: str = "evaluation"  # evaluation | gate | golden-task
+
+
+@router.post(
+    "/ctrf/generate",
+    dependencies=[require_scope("admin")],
+)
+async def generate_ctrf(body: GenerateCTRFRequest) -> dict[str, Any]:
+    """Generate a CTRF report from an evaluation run.
+
+    If ``run_id`` is empty, the latest completed run is used.
+    ``report_type`` controls which data is included in the report:
+    ``"evaluation"`` (default), ``"gate"``, or ``"golden-task"``.
+    """
+    report = None
+
+    if body.run_id:
+        if body.report_type == "gate":
+            report = _service.generate_ctrf_for_gate(body.run_id)
+        elif body.report_type == "golden-task":
+            report = _service.generate_ctrf_for_golden_tasks(body.run_id)
+        else:
+            report = _service.generate_ctrf_for_run(body.run_id)
+    else:
+        report = _service.get_latest_ctrf()
+
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No completed evaluation run found for CTRF generation",
+        )
+
+    return report.model_dump(mode="json")
