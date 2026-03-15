@@ -240,6 +240,10 @@ class Settings(BaseSettings):
     agent_default_context_window: int = 128000
     agent_context_warn_threshold: float = 0.8
 
+    # Tool loop scoring (S28)
+    agent_tool_loop_max_retries: int = 3
+    agent_tool_loop_backoff_base_ms: float = 100
+
     # Hook framework
     hooks_enabled: bool = True
     hooks_definitions_dir: str = "hook-definitions"
