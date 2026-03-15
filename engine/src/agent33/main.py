@@ -189,6 +189,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("agent_definitions_dir_not_found", path=str(defs_dir))
     app.state.agent_registry = agent_registry
 
+    # -- Agent profiler (S40) ----------------------------------------------
+    from agent33.agents.profiling import AgentProfiler
+
+    agent_profiler = AgentProfiler(max_profiles=settings.agent_profiler_max_profiles)
+    app.state.agent_profiler = agent_profiler
+    logger.info(
+        "agent_profiler_initialized",
+        max_profiles=settings.agent_profiler_max_profiles,
+    )
+
     # -- Observability metrics + alerts -------------------------------------
     from agent33.observability.alerts import AlertManager
     from agent33.observability.effort_telemetry import (
