@@ -190,6 +190,7 @@ class Settings(BaseSettings):
         "automation,data-analysis,devops,security,testing,"
         "ai-ml,integration,workflow,research,general"
     )
+    pack_signing_key: str = ""
 
     # MCP (Model Context Protocol) servers
     mcp_servers: str = ""  # Comma-separated server URLs
