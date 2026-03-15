@@ -588,6 +588,18 @@ class TestModelValidation:
 class TestProfilingRoutes:
     """Test the profiling API endpoints with real JWT auth."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_profiler(self) -> None:  # type: ignore[misc]
+        """Save and restore app.state.agent_profiler to prevent test pollution."""
+        from agent33.main import app
+
+        original = getattr(app.state, "agent_profiler", None)
+        yield  # type: ignore[misc]
+        if original is not None:
+            app.state.agent_profiler = original
+        elif hasattr(app.state, "agent_profiler"):
+            del app.state.agent_profiler
+
     async def test_summaries_empty(self) -> None:
         from agent33.main import app
 

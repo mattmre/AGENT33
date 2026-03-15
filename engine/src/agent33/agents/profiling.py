@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime  # noqa: TCH003
 from typing import Any
 
@@ -89,8 +89,7 @@ class AgentProfiler:
     """
 
     def __init__(self, max_profiles: int = 1000) -> None:
-        self._max_profiles = max(1, max_profiles)
-        self._profiles: list[AgentInvocationProfile] = []
+        self._profiles: deque[AgentInvocationProfile] = deque(maxlen=max(1, max_profiles))
         self._lock = threading.Lock()
 
     # -- recording ----------------------------------------------------------
@@ -98,8 +97,6 @@ class AgentProfiler:
     def record_profile(self, profile: AgentInvocationProfile) -> None:
         """Store a profile, evicting the oldest if the buffer is full."""
         with self._lock:
-            if len(self._profiles) >= self._max_profiles:
-                self._profiles.pop(0)
             self._profiles.append(profile)
 
     # -- retrieval ----------------------------------------------------------
@@ -119,8 +116,7 @@ class AgentProfiler:
             else:
                 matched = list(self._profiles)
         # Newest first, then apply limit
-        matched.reverse()
-        return matched[:limit]
+        return list(reversed(matched))[:limit]
 
     # -- summaries ----------------------------------------------------------
 
@@ -159,37 +155,46 @@ class AgentProfiler:
 
         Returns a list of dicts with keys: ``agent_name``, ``bottleneck_phase``,
         ``phase_avg_ms``, ``total_avg_ms``, ``ratio``.
-        """
-        summaries = self.get_all_summaries()
-        results: list[dict[str, Any]] = []
 
-        for summary in summaries:
+        Takes a single snapshot under one lock acquisition to avoid inconsistent
+        ratios when profiles are recorded concurrently.
+        """
+        # Single snapshot — all computation derives from this copy
+        with self._lock:
+            profiles_copy = list(self._profiles)
+
+        if not profiles_copy:
+            return []
+
+        # Group by agent
+        by_agent: dict[str, list[AgentInvocationProfile]] = defaultdict(list)
+        for p in profiles_copy:
+            by_agent[p.agent_name].append(p)
+
+        results: list[dict[str, Any]] = []
+        for agent_name, agent_profiles in sorted(by_agent.items()):
+            summary = self._build_summary(agent_name, agent_profiles)
             if summary.avg_duration_ms <= 0:
                 continue
+
+            # Compute all phase averages from the same snapshot
+            n = len(agent_profiles)
+            avg_prompt = sum(p.prompt_construction_ms for p in agent_profiles) / n
+            avg_post = sum(p.post_processing_ms for p in agent_profiles) / n
 
             phases = {
                 "llm": summary.avg_llm_ms,
                 "tools": summary.avg_tool_ms,
+                "prompt": avg_prompt,
+                "post": avg_post,
             }
-            # Reconstruct prompt and post averages from profiles
-            with self._lock:
-                agent_profiles = [p for p in self._profiles if p.agent_name == summary.agent_name]
-            if not agent_profiles:
-                continue
-
-            avg_prompt = sum(p.prompt_construction_ms for p in agent_profiles) / len(
-                agent_profiles
-            )
-            avg_post = sum(p.post_processing_ms for p in agent_profiles) / len(agent_profiles)
-            phases["prompt"] = avg_prompt
-            phases["post"] = avg_post
 
             for phase_name, phase_avg in phases.items():
-                ratio = phase_avg / summary.avg_duration_ms if summary.avg_duration_ms > 0 else 0.0
+                ratio = phase_avg / summary.avg_duration_ms
                 if ratio > 0.6:
                     results.append(
                         {
-                            "agent_name": summary.agent_name,
+                            "agent_name": agent_name,
                             "bottleneck_phase": phase_name,
                             "phase_avg_ms": round(phase_avg, 2),
                             "total_avg_ms": round(summary.avg_duration_ms, 2),
