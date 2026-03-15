@@ -355,6 +355,37 @@ async def get_agent_by_id(
     return definition.model_dump(mode="json")
 
 
+@router.get("/tool-loop/scores", dependencies=[require_scope("agents:read")])
+async def get_tool_loop_scores(
+    request: Request,
+) -> dict[str, Any]:
+    """Return current tool loop scoring data.
+
+    If a ``ToolLoopScorer`` has been installed on ``app.state``,
+    this endpoint returns its summary.  Otherwise it returns a minimal
+    empty-state response.
+    """
+    empty: dict[str, Any] = {
+        "total_iterations": 0,
+        "total_tool_calls": 0,
+        "unique_tools": 0,
+        "overall_success_rate": 0.0,
+        "convergence_detected": False,
+        "tool_scores": [],
+        "iterations": [],
+    }
+    scorer = getattr(request.app.state, "tool_loop_scorer", None)
+    if scorer is None:
+        return empty
+    try:
+        summary = scorer.get_loop_summary()
+        result: dict[str, Any] = summary.model_dump(mode="json")
+        return result
+    except Exception:
+        logger.debug("tool_loop_scorer.get_loop_summary() failed", exc_info=True)
+        return empty
+
+
 @router.get("/", dependencies=[require_scope("agents:read")])
 async def list_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
