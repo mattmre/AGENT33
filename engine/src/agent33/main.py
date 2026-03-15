@@ -40,6 +40,7 @@ from agent33.api.routes import (
     mcp_proxy,
     mcp_sync,
     memory_search,
+    migrations,
     multimodal,
     operations_hub,
     operator,
@@ -1258,6 +1259,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("tuning_loop_scheduler_init_failed", exc_info=True)
 
+    # -- Alembic migration checker (S34) ------------------------------------
+    from agent33.migrations.checker import MigrationChecker as _MigrationChecker
+
+    _migration_checker = _MigrationChecker(
+        alembic_dir=str(Path(settings.alembic_config_path).parent / "alembic"),
+        config_file=settings.alembic_config_path,
+    )
+    app.state.migration_checker = _migration_checker
+    if settings.alembic_auto_check_on_startup:
+        try:
+            _mig_status = _migration_checker.get_status()
+            if not _mig_status.chain_valid:
+                logger.warning("alembic_chain_invalid", heads=_mig_status.heads)
+            elif _mig_status.has_multiple_heads:
+                logger.warning("alembic_multiple_heads", heads=_mig_status.heads)
+            else:
+                logger.info(
+                    "alembic_chain_ok",
+                    head=_mig_status.current_head,
+                    revisions=len(_migration_checker.list_revisions()),
+                )
+        except Exception:
+            logger.warning("alembic_auto_check_failed", exc_info=True)
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
@@ -1517,3 +1542,4 @@ app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
+app.include_router(migrations.router)
