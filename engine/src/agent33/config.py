@@ -384,6 +384,12 @@ class Settings(BaseSettings):
     alembic_config_path: str = "alembic.ini"
     alembic_auto_check_on_startup: bool = False
 
+    # Webhook delivery reliability (S43)
+    webhook_delivery_max_retries: int = 5
+    webhook_delivery_base_delay: float = 1.0
+    webhook_delivery_max_delay: float = 300.0
+    webhook_delivery_max_records: int = 10_000
+
     # Workflow transport (S33: WS-first / SSE fallback)
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
