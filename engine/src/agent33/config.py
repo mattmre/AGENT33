@@ -236,6 +236,10 @@ class Settings(BaseSettings):
     jupyter_kernel_mount_workdir: bool = True
     jupyter_kernel_container_workdir: str = "/workspace"
 
+    # Context window budgeting (S27)
+    agent_default_context_window: int = 128000
+    agent_context_warn_threshold: float = 0.8
+
     # Hook framework
     hooks_enabled: bool = True
     hooks_definitions_dir: str = "hook-definitions"

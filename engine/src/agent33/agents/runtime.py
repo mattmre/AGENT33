@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable
 
     from agent33.agents.context_manager import ContextManager
+    from agent33.agents.context_window import ContextWindowManager
     from agent33.agents.definition import AgentDefinition
     from agent33.agents.effort import AgentEffort, AgentEffortRouter
     from agent33.agents.events import ToolLoopEvent
@@ -243,6 +244,7 @@ class AgentRuntime:
         tenant_id: str = "",
         domain: str = "",
         hook_registry: Any | None = None,
+        context_window_manager: ContextWindowManager | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -276,6 +278,7 @@ class AgentRuntime:
         self._context_manager = context_manager
         self._reasoning_protocol = reasoning_protocol
         self._hook_registry = hook_registry
+        self._context_window_manager = context_window_manager
 
     @property
     def definition(self) -> AgentDefinition:
@@ -453,6 +456,14 @@ class AgentRuntime:
         self._validate_required_inputs(inputs)
 
         user_content = json.dumps(inputs, indent=2)
+
+        # --- Context window budgeting (S27) ---
+        if self._context_window_manager is not None:
+            budget = self._context_window_manager.create_budget(
+                system_prompt=system_prompt,
+                history=[{"role": "user", "content": user_content}],
+            )
+            self._context_window_manager.check_and_warn(budget)
 
         messages = [
             ChatMessage(role="system", content=system_prompt),

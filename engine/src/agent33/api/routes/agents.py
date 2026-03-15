@@ -729,6 +729,52 @@ async def invoke_agent_iterative_stream(
     )
 
 
+@router.get(
+    "/{name}/context-budget",
+    dependencies=[require_scope("agents:read")],
+)
+async def get_context_budget(
+    name: str,
+    request: Request,
+    registry: AgentRegistry = Depends(get_registry),  # noqa: B008
+) -> dict[str, Any]:
+    """Return an estimated context budget for the agent's current configuration.
+
+    Builds the system prompt, collects skill instructions, and estimates
+    how many tokens each component consumes relative to the model's
+    context window.
+    """
+    from agent33.agents.context_window import ContextWindowManager
+    from agent33.agents.runtime import _build_system_prompt
+
+    definition = registry.get(name)
+    if definition is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    # Build system prompt the same way AgentRuntime does
+    system_prompt = _build_system_prompt(definition)
+
+    # Collect skill instruction blocks if injector is available
+    skill_injector = getattr(request.app.state, "skill_injector", None)
+    skill_texts: list[str] = []
+    if skill_injector is not None and definition.skills:
+        skill_texts.append(skill_injector.build_skill_metadata_block(definition.skills))
+        for skill_name in definition.skills:
+            skill_texts.append(skill_injector.build_skill_instructions_block(skill_name))
+
+    cwm = getattr(request.app.state, "context_window_manager", None)
+    if cwm is None:
+        cwm = ContextWindowManager(default_max_tokens=settings.agent_default_context_window)
+
+    budget = cwm.create_budget(
+        system_prompt=system_prompt,
+        skills=skill_texts if skill_texts else None,
+    )
+    report = cwm.get_utilization_report(budget)
+    report["agent"] = name
+    return report
+
+
 # -- helpers --------------------------------------------------------------
 
 
