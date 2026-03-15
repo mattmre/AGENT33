@@ -103,6 +103,27 @@ class ImprovementService:
         del self._persisted_metrics_snapshots
         self._checklist_evaluator = ChecklistEvaluator()
 
+    # ----- Policy management --------------------------------------------------
+
+    def update_policy(self, policy: LearningPersistencePolicy) -> None:
+        """Replace the live persistence policy at runtime.
+
+        Used by the tuning loop to adjust thresholds without reconstructing
+        the service.
+        """
+        if not 0.0 <= policy.auto_intake_min_quality <= 1.0:
+            raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
+        self._persistence_policy = policy
+        logger.info(
+            "persistence_policy_updated",
+            extra={
+                "retention_days": policy.retention_days,
+                "max_signals": policy.max_signals,
+                "max_generated_intakes": policy.max_generated_intakes,
+                "auto_intake_min_quality": policy.auto_intake_min_quality,
+            },
+        )
+
     # ----- Read-only accessors (for analytics) --------------------------------
 
     def all_intakes(self, tenant_id: str | None = None) -> list[ResearchIntake]:
