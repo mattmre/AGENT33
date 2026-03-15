@@ -553,6 +553,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.curation_service = curation_service
     logger.info("marketplace_curation_initialized")
 
+    # -- Trust analytics dashboard (Phase 33 / S23) ------------------------
+    from agent33.packs.trust_analytics import TrustAnalyticsService
+
+    trust_analytics = TrustAnalyticsService(
+        pack_registry,
+        pack_trust_manager,
+        provenance_collector=None,  # wired later after provenance init
+        curation_service=curation_service,
+        verification_key=settings.pack_signing_key,
+    )
+    app.state.trust_analytics = trust_analytics
+    logger.info("trust_analytics_initialized")
+
     # -- Hook registry -----------------------------------------------------
     hook_registry = None
     if settings.hooks_enabled:
@@ -1109,6 +1122,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.provenance_collector = _provenance_collector
     app.state.audit_timeline_service = _audit_timeline_service
     app.state.audit_exporter = _audit_exporter
+
+    # Back-wire provenance collector into trust analytics (initialized earlier)
+    if hasattr(app.state, "trust_analytics"):
+        app.state.trust_analytics._provenance_collector = _provenance_collector
 
     _runtime_version_info = _resolve_version()
     app.state.runtime_version_info = _runtime_version_info

@@ -527,3 +527,78 @@ async def rollback_pack(
         restored_from_version=revision.version,
         errors=[],
     )
+
+
+# ---------------------------------------------------------------------------
+# Trust dashboard endpoints (Phase 33 / S23)
+# ---------------------------------------------------------------------------
+
+
+def _get_trust_analytics(request: Request) -> Any:
+    """Retrieve TrustAnalyticsService from app state."""
+    return getattr(request.app.state, "trust_analytics", None)
+
+
+@router.get("/trust/dashboard", dependencies=[require_scope("agents:read")])
+async def get_trust_dashboard(request: Request) -> dict[str, Any]:
+    """Return the full trust dashboard: overview, chain, audit, policy, curation."""
+    svc = _get_trust_analytics(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Trust analytics service not initialized")
+    summary = svc.get_dashboard()
+    result: dict[str, Any] = summary.model_dump(mode="json")
+    return result
+
+
+@router.get("/trust/overview", dependencies=[require_scope("agents:read")])
+async def get_trust_overview(request: Request) -> dict[str, Any]:
+    """Return aggregate trust metrics for all installed packs."""
+    svc = _get_trust_analytics(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Trust analytics service not initialized")
+    overview = svc.get_overview()
+    result: dict[str, Any] = overview.model_dump(mode="json")
+    return result
+
+
+@router.get("/trust/chain", dependencies=[require_scope("agents:read")])
+async def get_trust_chain(request: Request) -> dict[str, Any]:
+    """Return trust chain entries for all installed packs."""
+    svc = _get_trust_analytics(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Trust analytics service not initialized")
+    chain = svc.get_trust_chain()
+    return {
+        "entries": [entry.model_dump(mode="json") for entry in chain],
+        "count": len(chain),
+    }
+
+
+@router.get("/trust/audit", dependencies=[require_scope("agents:read")])
+async def get_trust_audit(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500, description="Max audit records to return"),
+) -> dict[str, Any]:
+    """Return recent trust-related audit trail records."""
+    svc = _get_trust_analytics(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Trust analytics service not initialized")
+    records = svc.get_audit_trail(limit=limit)
+    return {
+        "records": [r.model_dump(mode="json") for r in records],
+        "count": len(records),
+    }
+
+
+@router.post("/trust/verify-all", dependencies=[require_scope("admin")])
+async def verify_all_signatures(request: Request) -> dict[str, Any]:
+    """Batch-verify signatures for all signed packs."""
+    svc = _get_trust_analytics(request)
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Trust analytics service not initialized")
+    results = svc.verify_all_signatures()
+    return {
+        "results": results,
+        "total_verified": len(results),
+        "all_valid": all(r.get("valid") is True for r in results) if results else True,
+    }
