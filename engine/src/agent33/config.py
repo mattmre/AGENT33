@@ -291,6 +291,7 @@ class Settings(BaseSettings):
     improvement_learning_max_signals: int = 5000
     improvement_learning_max_generated_intakes: int = 1000
     improvement_learning_auto_intake_min_quality: float = 0.45
+    improvement_learning_max_metrics_snapshots: int = 100
 
     # Comparative evaluation (AWM Tier 2 group-relative scoring)
     comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates

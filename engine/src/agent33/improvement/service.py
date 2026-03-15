@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from agent33.improvement.checklists import ChecklistEvaluator, build_checklist
-from agent33.improvement.metrics import MetricsTracker, default_metrics
+from agent33.improvement.metrics import MetricsTracker, default_metrics, percentile
 from agent33.improvement.models import (
     ChecklistPeriod,
     ImprovementChecklist,
@@ -82,6 +82,7 @@ class ImprovementService:
         learning_store: LearningSignalStore | None = None,
         *,
         persistence_policy: LearningPersistencePolicy | None = None,
+        max_metrics_snapshots: int = 100,
     ) -> None:
         self._intakes: dict[str, ResearchIntake] = {}
         self._lessons: dict[str, LessonLearned] = {}
@@ -91,11 +92,47 @@ class ImprovementService:
         self._learning_signal_intake_map: dict[str, str] = {}
         self._learning_store = learning_store or InMemoryLearningSignalStore()
         self._persistence_policy = persistence_policy or LearningPersistencePolicy()
+        self._max_metrics_snapshots = max(1, max_metrics_snapshots)
         if not 0.0 <= self._persistence_policy.auto_intake_min_quality <= 1.0:
             raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
+        self._persisted_metrics_snapshots: list[MetricsSnapshot] = []
         self._load_learning_state()
         self._metrics_tracker = MetricsTracker()
+        # Restore any persisted metrics snapshots into the tracker
+        self._metrics_tracker._snapshots = list(self._persisted_metrics_snapshots)
+        del self._persisted_metrics_snapshots
         self._checklist_evaluator = ChecklistEvaluator()
+
+    # ----- Read-only accessors (for analytics) --------------------------------
+
+    def all_intakes(self, tenant_id: str | None = None) -> list[ResearchIntake]:
+        """Return copies of all research intakes, optionally filtered by tenant."""
+        result = list(self._intakes.values())
+        if tenant_id is not None:
+            result = [i for i in result if i.tenant_id == tenant_id]
+        return [i.model_copy(deep=True) for i in result]
+
+    def all_lessons(self) -> list[LessonLearned]:
+        """Return copies of all lessons learned."""
+        return [lesson.model_copy(deep=True) for lesson in self._lessons.values()]
+
+    def all_signals(self, tenant_id: str | None = None) -> list[LearningSignal]:
+        """Return copies of all learning signals, optionally filtered by tenant."""
+        result = list(self._learning_signals.values())
+        if tenant_id is not None:
+            result = [s for s in result if s.tenant_id == tenant_id]
+        return [s.model_copy(deep=True) for s in result]
+
+    def all_refreshes(self) -> list[RoadmapRefresh]:
+        """Return copies of all roadmap refreshes."""
+        return [r.model_copy(deep=True) for r in self._refreshes.values()]
+
+    def all_metrics_snapshots(self, limit: int | None = None) -> list[MetricsSnapshot]:
+        """Return copies of metrics snapshots (newest first)."""
+        snapshots = self._metrics_tracker.list_snapshots(
+            limit=limit or len(self._metrics_tracker._snapshots) or 1
+        )
+        return [s.model_copy(deep=True) for s in snapshots]
 
     # ----- Research Intake -------------------------------------------------
 
@@ -263,8 +300,13 @@ class ImprovementService:
     # ----- Metrics ---------------------------------------------------------
 
     def save_metrics_snapshot(self, snapshot: MetricsSnapshot) -> MetricsSnapshot:
-        """Save a metrics snapshot."""
-        return self._metrics_tracker.save_snapshot(snapshot)
+        """Save a metrics snapshot, enforce cap, and persist."""
+        result = self._metrics_tracker.save_snapshot(snapshot)
+        # Enforce max snapshots cap
+        while len(self._metrics_tracker._snapshots) > self._max_metrics_snapshots:
+            self._metrics_tracker._snapshots.pop(0)
+        self._persist_learning_state()
+        return result
 
     def latest_metrics(self) -> MetricsSnapshot | None:
         """Return the latest metrics snapshot."""
@@ -540,16 +582,8 @@ class ImprovementService:
         )
 
     @staticmethod
-    def _percentile(values: list[float], percentile: float) -> float:
-        if not values:
-            return 0.0
-        sorted_values = sorted(values)
-        if percentile <= 0:
-            return sorted_values[0]
-        if percentile >= 1:
-            return sorted_values[-1]
-        index = int(round((len(sorted_values) - 1) * percentile))
-        return sorted_values[index]
+    def _percentile(values: list[float], p: float) -> float:
+        return percentile(values, p)
 
     def calibrate_learning_thresholds(
         self,
@@ -738,6 +772,11 @@ class ImprovementService:
         self._learning_signal_intake_map = dict(state.signal_intake_map)
         for intake in state.generated_intakes:
             self._intakes[intake.intake_id] = intake
+        # Stash persisted metrics snapshots for later restoration into tracker
+        if hasattr(self, "_metrics_tracker"):
+            self._metrics_tracker._snapshots = list(state.metrics_snapshots)
+        else:
+            self._persisted_metrics_snapshots = list(state.metrics_snapshots)
 
     @staticmethod
     def _normalize_signal_field(value: str) -> str:
@@ -845,10 +884,14 @@ class ImprovementService:
         signals, generated_intakes = self._prune_learning_state()
         signals.sort(key=lambda signal: signal.signal_id)
         generated_intakes.sort(key=lambda intake: intake.intake_id)
+        metrics_snapshots: list[MetricsSnapshot] = []
+        if hasattr(self, "_metrics_tracker"):
+            metrics_snapshots = list(self._metrics_tracker._snapshots)
         self._learning_store.save(
             LearningPersistenceState(
                 signals=signals,
                 generated_intakes=generated_intakes,
                 signal_intake_map=dict(self._learning_signal_intake_map),
+                metrics_snapshots=metrics_snapshots,
             )
         )
