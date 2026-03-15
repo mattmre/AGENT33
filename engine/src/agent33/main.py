@@ -79,6 +79,9 @@ from agent33.api.routes import (
     plugins as plugins_routes,
 )
 from agent33.api.routes import (
+    rate_limits as rate_limits_routes,
+)
+from agent33.api.routes import (
     skill_matching as skill_matching_routes,
 )
 from agent33.api.routes import (
@@ -1091,6 +1094,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.operator_service = operator_service
     logger.info("operator_service_initialized")
 
+    # --- Rate limiter (S42) ---
+    # The RateLimiter instance is created eagerly at module scope (for middleware
+    # registration). Store the reference on app.state for route DI access.
+    if settings.rate_limit_enabled:
+        app.state.rate_limiter = _boot_rate_limiter
+        logger.info(
+            "rate_limiter_initialized",
+            default_tier=settings.rate_limit_default_tier,
+        )
+
     # --- Cron CRUD and job history (Track 9) ---
     from agent33.automation.cron_models import JobDefinition, JobHistoryStore
 
@@ -1482,10 +1495,29 @@ app = FastAPI(
 )
 
 # -- Middleware (order matters: last added = first executed) --------------------
-# Execution order: CORS -> Auth -> SizeLimit -> HookMiddleware -> Router
+# Execution order: CORS -> Auth -> RateLimit -> SizeLimit -> HookMiddleware -> Router
 # HookMiddleware added first so it runs last (after auth resolves tenant_id)
 app.add_middleware(HookMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
+
+# Rate limit middleware: runs after auth resolves tenant_id.
+# The RateLimiter is a lightweight in-memory object, safe to create eagerly.
+if settings.rate_limit_enabled:
+    from agent33.security.rate_limiter import (
+        RateLimiter as _BootRateLimiter,
+    )
+    from agent33.security.rate_limiter import (
+        RateLimitMiddleware,
+    )
+    from agent33.security.rate_limiter import (
+        RateLimitTier as _BootRateLimitTier,
+    )
+
+    _boot_rate_limiter = _BootRateLimiter(
+        default_tier=_BootRateLimitTier(settings.rate_limit_default_tier),
+    )
+    app.add_middleware(RateLimitMiddleware, rate_limiter=_boot_rate_limiter)
+
 app.add_middleware(AuthMiddleware)
 
 _cors_origins = settings.cors_allowed_origins.split(",") if settings.cors_allowed_origins else []
@@ -1553,3 +1585,4 @@ app.include_router(connectors.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
+app.include_router(rate_limits_routes.router)
