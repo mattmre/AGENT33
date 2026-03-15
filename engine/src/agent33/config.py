@@ -293,6 +293,14 @@ class Settings(BaseSettings):
     improvement_learning_auto_intake_min_quality: float = 0.45
     improvement_learning_max_metrics_snapshots: int = 100
 
+    # Tuning loop automation (Phase 31)
+    improvement_tuning_loop_enabled: bool = False
+    improvement_tuning_loop_interval_hours: float = 24.0
+    improvement_tuning_loop_max_quality_delta: float = 0.15
+    improvement_tuning_loop_max_retention_delta_days: int = 30
+    improvement_tuning_loop_require_approval: bool = True
+    improvement_tuning_loop_dry_run: bool = False
+
     # Comparative evaluation (AWM Tier 2 group-relative scoring)
     comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates
     comparative_min_population_size: int = 2  # min agents for round-robin

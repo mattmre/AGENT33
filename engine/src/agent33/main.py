@@ -1091,6 +1091,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         git_hash=_runtime_version_info.git_short_hash,
     )
 
+    # -- Tuning loop scheduler (Phase 31) ------------------------------------
+    if settings.improvement_tuning_loop_enabled and settings.improvement_learning_enabled:
+        try:
+            from agent33.improvement.tuning import TuningLoopScheduler, TuningLoopService
+
+            _improvement_svc = improvements.get_improvement_service()
+            _config_apply_svc = getattr(app.state, "config_apply_service", None)
+            _tuning_svc = TuningLoopService(_improvement_svc, _config_apply_svc, settings)
+            _tuning_scheduler = TuningLoopScheduler(
+                _tuning_svc, settings.improvement_tuning_loop_interval_hours
+            )
+            app.state.tuning_loop_scheduler = _tuning_scheduler
+            await _tuning_scheduler.start()
+            logger.info("tuning_loop_scheduler_started")
+        except Exception:
+            logger.warning("tuning_loop_scheduler_init_failed", exc_info=True)
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
@@ -1140,6 +1157,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     scheduler = getattr(app.state, "training_scheduler", None)
     if scheduler is not None:
         await scheduler.stop()
+
+    _tuning_loop_scheduler: Any = getattr(app.state, "tuning_loop_scheduler", None)
+    if _tuning_loop_scheduler is not None:
+        await _tuning_loop_scheduler.stop()
+        logger.info("tuning_loop_scheduler_stopped")
 
     # Close embedding provider (cache.close() delegates to provider.close())
     _embedder = getattr(app.state, "embedding_cache", None) or getattr(

@@ -45,6 +45,7 @@ from agent33.improvement.repo_ingestion import (
     score_feature_candidate,
 )
 from agent33.improvement.service import ImprovementService, LearningPersistencePolicy
+from agent33.improvement.tuning import TuningLoopService
 from agent33.security.permissions import check_permission, require_scope
 
 router = APIRouter(prefix="/v1/improvements", tags=["improvements"])
@@ -121,11 +122,23 @@ def get_analytics_service() -> AnalyticsService:
     return _analytics
 
 
+_tuning: TuningLoopService | None = None
+
+
+def get_tuning_service() -> TuningLoopService:
+    """Return (lazily created) tuning loop service singleton."""
+    global _tuning  # noqa: PLW0603
+    if _tuning is None:
+        _tuning = TuningLoopService(get_improvement_service(), settings=settings)
+    return _tuning
+
+
 def _reset_service() -> None:
     """Reset singleton for testing."""
-    global _service, _analytics  # noqa: PLW0603
+    global _service, _analytics, _tuning  # noqa: PLW0603
     _service = _build_improvement_service()
     _analytics = None
+    _tuning = None
 
 
 # ---------------------------------------------------------------------------
@@ -940,3 +953,43 @@ def analytics_refresh_cadence() -> dict[str, Any]:
     """Return roadmap refresh cadence report."""
     svc = get_analytics_service()
     return svc.refresh_cadence().model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------
+# Tuning Loop endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/tuning/status")
+def tuning_status() -> dict[str, Any]:
+    """Return current tuning loop status."""
+    svc = get_tuning_service()
+    return svc.get_status()
+
+
+@router.post("/tuning/run")
+def tuning_run(dry_run: bool | None = None) -> dict[str, Any]:
+    """Manually trigger a tuning cycle."""
+    _ensure_learning_enabled()
+    svc = get_tuning_service()
+    record = svc.run_cycle(dry_run=dry_run)
+    return record.model_dump(mode="json")
+
+
+@router.get("/tuning/history")
+def tuning_history(limit: int = 20) -> list[dict[str, Any]]:
+    """Return recent tuning cycle records."""
+    svc = get_tuning_service()
+    return [r.model_dump(mode="json") for r in svc.get_history(limit=limit)]
+
+
+@router.post("/tuning/approve/{cycle_id}")
+def tuning_approve(cycle_id: str, approved_by: str = "operator") -> dict[str, Any]:
+    """Approve a pending tuning cycle and apply its changes."""
+    _ensure_learning_enabled()
+    svc = get_tuning_service()
+    try:
+        record = svc.approve_cycle(cycle_id, approved_by=approved_by)
+        return record.model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
