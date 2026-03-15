@@ -132,15 +132,18 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
         checks["status_line"] = "unconfigured"
 
     all_ok = all(v == "ok" for v in checks.values())
-    result: dict[str, Any] = {"status": "healthy" if all_ok else "degraded", "services": checks}
+    health_result: dict[str, Any] = {
+        "status": "healthy" if all_ok else "degraded",
+        "services": checks,
+    }
 
     # Attach runtime version info if available
     runtime_info = getattr(app_state, "runtime_version_info", None)
     if runtime_info is not None:
-        result["runtime_version"] = runtime_info.version
-        result["git_short_hash"] = runtime_info.git_short_hash
+        health_result["runtime_version"] = runtime_info.version
+        health_result["git_short_hash"] = runtime_info.git_short_hash
 
-    return result
+    return health_result
 
 
 @router.get("/health/channels")

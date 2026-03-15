@@ -47,7 +47,7 @@ class RestartGuard:
             )
             # Pydantic ValidationError has `.errors()`, others just str.
             if hasattr(exc, "errors"):
-                for err in exc.errors():  # type: ignore[union-attr]
+                for err in exc.errors():  # type: ignore[union-attr,unused-ignore]
                     loc = ".".join(str(p) for p in err.get("loc", []))
                     msg = err.get("msg", str(err))
                     errors.append(f"{loc}: {msg}" if loc else msg)

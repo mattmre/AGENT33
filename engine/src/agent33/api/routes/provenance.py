@@ -142,7 +142,8 @@ async def get_receipt(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Receipt {receipt_id} not found",
         )
-    return receipt
+    result: ProvenanceReceipt = receipt
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -183,11 +184,12 @@ async def export_audit(
 ) -> AuditBundle:
     """Generate and return an audit bundle."""
     exporter = _get_exporter(request)
-    return exporter.export(
+    bundle: AuditBundle = exporter.export(
         tenant_id=body.tenant_id,
         since=body.since,
         until=body.until,
     )
+    return bundle
 
 
 # ---------------------------------------------------------------------------
