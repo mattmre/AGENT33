@@ -114,4 +114,90 @@ describe("GlobalSearch", () => {
 
     expect(screen.queryByText("No results found.")).not.toBeInTheDocument()
   })
+
+  it("does not submit when query is empty", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<GlobalSearch token="tok" />)
+    await user.type(
+      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      "{enter}"
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("shows sign-in message in results panel when token is null and form submitted", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<GlobalSearch token={null} />)
+
+    expect(screen.getByPlaceholderText("Sign in to use memory search")).toBeDisabled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("displays loading state while search is in flight", async () => {
+    const user = userEvent.setup()
+    let resolveSearch: (value: unknown) => void = () => {}
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSearch = resolve
+        })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<GlobalSearch token="tok" />)
+    await user.type(
+      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      "query{enter}"
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Searching...")).toBeInTheDocument()
+    })
+
+    resolveSearch({
+      ok: true,
+      json: () => Promise.resolve({ results: [] })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText("No results found.")).toBeInTheDocument()
+    })
+    expect(screen.queryByText("Searching...")).not.toBeInTheDocument()
+  })
+
+  it("renders result token and match metadata", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          results: [
+            {
+              content: "Semantic memory result about agent orchestration workflow",
+              token_estimate: 128,
+              level: "summary"
+            }
+          ]
+        })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<GlobalSearch token="tok" />)
+    await user.type(
+      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      "search{enter}"
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Tokens: 128/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Match: summary/)).toBeInTheDocument()
+  })
 })
