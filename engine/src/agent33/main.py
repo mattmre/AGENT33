@@ -74,6 +74,9 @@ from agent33.api.routes import (
     plugins as plugins_routes,
 )
 from agent33.api.routes import (
+    skill_matching as skill_matching_routes,
+)
+from agent33.api.routes import (
     tool_catalog as tool_catalog_routes,
 )
 from agent33.config import settings
@@ -473,6 +476,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     skill_injector = SkillInjector(skill_registry)
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
+
+    # -- Hybrid skill matcher (S29) ----------------------------------------
+    from agent33.skills.calibration import HybridSkillMatcher, MatchThresholds
+
+    hybrid_thresholds = MatchThresholds(
+        fuzzy_threshold=settings.skill_match_fuzzy_threshold,
+        semantic_threshold=settings.skill_match_semantic_threshold,
+        contextual_threshold=settings.skill_match_contextual_threshold,
+        max_candidates=settings.skill_match_max_candidates,
+    )
+    hybrid_skill_matcher = HybridSkillMatcher(
+        skill_registry=skill_registry,
+        thresholds=hybrid_thresholds,
+    )
+    app.state.hybrid_skill_matcher = hybrid_skill_matcher
+    logger.info("hybrid_skill_matcher_initialized")
 
     # -- Pack registry (optional) ------------------------------------------
     from agent33.packs.marketplace import LocalPackMarketplace
@@ -1456,3 +1475,4 @@ app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
 app.include_router(connectors.router)
+app.include_router(skill_matching_routes.router)
