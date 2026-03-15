@@ -238,6 +238,10 @@ class Settings(BaseSettings):
     hooks_execution_log_enabled: bool = True
     hooks_execution_log_retention_hours: int = 24
 
+    # Provenance
+    provenance_enabled: bool = True
+    provenance_max_receipts: int = 10000
+
     # Environment
     environment: str = "development"
 
