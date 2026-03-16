@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     )
 
     # Rate limiting (per-tenant, sliding window)
+    rate_limit_enabled: bool = True
+    rate_limit_default_tier: str = "standard"
     rate_limit_per_minute: int = 60  # max tool executions per minute
     rate_limit_burst: int = 10  # max burst above per-minute rate
 
