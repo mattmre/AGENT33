@@ -59,6 +59,7 @@ from agent33.api.routes import (
     traces,
     training,
     visualizations,
+    webhook_delivery,
     webhooks,
     workflow_marketplace,
     workflow_sse,
@@ -1298,6 +1299,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("tuning_loop_scheduler_init_failed", exc_info=True)
 
+    # -- Webhook delivery manager (S43) ------------------------------------
+    from agent33.automation.webhook_delivery import WebhookDeliveryManager
+
+    _webhook_delivery_mgr = WebhookDeliveryManager(
+        max_retries=settings.webhook_delivery_max_retries,
+        base_delay_seconds=settings.webhook_delivery_base_delay,
+        max_delay_seconds=settings.webhook_delivery_max_delay,
+        max_records=settings.webhook_delivery_max_records,
+    )
+    app.state.webhook_delivery = _webhook_delivery_mgr
+    logger.info(
+        "webhook_delivery_manager_initialized",
+        max_retries=settings.webhook_delivery_max_retries,
+        max_records=settings.webhook_delivery_max_records,
+    )
+
     # -- Alembic migration checker (S34) ------------------------------------
     from agent33.migrations.checker import MigrationChecker as _MigrationChecker
 
@@ -1559,6 +1576,7 @@ app.include_router(visualizations.router)
 app.include_router(explanations.router)
 app.include_router(auth.router)
 app.include_router(webhooks.router)
+app.include_router(webhook_delivery.router)
 app.include_router(dashboard.router)
 app.include_router(memory_search.router)
 app.include_router(discovery_routes.router)
