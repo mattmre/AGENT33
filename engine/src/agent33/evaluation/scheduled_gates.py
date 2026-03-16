@@ -283,7 +283,7 @@ class ScheduledGateService:
             # If no golden tasks for this gate type, use all available tasks
             if not task_ids:
                 all_tasks = self._evaluation_service.list_golden_tasks()
-                task_ids = [t["task_id"] for t in all_tasks]
+                task_ids = [str(t["task_id"]) for t in all_tasks]
 
             # 3. Generate synthetic results using the evaluation service's
             #    trial evaluator (DeterministicFallbackEvaluator by default)
