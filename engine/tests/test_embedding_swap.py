@@ -87,6 +87,7 @@ class FakeEmbeddingCache:
         self._hits = 0
         self._misses = 0
         self.clear_count = 0
+        self._lock = asyncio.Lock()
 
     @property
     def size(self) -> int:
@@ -806,3 +807,187 @@ class TestManagerNotInitialized:
             resp = await c.get("/v1/embeddings/current")
             assert resp.status_code == 503
             assert "not initialized" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: Swap state revert on failure
+# ---------------------------------------------------------------------------
+
+
+class TestSwapStateRevert:
+    """Test that _current_model is not updated if swap side effects fail."""
+
+    async def test_current_model_reverts_on_provider_error(
+        self,
+        manager: EmbeddingSwapManager,
+        alt_model: EmbeddingModelInfo,
+    ) -> None:
+        """If the provider mutation raises, _current_model stays unchanged."""
+
+        class FailingProvider:
+            _model: str = "nomic-embed-text"
+
+            def __setattr__(self, name: str, value: Any) -> None:
+                if name == "_model" and value == "bge-large-en":
+                    raise RuntimeError("Provider mutation failed")
+                super().__setattr__(name, value)
+
+        manager.set_embedding_provider(FailingProvider())  # type: ignore[arg-type]
+        await manager.register_model(alt_model)
+
+        record = await manager.execute_swap("bge-large-en", initiated_by="test")
+        assert record.status == SwapStatus.FAILED
+        assert "Provider mutation failed" in record.error
+
+        # Current model must NOT have been updated
+        assert manager.get_current_model().model_id == "nomic-embed-text"
+
+    async def test_current_model_reverts_on_cache_error(
+        self,
+        manager: EmbeddingSwapManager,
+        alt_model: EmbeddingModelInfo,
+    ) -> None:
+        """If cache invalidation raises, _current_model stays unchanged."""
+
+        class FailingCache:
+            _lock = asyncio.Lock()
+
+            @property
+            def size(self) -> int:
+                return 0
+
+            @property
+            def hit_rate(self) -> float:
+                return 0.0
+
+            def clear(self) -> None:
+                raise RuntimeError("Cache clear exploded")
+
+        manager.set_embedding_cache(FailingCache())  # type: ignore[arg-type]
+        await manager.register_model(alt_model)
+
+        record = await manager.execute_swap("bge-large-en", initiated_by="test")
+        assert record.status == SwapStatus.FAILED
+        assert "Cache clear exploded" in record.error
+
+        # Current model must NOT have been updated
+        assert manager.get_current_model().model_id == "nomic-embed-text"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: Cache invalidation acquires cache lock
+# ---------------------------------------------------------------------------
+
+
+class TestCacheInvalidationLockAcquisition:
+    """Test that _invalidate_cache() uses the cache's internal lock."""
+
+    async def test_invalidate_cache_acquires_lock(
+        self,
+        manager: EmbeddingSwapManager,
+        alt_model: EmbeddingModelInfo,
+    ) -> None:
+        """Verify that the cache lock is acquired during invalidation."""
+        cache = FakeEmbeddingCache()
+        cache._cache["key"] = [1.0]
+        manager.set_embedding_cache(cache)  # type: ignore[arg-type]
+        await manager.register_model(alt_model)
+
+        # Track lock acquisitions
+        original_lock = cache._lock
+        lock_acquired_count = 0
+        original_acquire = original_lock.acquire
+
+        async def tracking_acquire() -> bool:
+            nonlocal lock_acquired_count
+            result = await original_acquire()
+            lock_acquired_count += 1
+            return result
+
+        original_lock.acquire = tracking_acquire  # type: ignore[assignment]
+
+        await manager.execute_swap("bge-large-en", initiated_by="admin")
+        assert cache.clear_count == 1
+        assert lock_acquired_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: Failed swap returns 409 via API
+# ---------------------------------------------------------------------------
+
+
+class TestFailedSwapReturns409:
+    """Test that a swap that fails at runtime returns HTTP 409."""
+
+    async def test_swap_failure_returns_409(self) -> None:
+        from fastapi import FastAPI
+
+        from agent33.api.routes.embedding_swap import router
+
+        test_app = FastAPI()
+        test_app.include_router(router)
+
+        default = _make_model()
+        mgr = EmbeddingSwapManager(current_model=default)
+
+        class FailingCache:
+            _lock = asyncio.Lock()
+
+            @property
+            def size(self) -> int:
+                return 0
+
+            @property
+            def hit_rate(self) -> float:
+                return 0.0
+
+            def clear(self) -> None:
+                raise RuntimeError("Intentional cache failure")
+
+        mgr.set_embedding_cache(FailingCache())  # type: ignore[arg-type]
+
+        @test_app.middleware("http")
+        async def _fake_auth(request: Any, call_next: Any) -> Any:
+            request.state.user = MagicMock(scopes=["admin"])
+            return await call_next(request)
+
+        test_app.state.embedding_swap = mgr
+
+        # Register the target model first
+        transport = ASGITransport(app=test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            await c.post(
+                "/v1/embeddings/models",
+                json={"model_id": "fail-model", "provider": "test", "dimensions": 256},
+            )
+            resp = await c.post(
+                "/v1/embeddings/swap",
+                json={"target_model_id": "fail-model"},
+            )
+            assert resp.status_code == 409
+            assert "Intentional cache failure" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 5: Limit validation on history endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestHistoryLimitValidation:
+    """Test that the limit query param is validated."""
+
+    async def test_negative_limit_rejected(self, client: AsyncClient) -> None:
+        resp = await client.get("/v1/embeddings/history?limit=-1")
+        assert resp.status_code == 422
+
+    async def test_zero_limit_rejected(self, client: AsyncClient) -> None:
+        resp = await client.get("/v1/embeddings/history?limit=0")
+        assert resp.status_code == 422
+
+    async def test_limit_over_max_rejected(self, client: AsyncClient) -> None:
+        resp = await client.get("/v1/embeddings/history?limit=101")
+        assert resp.status_code == 422
+
+    async def test_valid_limit_accepted(self, client: AsyncClient) -> None:
+        resp = await client.get("/v1/embeddings/history?limit=50")
+        assert resp.status_code == 200

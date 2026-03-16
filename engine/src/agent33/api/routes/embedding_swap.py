@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from agent33.memory.embedding_swap import (
     EmbeddingModelInfo,
     EmbeddingSwapManager,
     SwapRecord,
+    SwapStatus,
 )
 from agent33.security.permissions import require_scope
 
 router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +161,12 @@ async def execute_swap(
             detail=str(exc),
         ) from exc
 
+    if record.status == SwapStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=record.error or "Swap failed",
+        )
+
     return record
 
 
@@ -189,7 +194,7 @@ async def rollback_swap(request: Request) -> SwapRecord | None:
 )
 async def get_history(
     request: Request,
-    limit: int = 50,
+    limit: int = Query(default=50, gt=0, le=100),
 ) -> HistoryResponse:
     """Return swap history, most recent first."""
     manager = _get_swap_manager(request)

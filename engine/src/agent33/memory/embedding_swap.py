@@ -98,6 +98,21 @@ class EmbeddingSwapManager:
         """Wire the embedding provider for model switching."""
         self._embedding_provider = provider
 
+    async def _invalidate_cache(self) -> None:
+        """Clear the embedding cache, acquiring its internal lock if present.
+
+        This prevents races between cache invalidation during a swap and
+        in-flight ``embed()`` calls that hold the cache lock.
+        """
+        if self._embedding_cache is None:
+            return
+        cache_lock = getattr(self._embedding_cache, "_lock", None)
+        if cache_lock is not None:
+            async with cache_lock:
+                self._embedding_cache.clear()
+        else:
+            self._embedding_cache.clear()
+
     # -- Read operations (no lock needed for atomicity) --------------------
 
     def get_current_model(self) -> EmbeddingModelInfo:
@@ -206,19 +221,18 @@ class EmbeddingSwapManager:
                 status=SwapStatus.PENDING,
             )
 
+            previous_model = self._current_model
             start = time.monotonic()
             try:
-                # Update the current model reference
-                previous_model = self._current_model
-                self._current_model = target
-
                 # Update provider model name if wired
                 if self._embedding_provider is not None:
                     self._embedding_provider._model = target.model_id
 
                 # Invalidate cache -- all cached embeddings are from old model
-                if self._embedding_cache is not None:
-                    self._embedding_cache.clear()
+                await self._invalidate_cache()
+
+                # Only update current model after all side effects succeed
+                self._current_model = target
 
                 elapsed_ms = (time.monotonic() - start) * 1000
                 record.status = SwapStatus.COMPLETED
@@ -234,6 +248,11 @@ class EmbeddingSwapManager:
                     dimension_change=(previous_model.dimensions != target.dimensions),
                 )
             except Exception as exc:
+                # Revert to previous model on failure
+                self._current_model = previous_model
+                if self._embedding_provider is not None:
+                    self._embedding_provider._model = previous_model.model_id
+
                 elapsed_ms = (time.monotonic() - start) * 1000
                 record.status = SwapStatus.FAILED
                 record.duration_ms = elapsed_ms
@@ -285,15 +304,16 @@ class EmbeddingSwapManager:
                 status=SwapStatus.PENDING,
             )
 
+            previous_model = self._current_model
             start = time.monotonic()
             try:
-                self._current_model = rollback_target
-
                 if self._embedding_provider is not None:
                     self._embedding_provider._model = rollback_target.model_id
 
-                if self._embedding_cache is not None:
-                    self._embedding_cache.clear()
+                await self._invalidate_cache()
+
+                # Only update current model after all side effects succeed
+                self._current_model = rollback_target
 
                 elapsed_ms = (time.monotonic() - start) * 1000
                 rollback_record.status = SwapStatus.ROLLED_BACK
@@ -310,6 +330,11 @@ class EmbeddingSwapManager:
                     duration_ms=elapsed_ms,
                 )
             except Exception as exc:
+                # Revert to previous model on failure
+                self._current_model = previous_model
+                if self._embedding_provider is not None:
+                    self._embedding_provider._model = previous_model.model_id
+
                 elapsed_ms = (time.monotonic() - start) * 1000
                 rollback_record.status = SwapStatus.FAILED
                 rollback_record.duration_ms = elapsed_ms

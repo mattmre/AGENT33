@@ -120,8 +120,9 @@ class Settings(BaseSettings):
     embedding_cache_max_size: int = 1024
 
     # Embedding hot-swap (S44)
-    embedding_hot_swap_enabled: bool = True
-    embedding_default_model: str = "default"
+    embedding_hot_swap_enabled: bool = False
+    embedding_default_model: str = "nomic-embed-text"
+    embedding_default_dimensions: int = 768
 
     # RAG / Hybrid search
     rag_top_k: int = 5

@@ -446,9 +446,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from agent33.memory.embedding_swap import EmbeddingModelInfo, EmbeddingSwapManager
 
         default_model_info = EmbeddingModelInfo(
-            model_id=settings.embedding_default_model or "default",
+            model_id=settings.embedding_default_model,
             provider=settings.embedding_provider,
-            dimensions=768,  # nomic-embed-text default
+            dimensions=settings.embedding_default_dimensions,
             max_tokens=8192,
             version="1.0",
             description="Default embedding model",
@@ -1653,4 +1653,5 @@ app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
 app.include_router(rate_limits_routes.router)
-app.include_router(embedding_swap_routes.router)
+if settings.embedding_hot_swap_enabled:
+    app.include_router(embedding_swap_routes.router)
