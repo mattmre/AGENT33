@@ -1516,6 +1516,9 @@ if settings.rate_limit_enabled:
     _boot_rate_limiter = _BootRateLimiter(
         default_tier=_BootRateLimitTier(settings.rate_limit_default_tier),
     )
+    # Store eagerly on app.state so tests can reset per-tenant state even
+    # before the async lifespan runs (TestClient without context manager).
+    app.state.rate_limiter = _boot_rate_limiter
     app.add_middleware(RateLimitMiddleware, rate_limiter=_boot_rate_limiter)
 
 app.add_middleware(AuthMiddleware)

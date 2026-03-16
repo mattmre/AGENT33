@@ -119,6 +119,10 @@ class RateLimiter:
     def default_tier(self) -> RateLimitTier:
         return self._default_tier
 
+    @default_tier.setter
+    def default_tier(self, tier: RateLimitTier) -> None:
+        self._default_tier = tier
+
     def _get_tier(self, tenant_id: str) -> RateLimitTier:
         return self._tiers.get(tenant_id, self._default_tier)
 
@@ -328,6 +332,11 @@ class RateLimiter:
                 "tenant_rate_limit_reset",
                 extra={"tenant_id": tenant_id},
             )
+
+    def reset_all(self) -> None:
+        """Reset all per-tenant state.  Useful in tests."""
+        with self._lock:
+            self._states.clear()
 
 
 # ---------------------------------------------------------------------------
