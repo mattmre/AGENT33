@@ -87,6 +87,9 @@ from agent33.api.routes import (
     rate_limits as rate_limits_routes,
 )
 from agent33.api.routes import (
+    scheduled_gates as scheduled_gates_routes,
+)
+from agent33.api.routes import (
     skill_matching as skill_matching_routes,
 )
 from agent33.api.routes import (
@@ -1070,6 +1073,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     comparative.set_comparative_service(comparative_service)
     logger.info("comparative_evaluation_initialized")
 
+    # --- Scheduled evaluation gates (S45) ---
+    if settings.scheduled_gates_enabled:
+        from agent33.evaluation.scheduled_gates import ScheduledGateService
+
+        _eval_svc = evaluations.get_evaluation_service()
+        scheduled_gate_service = ScheduledGateService(
+            evaluation_service=_eval_svc,
+            max_schedules=settings.scheduled_gates_max_schedules,
+            history_retention=settings.scheduled_gates_history_retention,
+        )
+        await scheduled_gate_service.start()
+        app.state.scheduled_gate_service = scheduled_gate_service
+        scheduled_gates_routes.set_service(scheduled_gate_service)
+        app.include_router(scheduled_gates_routes.router)
+        logger.info("scheduled_gate_service_initialized")
+
     # --- Synthetic environment generation (AWM Tier 2 A5) ---
     from agent33.evaluation.synthetic_envs.service import SyntheticEnvironmentService
 
@@ -1408,6 +1427,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _training_store: Any = getattr(app.state, "training_store", None)
     if _training_store is not None:
         await _training_store.close()
+
+    _scheduled_gate_svc: Any = getattr(app.state, "scheduled_gate_service", None)
+    if _scheduled_gate_svc is not None:
+        await _scheduled_gate_svc.stop()
+        logger.info("scheduled_gate_service_stopped")
 
     _proxy_manager: Any = getattr(app.state, "proxy_manager", None)
     if _proxy_manager is not None:
