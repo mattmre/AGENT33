@@ -107,6 +107,7 @@ markers = [
     "integration: marks tests requiring running services",
     "benchmark: marks benchmark and performance tests",
     "smoke: marks fast smoke tests for CI",
+    "e2e: marks cross-subsystem end-to-end integration tests",
 ]
 
 [tool.coverage.run]
