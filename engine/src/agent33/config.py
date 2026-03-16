@@ -387,6 +387,11 @@ class Settings(BaseSettings):
     script_hooks_default_timeout_ms: float = 5000.0
     script_hooks_max_timeout_ms: float = 30000.0
 
+    # Scheduled evaluation gates (S45)
+    scheduled_gates_enabled: bool = False
+    scheduled_gates_max_schedules: int = 50
+    scheduled_gates_history_retention: int = 100
+
     # Alembic migration checker (S34)
     alembic_config_path: str = "alembic.ini"
     alembic_auto_check_on_startup: bool = False

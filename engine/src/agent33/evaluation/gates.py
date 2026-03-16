@@ -88,6 +88,22 @@ DEFAULT_THRESHOLDS: list[GateThreshold] = [
         value=100.0,
         action=GateAction.BLOCK,
     ),
+    # M-01: Success Rate (G-MON — relaxed monitoring threshold)
+    GateThreshold(
+        metric_id=MetricId.M_01,
+        gate=GateType.G_MON,
+        operator=ThresholdOperator.GTE,
+        value=85.0,
+        action=GateAction.WARN,
+    ),
+    # M-03: Rework Rate (G-MON — relaxed monitoring threshold)
+    GateThreshold(
+        metric_id=MetricId.M_03,
+        gate=GateType.G_MON,
+        operator=ThresholdOperator.LTE,
+        value=25.0,
+        action=GateAction.WARN,
+    ),
 ]
 
 # Gate → required golden task tag mapping (§ Gate Execution Matrix)

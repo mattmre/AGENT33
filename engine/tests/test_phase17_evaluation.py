@@ -233,7 +233,7 @@ class TestGateEnforcer:
         self.enforcer = GateEnforcer()
 
     def test_default_thresholds_exist(self):
-        assert len(DEFAULT_THRESHOLDS) == 8
+        assert len(DEFAULT_THRESHOLDS) == 10
 
     def test_pr_gate_pass(self):
         metrics = {MetricId.M_01: 85.0, MetricId.M_03: 20.0, MetricId.M_05: 95.0}
