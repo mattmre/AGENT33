@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     embedding_cache_enabled: bool = True
     embedding_cache_max_size: int = 1024
 
+    # Embedding hot-swap (S44)
+    embedding_hot_swap_enabled: bool = True
+    embedding_default_model: str = "default"
+
     # RAG / Hybrid search
     rag_top_k: int = 5
     rag_similarity_threshold: float = 0.3
