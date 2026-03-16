@@ -75,6 +75,9 @@ from agent33.api.routes import (
     discovery as discovery_routes,
 )
 from agent33.api.routes import (
+    embedding_swap as embedding_swap_routes,
+)
+from agent33.api.routes import (
     execution as execution_routes,
 )
 from agent33.api.routes import (
@@ -436,6 +439,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.embedding_cache = embedding_cache
 
     logger.info("embedding_provider_initialized", cache=settings.embedding_cache_enabled)
+
+    # -- Embedding hot-swap manager (S44) ----------------------------------
+    embedding_swap_manager = None
+    if settings.embedding_hot_swap_enabled:
+        from agent33.memory.embedding_swap import EmbeddingModelInfo, EmbeddingSwapManager
+
+        default_model_info = EmbeddingModelInfo(
+            model_id=settings.embedding_default_model,
+            provider=settings.embedding_provider,
+            dimensions=settings.embedding_default_dimensions,
+            max_tokens=8192,
+            version="1.0",
+            description="Default embedding model",
+        )
+        embedding_swap_manager = EmbeddingSwapManager(
+            current_model=default_model_info,
+        )
+        embedding_swap_manager.set_embedding_provider(embedding_provider)
+        if settings.embedding_cache_enabled:
+            embedding_swap_manager.set_embedding_cache(getattr(app.state, "embedding_cache", None))
+        app.state.embedding_swap = embedding_swap_manager
+        logger.info(
+            "embedding_swap_manager_initialized",
+            model_id=default_model_info.model_id,
+            provider=default_model_info.provider,
+        )
 
     # -- BM25 + Hybrid + RAG ----------------------------------------------
     from agent33.memory.bm25 import BM25Index
@@ -1624,3 +1653,5 @@ app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
 app.include_router(rate_limits_routes.router)
+if settings.embedding_hot_swap_enabled:
+    app.include_router(embedding_swap_routes.router)
