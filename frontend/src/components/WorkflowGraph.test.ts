@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("reactflow", async () => {
   const React = await import("react");
@@ -60,7 +60,11 @@ import {
   type WorkflowNode
 } from "./WorkflowGraph";
 
-import { statusToColor } from "./WorkflowStatusNode";
+import { normalizeWorkflowStepStatus, statusToColor } from "./WorkflowStatusNode";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // ---------------------------------------------------------------------------
 // mapWorkflowNodesToReactFlow
@@ -183,8 +187,16 @@ describe("statusToColor", () => {
     expect(statusToColor("running")).toBe("#3b82f6");
   });
 
+  it("returns amber for retrying", () => {
+    expect(statusToColor("retrying")).toBe("#f59e0b");
+  });
+
   it("returns gray for pending", () => {
     expect(statusToColor("pending")).toBe("#9ca3af");
+  });
+
+  it("returns gray for skipped", () => {
+    expect(statusToColor("skipped")).toBe("#9ca3af");
   });
 
   it("returns gray for undefined (default)", () => {
@@ -194,6 +206,18 @@ describe("statusToColor", () => {
   it("returns gray for unknown status strings", () => {
     expect(statusToColor("cancelled")).toBe("#9ca3af");
     expect(statusToColor("")).toBe("#9ca3af");
+  });
+});
+
+describe("normalizeWorkflowStepStatus", () => {
+  it("keeps supported retrying and skipped statuses explicit", () => {
+    expect(normalizeWorkflowStepStatus("retrying")).toBe("retrying");
+    expect(normalizeWorkflowStepStatus("skipped")).toBe("skipped");
+  });
+
+  it("falls back to pending for unknown statuses", () => {
+    expect(normalizeWorkflowStepStatus("cancelled")).toBe("pending");
+    expect(normalizeWorkflowStepStatus(undefined)).toBe("pending");
   });
 });
 
@@ -273,11 +297,24 @@ describe("hasActiveNodes", () => {
     expect(hasActiveNodes(nodes)).toBe(true);
   });
 
+  it("returns true when any node has status retrying", () => {
+    const nodes: WorkflowNode[] = [
+      { id: "a", name: "A", action: "run", status: "success" },
+      { id: "b", name: "B", action: "run", status: "retrying" }
+    ];
+    expect(hasActiveNodes(nodes)).toBe(true);
+  });
+
   it("returns false when all nodes are terminal (success/failed)", () => {
     const nodes: WorkflowNode[] = [
       { id: "a", name: "A", action: "run", status: "success" },
       { id: "b", name: "B", action: "run", status: "failed" }
     ];
+    expect(hasActiveNodes(nodes)).toBe(false);
+  });
+
+  it("returns false when nodes are only skipped", () => {
+    const nodes: WorkflowNode[] = [{ id: "a", name: "A", action: "run", status: "skipped" }];
     expect(hasActiveNodes(nodes)).toBe(false);
   });
 
@@ -295,11 +332,11 @@ describe("hasActiveNodes", () => {
 // getRunningNodeIds — helper for edge animation
 // ---------------------------------------------------------------------------
 describe("getRunningNodeIds", () => {
-  it("collects only running node IDs", () => {
+  it("collects running and retrying node IDs used for active edge animation", () => {
     const nodes: WorkflowNode[] = [
       { id: "a", name: "A", action: "run", status: "running" },
       { id: "b", name: "B", action: "run", status: "success" },
-      { id: "c", name: "C", action: "run", status: "running" }
+      { id: "c", name: "C", action: "run", status: "retrying" }
     ];
 
     const ids = getRunningNodeIds(nodes);
@@ -375,5 +412,47 @@ describe("WorkflowGraph", () => {
     expect(screen.getByText("success")).toBeInTheDocument();
     expect(screen.getByText(/"attempt": 2/)).toBeInTheDocument();
     expect(screen.getByText("2 nodes · 1 edges")).toBeInTheDocument();
+  });
+
+  it("keeps polling while a node is retrying", () => {
+    vi.useFakeTimers();
+    const onRefresh = vi.fn();
+
+    render(
+      createElement(WorkflowGraph, {
+        onRefresh,
+        pollIntervalMs: 500,
+        data: {
+          workflow_id: "retry-flow",
+          nodes: [{ id: "step-a", name: "Step A", action: "transform", status: "retrying" }],
+          edges: []
+        }
+      })
+    );
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(onRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not poll when nodes are only skipped", () => {
+    vi.useFakeTimers();
+    const onRefresh = vi.fn();
+
+    render(
+      createElement(WorkflowGraph, {
+        onRefresh,
+        pollIntervalMs: 500,
+        data: {
+          workflow_id: "skipped-flow",
+          nodes: [{ id: "step-a", name: "Step A", action: "transform", status: "skipped" }],
+          edges: []
+        }
+      })
+    );
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 });

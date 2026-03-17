@@ -53,6 +53,9 @@ const nodeTypes: NodeTypes = {
   workflowStatus: WorkflowStatusNode
 };
 
+const EDGE_ANIMATION_STATUSES = new Set(["running", "retrying"]);
+const ACTIVE_POLLING_STATUSES = new Set(["running", "pending", "retrying"]);
+
 /**
  * Maps backend WorkflowNode to ReactFlow Node format.
  * All nodes use the custom `workflowStatus` type.
@@ -75,12 +78,12 @@ export function mapWorkflowNodesToReactFlow(nodes: WorkflowNode[]): Node[] {
 }
 
 /**
- * Build a Set of node IDs whose status is `"running"`.
+ * Build a Set of node IDs whose status is actively executing.
  */
 export function getRunningNodeIds(nodes: WorkflowNode[]): Set<string> {
   const ids = new Set<string>();
   for (const node of nodes) {
-    if (node.status === "running") {
+    if (node.status && EDGE_ANIMATION_STATUSES.has(node.status)) {
       ids.add(node.id);
     }
   }
@@ -88,17 +91,17 @@ export function getRunningNodeIds(nodes: WorkflowNode[]): Set<string> {
 }
 
 /**
- * Returns true when at least one node has an active status (`running` or `pending`)
- * that warrants automatic polling.
+ * Returns true when at least one node has an active status (`running`, `pending`,
+ * or `retrying`) that warrants automatic polling.
  */
 export function hasActiveNodes(nodes: WorkflowNode[]): boolean {
-  return nodes.some((n) => n.status === "running" || n.status === "pending");
+  return nodes.some((node) => node.status !== undefined && ACTIVE_POLLING_STATUSES.has(node.status));
 }
 
 /**
  * Maps backend WorkflowEdge to ReactFlow Edge format.
  *
- * Edges whose source **or** target is a running node are animated
+ * Edges whose source **or** target is an actively executing node are animated
  * to visually indicate in-progress data flow.
  */
 export function mapWorkflowEdgesToReactFlow(
@@ -148,7 +151,7 @@ function WorkflowGraphInner({
     });
   }, [initialNodes]);
 
-  // ---- Polling: auto-refresh while any node is running or pending ----
+  // ---- Polling: auto-refresh while any node is active or retrying ----
   const shouldPoll = useMemo(() => hasActiveNodes(data.nodes), [data.nodes]);
 
   useEffect(() => {

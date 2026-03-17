@@ -38,7 +38,9 @@ coding and layout instead of CSS-hacking the built-in `default` node type.
 | success   | Green    | `#22c55e` | Universal "OK / done" signal             |
 | failed    | Red      | `#ef4444` | Universal error / danger signal          |
 | running   | Blue     | `#3b82f6` | Active / in-progress, distinct from both |
+| retrying  | Amber    | `#f59e0b` | Still active, but distinguishable from initial execution |
 | pending   | Gray     | `#9ca3af` | Neutral / waiting, muted tone            |
+| skipped   | Gray     | `#9ca3af` | Terminal but intentionally neutral       |
 | (default) | Gray     | `#9ca3af` | Safe fallback for unknown status strings |
 
 Colours sourced from Tailwind's colour scale for consistency with common UI
@@ -57,16 +59,18 @@ oscillates `box-shadow` intensity on running nodes.
   (matches project convention: `pulse-orb`, `pulse-recording`, etc.).
 - A 1.8 s cycle with ease-in-out produces a calm, noticeable pulse without
   being distracting during long-running workflows.
+- Retry states remain visually distinct by color alone; they do not reuse the
+  running pulse class.
 
 ### 2.3 Edge Animation for Running Nodes
 
 **Decision**: Set `animated: true` on any edge whose source **or** target node
-has status `"running"`.
+has status `"running"` or `"retrying"`.
 
 **Rationale**:
 - ReactFlow's built-in edge animation draws a moving dash pattern along the
   path, visually indicating data flow.
-- Animating edges connected to running nodes (both directions) creates a
+- Animating edges connected to actively executing nodes (both directions) creates a
   localised visual cluster around active work, rather than animating the entire
   graph.
 - The `mapWorkflowEdgesToReactFlow` function now accepts an optional
@@ -74,8 +78,8 @@ has status `"running"`.
 
 ### 2.4 Polling Refresh
 
-**Decision**: When `hasActiveNodes()` is true (any node is `running` or
-`pending`), start a `setInterval` that calls the parent-supplied `onRefresh`
+**Decision**: When `hasActiveNodes()` is true (any node is `running`,
+`pending`, or `retrying`), start a `setInterval` that calls the parent-supplied `onRefresh`
 callback every 2 seconds (configurable via `pollIntervalMs` prop).
 
 **Rationale**:
@@ -85,6 +89,8 @@ callback every 2 seconds (configurable via `pollIntervalMs` prop).
   override (e.g., `pollIntervalMs={5000}` for larger clusters).
 - The interval is cleaned up in the `useEffect` destructor on unmount or when
   `shouldPoll` becomes false, preventing stale timers.
+- `retrying` is treated as active because the step is still in-flight; `skipped`
+  is not, because it is already terminal from the graph's perspective.
 - **Why not WebSocket?** The engine already exposes an observation stream via
   SSE (`ObservationStream` component). Polling is simpler for the graph because
   the data shape (full graph snapshot) is not event-based and the polling
@@ -103,20 +109,17 @@ component tree.
 
 ## 3. Testing Strategy
 
-All new logic is exported as pure functions and tested without DOM rendering:
+The graph helpers are tested as pure functions, and the status node is rendered
+directly with a light ReactFlow mock to cover display-specific behavior:
 
 | Function                        | Tests                                           |
 |---------------------------------|-------------------------------------------------|
-| `statusToColor`                 | All 4 named statuses + `undefined` + unknown    |
+| `statusToColor`                 | Named statuses including `retrying` / `skipped` |
 | `mapWorkflowNodesToReactFlow`   | Existing tests + new `type: workflowStatus` assertion |
-| `mapWorkflowEdgesToReactFlow`   | Without running IDs (all false), with source running, with target running |
-| `hasActiveNodes`                | running, pending, terminal-only, no-status, empty |
-| `getRunningNodeIds`             | Filters only `"running"` nodes, returns empty set |
-
-Rendering the custom node component in tests would require mocking ReactFlow's
-internal context provider. Since the colour mapping is already covered by
-`statusToColor` tests and the node is a thin JSX wrapper, the pure-function
-tests provide sufficient regression coverage without added complexity.
+| `mapWorkflowEdgesToReactFlow`   | Without active IDs (all false), with source active, with target active |
+| `hasActiveNodes`                | running, pending, retrying, skipped-only, terminal-only, no-status, empty |
+| `getRunningNodeIds`             | Filters executing nodes used for edge animation |
+| `WorkflowStatusNode` render     | running pulse class, retrying label, unknown fallback to `pending` |
 
 ## 4. Files Changed
 
