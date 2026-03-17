@@ -15,6 +15,14 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+_FINDING_INSERT_SQL = """
+INSERT OR REPLACE INTO scan_findings
+    (id, run_id, tool, file_path, line_number, severity, category,
+     cwe_id, title, description, recommendation, fingerprint, created_at,
+     finding_payload)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS scan_runs (
     id TEXT PRIMARY KEY,
@@ -26,7 +34,8 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     target_path TEXT NOT NULL DEFAULT '',
     tools_used TEXT NOT NULL DEFAULT '[]',
     summary TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    run_payload TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS scan_findings (
@@ -43,6 +52,7 @@ CREATE TABLE IF NOT EXISTS scan_findings (
     recommendation TEXT NOT NULL DEFAULT '',
     fingerprint TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
+    finding_payload TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (run_id) REFERENCES scan_runs(id) ON DELETE CASCADE
 );
 
@@ -79,7 +89,7 @@ class SecurityScanStore:
             return self._conn
         if self._db_path != ":memory:":
             Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
@@ -89,6 +99,18 @@ class SecurityScanStore:
     def _ensure_schema(self) -> None:
         conn = self._connect()
         conn.executescript(_SCHEMA_SQL)
+        self._ensure_column(
+            conn,
+            table_name="scan_runs",
+            column_name="run_payload",
+            definition="TEXT NOT NULL DEFAULT '{}'",
+        )
+        self._ensure_column(
+            conn,
+            table_name="scan_findings",
+            column_name="finding_payload",
+            definition="TEXT NOT NULL DEFAULT '{}'",
+        )
         conn.commit()
 
     def close(self) -> None:
@@ -106,18 +128,24 @@ class SecurityScanStore:
         conn = self._connect()
         summary = run.findings_summary.model_dump(mode="json")
         tools_used = run.metadata.tools_executed
+        run_payload = json.dumps(run.model_dump(mode="json"))
         conn.execute(
             """
             INSERT INTO scan_runs
                 (id, tenant_id, profile, status, started_at, completed_at,
-                 target_path, tools_used, summary, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 target_path, tools_used, summary, created_at, run_payload)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+                tenant_id = excluded.tenant_id,
+                profile = excluded.profile,
                 status = excluded.status,
                 started_at = excluded.started_at,
                 completed_at = excluded.completed_at,
+                target_path = excluded.target_path,
                 tools_used = excluded.tools_used,
-                summary = excluded.summary
+                summary = excluded.summary,
+                created_at = excluded.created_at,
+                run_payload = excluded.run_payload
             """,
             (
                 run.id,
@@ -130,6 +158,7 @@ class SecurityScanStore:
                 json.dumps(tools_used),
                 json.dumps(summary),
                 _dt_to_str(run.created_at),
+                run_payload,
             ),
         )
         conn.commit()
@@ -183,35 +212,21 @@ class SecurityScanStore:
         if not findings:
             return 0
         conn = self._connect()
-        rows = [
-            (
-                f.id,
-                f.run_id,
-                f.tool,
-                f.file_path,
-                f.line_number,
-                f.severity.value,
-                f.category.value,
-                f.cwe_id,
-                f.title,
-                f.description,
-                f.remediation,
-                getattr(f, "fingerprint", ""),
-                _dt_to_str(f.created_at),
-            )
-            for f in findings
-        ]
-        conn.executemany(
-            """
-            INSERT OR REPLACE INTO scan_findings
-                (id, run_id, tool, file_path, line_number, severity, category,
-                 cwe_id, title, description, recommendation, fingerprint, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
+        rows = self._finding_rows(findings)
+        conn.executemany(_FINDING_INSERT_SQL, rows)
         conn.commit()
         logger.debug("security_scan_store_findings_saved", count=len(rows))
+        return len(rows)
+
+    def replace_findings(self, run_id: str, findings: list[SecurityFinding]) -> int:
+        """Replace all persisted findings for one run."""
+        conn = self._connect()
+        rows = self._finding_rows(findings)
+        with conn:
+            conn.execute("DELETE FROM scan_findings WHERE run_id = ?", (run_id,))
+            if rows:
+                conn.executemany(_FINDING_INSERT_SQL, rows)
+        logger.debug("security_scan_store_findings_replaced", run_id=run_id, count=len(rows))
         return len(rows)
 
     def get_findings(self, run_id: str) -> list[dict[str, object]]:
@@ -263,6 +278,7 @@ class SecurityScanStore:
             "tools_used": json.loads(row["tools_used"]),
             "summary": json.loads(row["summary"]),
             "created_at": _str_to_dt(row["created_at"]),
+            "payload": _load_payload(row["run_payload"]),
         }
 
     @staticmethod
@@ -281,4 +297,54 @@ class SecurityScanStore:
             "recommendation": row["recommendation"],
             "fingerprint": row["fingerprint"],
             "created_at": _str_to_dt(row["created_at"]),
+            "payload": _load_payload(row["finding_payload"]),
         }
+
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        *,
+        table_name: str,
+        column_name: str,
+        definition: str,
+    ) -> None:
+        existing_columns = {
+            str(row["name"])
+            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if column_name in existing_columns:
+            return
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+    @staticmethod
+    def _finding_rows(findings: list[SecurityFinding]) -> list[tuple[object, ...]]:
+        return [
+            (
+                finding.id,
+                finding.run_id,
+                finding.tool,
+                finding.file_path,
+                finding.line_number,
+                finding.severity.value,
+                finding.category.value,
+                finding.cwe_id,
+                finding.title,
+                finding.description,
+                finding.remediation,
+                getattr(finding, "fingerprint", ""),
+                _dt_to_str(finding.created_at),
+                json.dumps(finding.model_dump(mode="json")),
+            )
+            for finding in findings
+        ]
+
+
+def _load_payload(value: str) -> dict[str, object]:
+    """Deserialize a persisted payload column with a safe fallback."""
+    if not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}

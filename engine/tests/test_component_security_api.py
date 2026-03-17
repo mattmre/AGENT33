@@ -10,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent33.api.routes import component_security
-from agent33.api.routes.component_security import _service
 from agent33.component_security.models import (
     FindingCategory,
     FindingSeverity,
@@ -21,6 +20,7 @@ from agent33.component_security.models import (
     SecurityProfile,
     SecurityRun,
 )
+from agent33.component_security.persistence import SecurityScanStore
 from agent33.main import app
 from agent33.security.auth import create_access_token
 from agent33.services.security_scan import SecurityScanService
@@ -49,15 +49,17 @@ def _default_command_runner(
 
 @pytest.fixture(autouse=True)
 def reset_component_security_service() -> None:
-    _service._runs.clear()
-    _service._findings.clear()
-    _service._command_runner = _default_command_runner
-    _service._allowed_roots = []
+    service = component_security._service
+    service._runs.clear()
+    service._findings.clear()
+    service._command_runner = _default_command_runner
+    service._allowed_roots = []
     yield
-    _service._runs.clear()
-    _service._findings.clear()
-    _service._command_runner = _default_command_runner
-    _service._allowed_roots = []
+    service = component_security._service
+    service._runs.clear()
+    service._findings.clear()
+    service._command_runner = _default_command_runner
+    service._allowed_roots = []
 
 
 @pytest.fixture
@@ -490,3 +492,133 @@ class TestComponentSecurityApi:
         payload = response.json()
         assert payload["llm_findings"] >= 1
         assert payload["total_findings"] == payload["llm_findings"]
+
+    def test_llm_scan_run_summary_persists_across_restart(
+        self,
+        writer_client: TestClient,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store_path = tmp_path / "component-security-scans.sqlite3"
+        service = SecurityScanService(
+            command_runner=_default_command_runner,
+            allowed_roots=[str(tmp_path)],
+            store=SecurityScanStore(db_path=str(store_path)),
+        )
+        monkeypatch.setattr(component_security, "_service", service)
+
+        create_response = writer_client.post(
+            "/v1/component-security/runs",
+            json={
+                "target": {"repository_path": str(tmp_path)},
+                "profile": "quick",
+                "requested_by": "reviewer",
+                "session_id": "sess-123",
+                "execute_now": False,
+            },
+        )
+        assert create_response.status_code == 201
+        run_id = create_response.json()["id"]
+
+        def _scan_prompt_safety(
+            text: str, *, run_id: str = "", source: str = ""
+        ) -> list[SecurityFinding]:
+            return [
+                SecurityFinding(
+                    run_id=run_id,
+                    severity=FindingSeverity.LOW,
+                    category=FindingCategory.PROMPT_INJECTION,
+                    title=f"prompt:{source}",
+                    description=text,
+                    tool="llm-security",
+                )
+            ]
+
+        def _scan_model_behavior(model_name: str, *, run_id: str = "") -> list[SecurityFinding]:
+            return [
+                SecurityFinding(
+                    run_id=run_id,
+                    severity=FindingSeverity.MEDIUM,
+                    category=FindingCategory.MODEL_SECURITY,
+                    title=model_name,
+                    description="garak",
+                    tool="garak",
+                )
+            ]
+
+        monkeypatch.setattr(
+            component_security._llm_scanner,
+            "scan_prompt_safety",
+            _scan_prompt_safety,
+        )
+        monkeypatch.setattr(
+            component_security._llm_scanner,
+            "scan_model_behavior",
+            _scan_model_behavior,
+        )
+        llm_response = writer_client.post(f"/v1/component-security/runs/{run_id}/llm-scan")
+        assert llm_response.status_code == 200
+
+        restarted_service = SecurityScanService(
+            command_runner=_default_command_runner,
+            allowed_roots=[str(tmp_path)],
+            store=SecurityScanStore(db_path=str(store_path)),
+        )
+        monkeypatch.setattr(component_security, "_service", restarted_service)
+
+        run_response = writer_client.get(f"/v1/component-security/runs/{run_id}")
+        assert run_response.status_code == 200
+        payload = run_response.json()
+        assert payload["findings_count"] == llm_response.json()["total_findings"]
+        assert payload["metadata"]["requested_by"] == "reviewer"
+        assert payload["metadata"]["session_id"] == "sess-123"
+
+        findings_response = writer_client.get(f"/v1/component-security/runs/{run_id}/findings")
+        assert findings_response.status_code == 200
+        assert findings_response.json()["total_count"] == llm_response.json()["total_findings"]
+
+        sarif_response = writer_client.get(f"/v1/component-security/runs/{run_id}/sarif")
+        assert sarif_response.status_code == 200
+        assert sarif_response.json()["runs"]
+
+    def test_list_runs_read_persists_from_store_restart(
+        self,
+        writer_client: TestClient,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store_path = tmp_path / "component-security-scans.sqlite3"
+        first_service = SecurityScanService(
+            command_runner=_default_command_runner,
+            allowed_roots=[str(tmp_path)],
+            store=SecurityScanStore(db_path=str(store_path)),
+        )
+        monkeypatch.setattr(component_security, "_service", first_service)
+        create_response = writer_client.post(
+            "/v1/component-security/runs",
+            json={
+                "target": {
+                    "repository_path": str(tmp_path),
+                    "branch": "feature/persisted",
+                },
+                "profile": "quick",
+                "execute_now": False,
+            },
+        )
+        assert create_response.status_code == 201
+        run_id = create_response.json()["id"]
+
+        second_service = SecurityScanService(
+            command_runner=_default_command_runner,
+            allowed_roots=[str(tmp_path)],
+            store=SecurityScanStore(db_path=str(store_path)),
+        )
+        monkeypatch.setattr(component_security, "_service", second_service)
+        list_response = writer_client.get("/v1/component-security/runs")
+        assert list_response.status_code == 200
+        run_ids = {run["id"] for run in list_response.json()}
+        assert run_id in run_ids
+
+        get_response = writer_client.get(f"/v1/component-security/runs/{run_id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["target"]["branch"] == "feature/persisted"

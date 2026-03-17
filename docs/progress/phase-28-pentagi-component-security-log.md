@@ -1,5 +1,40 @@
 # Phase 28 Progress Log: PentAGI Component Security Integration
 
+## 2026-03-16
+
+### Work Completed
+- [x] Wired `component_security` API singleton to construct `SecurityScanService` with configurable persistence settings.
+- [x] Extended `SecurityScanService` to load runs/findings from `SecurityScanStore`, persist lifecycle transitions, and support persisted finding appends.
+- [x] Added API/service tests for restart-survival and persisted LLM-scan additions; updated persistence docs and .env defaults.
+
+### Validation Evidence
+```bash
+cd engine
+$env:PYTHONPATH='src'; python -m pytest tests/test_component_security_api.py tests/test_security_persistence.py -q --no-cov
+python -m ruff check src/agent33/api/routes/component_security.py src/agent33/services/security_scan.py src/agent33/component_security/persistence.py src/agent33/config.py tests/test_component_security_api.py tests/test_security_persistence.py
+```
+
+**Results**:
+- `52 passed, 1 warning` for the targeted persistence/API pytest slice.
+- `ruff` passed for all touched component-security runtime and test files.
+
+### Issues Encountered
+| Issue | Impact | Resolution |
+|-------|--------|------------|
+| -- | -- | -- |
+
+### Decisions Made
+- **Decision**: Keep persistence opt-in via configuration flags.
+  - **Rationale**: Avoid cross-test/process side effects while allowing deployment-time control.
+- **Decision**: Extend the existing SQLite schema with full model payload columns while retaining queryable summary fields.
+  - **Rationale**: Preserves backward-compatible filters and retention queries while allowing exact `SecurityRun` / `SecurityFinding` round-trips after restart.
+- **Decision**: Treat SQLite as the authoritative backing store when persistence is enabled.
+  - **Rationale**: Prevents stale in-memory cache entries from surviving cross-instance deletes or updates.
+
+### Next Steps
+- [ ] Verify target environment restart behavior with real service startup path.
+- [ ] Confirm any operational defaults for persistence retention and cleanup policy are documented.
+
 ## Session Template
 
 Use this template to document progress, validation evidence, and decisions during Phase 28 implementation.

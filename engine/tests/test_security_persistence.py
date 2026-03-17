@@ -12,6 +12,7 @@ from agent33.component_security.dedup import (
 from agent33.component_security.models import (
     FindingCategory,
     FindingSeverity,
+    RunStatus,
     ScanTarget,
     SecurityFinding,
     SecurityProfile,
@@ -429,3 +430,128 @@ class TestStoreFileBacked:
         assert loaded is not None
         assert loaded["id"] == run.id
         store2.close()
+
+
+class TestSecurityScanServiceStoreIntegration:
+    """SecurityScanService hydrates and persists lifecycle state via store."""
+
+    def test_service_hydrates_runs_and_findings_from_store(self, tmp_path: object) -> None:
+        store = SecurityScanStore(db_path=str(tmp_path / "scans.db"))
+        run = _make_run(run_id="secrun-hydrate")
+        finding = _make_finding(run_id=run.id, title="persisted finding")
+        run.started_at = datetime.now(UTC)
+        run.completed_at = datetime.now(UTC)
+        run.status = RunStatus.COMPLETED
+        store.save_run(run)
+        store.save_findings([finding])
+
+        service = SecurityScanService(store=store)
+        hydrated_run = service.get_run(run.id)
+        assert hydrated_run.tenant_id == run.tenant_id
+        findings = service.fetch_findings(run.id)
+        assert len(findings) == 1
+        assert findings[0].title == "persisted finding"
+
+    def test_service_reads_store_on_list_delete_and_fetch(self, tmp_path: object) -> None:
+        store = SecurityScanStore(db_path=str(tmp_path / "scans.db"))
+        active_run = _make_run(run_id="secrun-list")
+        active_run.status = RunStatus.COMPLETED
+        active_run.started_at = datetime.now(UTC)
+        active_run.completed_at = datetime.now(UTC)
+        store.save_run(active_run)
+
+        service = SecurityScanService(store=store)
+        assert service.list_runs(limit=10)[0].id == active_run.id
+
+        service.delete_run(active_run.id)
+        assert store.get_run(active_run.id) is None
+
+    def test_service_persists_state_transitions_beyond_completed(
+        self,
+        tmp_path: object,
+    ) -> None:
+        db_path = str(tmp_path / "scans.db")
+        store = SecurityScanStore(db_path=db_path)
+        target = tmp_path / "repo"
+        target.mkdir()
+
+        service = SecurityScanService(
+            command_runner=lambda command, timeout: subprocess.CompletedProcess(
+                args=command,
+                returncode=2,
+                stdout="",
+                stderr="boom",
+            ),
+            allowed_roots=[str(target)],
+            store=store,
+        )
+        run = service.create_run(
+            target=ScanTarget(repository_path=str(target)),
+            profile=SecurityProfile.QUICK,
+            tenant_id="t-1",
+        )
+        assert service.get_run(run.id, tenant_id="t-1").status == RunStatus.PENDING
+
+        failed = service.launch_scan(run.id)
+        assert failed.status == RunStatus.FAILED
+        persisted = store.get_run(run.id)
+        assert persisted is not None
+        assert persisted["status"] == "failed"
+
+    def test_service_hydration_supports_restart_survival_for_cancelled_runs(
+        self,
+        tmp_path: object,
+    ) -> None:
+        db_path = str(tmp_path / "scans.db")
+        store = SecurityScanStore(db_path=db_path)
+        target = tmp_path / "repo"
+        target.mkdir()
+
+        first_service = SecurityScanService(
+            allowed_roots=[str(target)],
+            store=store,
+        )
+        run = first_service.create_run(
+            target=ScanTarget(repository_path=str(target)),
+            profile=SecurityProfile.QUICK,
+            tenant_id="t-1",
+        )
+        first_service.cancel_run(run.id)
+
+        second_service = SecurityScanService(allowed_roots=[str(target)], store=store)
+        hydrated_run = second_service.get_run(run.id, tenant_id="t-1")
+        assert hydrated_run.status == RunStatus.CANCELLED
+
+    def test_service_applies_retention_cleanup_on_startup(self, tmp_path: object) -> None:
+        store = SecurityScanStore(db_path=str(tmp_path / "scans.db"))
+        expired_run = _make_run(run_id="secrun-expired")
+        expired_run.created_at = datetime.now(UTC) - timedelta(days=120)
+        store.save_run(expired_run)
+
+        SecurityScanService(store=store, store_retention_days=30)
+
+        assert store.get_run(expired_run.id) is None
+
+    def test_store_refresh_evicted_deleted_runs_across_instances(self, tmp_path: object) -> None:
+        store_path = str(tmp_path / "scans.db")
+        target = tmp_path / "repo"
+        target.mkdir()
+
+        first_service = SecurityScanService(
+            allowed_roots=[str(target)],
+            store=SecurityScanStore(db_path=store_path),
+        )
+        second_service = SecurityScanService(
+            allowed_roots=[str(target)],
+            store=SecurityScanStore(db_path=store_path),
+        )
+
+        run = first_service.create_run(
+            target=ScanTarget(repository_path=str(target)),
+            profile=SecurityProfile.QUICK,
+        )
+        assert any(item.id == run.id for item in second_service.list_runs())
+
+        second_service.delete_run(run.id)
+
+        assert all(item.id != run.id for item in first_service.list_runs())
