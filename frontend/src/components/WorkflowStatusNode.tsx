@@ -2,7 +2,22 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 
 /** Valid workflow step statuses */
-export type WorkflowStepStatus = "success" | "failed" | "running" | "pending";
+export type WorkflowStepStatus =
+  | "success"
+  | "failed"
+  | "running"
+  | "pending"
+  | "retrying"
+  | "skipped";
+
+const KNOWN_WORKFLOW_STEP_STATUSES = new Set<WorkflowStepStatus>([
+  "success",
+  "failed",
+  "running",
+  "pending",
+  "retrying",
+  "skipped"
+]);
 
 export interface WorkflowStatusNodeData {
   label: string;
@@ -12,32 +27,35 @@ export interface WorkflowStatusNodeData {
 }
 
 /**
+ * Normalize workflow statuses for display, falling back to `pending`.
+ */
+export function normalizeWorkflowStepStatus(status: string | undefined): WorkflowStepStatus {
+  if (status && KNOWN_WORKFLOW_STEP_STATUSES.has(status as WorkflowStepStatus)) {
+    return status as WorkflowStepStatus;
+  }
+  return "pending";
+}
+
+/**
  * Maps a workflow step status string to a display color.
  *
  * Exported for direct unit-testing without rendering.
  */
 export function statusToColor(status: string | undefined): string {
-  switch (status) {
+  switch (normalizeWorkflowStepStatus(status)) {
     case "success":
       return "#22c55e";
     case "failed":
       return "#ef4444";
     case "running":
       return "#3b82f6";
+    case "retrying":
+      return "#f59e0b";
+    case "skipped":
     case "pending":
     default:
       return "#9ca3af";
   }
-}
-
-/**
- * Human-readable status label, falling back to "pending" for unknown values.
- */
-function statusLabel(status: string | undefined): string {
-  if (status === "success" || status === "failed" || status === "running" || status === "pending") {
-    return status;
-  }
-  return status ?? "pending";
 }
 
 const nodeBaseStyle: React.CSSProperties = {
@@ -69,8 +87,9 @@ const statusBadgeBase: React.CSSProperties = {
  * defined in `styles.css` (class `.wf-node-running`).
  */
 function WorkflowStatusNodeRaw({ data }: NodeProps<WorkflowStatusNodeData>): JSX.Element {
-  const color = statusToColor(data.status);
-  const isRunning = data.status === "running";
+  const normalizedStatus = normalizeWorkflowStepStatus(data.status);
+  const color = statusToColor(normalizedStatus);
+  const isRunning = normalizedStatus === "running";
 
   const borderStyle: React.CSSProperties = {
     border: `2px solid ${color}`,
@@ -82,7 +101,7 @@ function WorkflowStatusNodeRaw({ data }: NodeProps<WorkflowStatusNodeData>): JSX
       className={isRunning ? "wf-node-running" : undefined}
       style={{ ...nodeBaseStyle, ...borderStyle }}
       role="group"
-      aria-label={`${data.label}: ${statusLabel(data.status)}`}
+      aria-label={`${data.label}: ${normalizedStatus}`}
     >
       <Handle type="target" position={Position.Top} style={{ background: color }} />
 
@@ -96,7 +115,7 @@ function WorkflowStatusNodeRaw({ data }: NodeProps<WorkflowStatusNodeData>): JSX
         }}
         role="status"
       >
-        {statusLabel(data.status)}
+        {normalizedStatus}
       </span>
 
       <Handle type="source" position={Position.Bottom} style={{ background: color }} />
