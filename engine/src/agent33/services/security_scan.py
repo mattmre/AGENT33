@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -70,12 +71,16 @@ class SecurityScanService:
         command_runner: Callable[[list[str], int], subprocess.CompletedProcess[str]] | None = None,
         allowed_roots: list[str] | None = None,
         store: SecurityScanStore | None = None,
+        store_retention_days: int | None = None,
     ) -> None:
         self._runs: dict[str, SecurityRun] = {}
         self._findings: dict[str, list[SecurityFinding]] = {}
         self._command_runner = command_runner or self._run_command
         self._allowed_roots = [Path(root).resolve() for root in (allowed_roots or [])]
         self._store = store
+        self._store_retention_days = store_retention_days
+        self._apply_store_retention()
+        self._load_persisted_state()
 
     def create_run(
         self,
@@ -100,6 +105,7 @@ class SecurityScanService:
         run.metadata.release_candidate_id = release_candidate_id
         self._runs[run.id] = run
         self._findings[run.id] = []
+        self._persist(run, findings=[])
         logger.info("component_security_run_created", run_id=run.id, profile=profile.value)
         return run
 
@@ -112,6 +118,8 @@ class SecurityScanService:
         limit: int = 50,
     ) -> list[SecurityRun]:
         """List runs with optional tenant/status/profile filters."""
+        if self._store is not None:
+            self._refresh_from_store()
         runs = list(self._runs.values())
         if tenant_id:
             runs = [run for run in runs if run.tenant_id == tenant_id]
@@ -124,7 +132,11 @@ class SecurityScanService:
 
     def get_run(self, run_id: str, *, tenant_id: str | None = None) -> SecurityRun:
         """Get a run by ID with optional tenant check."""
-        run = self._runs.get(run_id)
+        run = (
+            self._load_run_from_store(run_id)
+            if self._store is not None
+            else self._runs.get(run_id)
+        )
         if run is None:
             raise RunNotFoundError(f"Component security run not found: {run_id}")
         if tenant_id and run.tenant_id != tenant_id:
@@ -140,6 +152,7 @@ class SecurityScanService:
         run.status = RunStatus.RUNNING
         run.touch()
         run.started_at = run.updated_at
+        self._persist(run, findings=self._findings.get(run.id, []))
 
         try:
             if run.profile == SecurityProfile.QUICK:
@@ -163,6 +176,8 @@ class SecurityScanService:
             if run.status == RunStatus.CANCELLED:
                 run.metadata.tools_executed = tools_executed
                 run.metadata.tool_warnings = tool_warnings
+                run.touch()
+                self._persist(run, findings=self._findings.get(run.id, []))
                 return run
             findings = self._apply_dedup(findings)
             self._findings[run.id] = findings
@@ -179,11 +194,13 @@ class SecurityScanService:
             run.error_message = "Scan timed out while executing quick profile"
             run.touch()
             run.completed_at = run.updated_at
+            self._persist(run, findings=self._findings.get(run.id, []))
         except ToolExecutionError as exc:
             run.status = RunStatus.FAILED
             run.error_message = str(exc)
             run.touch()
             run.completed_at = run.updated_at
+            self._persist(run, findings=self._findings.get(run.id, []))
         return run
 
     def fetch_findings(
@@ -195,9 +212,9 @@ class SecurityScanService:
     ) -> list[SecurityFinding]:
         """Return findings for a run with optional minimum severity filter."""
         run = self.get_run(run_id, tenant_id=tenant_id)
-        if run.status != RunStatus.COMPLETED:
-            return []
         findings = self._findings.get(run.id, [])
+        if not findings and self._store is not None:
+            findings = self._load_findings_for_run(run.id)
         if min_severity is None:
             return findings
         min_score = _SEVERITY_ORDER[min_severity]
@@ -211,6 +228,7 @@ class SecurityScanService:
         run.status = RunStatus.CANCELLED
         run.touch()
         run.completed_at = run.updated_at
+        self._persist(run, findings=self._findings.get(run.id, []))
         return run
 
     def delete_run(self, run_id: str, *, tenant_id: str | None = None) -> None:
@@ -218,6 +236,29 @@ class SecurityScanService:
         run = self.get_run(run_id, tenant_id=tenant_id)
         del self._runs[run.id]
         self._findings.pop(run.id, None)
+        if self._store is not None:
+            self._store.delete_run(run.id)
+
+    def add_findings(
+        self,
+        run_id: str,
+        *,
+        tenant_id: str | None = None,
+        findings: list[SecurityFinding],
+    ) -> SecurityRun:
+        """Append findings to an existing run and persist."""
+        run = self.get_run(run_id, tenant_id=tenant_id)
+        if not findings:
+            self._persist(run, findings=self._findings.get(run.id, []))
+            return run
+        existing = list(self._findings.get(run.id, []))
+        combined = existing + findings
+        self._findings[run.id] = combined
+        run.findings_count = len(combined)
+        run.findings_summary = FindingsSummary.from_findings(combined)
+        run.touch()
+        self._persist(run, findings=combined)
+        return run
 
     def sarif_export(
         self,
@@ -582,12 +623,172 @@ class SecurityScanService:
 
         return deduplicate_findings(findings)
 
+    def _load_persisted_state(self) -> None:
+        """Load persisted runs and findings into memory cache."""
+        self._refresh_from_store()
+
+    def _refresh_from_store(self) -> None:
+        """Refresh in-memory cache from persistent storage."""
+        if self._store is None:
+            return
+        try:
+            persisted_rows = self._store.list_runs(limit=10000)
+        except Exception:
+            logger.exception("security_scan_store_list_failed")
+            return
+        refreshed_runs: dict[str, SecurityRun] = {}
+        refreshed_findings: dict[str, list[SecurityFinding]] = {}
+        for row in persisted_rows:
+            run = self._run_from_store_row(row)
+            if run is None:
+                continue
+            refreshed_runs[run.id] = run
+            try:
+                refreshed_findings[run.id] = self._load_findings_for_run(run.id)
+            except Exception:
+                logger.exception(
+                    "security_scan_store_findings_load_failed",
+                    run_id=run.id,
+                )
+                refreshed_findings[run.id] = []
+        self._runs = refreshed_runs
+        self._findings = refreshed_findings
+
     def _persist(self, run: SecurityRun, findings: list[SecurityFinding]) -> None:
-        """Persist a completed run and its findings when a store is configured."""
+        """Persist run state and findings when a store is configured."""
         if self._store is None:
             return
         try:
             self._store.save_run(run)
-            self._store.save_findings(findings)
+            self._store.replace_findings(run.id, findings)
         except Exception:
             logger.exception("security_scan_persist_failed", run_id=run.id)
+
+    def _load_run_from_store(self, run_id: str) -> SecurityRun | None:
+        """Load a run by ID from persistent storage."""
+        if self._store is None:
+            return None
+        row = self._store.get_run(run_id)
+        if row is None:
+            self._runs.pop(run_id, None)
+            self._findings.pop(run_id, None)
+            return None
+        run = self._run_from_store_row(row)
+        if run is None:
+            self._runs.pop(run_id, None)
+            self._findings.pop(run_id, None)
+            return None
+        self._runs[run.id] = run
+        try:
+            self._findings[run.id] = self._load_findings_for_run(run.id)
+        except Exception:
+            logger.exception("security_scan_store_findings_load_failed", run_id=run.id)
+            self._findings[run.id] = []
+        return run
+
+    def _load_findings_for_run(self, run_id: str) -> list[SecurityFinding]:
+        """Load findings for a run from persistent storage."""
+        if self._store is None:
+            return []
+        rows = self._store.get_findings(run_id)
+        findings = [self._finding_from_store_row(row) for row in rows]
+        findings = [finding for finding in findings if finding is not None]
+        self._findings[run_id] = findings
+        return findings
+
+    def _run_from_store_row(self, row: dict[str, object]) -> SecurityRun | None:
+        """Convert a stored run row to SecurityRun."""
+        payload = row.get("payload")
+        if isinstance(payload, dict) and payload:
+            try:
+                return SecurityRun.model_validate(payload)
+            except Exception:
+                logger.warning(
+                    "security_scan_store_run_payload_invalid",
+                    run_id=row.get("id"),
+                )
+        try:
+            status = RunStatus(str(row["status"]))
+            profile = SecurityProfile(str(row["profile"]))
+        except (KeyError, ValueError):
+            return None
+        tools_used = row.get("tools_used")
+        if not isinstance(tools_used, list):
+            tools_used = []
+        summary_payload = row.get("summary")
+        if not isinstance(summary_payload, dict):
+            summary_payload = {}
+        findings_summary = FindingsSummary.model_validate(summary_payload)
+        target_path = row.get("target_path")
+        created_at = row.get("created_at")
+        updated_at = row.get("updated_at")
+        started_at = row.get("started_at")
+        completed_at = row.get("completed_at")
+        return SecurityRun(
+            id=str(row["id"]),
+            tenant_id=str(row.get("tenant_id", "")),
+            profile=profile,
+            status=status,
+            target=ScanTarget(repository_path=str(target_path)),
+            findings_count=findings_summary.total,
+            findings_summary=findings_summary,
+            created_at=created_at if isinstance(created_at, datetime) else datetime.now(UTC),
+            updated_at=(
+                updated_at if isinstance(updated_at, datetime) else created_at
+                if isinstance(created_at, datetime)
+                else datetime.now(UTC)
+            ),
+            started_at=started_at if isinstance(started_at, datetime) else None,
+            completed_at=completed_at if isinstance(completed_at, datetime) else None,
+        )
+
+    @staticmethod
+    def _finding_from_store_row(row: dict[str, object]) -> SecurityFinding | None:
+        """Convert a stored finding row to SecurityFinding."""
+        payload = row.get("payload")
+        if isinstance(payload, dict) and payload:
+            try:
+                return SecurityFinding.model_validate(payload)
+            except Exception:
+                logger.warning(
+                    "security_scan_store_finding_payload_invalid",
+                    finding_id=row.get("id"),
+                )
+        try:
+            severity = FindingSeverity(str(row["severity"]))
+            category = FindingCategory(str(row["category"]))
+        except (KeyError, ValueError):
+            return None
+        return SecurityFinding(
+            id=str(row.get("id", "")),
+            run_id=str(row["run_id"]),
+            severity=severity,
+            category=category,
+            title=str(row.get("title", "")),
+            description=str(row.get("description", "")),
+            tool=str(row.get("tool", "")),
+            file_path=str(row.get("file_path", "")),
+            line_number=row.get("line_number"),
+            remediation=str(row.get("recommendation", "")),
+            cwe_id=str(row.get("cwe_id", "")),
+            created_at=(
+                row.get("created_at")
+                if isinstance(row.get("created_at"), datetime)
+                else datetime.now(UTC)
+            ),
+            cvss_score=row.get("cvss_score") if "cvss_score" in row else None,
+        )
+
+    def _apply_store_retention(self) -> None:
+        """Apply retention policy before hydrating persisted state."""
+        if self._store is None or self._store_retention_days is None:
+            return
+        if self._store_retention_days <= 0:
+            return
+        try:
+            self._store.cleanup_expired_runs(retention_days=self._store_retention_days)
+        except Exception:
+            logger.exception(
+                "security_scan_store_retention_failed",
+                retention_days=self._store_retention_days,
+            )

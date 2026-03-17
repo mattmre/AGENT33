@@ -13,13 +13,13 @@ from agent33.component_security.llm_security import LLMSecurityScanner
 from agent33.component_security.mcp_scanner import MCPSecurityScanner
 from agent33.component_security.models import (
     FindingSeverity,
-    FindingsSummary,
     RunStatus,
     ScanOptions,
     ScanTarget,
     SecurityFinding,
     SecurityProfile,
 )
+from agent33.component_security.persistence import SecurityScanStore
 from agent33.config import settings
 from agent33.security.permissions import require_scope
 from agent33.services.security_scan import (
@@ -31,7 +31,23 @@ from agent33.services.security_scan import (
 
 router = APIRouter(prefix="/v1/component-security", tags=["component-security"])
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
-_service = SecurityScanService(allowed_roots=[str(_WORKSPACE_ROOT)])
+
+
+def _build_security_scan_store() -> SecurityScanStore | None:
+    """Construct optional persistent store for security scan runs."""
+    if not settings.component_security_scan_store_enabled:
+        return None
+    db_path = settings.component_security_scan_store_db_path.strip()
+    if not db_path:
+        return None
+    return SecurityScanStore(db_path=db_path)
+
+
+_service = SecurityScanService(
+    allowed_roots=[str(_WORKSPACE_ROOT)],
+    store=_build_security_scan_store(),
+    store_retention_days=settings.component_security_scan_store_retention_days,
+)
 _mcp_scanner = MCPSecurityScanner()
 _llm_scanner = LLMSecurityScanner()
 
@@ -39,6 +55,17 @@ _llm_scanner = LLMSecurityScanner()
 def get_component_security_service() -> SecurityScanService:
     """Return singleton component security service."""
     return _service
+
+
+def _reset_service() -> None:
+    """Rebuild the component-security singleton for tests."""
+    global _service  # noqa: PLW0603
+
+    _service = SecurityScanService(
+        allowed_roots=[str(_WORKSPACE_ROOT)],
+        store=_build_security_scan_store(),
+        store_retention_days=settings.component_security_scan_store_retention_days,
+    )
 
 
 def _tenant_id(request: Request) -> str:
@@ -64,7 +91,8 @@ class CreateSecurityRunRequest(BaseModel):
 @router.post("/runs", status_code=201, dependencies=[require_scope("component-security:write")])
 async def create_run(body: CreateSecurityRunRequest, request: Request) -> dict[str, Any]:
     """Create a new component security run and optionally execute it immediately."""
-    run = _service.create_run(
+    service = get_component_security_service()
+    run = service.create_run(
         target=body.target,
         profile=body.profile,
         options=body.options,
@@ -75,7 +103,7 @@ async def create_run(body: CreateSecurityRunRequest, request: Request) -> dict[s
     )
     if body.execute_now:
         try:
-            run = _service.launch_scan(run.id, tenant_id=_tenant_id(request))
+            run = service.launch_scan(run.id, tenant_id=_tenant_id(request))
         except SecurityScanError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     return run.model_dump(mode="json")
@@ -90,7 +118,7 @@ async def list_runs(
 ) -> list[dict[str, Any]]:
     """List component security runs for current tenant."""
     tenant_id = _tenant_id(request)
-    runs = _service.list_runs(
+    runs = get_component_security_service().list_runs(
         tenant_id=tenant_id if tenant_id else None,
         status=status,
         profile=profile,
@@ -103,7 +131,10 @@ async def list_runs(
 async def get_run(run_id: str, request: Request) -> dict[str, Any]:
     """Get component security run details by ID."""
     try:
-        run = _service.get_run(run_id, tenant_id=_tenant_id(request) or None)
+        run = get_component_security_service().get_run(
+            run_id,
+            tenant_id=_tenant_id(request) or None,
+        )
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return run.model_dump(mode="json")
@@ -117,7 +148,7 @@ async def get_findings(
 ) -> dict[str, Any]:
     """Fetch findings for a run."""
     try:
-        findings = _service.fetch_findings(
+        findings = get_component_security_service().fetch_findings(
             run_id,
             tenant_id=_tenant_id(request) or None,
             min_severity=min_severity,
@@ -134,7 +165,10 @@ async def get_findings(
 async def cancel_run(run_id: str, request: Request) -> dict[str, Any]:
     """Cancel a running or pending run."""
     try:
-        run = _service.cancel_run(run_id, tenant_id=_tenant_id(request) or None)
+        run = get_component_security_service().cancel_run(
+            run_id,
+            tenant_id=_tenant_id(request) or None,
+        )
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RunStateError as exc:
@@ -146,7 +180,10 @@ async def cancel_run(run_id: str, request: Request) -> dict[str, Any]:
 async def delete_run(run_id: str, request: Request) -> dict[str, str]:
     """Delete a run and associated findings."""
     try:
-        _service.delete_run(run_id, tenant_id=_tenant_id(request) or None)
+        get_component_security_service().delete_run(
+            run_id,
+            tenant_id=_tenant_id(request) or None,
+        )
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"deleted": run_id}
@@ -156,7 +193,10 @@ async def delete_run(run_id: str, request: Request) -> dict[str, str]:
 async def get_run_status(run_id: str, request: Request) -> dict[str, str]:
     """Get status for polling clients."""
     try:
-        run = _service.get_run(run_id, tenant_id=_tenant_id(request) or None)
+        run = get_component_security_service().get_run(
+            run_id,
+            tenant_id=_tenant_id(request) or None,
+        )
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"run_id": run.id, "status": run.status.value}
@@ -169,7 +209,10 @@ async def get_run_status(run_id: str, request: Request) -> dict[str, str]:
 async def get_run_sarif(run_id: str, request: Request) -> dict[str, Any]:
     """Export findings as SARIF 2.1.0 JSON."""
     try:
-        sarif = _service.sarif_export(run_id, tenant_id=_tenant_id(request) or None)
+        sarif = get_component_security_service().sarif_export(
+            run_id,
+            tenant_id=_tenant_id(request) or None,
+        )
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return sarif
@@ -230,8 +273,9 @@ async def remove_mcp_server(name: str) -> dict[str, str]:
 )
 async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
     """Trigger AI-specific security scan for a run."""
+    service = get_component_security_service()
     try:
-        run = _service.get_run(run_id, tenant_id=_tenant_id(request) or None)
+        run = service.get_run(run_id, tenant_id=_tenant_id(request) or None)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -262,15 +306,14 @@ async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
         )
 
     # Store findings alongside existing ones
-    existing = _service._findings.get(run.id, [])
-    existing.extend(findings)
-    _service._findings[run.id] = existing
-
-    run.findings_count = len(existing)
-    run.findings_summary = FindingsSummary.from_findings(existing)
+    updated = service.add_findings(
+        run.id,
+        tenant_id=_tenant_id(request),
+        findings=findings,
+    )
 
     return {
         "run_id": run.id,
         "llm_findings": len(findings),
-        "total_findings": len(existing),
+        "total_findings": updated.findings_count,
     }

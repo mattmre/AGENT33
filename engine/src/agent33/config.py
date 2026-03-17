@@ -55,6 +55,9 @@ class Settings(BaseSettings):
         "admin,agents:read,agents:write,agents:invoke,"
         "workflows:read,workflows:write,workflows:execute,tools:execute"
     )
+    component_security_scan_store_enabled: bool = False
+    component_security_scan_store_db_path: str = "var/component_security_scans.sqlite3"
+    component_security_scan_store_retention_days: int = 90
 
     # Rate limiting (per-tenant, sliding window)
     rate_limit_enabled: bool = True
@@ -459,6 +462,7 @@ class Settings(BaseSettings):
         return normalized
 
     @field_validator(
+        "component_security_scan_store_retention_days",
         "improvement_learning_dedupe_window_minutes",
         "improvement_learning_retention_days",
         "improvement_learning_max_signals",
