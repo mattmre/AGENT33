@@ -120,6 +120,38 @@ class TestStoreRunRoundTrip:
         assert len(runs) == 1
         assert runs[0]["id"] == "secrun-a"
 
+    def test_list_runs_status_filter_applies_before_limit(self) -> None:
+        store = SecurityScanStore()
+        newer_failed = _make_run(run_id="secrun-failed", status="failed")
+        newer_failed.created_at = datetime(2025, 6, 1, tzinfo=UTC)
+        older_completed = _make_run(run_id="secrun-completed", status="completed")
+        older_completed.created_at = datetime(2025, 1, 1, tzinfo=UTC)
+        store.save_run(older_completed)
+        store.save_run(newer_failed)
+
+        runs = store.list_runs(status="completed", limit=1)
+        assert len(runs) == 1
+        assert runs[0]["id"] == "secrun-completed"
+
+    def test_list_runs_profile_filter_applies_before_limit(self) -> None:
+        store = SecurityScanStore()
+        newer_standard = _make_run(
+            run_id="secrun-standard",
+            profile=SecurityProfile.STANDARD,
+        )
+        newer_standard.created_at = datetime(2025, 6, 1, tzinfo=UTC)
+        older_quick = _make_run(
+            run_id="secrun-quick",
+            profile=SecurityProfile.QUICK,
+        )
+        older_quick.created_at = datetime(2025, 1, 1, tzinfo=UTC)
+        store.save_run(older_quick)
+        store.save_run(newer_standard)
+
+        runs = store.list_runs(profile="quick", limit=1)
+        assert len(runs) == 1
+        assert runs[0]["id"] == "secrun-quick"
+
     def test_delete_run(self) -> None:
         store = SecurityScanStore()
         run = _make_run()
@@ -465,6 +497,36 @@ class TestSecurityScanServiceStoreIntegration:
 
         service.delete_run(active_run.id)
         assert store.get_run(active_run.id) is None
+
+    def test_service_list_runs_does_not_hydrate_findings(self, tmp_path: object) -> None:
+        class SpySecurityScanStore(SecurityScanStore):
+            def __init__(self, db_path: str) -> None:
+                super().__init__(db_path=db_path)
+                self.list_runs_calls = 0
+                self.get_findings_calls = 0
+
+            def list_runs(self, **kwargs: object) -> list[dict[str, object]]:
+                self.list_runs_calls += 1
+                return super().list_runs(**kwargs)
+
+            def get_findings(self, run_id: str) -> list[dict[str, object]]:
+                self.get_findings_calls += 1
+                return super().get_findings(run_id)
+
+        store = SpySecurityScanStore(db_path=str(tmp_path / "scans.db"))
+        run = _make_run(run_id="secrun-spy")
+        store.save_run(run)
+        store.save_findings([_make_finding(run_id=run.id)])
+
+        service = SecurityScanService(store=store)
+        store.list_runs_calls = 0
+        store.get_findings_calls = 0
+
+        runs = service.list_runs(limit=10)
+
+        assert [item.id for item in runs] == [run.id]
+        assert store.list_runs_calls == 1
+        assert store.get_findings_calls == 0
 
     def test_service_persists_state_transitions_beyond_completed(
         self,

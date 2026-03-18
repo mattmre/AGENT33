@@ -176,20 +176,30 @@ class SecurityScanStore:
         self,
         *,
         tenant_id: str | None = None,
+        status: str | None = None,
+        profile: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, object]]:
         """List runs with optional tenant filter, newest first."""
         conn = self._connect()
+        where_clauses: list[str] = []
+        params: list[object] = []
         if tenant_id is not None:
-            rows = conn.execute(
-                "SELECT * FROM scan_runs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
-                (tenant_id, limit),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM scan_runs ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            where_clauses.append("tenant_id = ?")
+            params.append(tenant_id)
+        if status is not None:
+            where_clauses.append("status = ?")
+            params.append(status)
+        if profile is not None:
+            where_clauses.append("profile = ?")
+            params.append(profile)
+
+        query = "SELECT * FROM scan_runs"
+        if where_clauses:
+            query = f"{query} WHERE {' AND '.join(where_clauses)}"
+        query = f"{query} ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, tuple(params)).fetchall()
         return [self._row_to_run_dict(row) for row in rows]
 
     def delete_run(self, run_id: str) -> bool:
