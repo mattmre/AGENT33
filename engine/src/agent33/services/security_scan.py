@@ -691,8 +691,11 @@ class SecurityScanService:
         if self._store is None:
             return []
         rows = self._store.get_findings(run_id)
-        findings = [self._finding_from_store_row(row) for row in rows]
-        findings = [finding for finding in findings if finding is not None]
+        findings: list[SecurityFinding] = []
+        for row in rows:
+            finding = self._finding_from_store_row(row)
+            if finding is not None:
+                findings.append(finding)
         self._findings[run_id] = findings
         return findings
 
