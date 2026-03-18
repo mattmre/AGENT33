@@ -309,8 +309,7 @@ class SecurityScanStore:
         definition: str,
     ) -> None:
         existing_columns = {
-            str(row["name"])
-            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+            str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         }
         if column_name in existing_columns:
             return
