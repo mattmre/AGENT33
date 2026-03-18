@@ -23,6 +23,8 @@ from agent33.evaluation.models import (
 )
 
 if TYPE_CHECKING:
+    from apscheduler.triggers.cron import CronTrigger
+
     from agent33.evaluation.service import EvaluationService
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,10 @@ class ScheduledGateService:
                 raise ValueError("cron_expr is required for CRON schedule type")
             if config.interval_seconds is not None:
                 raise ValueError("interval_seconds must not be set for CRON schedule type")
+            try:
+                self._build_cron_trigger(config.cron_expr)
+            except ValueError as exc:
+                raise ValueError(f"Invalid cron_expr: {config.cron_expr!r}") from exc
         elif config.schedule_type == ScheduleType.INTERVAL:
             if config.interval_seconds is None or config.interval_seconds <= 0:
                 raise ValueError(
@@ -224,23 +230,7 @@ class ScheduledGateService:
     def _register_job(self, config: ScheduledGateConfig) -> None:
         """Add an APScheduler job for the given config."""
         if config.schedule_type == ScheduleType.CRON:
-            from apscheduler.triggers.cron import CronTrigger
-
-            parts = config.cron_expr.split() if config.cron_expr else []
-            if len(parts) != 5:
-                logger.warning(
-                    "scheduled_gate_invalid_cron id=%s expr=%s",
-                    config.schedule_id,
-                    config.cron_expr,
-                )
-                return
-            trigger = CronTrigger(
-                minute=parts[0],
-                hour=parts[1],
-                day=parts[2],
-                month=parts[3],
-                day_of_week=parts[4],
-            )
+            trigger = self._build_cron_trigger(config.cron_expr or "")
             self._scheduler.add_job(
                 self._execute_gate,
                 trigger=trigger,
@@ -257,6 +247,13 @@ class ScheduledGateService:
                 id=config.schedule_id,
                 args=[config.schedule_id],
             )
+
+    @staticmethod
+    def _build_cron_trigger(cron_expr: str) -> CronTrigger:
+        """Build and validate an APScheduler cron trigger from a 5-field expression."""
+        from apscheduler.triggers.cron import CronTrigger
+
+        return CronTrigger.from_crontab(cron_expr.strip())
 
     async def _execute_gate(self, schedule_id: str) -> ScheduledGateResult:
         """Internal callback: run an evaluation gate and record the result."""

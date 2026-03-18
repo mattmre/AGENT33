@@ -28,6 +28,7 @@ from agent33.evaluation.scheduled_gates import (
     ScheduleType,
 )
 from agent33.evaluation.service import EvaluationService
+from agent33.security.auth import create_access_token
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -194,6 +195,26 @@ class TestConfigValidation:
         created = gate_service.create_schedule(config)
         assert created.schedule_id == config.schedule_id
         assert created.cron_expr == "*/5 * * * *"
+
+    def test_cron_with_wrong_field_count_rejected(
+        self, gate_service: ScheduledGateService
+    ) -> None:
+        config = ScheduledGateConfig(
+            schedule_type=ScheduleType.CRON,
+            cron_expr="not a cron",
+        )
+        with pytest.raises(ValueError, match="Invalid cron_expr"):
+            gate_service.create_schedule(config)
+
+    def test_cron_with_out_of_range_value_rejected(
+        self, gate_service: ScheduledGateService
+    ) -> None:
+        config = ScheduledGateConfig(
+            schedule_type=ScheduleType.CRON,
+            cron_expr="61 * * * *",
+        )
+        with pytest.raises(ValueError, match="Invalid cron_expr"):
+            gate_service.create_schedule(config)
 
     def test_valid_interval_accepted(self, gate_service: ScheduledGateService) -> None:
         config = _interval_config()
@@ -582,16 +603,23 @@ class TestScheduledGatesAPI:
     """Test the FastAPI routes for scheduled gates."""
 
     @pytest.fixture()
+    def auth_token(self) -> str:
+        return create_access_token(
+            "scheduled-gates-test-user",
+            scopes=["tools:execute", "workflows:read"],
+        )
+
+    @pytest.fixture()
     def _install_service(self, gate_service: ScheduledGateService) -> ScheduledGateService:
         """Install the service on the routes module."""
         from agent33.api.routes import scheduled_gates as routes_mod
 
         routes_mod.set_service(gate_service)
-        yield gate_service  # type: ignore[misc]
-        routes_mod.set_service(None)  # type: ignore[arg-type]
+        yield gate_service
+        routes_mod.set_service(None)
 
     @pytest.fixture()
-    def client(self, _install_service: ScheduledGateService):  # noqa: ANN201
+    def client(self, _install_service: ScheduledGateService, auth_token: str):  # noqa: ANN201
         """Create an httpx AsyncClient with auth headers."""
         import httpx
 
@@ -605,10 +633,10 @@ class TestScheduledGatesAPI:
         return httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": f"Bearer {auth_token}"},
         )
 
-    async def test_503_when_service_not_set(self) -> None:
+    async def test_503_when_service_not_set(self, auth_token: str) -> None:
         """Routes should return 503 when the service is not initialized."""
         import httpx
 
@@ -616,18 +644,17 @@ class TestScheduledGatesAPI:
         from agent33.main import app
 
         # Ensure service is None
-        routes_mod.set_service(None)  # type: ignore[arg-type]
+        routes_mod.set_service(None)
         app.include_router(routes_mod.router)
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": f"Bearer {auth_token}"},
         ) as c:
             resp = await c.get("/v1/evaluations/schedules")
-            # Will be 401 (auth) or 503 (service) depending on middleware
-            assert resp.status_code in (401, 503)
+            assert resp.status_code == 503
 
     async def test_create_schedule_endpoint(
         self, client: object, _install_service: ScheduledGateService
@@ -641,9 +668,6 @@ class TestScheduledGatesAPI:
                     "cron_expr": "0 * * * *",
                 },
             )
-            # Auth middleware may reject test tokens
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 201
             data = resp.json()
             assert "schedule_id" in data
@@ -660,8 +684,6 @@ class TestScheduledGatesAPI:
 
         async with client as c:
             resp = await c.get("/v1/evaluations/schedules")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 200
             data = resp.json()
             assert isinstance(data, list)
@@ -677,8 +699,6 @@ class TestScheduledGatesAPI:
 
         async with client as c:
             resp = await c.get(f"/v1/evaluations/schedules/{config.schedule_id}")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 200
             data = resp.json()
             assert data["schedule_id"] == config.schedule_id
@@ -690,8 +710,6 @@ class TestScheduledGatesAPI:
     ) -> None:
         async with client as c:
             resp = await c.get("/v1/evaluations/schedules/nonexistent")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 404
 
     async def test_delete_schedule_endpoint(
@@ -704,8 +722,6 @@ class TestScheduledGatesAPI:
 
         async with client as c:
             resp = await c.delete(f"/v1/evaluations/schedules/{config.schedule_id}")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 204
 
     async def test_delete_schedule_not_found(
@@ -715,8 +731,6 @@ class TestScheduledGatesAPI:
     ) -> None:
         async with client as c:
             resp = await c.delete("/v1/evaluations/schedules/nonexistent")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 404
 
     async def test_trigger_endpoint(
@@ -729,8 +743,6 @@ class TestScheduledGatesAPI:
 
         async with client as c:
             resp = await c.post(f"/v1/evaluations/schedules/{config.schedule_id}/trigger")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 200
             data = resp.json()
             assert data["schedule_id"] == config.schedule_id
@@ -744,8 +756,6 @@ class TestScheduledGatesAPI:
     ) -> None:
         async with client as c:
             resp = await c.post("/v1/evaluations/schedules/nonexistent/trigger")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 404
 
     async def test_history_endpoint(
@@ -759,8 +769,6 @@ class TestScheduledGatesAPI:
 
         async with client as c:
             resp = await c.get(f"/v1/evaluations/schedules/{config.schedule_id}/history")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 200
             data = resp.json()
             assert isinstance(data, list)
@@ -773,8 +781,6 @@ class TestScheduledGatesAPI:
     ) -> None:
         async with client as c:
             resp = await c.get("/v1/evaluations/schedules/nonexistent/history")
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 404
 
     async def test_create_invalid_schedule_returns_422(
@@ -790,9 +796,23 @@ class TestScheduledGatesAPI:
                     # missing cron_expr
                 },
             )
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 422
+
+    async def test_create_invalid_cron_returns_422(
+        self,
+        client: object,
+        _install_service: ScheduledGateService,
+    ) -> None:
+        async with client as c:
+            resp = await c.post(
+                "/v1/evaluations/schedules",
+                json={
+                    "schedule_type": "cron",
+                    "cron_expr": "not a cron",
+                },
+            )
+            assert resp.status_code == 422
+            assert "Invalid cron_expr" in resp.json()["detail"]
 
     async def test_history_with_limit_param(
         self,
@@ -809,8 +829,6 @@ class TestScheduledGatesAPI:
                 f"/v1/evaluations/schedules/{config.schedule_id}/history",
                 params={"limit": 2},
             )
-            if resp.status_code == 401:
-                pytest.skip("Auth middleware rejects test token")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data) == 2

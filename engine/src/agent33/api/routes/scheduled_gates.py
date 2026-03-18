@@ -27,7 +27,7 @@ router = APIRouter(prefix="/v1/evaluations/schedules", tags=["scheduled-gates"])
 _service: ScheduledGateService | None = None
 
 
-def set_service(service: ScheduledGateService) -> None:
+def set_service(service: ScheduledGateService | None) -> None:
     """Install the service instance (called from lifespan)."""
     global _service  # noqa: PLW0603
     _service = service
