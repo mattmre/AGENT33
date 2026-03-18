@@ -73,6 +73,19 @@ def _interval_config(**overrides: object) -> ScheduledGateConfig:
     return ScheduledGateConfig(**defaults)  # type: ignore[arg-type]
 
 
+def _build_test_app():
+    """Build a fresh FastAPI app with auth middleware and the scheduled gates router."""
+    from fastapi import FastAPI
+
+    from agent33.api.routes import scheduled_gates as routes_mod
+    from agent33.security.middleware import AuthMiddleware
+
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.include_router(routes_mod.router)
+    return app
+
+
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
@@ -611,13 +624,6 @@ class TestScheduledGatesAPI:
         return {"Authorization": f"Bearer {token}"}
 
     @pytest.fixture()
-    def scheduled_gates_auth_token(self) -> str:
-        return create_access_token(
-            "scheduled-gates-test-user",
-            scopes=["tools:execute", "workflows:read"],
-        )
-
-    @pytest.fixture()
     def _install_service(self, gate_service: ScheduledGateService) -> ScheduledGateService:
         """Install the service on the routes module."""
         from agent33.api.routes import scheduled_gates as routes_mod
@@ -627,25 +633,32 @@ class TestScheduledGatesAPI:
         routes_mod.set_service(None)
 
     @pytest.fixture()
-    def client(
-        self,
-        _install_service: ScheduledGateService,
-        scheduled_gates_auth_token: str,
-    ):  # noqa: ANN201
+    def scheduled_gates_test_app(self, _install_service: ScheduledGateService):  # noqa: ANN201
+        """Create a fresh app instance for each API test."""
+        return _build_test_app()
+
+    @pytest.fixture()
+    def read_client(self, scheduled_gates_test_app):  # noqa: ANN201
         """Create an httpx AsyncClient with auth headers."""
         import httpx
 
-        from agent33.api.routes import scheduled_gates as routes_mod
-        from agent33.main import app
-
-        # Temporarily include the router for testing
-        app.include_router(routes_mod.router)
-
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=scheduled_gates_test_app)
         return httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": f"Bearer {scheduled_gates_auth_token}"},
+            headers=self._auth_headers("workflows:read"),
+        )
+
+    @pytest.fixture()
+    def execute_client(self, scheduled_gates_test_app):  # noqa: ANN201
+        """Create an httpx AsyncClient with write/execute auth headers."""
+        import httpx
+
+        transport = httpx.ASGITransport(app=scheduled_gates_test_app)
+        return httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers=self._auth_headers("tools:execute"),
         )
 
     async def test_list_schedules_requires_auth(
@@ -654,11 +667,7 @@ class TestScheduledGatesAPI:
     ) -> None:
         import httpx
 
-        from agent33.api.routes import scheduled_gates as routes_mod
-        from agent33.main import app
-
-        app.include_router(routes_mod.router)
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=_build_test_app())
 
         async with httpx.AsyncClient(
             transport=transport,
@@ -674,11 +683,7 @@ class TestScheduledGatesAPI:
     ) -> None:
         import httpx
 
-        from agent33.api.routes import scheduled_gates as routes_mod
-        from agent33.main import app
-
-        app.include_router(routes_mod.router)
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=_build_test_app())
 
         async with httpx.AsyncClient(
             transport=transport,
@@ -696,30 +701,27 @@ class TestScheduledGatesAPI:
 
         assert resp.status_code == 403
 
-    async def test_503_when_service_not_set(self, scheduled_gates_auth_token: str) -> None:
+    async def test_503_when_service_not_set(self) -> None:
         """Routes should return 503 when the service is not initialized."""
         import httpx
 
         from agent33.api.routes import scheduled_gates as routes_mod
-        from agent33.main import app
 
         # Ensure service is None
         routes_mod.set_service(None)
-        app.include_router(routes_mod.router)
-
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=_build_test_app())
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": f"Bearer {scheduled_gates_auth_token}"},
+            headers=self._auth_headers("workflows:read"),
         ) as c:
             resp = await c.get("/v1/evaluations/schedules")
             assert resp.status_code == 503
 
     async def test_create_schedule_endpoint(
-        self, client: object, _install_service: ScheduledGateService
+        self, execute_client: object, _install_service: ScheduledGateService
     ) -> None:
-        async with client as c:
+        async with execute_client as c:
             resp = await c.post(
                 "/v1/evaluations/schedules",
                 json={
@@ -736,13 +738,13 @@ class TestScheduledGatesAPI:
 
     async def test_list_schedules_endpoint(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         # Create a schedule via service first
         _install_service.create_schedule(_cron_config())
 
-        async with client as c:
+        async with read_client as c:
             resp = await c.get("/v1/evaluations/schedules")
             assert resp.status_code == 200
             data = resp.json()
@@ -751,13 +753,13 @@ class TestScheduledGatesAPI:
 
     async def test_get_schedule_endpoint(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         config = _cron_config()
         _install_service.create_schedule(config)
 
-        async with client as c:
+        async with read_client as c:
             resp = await c.get(f"/v1/evaluations/schedules/{config.schedule_id}")
             assert resp.status_code == 200
             data = resp.json()
@@ -765,43 +767,43 @@ class TestScheduledGatesAPI:
 
     async def test_get_schedule_not_found(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with read_client as c:
             resp = await c.get("/v1/evaluations/schedules/nonexistent")
             assert resp.status_code == 404
 
     async def test_delete_schedule_endpoint(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         config = _cron_config()
         _install_service.create_schedule(config)
 
-        async with client as c:
+        async with execute_client as c:
             resp = await c.delete(f"/v1/evaluations/schedules/{config.schedule_id}")
             assert resp.status_code == 204
 
     async def test_delete_schedule_not_found(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with execute_client as c:
             resp = await c.delete("/v1/evaluations/schedules/nonexistent")
             assert resp.status_code == 404
 
     async def test_trigger_endpoint(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         config = _cron_config()
         _install_service.create_schedule(config)
 
-        async with client as c:
+        async with execute_client as c:
             resp = await c.post(f"/v1/evaluations/schedules/{config.schedule_id}/trigger")
             assert resp.status_code == 200
             data = resp.json()
@@ -811,23 +813,23 @@ class TestScheduledGatesAPI:
 
     async def test_trigger_nonexistent_returns_404(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with execute_client as c:
             resp = await c.post("/v1/evaluations/schedules/nonexistent/trigger")
             assert resp.status_code == 404
 
     async def test_history_endpoint(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         config = _cron_config()
         _install_service.create_schedule(config)
         await _install_service.trigger_now(config.schedule_id)
 
-        async with client as c:
+        async with read_client as c:
             resp = await c.get(f"/v1/evaluations/schedules/{config.schedule_id}/history")
             assert resp.status_code == 200
             data = resp.json()
@@ -836,19 +838,19 @@ class TestScheduledGatesAPI:
 
     async def test_history_nonexistent_returns_404(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with read_client as c:
             resp = await c.get("/v1/evaluations/schedules/nonexistent/history")
             assert resp.status_code == 404
 
     async def test_create_invalid_schedule_returns_422(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with execute_client as c:
             resp = await c.post(
                 "/v1/evaluations/schedules",
                 json={
@@ -860,10 +862,10 @@ class TestScheduledGatesAPI:
 
     async def test_create_invalid_cron_returns_422(
         self,
-        client: object,
+        execute_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
-        async with client as c:
+        async with execute_client as c:
             resp = await c.post(
                 "/v1/evaluations/schedules",
                 json={
@@ -876,7 +878,7 @@ class TestScheduledGatesAPI:
 
     async def test_history_with_limit_param(
         self,
-        client: object,
+        read_client: object,
         _install_service: ScheduledGateService,
     ) -> None:
         config = _cron_config()
@@ -884,7 +886,7 @@ class TestScheduledGatesAPI:
         for _ in range(5):
             await _install_service.trigger_now(config.schedule_id)
 
-        async with client as c:
+        async with read_client as c:
             resp = await c.get(
                 f"/v1/evaluations/schedules/{config.schedule_id}/history",
                 params={"limit": 2},

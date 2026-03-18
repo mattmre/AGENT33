@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, Field
 
 from agent33.evaluation.models import (
@@ -23,8 +24,6 @@ from agent33.evaluation.models import (
 )
 
 if TYPE_CHECKING:
-    from apscheduler.triggers.cron import CronTrigger
-
     from agent33.evaluation.service import EvaluationService
 
 logger = logging.getLogger(__name__)
@@ -79,7 +78,6 @@ class ScheduledGateHistory(BaseModel):
         self.results.append(result)
         if len(self.results) > self.max_history:
             self.results = self.results[-self.max_history :]
-
 
 # ---------------------------------------------------------------------------
 # Service
@@ -251,8 +249,6 @@ class ScheduledGateService:
     @staticmethod
     def _build_cron_trigger(cron_expr: str) -> CronTrigger:
         """Build and validate an APScheduler cron trigger from a 5-field expression."""
-        from apscheduler.triggers.cron import CronTrigger
-
         return CronTrigger.from_crontab(cron_expr.strip())
 
     async def _execute_gate(self, schedule_id: str) -> ScheduledGateResult:
