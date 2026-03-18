@@ -33,6 +33,19 @@ def _admin_token() -> str:
 class TestAgentInvokeE2E:
     """Agent invoke endpoint -> AgentRuntime -> LLM -> response pipeline."""
 
+    def test_e2e_harness_uses_deterministic_embedding_provider(self, e2e_client):
+        """The E2E app should wire recall through the deterministic harness embedder."""
+        app, _client, _mock_ltm = e2e_client
+
+        harness_provider = getattr(app.state, "_e2e_embedding_provider", None)
+        assert harness_provider is not None
+        assert isinstance(harness_provider.embed, AsyncMock)
+
+        embedding_cache = getattr(app.state, "embedding_cache", None)
+        assert embedding_cache is not None
+        assert getattr(embedding_cache, "_provider", None) is harness_provider
+        assert app.state.progressive_recall._embeddings is embedding_cache
+
     def test_agent_invoke_returns_structured_response(self, e2e_client, sample_agent_def):
         """POST /v1/agents/{name}/invoke returns full response shape.
 
