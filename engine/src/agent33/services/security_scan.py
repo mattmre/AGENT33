@@ -119,7 +119,24 @@ class SecurityScanService:
     ) -> list[SecurityRun]:
         """List runs with optional tenant/status/profile filters."""
         if self._store is not None:
-            self._refresh_from_store()
+            try:
+                persisted_rows = self._store.list_runs(
+                    tenant_id=tenant_id,
+                    status=status.value if status is not None else None,
+                    profile=profile.value if profile is not None else None,
+                    limit=limit,
+                )
+            except Exception:
+                logger.exception("security_scan_store_list_failed")
+            else:
+                runs: list[SecurityRun] = []
+                for row in persisted_rows:
+                    run = self._run_from_store_row(row)
+                    if run is None:
+                        continue
+                    self._runs[run.id] = run
+                    runs.append(run)
+                return runs
         runs = list(self._runs.values())
         if tenant_id:
             runs = [run for run in runs if run.tenant_id == tenant_id]
