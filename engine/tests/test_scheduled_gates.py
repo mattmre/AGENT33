@@ -602,6 +602,14 @@ class TestGMONThresholds:
 class TestScheduledGatesAPI:
     """Test the FastAPI routes for scheduled gates."""
 
+    @staticmethod
+    def _auth_headers(*scopes: str) -> dict[str, str]:
+        token = create_access_token(
+            "scheduled-gates-test-user",
+            scopes=list(scopes),
+        )
+        return {"Authorization": f"Bearer {token}"}
+
     @pytest.fixture()
     def auth_token(self) -> str:
         return create_access_token(
@@ -635,6 +643,54 @@ class TestScheduledGatesAPI:
             base_url="http://test",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
+
+    async def test_list_schedules_requires_auth(
+        self,
+        _install_service: ScheduledGateService,
+    ) -> None:
+        import httpx
+
+        from agent33.api.routes import scheduled_gates as routes_mod
+        from agent33.main import app
+
+        app.include_router(routes_mod.router)
+        transport = httpx.ASGITransport(app=app)
+
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as c:
+            resp = await c.get("/v1/evaluations/schedules")
+
+        assert resp.status_code == 401
+
+    async def test_create_schedule_requires_tools_execute_scope(
+        self,
+        _install_service: ScheduledGateService,
+    ) -> None:
+        import httpx
+
+        from agent33.api.routes import scheduled_gates as routes_mod
+        from agent33.main import app
+
+        app.include_router(routes_mod.router)
+        transport = httpx.ASGITransport(app=app)
+
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers=self._auth_headers("workflows:read"),
+        ) as c:
+            resp = await c.post(
+                "/v1/evaluations/schedules",
+                json={
+                    "gate_type": "G-MON",
+                    "schedule_type": "cron",
+                    "cron_expr": "0 * * * *",
+                },
+            )
+
+        assert resp.status_code == 403
 
     async def test_503_when_service_not_set(self, auth_token: str) -> None:
         """Routes should return 503 when the service is not initialized."""
