@@ -611,7 +611,7 @@ class TestScheduledGatesAPI:
         return {"Authorization": f"Bearer {token}"}
 
     @pytest.fixture()
-    def auth_token(self) -> str:
+    def scheduled_gates_auth_token(self) -> str:
         return create_access_token(
             "scheduled-gates-test-user",
             scopes=["tools:execute", "workflows:read"],
@@ -627,7 +627,11 @@ class TestScheduledGatesAPI:
         routes_mod.set_service(None)
 
     @pytest.fixture()
-    def client(self, _install_service: ScheduledGateService, auth_token: str):  # noqa: ANN201
+    def client(
+        self,
+        _install_service: ScheduledGateService,
+        scheduled_gates_auth_token: str,
+    ):  # noqa: ANN201
         """Create an httpx AsyncClient with auth headers."""
         import httpx
 
@@ -641,7 +645,7 @@ class TestScheduledGatesAPI:
         return httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": f"Bearer {auth_token}"},
+            headers={"Authorization": f"Bearer {scheduled_gates_auth_token}"},
         )
 
     async def test_list_schedules_requires_auth(
@@ -692,7 +696,7 @@ class TestScheduledGatesAPI:
 
         assert resp.status_code == 403
 
-    async def test_503_when_service_not_set(self, auth_token: str) -> None:
+    async def test_503_when_service_not_set(self, scheduled_gates_auth_token: str) -> None:
         """Routes should return 503 when the service is not initialized."""
         import httpx
 
@@ -707,7 +711,7 @@ class TestScheduledGatesAPI:
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"Authorization": f"Bearer {auth_token}"},
+            headers={"Authorization": f"Bearer {scheduled_gates_auth_token}"},
         ) as c:
             resp = await c.get("/v1/evaluations/schedules")
             assert resp.status_code == 503
