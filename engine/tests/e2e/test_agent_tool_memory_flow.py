@@ -21,6 +21,7 @@ from agent33.agents.definition import (
     AgentRole,
 )
 from agent33.agents.runtime import AgentResult
+from agent33.llm.base import LLMResponse
 from agent33.security.auth import create_access_token
 
 pytestmark = pytest.mark.e2e
@@ -32,6 +33,56 @@ def _admin_token() -> str:
 
 class TestAgentInvokeE2E:
     """Agent invoke endpoint -> AgentRuntime -> LLM -> response pipeline."""
+
+    def test_e2e_harness_uses_deterministic_embedding_provider(self, e2e_client):
+        """A real request path should await the deterministic harness embedder."""
+        app, client, _mock_ltm = e2e_client
+
+        harness_provider = getattr(app.state, "_e2e_embedding_provider", None)
+        assert harness_provider is not None
+        assert isinstance(harness_provider.embed, AsyncMock)
+
+        embedding_cache = getattr(app.state, "embedding_cache", None)
+        assert embedding_cache is not None
+        assert getattr(embedding_cache, "_provider", None) is harness_provider
+        assert app.state.progressive_recall._embeddings is embedding_cache
+
+        harness_provider.embed.reset_mock()
+
+        agent_def = AgentDefinition(
+            name="e2e-recall-agent",
+            version="1.0.0",
+            role=AgentRole.WORKER,
+            description="Recall wiring test",
+            inputs={"prompt": AgentParameter(type="string", description="input")},
+            outputs={"result": AgentParameter(type="string", description="output")},
+            constraints=AgentConstraints(max_tokens=128, timeout_seconds=10, max_retries=0),
+        )
+        app.state.agent_registry.register(agent_def)
+
+        mock_llm_response = LLMResponse(
+            content='{"result": "recall wiring works"}',
+            model="mock-model",
+            prompt_tokens=10,
+            completion_tokens=10,
+        )
+
+        with patch.object(
+            app.state.model_router,
+            "complete",
+            new_callable=AsyncMock,
+            return_value=mock_llm_response,
+        ):
+            resp = client.post(
+                "/v1/agents/e2e-recall-agent/invoke",
+                json={"inputs": {"prompt": "remember this request path"}},
+                headers={"Authorization": f"Bearer {_admin_token()}"},
+            )
+
+        assert resp.status_code == 200
+        assert harness_provider.embed.await_count >= 1
+        awaited_inputs = [call.args[0] for call in harness_provider.embed.await_args_list]
+        assert any("remember this request path" in value for value in awaited_inputs)
 
     def test_agent_invoke_returns_structured_response(self, e2e_client, sample_agent_def):
         """POST /v1/agents/{name}/invoke returns full response shape.

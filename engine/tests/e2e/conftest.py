@@ -10,13 +10,16 @@ from __future__ import annotations
 import hashlib
 import math
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent33.security.auth import create_access_token
+
+if TYPE_CHECKING:
+    from httpx import Response
 
 # ---------------------------------------------------------------------------
 # Deterministic embedding function (bag-of-words hash, no model needed)
@@ -53,6 +56,8 @@ def _make_mock_ltm() -> MagicMock:
     m = MagicMock()
     m.initialize = AsyncMock()
     m.close = AsyncMock()
+    m.store = AsyncMock(return_value="e2e-memory-record")
+    m.search = AsyncMock(return_value=[])
     return m
 
 
@@ -75,6 +80,55 @@ def _make_mock_redis_module() -> MagicMock:
     return mod
 
 
+def _make_embedding_provider() -> AsyncMock:
+    """Create a deterministic embedding provider for E2E harness tests."""
+    provider = AsyncMock()
+    provider.embed = AsyncMock(side_effect=lambda text: _deterministic_embed(text))
+    provider.embed_batch = AsyncMock(
+        side_effect=lambda texts: [_deterministic_embed(text) for text in texts]
+    )
+    provider.close = AsyncMock()
+    return provider
+
+
+class _AuthClientProxy:
+    """Lightweight auth wrapper that avoids starting nested TestClient instances."""
+
+    def __init__(self, client: TestClient, headers: dict[str, str]) -> None:
+        self._client = client
+        self._headers = headers
+
+    def _merged_headers(self, extra_headers: dict[str, str] | None) -> dict[str, str]:
+        headers = dict(self._headers)
+        if extra_headers is None:
+            return headers
+
+        header_keys = {key.lower(): key for key in headers}
+        for key, value in extra_headers.items():
+            existing_key = header_keys.get(key.lower())
+            if existing_key is not None:
+                headers.pop(existing_key, None)
+            headers[key] = value
+            header_keys[key.lower()] = key
+        return headers
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Response:
+        headers = self._merged_headers(kwargs.pop("headers", None))
+        return self._client.request(method, url, headers=headers, **kwargs)
+
+    def get(self, url: str, **kwargs: Any) -> Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> Response:
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> Response:
+        return self.request("PUT", url, **kwargs)
+
+    def delete(self, url: str, **kwargs: Any) -> Response:
+        return self.request("DELETE", url, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Core E2E app fixture
 # ---------------------------------------------------------------------------
@@ -93,12 +147,15 @@ def e2e_app():
     mock_ltm = _make_mock_ltm()
     mock_nats = _make_mock_nats_bus()
     mock_redis_mod = _make_mock_redis_module()
+    mock_embedding_provider = _make_embedding_provider()
 
     with (
         patch("agent33.main.LongTermMemory", return_value=mock_ltm),
         patch("agent33.main.NATSMessageBus", return_value=mock_nats),
+        patch("agent33.memory.embeddings.EmbeddingProvider", return_value=mock_embedding_provider),
         patch.dict(sys.modules, {"redis": MagicMock(), "redis.asyncio": mock_redis_mod}),
     ):
+        app.state._e2e_embedding_provider = mock_embedding_provider
         yield app, mock_ltm
 
 
@@ -183,33 +240,21 @@ def tenant_b_token() -> str:
 def admin_client(e2e_client, admin_token):
     """TestClient authenticated as admin (no tenant filter)."""
     app, client, mock_ltm = e2e_client
-    client.headers.update({"Authorization": f"Bearer {admin_token}"})
-    return app, client, mock_ltm
+    return app, _AuthClientProxy(client, {"Authorization": f"Bearer {admin_token}"}), mock_ltm
 
 
 @pytest.fixture
 def tenant_a_client(e2e_client, tenant_a_token):
     """TestClient authenticated as tenant-a."""
     app, base_client, mock_ltm = e2e_client
-    # Create a new TestClient with tenant-a headers sharing the same app
-    with TestClient(
-        app,
-        raise_server_exceptions=False,
-        headers={"Authorization": f"Bearer {tenant_a_token}"},
-    ) as client:
-        yield app, client
+    yield app, _AuthClientProxy(base_client, {"Authorization": f"Bearer {tenant_a_token}"})
 
 
 @pytest.fixture
 def tenant_b_client(e2e_client, tenant_b_token):
     """TestClient authenticated as tenant-b."""
     app, base_client, mock_ltm = e2e_client
-    with TestClient(
-        app,
-        raise_server_exceptions=False,
-        headers={"Authorization": f"Bearer {tenant_b_token}"},
-    ) as client:
-        yield app, client
+    yield app, _AuthClientProxy(base_client, {"Authorization": f"Bearer {tenant_b_token}"})
 
 
 # ---------------------------------------------------------------------------
