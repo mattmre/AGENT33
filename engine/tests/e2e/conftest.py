@@ -10,13 +10,16 @@ from __future__ import annotations
 import hashlib
 import math
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent33.security.auth import create_access_token
+
+if TYPE_CHECKING:
+    from httpx import Response
 
 # ---------------------------------------------------------------------------
 # Deterministic embedding function (bag-of-words hash, no model needed)
@@ -109,20 +112,20 @@ class _AuthClientProxy:
             header_keys[key.lower()] = key
         return headers
 
-    def request(self, method: str, url: str, **kwargs: Any):  # noqa: ANN201
+    def request(self, method: str, url: str, **kwargs: Any) -> Response:
         headers = self._merged_headers(kwargs.pop("headers", None))
         return self._client.request(method, url, headers=headers, **kwargs)
 
-    def get(self, url: str, **kwargs: Any):  # noqa: ANN201
+    def get(self, url: str, **kwargs: Any) -> Response:
         return self.request("GET", url, **kwargs)
 
-    def post(self, url: str, **kwargs: Any):  # noqa: ANN201
+    def post(self, url: str, **kwargs: Any) -> Response:
         return self.request("POST", url, **kwargs)
 
-    def put(self, url: str, **kwargs: Any):  # noqa: ANN201
+    def put(self, url: str, **kwargs: Any) -> Response:
         return self.request("PUT", url, **kwargs)
 
-    def delete(self, url: str, **kwargs: Any):  # noqa: ANN201
+    def delete(self, url: str, **kwargs: Any) -> Response:
         return self.request("DELETE", url, **kwargs)
 
 
