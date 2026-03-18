@@ -95,11 +95,22 @@ class _AuthClientProxy:
         self._client = client
         self._headers = headers
 
-    def request(self, method: str, url: str, **kwargs: Any):  # noqa: ANN201
+    def _merged_headers(self, extra_headers: dict[str, str] | None) -> dict[str, str]:
         headers = dict(self._headers)
-        extra_headers = kwargs.pop("headers", None)
-        if extra_headers is not None:
-            headers.update(extra_headers)
+        if extra_headers is None:
+            return headers
+
+        header_keys = {key.lower(): key for key in headers}
+        for key, value in extra_headers.items():
+            existing_key = header_keys.get(key.lower())
+            if existing_key is not None:
+                headers.pop(existing_key, None)
+            headers[key] = value
+            header_keys[key.lower()] = key
+        return headers
+
+    def request(self, method: str, url: str, **kwargs: Any):  # noqa: ANN201
+        headers = self._merged_headers(kwargs.pop("headers", None))
         return self._client.request(method, url, headers=headers, **kwargs)
 
     def get(self, url: str, **kwargs: Any):  # noqa: ANN201

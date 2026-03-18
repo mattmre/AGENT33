@@ -59,6 +59,30 @@ class TestTenantAuthEnforcement:
 class TestSessionTenantIsolation:
     """Session data isolation between tenants."""
 
+    def test_tenant_client_allows_case_insensitive_auth_override(
+        self,
+        tenant_a_client,
+        tenant_b_token,
+    ):
+        """Lowercase authorization overrides should replace, not append, fixture auth."""
+        _, client_a = tenant_a_client
+
+        resp = client_a.post(
+            "/v1/sessions/",
+            json={"purpose": "tenant-a-override-check"},
+        )
+        if resp.status_code == 503:
+            pytest.skip("Operator session service not initialized in E2E")
+
+        assert resp.status_code == 201
+        session_id = resp.json()["session_id"]
+
+        overridden = client_a.get(
+            f"/v1/sessions/{session_id}",
+            headers={"authorization": f"Bearer {tenant_b_token}"},
+        )
+        assert overridden.status_code == 403
+
     def test_tenant_a_cannot_see_tenant_b_sessions(self, tenant_a_client, tenant_b_client):
         """Tenant A creates a session; tenant B cannot see it in listing.
 

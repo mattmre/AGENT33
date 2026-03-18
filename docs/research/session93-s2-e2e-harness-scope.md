@@ -20,7 +20,8 @@ The E2E harness defined a deterministic embedding helper but never wired it into
 1. Patched the E2E harness to replace `agent33.memory.embeddings.EmbeddingProvider` with a deterministic mock during app lifespan.
 2. Completed the E2E `LongTermMemory` mock with explicit `store()` and `search()` async behavior.
 3. Replaced nested authenticated `TestClient` fixtures with lightweight auth-header proxy wrappers over the shared base client.
-4. Added a harness wiring test that asserts the E2E app routes progressive recall through the deterministic embedding provider/cache path.
+4. Added a harness request-path test that asserts a real agent invoke request awaits the deterministic embedder through progressive recall.
+5. Added an auth-proxy regression test proving lowercase `authorization` overrides replace fixture auth instead of appending a second bearer token.
 
 ## Validation
 
@@ -32,8 +33,11 @@ After the slice:
 
 - `python -m pytest engine/tests/e2e/ -q --no-cov --durations=15` -> `26 passed` in `154.89s`
 - `python -m pytest engine/tests/e2e/ -q --no-cov --durations=10` -> `26 passed` in `155.17s`
+- review-follow-up validation: `python -m pytest engine/tests/e2e/ -q --no-cov --durations=10` -> `27 passed` in `161.58s`
 - `python -m ruff check engine/tests/e2e/conftest.py engine/tests/e2e/test_agent_tool_memory_flow.py`
 - `python -m ruff format --check engine/tests/e2e/conftest.py engine/tests/e2e/test_agent_tool_memory_flow.py`
+- `python -m ruff check engine/tests/e2e/conftest.py engine/tests/e2e/test_agent_tool_memory_flow.py engine/tests/e2e/test_multi_tenant_isolation.py`
+- `python -m ruff format --check engine/tests/e2e/conftest.py engine/tests/e2e/test_agent_tool_memory_flow.py engine/tests/e2e/test_multi_tenant_isolation.py`
 
 Observed improvement:
 
