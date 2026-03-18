@@ -734,7 +734,9 @@ class SecurityScanService:
             findings_summary=findings_summary,
             created_at=created_at if isinstance(created_at, datetime) else datetime.now(UTC),
             updated_at=(
-                updated_at if isinstance(updated_at, datetime) else created_at
+                updated_at
+                if isinstance(updated_at, datetime)
+                else created_at
                 if isinstance(created_at, datetime)
                 else datetime.now(UTC)
             ),
