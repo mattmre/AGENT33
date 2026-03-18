@@ -128,15 +128,15 @@ class SecurityScanService:
                 )
             except Exception:
                 logger.exception("security_scan_store_list_failed")
-                return []
-            runs: list[SecurityRun] = []
-            for row in persisted_rows:
-                run = self._run_from_store_row(row)
-                if run is None:
-                    continue
-                self._runs[run.id] = run
-                runs.append(run)
-            return runs
+            else:
+                runs: list[SecurityRun] = []
+                for row in persisted_rows:
+                    run = self._run_from_store_row(row)
+                    if run is None:
+                        continue
+                    self._runs[run.id] = run
+                    runs.append(run)
+                return runs
         runs = list(self._runs.values())
         if tenant_id:
             runs = [run for run in runs if run.tenant_id == tenant_id]

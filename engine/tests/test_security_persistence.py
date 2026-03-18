@@ -528,6 +528,79 @@ class TestSecurityScanServiceStoreIntegration:
         assert store.list_runs_calls == 1
         assert store.get_findings_calls == 0
 
+    def test_service_list_runs_forwards_store_filters_before_limit(
+        self,
+        tmp_path: object,
+    ) -> None:
+        store = SecurityScanStore(db_path=str(tmp_path / "scans.db"))
+
+        older_completed = _make_run(
+            run_id="secrun-completed",
+            status=RunStatus.COMPLETED,
+            profile=SecurityProfile.QUICK,
+        )
+        older_completed.created_at = datetime(2025, 1, 1, tzinfo=UTC)
+        older_completed.updated_at = older_completed.created_at
+        newer_failed = _make_run(
+            run_id="secrun-failed",
+            status=RunStatus.FAILED,
+            profile=SecurityProfile.QUICK,
+        )
+        newer_failed.created_at = datetime(2025, 6, 1, tzinfo=UTC)
+        newer_failed.updated_at = newer_failed.created_at
+        store.save_run(older_completed)
+        store.save_run(newer_failed)
+
+        older_quick = _make_run(
+            run_id="secrun-quick",
+            status=RunStatus.COMPLETED,
+            profile=SecurityProfile.QUICK,
+        )
+        older_quick.created_at = datetime(2025, 1, 2, tzinfo=UTC)
+        older_quick.updated_at = older_quick.created_at
+        newer_standard = _make_run(
+            run_id="secrun-standard",
+            status=RunStatus.FAILED,
+            profile=SecurityProfile.STANDARD,
+        )
+        newer_standard.created_at = datetime(2025, 6, 2, tzinfo=UTC)
+        newer_standard.updated_at = newer_standard.created_at
+        store.save_run(older_quick)
+        store.save_run(newer_standard)
+
+        service = SecurityScanService(store=store)
+
+        completed_runs = service.list_runs(status=RunStatus.COMPLETED, limit=1)
+        quick_runs = service.list_runs(profile=SecurityProfile.QUICK, limit=1)
+
+        assert [run.id for run in completed_runs] == ["secrun-quick"]
+        assert [run.id for run in quick_runs] == ["secrun-failed"]
+
+    def test_service_list_runs_falls_back_to_cache_when_store_list_fails(
+        self,
+        tmp_path: object,
+    ) -> None:
+        class FailingListSecurityScanStore(SecurityScanStore):
+            def __init__(self, db_path: str) -> None:
+                super().__init__(db_path=db_path)
+                self.fail_list_runs = False
+
+            def list_runs(self, **kwargs: object) -> list[dict[str, object]]:
+                if self.fail_list_runs:
+                    raise RuntimeError("sqlite read failed")
+                return super().list_runs(**kwargs)
+
+        store = FailingListSecurityScanStore(db_path=str(tmp_path / "scans.db"))
+        run = _make_run(run_id="secrun-fallback", status=RunStatus.COMPLETED)
+        store.save_run(run)
+
+        service = SecurityScanService(store=store)
+        store.fail_list_runs = True
+
+        runs = service.list_runs(status=RunStatus.COMPLETED, limit=10)
+
+        assert [item.id for item in runs] == [run.id]
+
     def test_service_persists_state_transitions_beyond_completed(
         self,
         tmp_path: object,
