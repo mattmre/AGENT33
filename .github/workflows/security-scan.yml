@@ -72,10 +72,7 @@ jobs:
           output: results/trivy-image.json
 
       - name: Verify runtime image no longer reports CVE-2026-0861
-        run: |
-          jq -e '
-            ([.Results[]?.Vulnerabilities[]? | select(.VulnerabilityID == "CVE-2026-0861")] | length) == 0
-          ' results/trivy-image.json >/dev/null
+        run: python scripts/verify_trivy_image.py results/trivy-image.json CVE-2026-0861
 
   trivy-config:
     name: IaC Misconfiguration Scan

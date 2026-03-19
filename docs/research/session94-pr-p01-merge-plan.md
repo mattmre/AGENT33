@@ -5,6 +5,7 @@ PR scope: runtime image hardening only
 ## Included
 
 - Pin `engine/Dockerfile` to a fixed Debian Trixie Python base image digest.
+- Upgrade the shipped runtime image's OS packages during build so the runtime consumes current Debian security updates.
 - Force the CI image build to refresh the base image during the security scan.
 - Add a targeted Trivy JSON assertion that fails if `CVE-2026-0861` appears in the built runtime image.
 - Record the next-wave deployment/config decisions in `docs/research/session94-p0-production-readiness-wave.md`.
@@ -21,7 +22,9 @@ PR scope: runtime image hardening only
 
 - `docker build --pull -t agent33:p01-runtime ./engine`
 - `docker run --rm agent33:p01-runtime cat /etc/os-release`
-- `docker run --rm agent33:p01-runtime dpkg-query -W libc6`
+- `docker run --rm agent33:p01-runtime dpkg-query -W libc6 libc-bin`
+- `docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --severity HIGH,CRITICAL --format json --ignore-unfixed agent33:p01-runtime`
+- `python scripts/verify_trivy_image.py trivy-agent33-p01-runtime.json CVE-2026-0861`
 - `python - <<'PY' ... yaml.safe_load('.github/workflows/security-scan.yml') ... PY`
 
 ## Merge Gates

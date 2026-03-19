@@ -14,9 +14,10 @@ Scope: `P0.1` implementation plus `P0.2a` / `P0.3a` research freeze
 
 Implement `P0.1` as a narrow image-hardening slice:
 
-1. Pin the runtime image to a fixed Python slim Trivy-safe baseline on Debian Trixie.
-2. Force CI image builds to pull the current base image during the security scan.
-3. Add a targeted image-scan assertion that fails if `CVE-2026-0861` appears in the built runtime image.
+1. Pin the runtime image to a fixed Python slim baseline on Debian Trixie.
+2. Upgrade the shipped runtime image's OS packages during build, because the current pinned upstream digest is still behind the live Debian security repository.
+3. Force CI image builds to pull the current base image during the security scan.
+4. Add a targeted image-scan assertion that fails if `CVE-2026-0861` appears in the built runtime image.
 
 Included files:
 
@@ -68,6 +69,10 @@ Policy decisions for the next slice:
 
 - `engine/docker-compose.prod.yml` is the only production-shaped asset today, so the first manifest slice must explicitly map Compose-only assumptions like health checks, resource hints, and inter-service URLs.
 - `engine/Dockerfile.airllm` and GPU/integration services remain outside this first runtime-image slice; do not expand the P0.1 PR to cover those images.
+- The current upstream `python:3.11.13-slim-trixie` digest still lags the live Debian security repository:
+  - `libc6` / `libc-bin` ship at `2.41-12` while Debian Trixie offers `2.41-12+deb13u2`
+  - OpenSSL packages also lag (`3.5.1-1` vs `3.5.4-1~deb13u2`)
+  - pinning alone does not clear the image scan
 - The current merged `origin/main` handoff docs are stale relative to the root planning files, so session tracking must be refreshed separately from the clean implementation worktree.
 
 ## Existing References
