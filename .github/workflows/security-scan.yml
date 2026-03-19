@@ -43,8 +43,11 @@ jobs:
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
+      - name: Create results directory
+        run: mkdir -p results
+
       - name: Build Docker image
-        run: docker build -t agent33:${{ github.sha }} ./engine
+        run: docker build --pull -t agent33:${{ github.sha }} ./engine
 
       - name: Run Trivy image scan
         uses: aquasecurity/trivy-action@0.28.0
@@ -55,6 +58,24 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+
+      - name: Export image scan for targeted CVE verification
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: agent33:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os
+          ignore-unfixed: false
+          exit-code: "0"
+          format: json
+          output: results/trivy-image.json
+
+      - name: Verify runtime image no longer reports CVE-2026-0861
+        run: |
+          jq -e '
+            ([.Results[]?.Vulnerabilities[]? | select(.VulnerabilityID == "CVE-2026-0861")] | length) == 0
+          ' results/trivy-image.json >/dev/null
 
   trivy-config:
     name: IaC Misconfiguration Scan
