@@ -78,7 +78,6 @@ class ScheduledGateHistory(BaseModel):
         self.results.append(result)
         if len(self.results) > self.max_history:
             self.results = self.results[-self.max_history :]
-
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
