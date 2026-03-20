@@ -120,6 +120,8 @@ kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2
   integrations.
 - `/metrics` is the Prometheus scrape endpoint for the API service.
 - `/v1/dashboard/metrics` remains the public JSON dashboard summary.
+- The first importable Grafana dashboard and Prometheus rule assets live under
+  `deploy/monitoring/`.
 - The Ollama image is pinned by digest as of `2026-03-20` so the base stays
   reproducible. Update that digest deliberately when you want a newer Ollama
   release.
