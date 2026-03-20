@@ -203,8 +203,8 @@ def test_horizontal_scaling_doc_references_files_that_exist() -> None:
 
     for path, marker in _REFERENCED_PATHS.items():
         assert path.exists(), path
-        assert marker in content
+        assert marker in content, marker
 
     for path, marker in _CODE_REFERENCES.items():
         assert path.exists(), path
-        assert marker in content
+        assert marker in content, marker
