@@ -346,6 +346,8 @@ class RateLimiter:
 # Paths that bypass rate limiting
 _BYPASS_PATHS: set[str] = {
     "/health",
+    "/healthz",
+    "/readyz",
     "/health/channels",
     "/docs",
     "/redoc",

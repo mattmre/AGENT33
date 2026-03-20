@@ -23,11 +23,21 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY src/ src/
+COPY agent-definitions/ agent-definitions/
+COPY workflow-definitions/ workflow-definitions/
+COPY tool-definitions/ tool-definitions/
+COPY packs/ packs/
+# The canonical workflow templates still live at repo-root `core/workflows`.
+# Keeping the engine image build context scoped to `./engine` avoids a broader
+# Docker build-policy change in this slice, so template catalog parity remains a
+# documented follow-up rather than a silent omission.
 COPY templates/ templates/
 COPY pyproject.toml .
 
 RUN pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
     pip install --no-cache-dir -e .
+
+RUN mkdir -p /app/var && chown -R agent33:agent33 /app
 
 USER agent33
 EXPOSE 8000
