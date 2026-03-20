@@ -10,6 +10,7 @@ Source of truth:
 Public (no auth required):
 - `GET /health`
 - `GET /health/channels`
+- `GET /metrics`
 - `POST /v1/auth/token`
 - `GET /v1/dashboard/`
 - `GET /v1/dashboard/metrics`
@@ -36,6 +37,7 @@ Defined scopes:
 | --- | --- | --- |
 | GET | `/health` | Public |
 | GET | `/health/channels` | Public |
+| GET | `/metrics` | Public |
 
 ### Auth
 
@@ -201,6 +203,7 @@ Defined scopes:
 
 | Method | Path | Scope |
 | --- | --- | --- |
+| GET | `/metrics` | Public |
 | GET | `/v1/dashboard/` | Public |
 | GET | `/v1/dashboard/metrics` | Public |
 | GET | `/v1/dashboard/lineage/{workflow_id}` | Public |
