@@ -20,7 +20,8 @@ packaging.
 3. Add a production overlay under `deploy/k8s/overlays/production/` that
    captures the first rollout-specific configuration:
    - registry/image placeholder contract
-   - production-oriented replica / rollout settings
+   - single-instance production rollout settings that do not overpromise safe
+     horizontal scaling before `P1.1` / `P1.2`
    - apply flow rooted in `kustomize`
 4. Update deployment docs so bootstrap auth is treated as a temporary,
    operator-driven setup step rather than the default production posture.

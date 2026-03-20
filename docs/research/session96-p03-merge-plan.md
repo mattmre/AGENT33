@@ -12,7 +12,9 @@ PR target: `P0.3` deployment configuration and secrets wiring
    inside `DATABASE_URL`.
 3. Confirm the new production overlay stays bounded to rollout/image config and
    does not drift into ingress, metrics, or cloud-specific packaging.
-4. Confirm bootstrap-auth guidance is explicit and production-safe.
+4. Confirm the production overlay remains single-instance until the later
+   horizontal-scaling slices land.
+5. Confirm bootstrap-auth guidance is explicit and production-safe.
 
 ## Validation Completed
 

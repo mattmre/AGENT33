@@ -9,10 +9,14 @@ plain manifest baseline in `deploy/k8s/base/`.
   placeholder:
   - `ghcr.io/mattmre/agent33:replace-with-release-tag`
 - API rollout becomes production-oriented:
-  - `replicas: 2`
+  - `replicas: 1`
   - rolling update with `maxUnavailable: 0`
   - `minReadySeconds: 10`
   - `terminationGracePeriodSeconds: 30`
+
+The overlay intentionally stays single-instance for now. Safe horizontal scaling
+is deferred to the later `P1.1` / `P1.2` work on runtime state boundaries and
+shared-state support.
 
 ## Secret Preparation
 

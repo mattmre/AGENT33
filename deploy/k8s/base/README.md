@@ -52,8 +52,10 @@ default.
 
 The base `ConfigMap` now carries non-secret runtime settings, including:
 
+- `CORS_ALLOWED_ORIGINS`
 - `AUTH_BOOTSTRAP_ENABLED`
 - `AUTH_BOOTSTRAP_ADMIN_USERNAME`
+- `AUTH_BOOTSTRAP_ADMIN_SCOPES`
 - `OPENAI_BASE_URL`
 
 The PostgreSQL secret now carries only:

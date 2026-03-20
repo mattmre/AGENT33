@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: agent33-api
 spec:
-  replicas: 2
+  replicas: 1
   minReadySeconds: 10
   revisionHistoryLimit: 5
   strategy:
