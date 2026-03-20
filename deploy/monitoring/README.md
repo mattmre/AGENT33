@@ -57,3 +57,7 @@ For ad hoc verification after import:
 The internal `/v1/dashboard/alerts` route is useful for operator spot checks,
 but the Prometheus rule file here is the production-facing alerting asset for
 this slice.
+
+For the repo's current rollout, health-check, and rollback procedure, use:
+
+- `docs/operators/production-deployment-runbook.md`

@@ -10,10 +10,13 @@ Source of truth:
 Public (no auth required):
 - `GET /health`
 - `GET /health/channels`
+- `GET /healthz`
+- `GET /readyz`
 - `GET /metrics`
 - `POST /v1/auth/token`
 - `GET /v1/dashboard/`
 - `GET /v1/dashboard/metrics`
+- `GET /v1/dashboard/alerts`
 - `GET /v1/dashboard/lineage/{workflow_id}`
 - `/docs`, `/redoc`, `/openapi.json`
 
@@ -28,6 +31,8 @@ Defined scopes:
 - `workflows:write`
 - `workflows:execute`
 - `tools:execute`
+- `operator:read`
+- `operator:write`
 
 ## 2. Endpoint Map by Domain
 
@@ -37,6 +42,8 @@ Defined scopes:
 | --- | --- | --- |
 | GET | `/health` | Public |
 | GET | `/health/channels` | Public |
+| GET | `/healthz` | Public |
+| GET | `/readyz` | Public |
 | GET | `/metrics` | Public |
 
 ### Auth
@@ -199,6 +206,19 @@ Defined scopes:
 | GET | `/v1/improvements/refreshes/{refresh_id}` | Authenticated |
 | POST | `/v1/improvements/refreshes/{refresh_id}/complete` | Authenticated |
 
+### Operator
+
+| Method | Path | Scope |
+| --- | --- | --- |
+| GET | `/v1/operator/status` | `operator:read` |
+| GET | `/v1/operator/config` | `operator:read` |
+| GET | `/v1/operator/doctor` | `operator:read` |
+| POST | `/v1/operator/reset` | `operator:write` |
+| GET | `/v1/operator/tools/summary` | `operator:read` |
+| GET | `/v1/operator/sessions` | `operator:read` |
+| GET | `/v1/operator/backups` | `operator:read` |
+| GET | `/v1/operator/onboarding` | `operator:read` |
+
 ### Dashboard
 
 | Method | Path | Scope |
@@ -206,6 +226,7 @@ Defined scopes:
 | GET | `/metrics` | Public |
 | GET | `/v1/dashboard/` | Public |
 | GET | `/v1/dashboard/metrics` | Public |
+| GET | `/v1/dashboard/alerts` | Public |
 | GET | `/v1/dashboard/lineage/{workflow_id}` | Public |
 
 ### Training
