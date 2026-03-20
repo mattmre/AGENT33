@@ -1,7 +1,7 @@
 # AGENT-33 Monitoring Assets
 
-This directory contains the first production-facing monitoring artifacts for the
-merged `/metrics` contract that landed in `P0.4`.
+This directory contains the first production-facing monitoring artifacts for
+the merged `/metrics` contract that landed in `P0.4`.
 
 ## Contents
 
@@ -9,7 +9,8 @@ merged `/metrics` contract that landed in `P0.4`.
   - importable Grafana dashboard focused on current effort-routing and scrape
     health metrics
 - `prometheus/agent33-alerts.rules.yaml`
-  - generic Prometheus alert rules for the current effort-routing metrics
+  - Prometheus recording rules and alert rules for the current effort-routing
+    telemetry objective baseline
 
 ## Assumptions
 
@@ -40,11 +41,26 @@ Load `prometheus/agent33-alerts.rules.yaml` through your Prometheus
 `rule_files` configuration or transform it into your platform's equivalent
 resource if you use a controller/operator-based installation.
 
-The first rule set is intentionally small:
+The checked-in rule set is intentionally bounded to the current repo-owned
+Prometheus surface:
 
-- telemetry export failures
-- sustained high-effort routing ratio
-- sustained cost drift
+- effort telemetry export reliability recording rules over `15m` and `28d`
+- sustained high-effort routing ratio recording and alerting
+- persistent estimated cost lifetime-average elevation recording and alerting
+- token-budget lifetime-average recording for operator context
+
+The formal `28d` telemetry objective requires Prometheus retention of at least
+`28d`. If your monitoring stack retains less history than that, keep the alert
+rules but treat the `28d` recording rule as advisory rather than a full
+objective window.
+
+The exported `*_avg` series are process-lifetime averages, not rolling-window
+averages. The checked-in cost rule therefore detects sustained lifetime-average
+elevation, not short-window drift or spike behavior.
+
+The current rule file does not claim full availability, latency, dependency,
+evaluation, webhook, or connector-fleet objectives. Those remain deferred until
+the repo exports the required metrics.
 
 ## Validation
 
@@ -57,6 +73,11 @@ For ad hoc verification after import:
 The internal `/v1/dashboard/alerts` route is useful for operator spot checks,
 but the Prometheus rule file here is the production-facing alerting asset for
 this slice.
+
+The current internal objective baseline and deferred-objective inventory live
+in:
+
+- `docs/operators/service-level-objectives.md`
 
 For the repo's current rollout, health-check, and rollback procedure, use:
 

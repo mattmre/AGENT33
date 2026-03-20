@@ -69,9 +69,12 @@ cp deploy/k8s/base/api-secret.example.yaml /tmp/api-secret.yaml
 3. Apply the secrets.
 
 ```bash
-kubectl apply -f /tmp/postgres-secret.yaml
-kubectl apply -f /tmp/api-secret.yaml
+kubectl apply -n agent33 -f /tmp/postgres-secret.yaml
+kubectl apply -n agent33 -f /tmp/api-secret.yaml
 ```
+
+If you prefer embedding the namespace directly in the secret manifests, set
+`metadata.namespace: agent33` before applying them.
 
 4. Apply the production overlay.
 
@@ -185,6 +188,14 @@ curl http://127.0.0.1:8000/v1/dashboard/alerts
 Use `/v1/dashboard/alerts` for operator spot checks only. The production-facing
 alerting contract for this slice is the Prometheus rule file, not the in-app
 dashboard route.
+
+The bounded objective baseline for this slice lives in
+[`service-level-objectives.md`](service-level-objectives.md). The current
+Prometheus alert names are:
+
+- `Agent33EffortTelemetryExportFailures`
+- `Agent33HighEffortRoutingRatio`
+- `Agent33EstimatedCostDrift`
 
 ## Rollback
 

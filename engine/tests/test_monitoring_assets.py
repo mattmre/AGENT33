@@ -22,6 +22,27 @@ _EXPECTED_METRICS = {
     "effort_routing_estimated_cost_usd_avg",
     "effort_routing_estimated_token_budget_avg",
 }
+_EXPECTED_RECORDS = {
+    "agent33:sli:effort_telemetry_export_failures:count_15m",
+    "agent33:sli:effort_telemetry_export_failures:count_28d",
+    "agent33:sli:high_effort_routing_ratio:ratio_15m",
+    "agent33:sli:estimated_cost_usd_avg:max",
+    "agent33:sli:estimated_token_budget_avg:max",
+}
+_EXPECTED_ALERTS = {
+    "Agent33EffortTelemetryExportFailures",
+    "Agent33HighEffortRoutingRatio",
+    "Agent33EstimatedCostDrift",
+}
+_UNSUPPORTED_PROMQL_TOKENS = {
+    "http_requests_total",
+    "http_request_duration_seconds",
+    "probe_success",
+    "webhook",
+    "evaluation",
+    "readyz",
+    "healthz",
+}
 
 
 def _walk_strings(value: Any) -> list[str]:
@@ -59,10 +80,49 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert groups[0]["name"] == "agent33-observability"
 
     rules = groups[0].get("rules")
-    assert isinstance(rules, list) and len(rules) == 3
+    assert isinstance(rules, list) and len(rules) == 8
 
+    record_names = {rule["record"] for rule in rules if "record" in rule}
+    alert_names = {rule["alert"] for rule in rules if "alert" in rule}
     expressions = [rule["expr"] for rule in rules]
-    assert any("effort_routing_export_failures_total" in expr for expr in expressions)
-    assert any("effort_routing_high_effort_total" in expr for expr in expressions)
-    assert any("effort_routing_decisions_total" in expr for expr in expressions)
-    assert any("effort_routing_estimated_cost_usd_avg" in expr for expr in expressions)
+    records_by_name = {rule["record"]: rule["expr"] for rule in rules if "record" in rule}
+    alerts_by_name = {rule["alert"]: rule["expr"] for rule in rules if "alert" in rule}
+    alert_annotations = {
+        rule["alert"]: rule.get("annotations", {}) for rule in rules if "alert" in rule
+    }
+
+    assert record_names == _EXPECTED_RECORDS
+    assert alert_names == _EXPECTED_ALERTS
+
+    for metric in _EXPECTED_METRICS:
+        assert any(metric in expr for expr in expressions), metric
+
+    for token in _UNSUPPORTED_PROMQL_TOKENS:
+        assert all(token not in expr for expr in expressions), token
+
+    assert (
+        "increase(effort_routing_export_failures_total[15m])"
+        in records_by_name["agent33:sli:effort_telemetry_export_failures:count_15m"]
+    )
+    assert (
+        "increase(effort_routing_export_failures_total[28d])"
+        in records_by_name["agent33:sli:effort_telemetry_export_failures:count_28d"]
+    )
+    assert (
+        "increase(effort_routing_high_effort_total[15m])"
+        in records_by_name["agent33:sli:high_effort_routing_ratio:ratio_15m"]
+    )
+    assert (
+        "increase(effort_routing_decisions_total[15m])"
+        in records_by_name["agent33:sli:high_effort_routing_ratio:ratio_15m"]
+    )
+    assert records_by_name["agent33:sli:estimated_cost_usd_avg:max"] == (
+        "max(effort_routing_estimated_cost_usd_avg)"
+    )
+    assert records_by_name["agent33:sli:estimated_token_budget_avg:max"] == (
+        "max(effort_routing_estimated_token_budget_avg)"
+    )
+    assert "count_15m > 0" in alerts_by_name["Agent33EffortTelemetryExportFailures"]
+    assert "ratio_15m > 0.5" in alerts_by_name["Agent33HighEffortRoutingRatio"]
+    assert "estimated_cost_usd_avg:max > 0.25" in alerts_by_name["Agent33EstimatedCostDrift"]
+    assert "lifetime average" in alert_annotations["Agent33EstimatedCostDrift"]["summary"].lower()
