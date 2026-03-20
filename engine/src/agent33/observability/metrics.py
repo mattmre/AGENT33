@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -16,6 +17,20 @@ class _Observation:
 class MetricsCollector:
     """Tracks counters and observations for key metrics."""
 
+    _PROMETHEUS_COUNTER_ALLOWLIST = frozenset(
+        {
+            "effort_routing_decisions_total",
+            "effort_routing_high_effort_total",
+            "effort_routing_export_failures_total",
+        }
+    )
+    _PROMETHEUS_OBSERVATION_ALLOWLIST = frozenset(
+        {
+            "effort_routing_estimated_cost_usd",
+            "effort_routing_estimated_token_budget",
+        }
+    )
+
     def __init__(self) -> None:
         self._counters: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._observations: dict[str, dict[str, _Observation]] = defaultdict(
@@ -27,6 +42,39 @@ class MetricsCollector:
         if not labels:
             return ""
         return ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
+
+    @staticmethod
+    def _parse_label_key(label_key: str) -> dict[str, str]:
+        labels: dict[str, str] = {}
+        if not label_key:
+            return labels
+        for item in label_key.split(","):
+            if "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            labels[key] = value
+        return labels
+
+    @staticmethod
+    def _escape_label_value(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+    @classmethod
+    def _render_prometheus_labels(cls, label_key: str) -> str:
+        labels = cls._parse_label_key(label_key)
+        if not labels:
+            return ""
+        rendered = ",".join(
+            f'{key}="{cls._escape_label_value(value)}"' for key, value in sorted(labels.items())
+        )
+        return f"{{{rendered}}}"
+
+    @staticmethod
+    def _sanitize_metric_name(name: str) -> str:
+        sanitized = re.sub(r"[^a-zA-Z0-9_:]", "_", name)
+        if sanitized and sanitized[0].isdigit():
+            return f"_{sanitized}"
+        return sanitized or "agent33_metric"
 
     def increment(self, name: str, labels: dict[str, str] | None = None) -> None:
         """Increment a counter by 1."""
@@ -64,6 +112,55 @@ class MetricsCollector:
                     }
 
         return summary
+
+    def render_prometheus(self) -> str:
+        """Render a low-cardinality Prometheus exposition payload."""
+        lines: list[str] = []
+
+        for name in sorted(self._PROMETHEUS_COUNTER_ALLOWLIST):
+            label_map = self._counters.get(name)
+            if not label_map:
+                continue
+            metric_name = self._sanitize_metric_name(name)
+            lines.append(f"# TYPE {metric_name} counter")
+            for label_key, value in sorted(label_map.items()):
+                lines.append(f"{metric_name}{self._render_prometheus_labels(label_key)} {value}")
+
+        for name in sorted(self._PROMETHEUS_OBSERVATION_ALLOWLIST):
+            obs_map = self._observations.get(name)
+            if not obs_map:
+                continue
+            metric_name = self._sanitize_metric_name(name)
+            lines.extend(
+                [
+                    f"# TYPE {metric_name}_count gauge",
+                    f"# TYPE {metric_name}_sum gauge",
+                    f"# TYPE {metric_name}_avg gauge",
+                    f"# TYPE {metric_name}_min gauge",
+                    f"# TYPE {metric_name}_max gauge",
+                ]
+            )
+            for label_key, observation in sorted(obs_map.items()):
+                values = observation.values
+                if not values:
+                    continue
+                labels = self._render_prometheus_labels(label_key)
+                total = sum(values)
+                count = len(values)
+                minimum = min(values)
+                maximum = max(values)
+                average = total / count
+                lines.extend(
+                    [
+                        f"{metric_name}_count{labels} {count}",
+                        f"{metric_name}_sum{labels} {total}",
+                        f"{metric_name}_avg{labels} {average}",
+                        f"{metric_name}_min{labels} {minimum}",
+                        f"{metric_name}_max{labels} {maximum}",
+                    ]
+                )
+
+        return "\n".join(lines) + ("\n" if lines else "# no metrics collected\n")
 
 
 # ---------------------------------------------------------------------------

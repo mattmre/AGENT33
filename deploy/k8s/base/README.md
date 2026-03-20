@@ -118,7 +118,8 @@ kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2
 - `/readyz` gates startup/readiness on the core in-cluster dependencies
   (`ollama`, `redis`, `postgres`, `nats`) without pulling in optional external
   integrations.
-- `/v1/dashboard/metrics` is JSON, not Prometheus exposition format.
+- `/metrics` is the Prometheus scrape endpoint for the API service.
+- `/v1/dashboard/metrics` remains the public JSON dashboard summary.
 - The Ollama image is pinned by digest as of `2026-03-20` so the base stays
   reproducible. Update that digest deliberately when you want a newer Ollama
   release.

@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from agent33.observability.alerts import AlertManager
 from agent33.observability.lineage import ExecutionLineage
 from agent33.observability.metrics import MetricsCollector
 
 router = APIRouter(prefix="/v1/dashboard", tags=["dashboard"])
+prometheus_router = APIRouter(tags=["dashboard"])
 
 # Module-level singletons; replaced at app startup if needed.
 _metrics = MetricsCollector()
@@ -88,6 +89,15 @@ async def dashboard_metrics() -> dict[str, Any]:
     """Return current metrics summary as JSON."""
     summary = _metrics.get_summary()
     return summary if summary else _DEFAULT_METRICS
+
+
+@prometheus_router.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics() -> PlainTextResponse:
+    """Return Prometheus-format metrics for scrape targets."""
+    return PlainTextResponse(
+        _metrics.render_prometheus(),
+        media_type="text/plain; version=0.0.4",
+    )
 
 
 @router.get("/alerts")

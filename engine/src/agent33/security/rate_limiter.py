@@ -349,6 +349,7 @@ _BYPASS_PATHS: set[str] = {
     "/healthz",
     "/readyz",
     "/health/channels",
+    "/metrics",
     "/docs",
     "/redoc",
     "/openapi.json",
