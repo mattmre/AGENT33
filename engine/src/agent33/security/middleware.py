@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 _PUBLIC_PATHS: set[str] = {
     "/health",
+    "/healthz",
+    "/readyz",
     "/health/channels",
     "/docs",
     "/redoc",

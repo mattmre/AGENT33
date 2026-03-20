@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from agent33.config import settings
 
@@ -21,6 +22,54 @@ def _get_adapters() -> dict[str, Any]:
     return _adapters
 
 
+async def _core_dependency_checks() -> dict[str, str]:
+    """Probe the in-cluster dependencies required for normal API operation."""
+    checks: dict[str, str] = {}
+
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{settings.ollama_base_url}/api/version")
+            checks["ollama"] = "ok" if response.status_code == 200 else "degraded"
+    except Exception:
+        checks["ollama"] = "unavailable"
+
+    try:
+        import redis.asyncio as aioredis
+
+        redis_client = aioredis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
+        await asyncio.wait_for(redis_client.ping(), timeout=3)
+        await redis_client.aclose()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "unavailable"
+
+    try:
+        import asyncpg
+
+        connection = await asyncio.wait_for(
+            asyncpg.connect(
+                settings.database_url.replace("+asyncpg", "").replace("postgresql", "postgres")
+            ),
+            timeout=3,
+        )
+        await asyncio.wait_for(connection.execute("SELECT 1"), timeout=3)
+        await connection.close()
+        checks["postgres"] = "ok"
+    except Exception:
+        checks["postgres"] = "unavailable"
+
+    try:
+        import nats
+
+        nc = await asyncio.wait_for(nats.connect(settings.nats_url), timeout=3)
+        await nc.close()
+        checks["nats"] = "ok"
+    except Exception:
+        checks["nats"] = "unavailable"
+
+    return checks
+
+
 @router.get("/health")
 async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[assignment]
     """Aggregate health check for all services."""
@@ -30,36 +79,7 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
     if include_external_checks:
         # Route requests get the full dependency probe set. Direct test calls
         # without a Request object only exercise channel aggregation.
-        try:
-            async with httpx.AsyncClient(timeout=3) as client:
-                r = await client.get(f"{settings.ollama_base_url}/api/version")
-                checks["ollama"] = "ok" if r.status_code == 200 else "degraded"
-        except Exception:
-            checks["ollama"] = "unavailable"
-
-        # Redis
-        try:
-            import redis.asyncio as aioredis
-
-            r_client = aioredis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
-            await r_client.ping()
-            await r_client.aclose()
-            checks["redis"] = "ok"
-        except Exception:
-            checks["redis"] = "unavailable"
-
-        # PostgreSQL
-        try:
-            import asyncpg
-
-            conn = await asyncpg.connect(
-                settings.database_url.replace("+asyncpg", "").replace("postgresql", "postgres")
-            )
-            await conn.execute("SELECT 1")
-            await conn.close()
-            checks["postgres"] = "ok"
-        except Exception:
-            checks["postgres"] = "unavailable"
+        checks.update(await _core_dependency_checks())
 
         # External Integrations
         if settings.openai_api_key.get_secret_value():
@@ -95,16 +115,6 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
             checks["jina"] = "configured"
         else:
             checks["jina"] = "unconfigured"
-
-        # NATS
-        try:
-            import nats
-
-            nc = await nats.connect(settings.nats_url)
-            await nc.close()
-            checks["nats"] = "ok"
-        except Exception:
-            checks["nats"] = "unavailable"
 
     # Messaging channels
     adapters = _get_adapters()
@@ -162,6 +172,24 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
         health_result["git_short_hash"] = runtime_info.git_short_hash
 
     return health_result
+
+
+@router.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Lightweight process health for liveness probes."""
+    return {"status": "healthy"}
+
+
+@router.get("/readyz")
+async def readyz(response: Response) -> dict[str, Any]:
+    """Kubernetes readiness probe for core in-cluster dependencies."""
+    checks = await _core_dependency_checks()
+    healthy = all(status == "ok" for status in checks.values())
+    response.status_code = 200 if healthy else 503
+    return {
+        "status": "healthy" if healthy else "degraded",
+        "services": checks,
+    }
 
 
 @router.get("/health/channels")

@@ -122,3 +122,16 @@ def test_health_lists_all_services(client: TestClient) -> None:
     assert expected.issubset(set(data["services"].keys())), (
         f"Service list mismatch. Missing: {expected - set(data['services'].keys())}"
     )
+
+
+def test_healthz_returns_lightweight_status(client: TestClient) -> None:
+    data = client.get("/healthz").json()
+    assert data == {"status": "healthy"}
+
+
+def test_readyz_returns_core_dependency_status(client: TestClient) -> None:
+    response = client.get("/readyz")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert set(data["services"]) == {"ollama", "redis", "postgres", "nats"}

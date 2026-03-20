@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: agent33:latest
+          image: agent33:replace-with-immutable-tag
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -24,35 +24,41 @@ spec:
                 name: agent33-api-config
             - secretRef:
                 name: agent33-api-secrets
-            - secretRef:
-                name: agent33-postgres-secrets
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: agent33-postgres-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agent33-postgres-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: agent33-postgres-secrets
+                  key: POSTGRES_DB
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
           readinessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - |
-                  import json
-                  import sys
-                  import urllib.request
-                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5) as response:
-                      payload = json.load(response)
-                  sys.exit(0 if payload.get("status") == "healthy" else 1)
+            httpGet:
+              path: /readyz
+              port: http
             initialDelaySeconds: 15
             periodSeconds: 15
-            timeoutSeconds: 5
+            timeoutSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            failureThreshold: 18
+            periodSeconds: 10
+            timeoutSeconds: 10
           livenessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - |
-                  import json
-                  import sys
-                  import urllib.request
-                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5) as response:
-                      payload = json.load(response)
-                  sys.exit(0 if payload.get("status") == "healthy" else 1)
+            tcpSocket:
+              port: http
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5

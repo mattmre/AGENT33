@@ -37,6 +37,8 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
     pip install --no-cache-dir -e .
 
+RUN mkdir -p /app/var && chown -R agent33:agent33 /app
+
 USER agent33
 EXPOSE 8000
 

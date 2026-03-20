@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
         - name: ollama
-          image: ollama/ollama:latest
+          image: ollama/ollama@sha256:5a5d014aa774f78ebe1340c0d4afc2e35afc12a2c3b34c84e71f78ea20af4ba3
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 11434
               name: http
@@ -45,6 +46,7 @@ spec:
               cpu: "500m"
               memory: "2Gi"
             limits:
+              cpu: "2"
               memory: "8Gi"
       volumes:
         - name: ollama-data

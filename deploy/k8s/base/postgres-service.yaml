@@ -3,6 +3,7 @@ kind: Service
 metadata:
   name: postgres
 spec:
+  clusterIP: None
   selector:
     app.kubernetes.io/name: postgres
   ports:
