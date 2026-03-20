@@ -87,6 +87,9 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     expressions = [rule["expr"] for rule in rules]
     records_by_name = {rule["record"]: rule["expr"] for rule in rules if "record" in rule}
     alerts_by_name = {rule["alert"]: rule["expr"] for rule in rules if "alert" in rule}
+    alert_annotations = {
+        rule["alert"]: rule.get("annotations", {}) for rule in rules if "alert" in rule
+    }
 
     assert record_names == _EXPECTED_RECORDS
     assert alert_names == _EXPECTED_ALERTS
@@ -122,3 +125,4 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert "count_15m > 0" in alerts_by_name["Agent33EffortTelemetryExportFailures"]
     assert "ratio_15m > 0.5" in alerts_by_name["Agent33HighEffortRoutingRatio"]
     assert "estimated_cost_usd_avg:max > 0.25" in alerts_by_name["Agent33EstimatedCostDrift"]
+    assert "lifetime average" in alert_annotations["Agent33EstimatedCostDrift"]["summary"].lower()

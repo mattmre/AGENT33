@@ -69,9 +69,12 @@ cp deploy/k8s/base/api-secret.example.yaml /tmp/api-secret.yaml
 3. Apply the secrets.
 
 ```bash
-kubectl apply -f /tmp/postgres-secret.yaml
-kubectl apply -f /tmp/api-secret.yaml
+kubectl apply -n agent33 -f /tmp/postgres-secret.yaml
+kubectl apply -n agent33 -f /tmp/api-secret.yaml
 ```
+
+If you prefer embedding the namespace directly in the secret manifests, set
+`metadata.namespace: agent33` before applying them.
 
 4. Apply the production overlay.
 

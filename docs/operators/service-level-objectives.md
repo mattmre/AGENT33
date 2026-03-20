@@ -31,8 +31,8 @@ small set of operational guardrails:
    - effort-routing telemetry export reliability
 2. Operational guardrails:
    - sustained high-effort routing ratio
-   - sustained estimated cost drift
-   - in-app high-effort count and token-budget spot checks through
+   - persistent estimated cost lifetime-average elevation
+   - in-app high-effort count and token-budget lifetime-average spot checks through
      `/v1/dashboard/alerts`
 
 This slice does not claim user-facing API availability, latency, or dependency
@@ -81,13 +81,17 @@ These stay alert-backed, but they are not promoted to full error-budgeted SLOs:
 | Guardrail | Source | Threshold Surface |
 | --- | --- | --- |
 | high-effort routing ratio | `effort_routing_high_effort_total` and `effort_routing_decisions_total` | `agent33:sli:high_effort_routing_ratio:ratio_15m` |
-| estimated cost drift | `effort_routing_estimated_cost_usd_avg` | `agent33:sli:estimated_cost_usd_avg:max` |
-| token-budget spike | `effort_routing_estimated_token_budget_avg` | `agent33:sli:estimated_token_budget_avg:max` and `/v1/dashboard/alerts` |
+| estimated cost lifetime average | `effort_routing_estimated_cost_usd_avg` | `agent33:sli:estimated_cost_usd_avg:max` |
+| token-budget lifetime average | `effort_routing_estimated_token_budget_avg` | `agent33:sli:estimated_token_budget_avg:max` and `/v1/dashboard/alerts` |
 | in-app high-effort count | in-memory routing summary | `AlertManager` threshold in `engine/src/agent33/main.py` |
 
 The Prometheus guardrails and the in-app dashboard alerts are related, but they
 are not identical. Prometheus is the production-facing alerting contract; the
 dashboard route remains a local operator spot-check surface.
+
+The exported `*_avg` series are process-lifetime averages computed by the
+current metrics collector. They are useful for persistent elevation checks, but
+they are not short-window drift or spike detectors.
 
 ## Deferred Objectives
 
@@ -118,6 +122,10 @@ Current Prometheus-backed rule names:
 - `Agent33EffortTelemetryExportFailures`
 - `Agent33HighEffortRoutingRatio`
 - `Agent33EstimatedCostDrift`
+
+`Agent33EstimatedCostDrift` keeps its historical rule name for continuity, but
+it currently alerts on persistent lifetime-average elevation rather than a true
+rolling-window drift signal.
 
 Current recording rules:
 

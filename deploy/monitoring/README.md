@@ -46,13 +46,17 @@ Prometheus surface:
 
 - effort telemetry export reliability recording rules over `15m` and `28d`
 - sustained high-effort routing ratio recording and alerting
-- sustained estimated cost drift recording and alerting
-- token-budget peak recording for operator context
+- persistent estimated cost lifetime-average elevation recording and alerting
+- token-budget lifetime-average recording for operator context
 
 The formal `28d` telemetry objective requires Prometheus retention of at least
 `28d`. If your monitoring stack retains less history than that, keep the alert
 rules but treat the `28d` recording rule as advisory rather than a full
 objective window.
+
+The exported `*_avg` series are process-lifetime averages, not rolling-window
+averages. The checked-in cost rule therefore detects sustained lifetime-average
+elevation, not short-window drift or spike behavior.
 
 The current rule file does not claim full availability, latency, dependency,
 evaluation, webhook, or connector-fleet objectives. Those remain deferred until

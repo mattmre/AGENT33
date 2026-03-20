@@ -314,7 +314,8 @@ retained delivered history.
 ## Notes
 
 - The production Prometheus rule file currently covers effort-routing telemetry
-  export reliability, routing mix, and cost drift only.
+  export reliability, routing mix, and persistent cost lifetime-average
+  elevation only.
 - These playbooks intentionally rely on the repo's current operator and admin
   APIs for regression and webhook incidents.
 - Evaluation, webhook, dependency, and request-level objectives require new

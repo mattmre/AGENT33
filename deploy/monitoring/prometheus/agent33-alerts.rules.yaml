@@ -49,8 +49,9 @@ groups:
           service: agent33-api
           owner: platform
         annotations:
-          summary: AGENT-33 estimated routing cost average is elevated
+          summary: AGENT-33 estimated routing cost lifetime average is elevated
           description: >
-            The current exported average estimated cost per routed invocation is
-            above the initial review threshold. Inspect the Grafana dashboard to
-            identify which effort/source series is driving the drift.
+            The exported process-lifetime average estimated cost per routed
+            invocation has remained above the initial review threshold. Inspect
+            the Grafana dashboard to identify which effort/source series is
+            keeping the average elevated.
