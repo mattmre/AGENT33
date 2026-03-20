@@ -61,3 +61,7 @@ this slice.
 For the repo's current rollout, health-check, and rollback procedure, use:
 
 - `docs/operators/production-deployment-runbook.md`
+
+For the current incident triage procedures tied to these monitoring assets, use:
+
+- `docs/operators/incident-response-playbooks.md`

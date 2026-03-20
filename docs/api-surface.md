@@ -135,6 +135,17 @@ Defined scopes:
 | PATCH | `/v1/evaluations/regressions/{regression_id}/triage` | `tools:execute` |
 | POST | `/v1/evaluations/regressions/{regression_id}/resolve` | `tools:execute` |
 
+### Scheduled Gates
+
+| Method | Path | Scope |
+| --- | --- | --- |
+| POST | `/v1/evaluations/schedules` | `tools:execute` |
+| GET | `/v1/evaluations/schedules` | `workflows:read` |
+| GET | `/v1/evaluations/schedules/{schedule_id}` | `workflows:read` |
+| DELETE | `/v1/evaluations/schedules/{schedule_id}` | `tools:execute` |
+| POST | `/v1/evaluations/schedules/{schedule_id}/trigger` | `tools:execute` |
+| GET | `/v1/evaluations/schedules/{schedule_id}/history` | `workflows:read` |
+
 ### Autonomy
 
 | Method | Path | Scope |
@@ -248,6 +259,17 @@ Defined scopes:
 | POST | `/v1/webhooks/slack` | Authenticated |
 | GET | `/v1/webhooks/whatsapp` | Authenticated |
 | POST | `/v1/webhooks/whatsapp` | Authenticated |
+
+### Webhook Delivery
+
+| Method | Path | Scope |
+| --- | --- | --- |
+| GET | `/v1/webhooks/deliveries` | `admin` |
+| GET | `/v1/webhooks/deliveries/stats` | `admin` |
+| GET | `/v1/webhooks/deliveries/dead-letters` | `admin` |
+| GET | `/v1/webhooks/deliveries/{delivery_id}` | `admin` |
+| POST | `/v1/webhooks/deliveries/{delivery_id}/retry` | `admin` |
+| DELETE | `/v1/webhooks/deliveries/purge` | `admin` |
 
 ## 3. Notes
 

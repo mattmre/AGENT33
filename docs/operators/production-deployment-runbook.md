@@ -15,6 +15,10 @@ This runbook is scoped to the repo-owned deployment assets already shipped on
 It does not cover horizontal scaling, ingress, or managed monitoring
 infrastructure.
 
+For broader production incident handling after deployment, use:
+
+- [`incident-response-playbooks.md`](incident-response-playbooks.md)
+
 ## Current Baseline
 
 - Namespace: `agent33`
@@ -208,7 +212,7 @@ kubectl rollout undo deployment/agent33-api -n agent33
 
 This runbook does not claim automated rollback for PostgreSQL, Redis, NATS,
 Ollama, SearXNG, or application-level state. Broader incident procedures belong
-in `P0.7`.
+in [`incident-response-playbooks.md`](incident-response-playbooks.md).
 
 ## Common Recovery Cases
 
