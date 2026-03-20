@@ -50,6 +50,14 @@ before applying this base. The examples show the required keys but are not wired
 into `kustomization.yaml` so the repo does not ship weak production secrets by
 default.
 
+The base `ConfigMap` now carries non-secret runtime settings, including:
+
+- `CORS_ALLOWED_ORIGINS`
+- `AUTH_BOOTSTRAP_ENABLED`
+- `AUTH_BOOTSTRAP_ADMIN_USERNAME`
+- `AUTH_BOOTSTRAP_ADMIN_SCOPES`
+- `OPENAI_BASE_URL`
+
 The PostgreSQL secret now carries only:
 
 - `POSTGRES_USER`
@@ -59,11 +67,23 @@ The PostgreSQL secret now carries only:
 The API deployment derives `DATABASE_URL` from those values so the password is
 not duplicated across secret keys.
 
+The API secret example carries only secret material:
+
+- `API_SECRET_KEY`
+- `JWT_SECRET`
+- `ENCRYPTION_KEY`
+- `AUTH_BOOTSTRAP_ADMIN_PASSWORD`
+- optional provider API keys
+
 ## Apply
+
+For production rollouts, prefer the production overlay in
+`deploy/k8s/overlays/production/`. Apply the base directly only for topology
+review or lab-style smoke validation.
 
 1. Copy each example Secret manifest and replace every placeholder value.
 2. Apply the edited Secret manifests.
-3. Apply the base Kustomize resources.
+3. Apply either the production overlay or the base Kustomize resources.
 
 ```bash
 cp deploy/k8s/base/postgres-secret.example.yaml /tmp/postgres-secret.yaml
@@ -73,7 +93,7 @@ cp deploy/k8s/base/api-secret.example.yaml /tmp/api-secret.yaml
 
 kubectl apply -f /tmp/postgres-secret.yaml
 kubectl apply -f /tmp/api-secret.yaml
-kubectl apply -k deploy/k8s/base
+kubectl apply -k deploy/k8s/overlays/production
 ```
 
 ## Notes
@@ -81,9 +101,11 @@ kubectl apply -k deploy/k8s/base
 - The current runtime still assumes an internal Ollama endpoint by default.
 - The current runtime also assumes a reachable `SEARXNG_URL`, so this base now
   includes SearXNG to preserve built-in search behavior.
-- The example API secret enables bootstrap auth by default so a fresh cluster
-  can mint the first admin token. Rotate the bootstrap password immediately and
-  disable bootstrap auth after initial access is established.
+- Bootstrap auth is disabled by default in the base `ConfigMap`. If you need a
+  first-admin bootstrap on a fresh cluster, temporarily set
+  `AUTH_BOOTSTRAP_ENABLED=true`, apply a strong
+  `AUTH_BOOTSTRAP_ADMIN_PASSWORD`, mint the initial admin token, then disable
+  bootstrap auth again.
 - Ollama readiness now requires the `llama3.2` model to be present. After the
   daemon starts, pull it with:
 
