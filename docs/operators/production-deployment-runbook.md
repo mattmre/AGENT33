@@ -19,6 +19,11 @@ For broader production incident handling after deployment, use:
 
 - [`incident-response-playbooks.md`](incident-response-playbooks.md)
 
+For the replica-safety contract and the ordered pre-work required before
+multi-instance rollout, use:
+
+- [`horizontal-scaling-architecture.md`](horizontal-scaling-architecture.md)
+
 ## Current Baseline
 
 - Namespace: `agent33`
@@ -38,7 +43,9 @@ Core in-cluster dependencies expected by the current overlay:
 - SearXNG
 
 The production overlay is intentionally single-instance today. Multi-replica
-guidance is deferred to `P1.1` / `P1.2`.
+guidance is defined in
+[`horizontal-scaling-architecture.md`](horizontal-scaling-architecture.md) and
+its `P1.2` follow-up work.
 
 ## Pre-Deployment Checklist
 

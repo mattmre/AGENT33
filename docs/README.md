@@ -11,15 +11,16 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 3. [Phase 25/26 Live Review Walkthrough](phase25-26-live-review-walkthrough.md)
 4. [Operator Guide: Improvement Cycles and Docker Kernels](operator-improvement-cycle-and-jupyter.md)
 5. [Production Deployment Runbook](operators/production-deployment-runbook.md)
-6. [Incident Response Playbooks](operators/incident-response-playbooks.md)
-7. [Service Level Objectives](operators/service-level-objectives.md)
-8. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
-9. [Use Cases](use-cases.md)
-10. [Functionality and Workflows](functionality-and-workflows.md)
-11. [API Surface](api-surface.md)
-12. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
-13. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
-14. [Phase 22 PR Checkpoints](prs/README.md)
+6. [Horizontal Scaling Architecture](operators/horizontal-scaling-architecture.md)
+7. [Incident Response Playbooks](operators/incident-response-playbooks.md)
+8. [Service Level Objectives](operators/service-level-objectives.md)
+9. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
+10. [Use Cases](use-cases.md)
+11. [Functionality and Workflows](functionality-and-workflows.md)
+12. [API Surface](api-surface.md)
+13. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
+14. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
+15. [Phase 22 PR Checkpoints](prs/README.md)
 
 ## Runtime Snapshot
 
@@ -39,6 +40,7 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 | `phase25-26-live-review-walkthrough.md` | Operator guide for live workflow execution, review artifact generation, signoff, and tool approvals |
 | `operator-improvement-cycle-and-jupyter.md` | Current operator path for the improvement-cycle wizard, canonical presets, and Docker-backed Jupyter execution |
 | `operators/production-deployment-runbook.md` | Current Kubernetes production rollout, verification, monitoring, and rollback guidance for the shipped deploy baseline |
+| `operators/horizontal-scaling-architecture.md` | Current replica-safety contract, state-boundary map, blocking globals, and `P1.2` migration sequence for multi-replica rollout |
 | `operators/incident-response-playbooks.md` | First incident-response playbooks for API outages, degraded dependencies, evaluation regressions, and webhook backlog incidents |
 | `operators/service-level-objectives.md` | Current internal SLO baseline, error-budget policy, guardrail mapping, and deferred-objective inventory |
 | `validation/phase22-phase25-27-surface-validation.md` | Evidence-backed validation record for the Phase 22 extension surfaces introduced by the Phase 25-27 stack |
