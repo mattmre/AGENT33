@@ -13,8 +13,8 @@ Included:
 
 - `deploy/k8s/base/` manifest set
 - base `kustomization.yaml`
-- API, PostgreSQL, Redis, NATS, and Ollama manifests
-- placeholder ConfigMap / Secret contract
+- API, PostgreSQL, Redis, NATS, Ollama, and SearXNG manifests
+- ConfigMap plus example Secret contract
 - runtime image fix to include engine-local definitions and packs
 - deployment README
 
@@ -40,6 +40,10 @@ runtime still assumes an internal Ollama endpoint by default:
 Because of that, omitting Ollama here would create a deployment baseline that
 looks complete but boots into a degraded configuration by default.
 
+The same reasoning applies to SearXNG: the current runtime still defaults
+`SEARXNG_URL` to an in-cluster service name, and the built-in search tool
+expects a reachable endpoint.
+
 ## Image Packaging Correction
 
 The engine image previously copied only `src/` and `templates/`, but the app
@@ -60,7 +64,7 @@ expects.
   build context, so this slice preserves the current image boundary rather than
   widening build context policy in the same PR.
 - The committed Secret manifests intentionally use placeholder values and must
-  be replaced before real production use.
+  be applied as operator-edited examples before real production use.
 - Local `kubectl apply --dry-run=client` still attempted cluster discovery in
   this environment, so render validation relies on `kubectl kustomize` and YAML
   parsing instead of a live schema fetch.

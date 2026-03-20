@@ -27,6 +27,10 @@ COPY agent-definitions/ agent-definitions/
 COPY workflow-definitions/ workflow-definitions/
 COPY tool-definitions/ tool-definitions/
 COPY packs/ packs/
+# The canonical workflow templates still live at repo-root `core/workflows`.
+# Keeping the engine image build context scoped to `./engine` avoids a broader
+# Docker build-policy change in this slice, so template catalog parity remains a
+# documented follow-up rather than a silent omission.
 COPY templates/ templates/
 COPY pyproject.toml .
 

@@ -10,3 +10,4 @@ data:
   NATS_URL: "nats://nats:4222"
   OLLAMA_BASE_URL: "http://ollama:11434"
   OLLAMA_DEFAULT_MODEL: "llama3.2"
+  SEARXNG_URL: "http://searxng:8080"

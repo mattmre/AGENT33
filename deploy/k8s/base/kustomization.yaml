@@ -4,8 +4,6 @@ namespace: agent33
 resources:
   - namespace.yaml
   - api-configmap.yaml
-  - api-secret.yaml
-  - postgres-secret.yaml
   - api-deployment.yaml
   - api-service.yaml
   - postgres-statefulset.yaml
@@ -17,3 +15,5 @@ resources:
   - ollama-pvc.yaml
   - ollama-deployment.yaml
   - ollama-service.yaml
+  - searxng-deployment.yaml
+  - searxng-service.yaml

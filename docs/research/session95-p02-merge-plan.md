@@ -6,11 +6,11 @@ PR target: `P0.2` initial Kubernetes manifests baseline
 ## Review Focus
 
 1. Confirm the manifest set matches the current runtime dependency boundary:
-   API, PostgreSQL, Redis, NATS, and Ollama.
+   API, PostgreSQL, Redis, NATS, Ollama, and SearXNG.
 2. Confirm the Docker image now contains engine-local runtime assets required by
    startup and operator flows.
-3. Confirm the placeholder secret contract is explicit and documented rather
-   than silently relying on local `.env` behavior.
+3. Confirm the example-secret and bootstrap-auth contract is explicit and
+   documented rather than silently relying on local `.env` behavior.
 4. Confirm this PR does not drift into `P0.3` secret-provider policy or `P0.4`
    observability/exporter work.
 

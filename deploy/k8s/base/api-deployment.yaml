@@ -27,16 +27,32 @@ spec:
             - secretRef:
                 name: agent33-postgres-secrets
           readinessProbe:
-            httpGet:
-              path: /health
-              port: http
+            exec:
+              command:
+                - python
+                - -c
+                - |
+                  import json
+                  import sys
+                  import urllib.request
+                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5) as response:
+                      payload = json.load(response)
+                  sys.exit(0 if payload.get("status") == "healthy" else 1)
             initialDelaySeconds: 15
             periodSeconds: 15
             timeoutSeconds: 5
           livenessProbe:
-            httpGet:
-              path: /health
-              port: http
+            exec:
+              command:
+                - python
+                - -c
+                - |
+                  import json
+                  import sys
+                  import urllib.request
+                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5) as response:
+                      payload = json.load(response)
+                  sys.exit(0 if payload.get("status") == "healthy" else 1)
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5

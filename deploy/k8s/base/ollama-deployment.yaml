@@ -22,9 +22,11 @@ spec:
             - name: OLLAMA_CONTEXT_LENGTH
               value: "32768"
           readinessProbe:
-            httpGet:
-              path: /api/tags
-              port: http
+            exec:
+              command:
+                - sh
+                - -c
+                - ollama list | grep -q '^llama3.2'
             initialDelaySeconds: 15
             periodSeconds: 20
             timeoutSeconds: 5
