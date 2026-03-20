@@ -2,8 +2,20 @@ groups:
   - name: agent33-observability
     interval: 30s
     rules:
+      - record: agent33:sli:effort_telemetry_export_failures:count_15m
+        expr: sum(increase(effort_routing_export_failures_total[15m]))
+      - record: agent33:sli:effort_telemetry_export_failures:count_28d
+        expr: sum(increase(effort_routing_export_failures_total[28d]))
+      - record: agent33:sli:high_effort_routing_ratio:ratio_15m
+        expr: >
+          sum(increase(effort_routing_high_effort_total[15m]))
+          / clamp_min(sum(increase(effort_routing_decisions_total[15m])), 1)
+      - record: agent33:sli:estimated_cost_usd_avg:max
+        expr: max(effort_routing_estimated_cost_usd_avg)
+      - record: agent33:sli:estimated_token_budget_avg:max
+        expr: max(effort_routing_estimated_token_budget_avg)
       - alert: Agent33EffortTelemetryExportFailures
-        expr: sum(increase(effort_routing_export_failures_total[15m])) > 0
+        expr: agent33:sli:effort_telemetry_export_failures:count_15m > 0
         for: 5m
         labels:
           severity: warning
@@ -17,10 +29,7 @@ groups:
             `/v1/dashboard/alerts` for local context before the in-memory
             signals roll over on restart.
       - alert: Agent33HighEffortRoutingRatio
-        expr: >
-          sum(increase(effort_routing_high_effort_total[15m]))
-          / clamp_min(sum(increase(effort_routing_decisions_total[15m])), 1)
-          > 0.5
+        expr: agent33:sli:high_effort_routing_ratio:ratio_15m > 0.5
         for: 15m
         labels:
           severity: warning
@@ -33,7 +42,7 @@ groups:
             the last 15 minutes. Review workload shape, threshold calibration,
             and downstream model cost implications.
       - alert: Agent33EstimatedCostDrift
-        expr: max(effort_routing_estimated_cost_usd_avg) > 0.25
+        expr: agent33:sli:estimated_cost_usd_avg:max > 0.25
         for: 15m
         labels:
           severity: warning

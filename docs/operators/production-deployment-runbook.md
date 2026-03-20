@@ -186,6 +186,14 @@ Use `/v1/dashboard/alerts` for operator spot checks only. The production-facing
 alerting contract for this slice is the Prometheus rule file, not the in-app
 dashboard route.
 
+The bounded objective baseline for this slice lives in
+[`service-level-objectives.md`](service-level-objectives.md). The current
+Prometheus alert names are:
+
+- `Agent33EffortTelemetryExportFailures`
+- `Agent33HighEffortRoutingRatio`
+- `Agent33EstimatedCostDrift`
+
 ## Rollback
 
 The current rollback path is deployment-manifest based, not the in-app release

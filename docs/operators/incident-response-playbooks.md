@@ -14,7 +14,13 @@ Use this document with:
 - [`../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml`](../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml)
 
 This playbook does not define new SLI thresholds or new monitoring assets.
-Threshold policy and additional alert wiring remain in `P0.8`.
+Formal objective policy lives in `service-level-objectives.md`, and evaluation
+plus webhook incidents remain manual because the repo does not export
+Prometheus-backed thresholds for them yet.
+
+The current objective and error-budget baseline now lives in:
+
+- [`service-level-objectives.md`](service-level-objectives.md)
 
 ## Severity Model
 
@@ -307,8 +313,9 @@ retained delivered history.
 
 ## Notes
 
-- The production Prometheus rule file currently covers effort-routing and cost
-  drift only.
+- The production Prometheus rule file currently covers effort-routing telemetry
+  export reliability, routing mix, and cost drift only.
 - These playbooks intentionally rely on the repo's current operator and admin
   APIs for regression and webhook incidents.
-- Additional thresholds and production alert wiring belong in `P0.8`.
+- Evaluation, webhook, dependency, and request-level objectives require new
+  Prometheus metrics before they can move beyond manual/operator procedures.
