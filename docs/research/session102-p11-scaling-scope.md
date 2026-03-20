@@ -54,6 +54,10 @@ What it does not yet have is a single architectural contract answering:
 - Redis
 - NATS
 
+Redis and NATS are shared runtime services, but this slice does not treat the
+checked-in overlay as providing durable Redis-backed coordination or a
+durable NATS state backend.
+
 ### Durable for restart on one replica, but not truly shared
 
 - `OrchestrationStateStore` snapshots written from
@@ -86,6 +90,9 @@ workers reconnect to the owning replica.
   and `engine/src/agent33/security/auth.py`
 - workflow registry, execution history, and scheduler state in
   `engine/src/agent33/api/routes/workflows.py`
+- cron job definitions and job history in `engine/src/agent33/api/routes/cron.py`
+  plus the in-memory `cron_job_store` / `job_history_store` wiring from
+  `engine/src/agent33/main.py`
 - orchestration-state-backed control-plane namespaces because
   `engine/src/agent33/services/orchestration_state.py` keeps an in-memory copy
   and rewrites the JSON snapshot without distributed locking or reload

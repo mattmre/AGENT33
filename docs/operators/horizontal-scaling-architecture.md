@@ -24,7 +24,8 @@ model. `P1.1` is architecture only. The implementation work starts in `P1.2`.
 
 Classify runtime state into four groups before changing deployment topology:
 
-1. Shared durable state that any replica can read or write safely.
+1. Shared backing services or durable data stores that multiple replicas can
+   connect to today.
 2. Durable state that survives restart on one replica but is not actually
    shared across replicas yet.
 3. Replica-local state that is acceptable only when a client, worker, or
@@ -35,7 +36,7 @@ Classify runtime state into four groups before changing deployment topology:
 Horizontal scaling is blocked by groups 2 and 4, and partially constrained by
 group 3.
 
-## Shared Durable Surfaces Available Today
+## Shared Backing Services Available Today
 
 The following backends already exist on `main` and are the foundation for
 multi-replica work:
@@ -43,12 +44,13 @@ multi-replica work:
 | Surface | Current backing | Notes |
 | --- | --- | --- |
 | Long-term memory | PostgreSQL via `LongTermMemory` | Durable and already shared |
-| Cache / transient coordination | Redis | Available to all replicas when configured |
-| Event bus | NATS | Existing cross-process messaging plane |
+| Cache / transient coordination | Redis | Shared runtime service, but the checked-in overlay does not make it a durable state store |
+| Event bus | NATS | Shared messaging plane, but not a persisted state backend for control-plane ownership |
 
 Redis and NATS are present today, but `P1.1` does not claim that the repo is
 already using them as the source of truth for schedulers, sessions, or control
-plane state ownership.
+plane state ownership, nor that the checked-in deployment treats them as
+durable state stores.
 
 ## Single-Replica Durable But Not Shared Yet
 
@@ -160,13 +162,15 @@ Implement the next slice in this order to minimize drift:
 1. Move auth bootstrap users and API-key state out of process memory.
 2. Replace workflow registry, execution history, and scheduler ownership with a
    shared or leader-elected model.
-3. Persist webhook registrations, delivery receipts, retry scheduling, and
+3. Persist cron job definitions and job history so the `/v1/cron` surface does
+   not fragment by replica.
+4. Persist webhook registrations, delivery receipts, retry scheduling, and
    dead-letter state.
-4. Persist evaluation runs, baselines, and scheduled-gate schedules/history.
-5. Migrate review lifecycle state to a shared durable store.
-6. Decide whether operator sessions and orchestration snapshots will use a
+5. Persist evaluation runs, baselines, and scheduled-gate schedules/history.
+6. Migrate review lifecycle state to a shared durable store.
+7. Decide whether operator sessions and orchestration snapshots will use a
    shared filesystem, PostgreSQL, or Redis-backed coordination.
-7. Define the routing strategy for workflow streaming, browser sessions, voice
+8. Define the routing strategy for workflow streaming, browser sessions, voice
    sessions, and kernel-backed execution.
 
 ## Readiness Gate Before `replicas > 1`
