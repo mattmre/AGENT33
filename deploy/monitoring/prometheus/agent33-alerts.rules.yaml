@@ -1,0 +1,47 @@
+groups:
+  - name: agent33-observability
+    interval: 30s
+    rules:
+      - alert: Agent33EffortTelemetryExportFailures
+        expr: sum(increase(effort_routing_export_failures_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: observability
+        annotations:
+          summary: AGENT-33 effort telemetry exports are failing
+          description: >
+            The API has recorded one or more effort-routing telemetry export
+            failures in the last 15 minutes. Inspect the application logs and
+            `/v1/dashboard/alerts` for local context before the in-memory
+            signals roll over on restart.
+      - alert: Agent33HighEffortRoutingRatio
+        expr: >
+          sum(increase(effort_routing_high_effort_total[15m]))
+          / clamp_min(sum(increase(effort_routing_decisions_total[15m])), 1)
+          > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: AGENT-33 high-effort routing ratio is elevated
+          description: >
+            More than 50% of effort-routing decisions have been high effort for
+            the last 15 minutes. Review workload shape, threshold calibration,
+            and downstream model cost implications.
+      - alert: Agent33EstimatedCostDrift
+        expr: max(effort_routing_estimated_cost_usd_avg) > 0.25
+        for: 15m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: AGENT-33 estimated routing cost average is elevated
+          description: >
+            The current exported average estimated cost per routed invocation is
+            above the initial review threshold. Inspect the Grafana dashboard to
+            identify which effort/source series is driving the drift.

@@ -44,3 +44,14 @@ kubectl apply -f /tmp/postgres-secret.yaml
 kubectl apply -f /tmp/api-secret.yaml
 kubectl apply -k deploy/k8s/overlays/production
 ```
+
+## Monitoring Assets
+
+The overlay does not deploy Prometheus or Grafana, but the repo now ships the
+first importable monitoring artifacts under:
+
+- `deploy/monitoring/grafana/`
+- `deploy/monitoring/prometheus/`
+
+Load those assets into your existing monitoring stack after the API service is
+being scraped via `/metrics`.
