@@ -122,6 +122,8 @@ kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2
 - `/v1/dashboard/metrics` remains the public JSON dashboard summary.
 - The first importable Grafana dashboard and Prometheus rule assets live under
   `deploy/monitoring/`.
+- The operator deployment procedure for this baseline lives in
+  `docs/operators/production-deployment-runbook.md`.
 - The Ollama image is pinned by digest as of `2026-03-20` so the base stays
   reproducible. Update that digest deliberately when you want a newer Ollama
   release.

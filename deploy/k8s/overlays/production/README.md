@@ -55,3 +55,7 @@ first importable monitoring artifacts under:
 
 Load those assets into your existing monitoring stack after the API service is
 being scraped via `/metrics`.
+
+For the repo's current rollout, health-check, and rollback sequence, use:
+
+- `docs/operators/production-deployment-runbook.md`
