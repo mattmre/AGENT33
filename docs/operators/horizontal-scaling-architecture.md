@@ -22,7 +22,7 @@ model. `P1.1` is architecture only. The implementation work starts in `P1.2`.
 
 ## State Boundary Model
 
-Classify runtime state into three groups before changing deployment topology:
+Classify runtime state into four groups before changing deployment topology:
 
 1. Shared durable state that any replica can read or write safely.
 2. Durable state that survives restart on one replica but is not actually
