@@ -81,6 +81,7 @@ dev = [
     "mypy>=1.13,<2",
     "pre-commit>=4,<5",
     "types-PyYAML>=6.0",
+    "locust>=2.29,<3",
 ]
 
 [project.scripts]
