@@ -186,6 +186,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("nats_init_failed", error=str(exc))
     app.state.nats_bus = nats_bus
 
+    # -- Instance registry and scaling guards (P1.2) -----------------------
+    from agent33.scaling.distributed_lock import create_lock
+    from agent33.scaling.instance_registry import InstanceRegistry
+    from agent33.scaling.state_guards import SchedulerOwnershipGuard
+
+    instance_registry = InstanceRegistry(redis=redis_conn)
+    await instance_registry.register()
+    app.state.instance_registry = instance_registry
+
+    scheduler_lock = create_lock(
+        name="scheduler_ownership",
+        redis=redis_conn,
+        ttl_seconds=60,
+    )
+    scheduler_guard = SchedulerOwnershipGuard(
+        lock=scheduler_lock,
+        registry=instance_registry,
+        surface_name="scheduler",
+    )
+    app.state.scheduler_guard = scheduler_guard
+    logger.info(
+        "scaling_guards_initialized",
+        instance_id=instance_registry.instance_id,
+        lock_backend="redis" if redis_conn is not None else "in-process",
+    )
+
     # -- Agent registry ----------------------------------------------------
     from pathlib import Path
 
@@ -1083,11 +1109,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             max_schedules=settings.scheduled_gates_max_schedules,
             history_retention=settings.scheduled_gates_history_retention,
         )
-        await scheduled_gate_service.start()
+        # Guard scheduler startup with distributed lock (P1.2)
+        _sched_owns = await scheduler_guard.acquire_ownership()
+        if _sched_owns:
+            await scheduled_gate_service.start()
+            logger.info("scheduled_gate_service_initialized")
+        else:
+            logger.warning(
+                "scheduled_gate_service_skipped_lock_held",
+                instance_id=instance_registry.instance_id,
+            )
         app.state.scheduled_gate_service = scheduled_gate_service
         scheduled_gates_routes.set_service(scheduled_gate_service)
         app.include_router(scheduled_gates_routes.router)
-        logger.info("scheduled_gate_service_initialized")
 
     # --- Synthetic environment generation (AWM Tier 2 A5) ---
     from agent33.evaluation.synthetic_envs.service import SyntheticEnvironmentService
@@ -1332,20 +1366,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- Tuning loop scheduler (Phase 31) ------------------------------------
     if settings.improvement_tuning_loop_enabled and settings.improvement_learning_enabled:
-        try:
-            from agent33.improvement.tuning import TuningLoopScheduler, TuningLoopService
+        # Only start the tuning loop if this instance owns the scheduler lock (P1.2)
+        _tuning_owns = scheduler_guard._lock.is_held
+        if not _tuning_owns:
+            # If scheduled gates did not claim ownership, try now
+            _tuning_owns = await scheduler_guard.acquire_ownership()
+        if _tuning_owns:
+            try:
+                from agent33.improvement.tuning import TuningLoopScheduler, TuningLoopService
 
-            _improvement_svc = improvements.get_improvement_service()
-            _config_apply_svc = getattr(app.state, "config_apply_service", None)
-            _tuning_svc = TuningLoopService(_improvement_svc, _config_apply_svc, settings)
-            _tuning_scheduler = TuningLoopScheduler(
-                _tuning_svc, settings.improvement_tuning_loop_interval_hours
+                _improvement_svc = improvements.get_improvement_service()
+                _config_apply_svc = getattr(app.state, "config_apply_service", None)
+                _tuning_svc = TuningLoopService(_improvement_svc, _config_apply_svc, settings)
+                _tuning_scheduler = TuningLoopScheduler(
+                    _tuning_svc, settings.improvement_tuning_loop_interval_hours
+                )
+                app.state.tuning_loop_scheduler = _tuning_scheduler
+                await _tuning_scheduler.start()
+                logger.info("tuning_loop_scheduler_started")
+            except Exception:
+                logger.warning("tuning_loop_scheduler_init_failed", exc_info=True)
+        else:
+            logger.warning(
+                "tuning_loop_scheduler_skipped_lock_held",
+                instance_id=instance_registry.instance_id,
             )
-            app.state.tuning_loop_scheduler = _tuning_scheduler
-            await _tuning_scheduler.start()
-            logger.info("tuning_loop_scheduler_started")
-        except Exception:
-            logger.warning("tuning_loop_scheduler_init_failed", exc_info=True)
 
     # -- Webhook delivery manager (S43) ------------------------------------
     from agent33.automation.webhook_delivery import WebhookDeliveryManager
@@ -1454,6 +1499,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _embedder is not None:
         await _embedder.close()
         logger.info("embedding_provider_closed")
+
+    # Release scheduler ownership and deregister instance (P1.2)
+    # Must happen before Redis is closed since it uses Redis keys.
+    _sched_guard: Any = getattr(app.state, "scheduler_guard", None)
+    if _sched_guard is not None:
+        try:
+            await _sched_guard.release_ownership()
+        except Exception:
+            logger.warning("scheduler_guard_release_failed", exc_info=True)
+
+    _inst_registry: Any = getattr(app.state, "instance_registry", None)
+    if _inst_registry is not None:
+        try:
+            await _inst_registry.deregister()
+            logger.info("instance_deregistered")
+        except Exception:
+            logger.warning("instance_deregister_failed", exc_info=True)
 
     if nats_bus.is_connected:
         await nats_bus.close()
