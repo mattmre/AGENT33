@@ -1,3 +1,9 @@
+# Node.js 24 migration status (deadline: June 2, 2026)
+# - actions/checkout: upgraded to v5 (Node 24 ready)
+# - actions/cache: v4 (awaiting v5 for Node 24; monitor releases)
+# - aquasecurity/trivy-action: pinned v0.35.0 (audit in P3.12 security scan)
+# - github/codeql-action: v3 (awaiting v4 for Node 24; monitor releases)
+# - anthropics/claude-code-action: @beta (tracks latest; verify Node 24 compat)
 name: Security Scan
 
 on:
@@ -11,17 +17,17 @@ jobs:
     name: Dependency CVE Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore Trivy DB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4 # TODO(node24): upgrade when v5 ships
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: fs
           scan-ref: ./engine
@@ -34,10 +40,10 @@ jobs:
     name: Container Image Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore Trivy DB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4 # TODO(node24): upgrade when v5 ships
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -50,7 +56,7 @@ jobs:
         run: docker build --pull -t agent33:${{ github.sha }} ./engine
 
       - name: Run Trivy image scan
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: image
           image-ref: agent33:${{ github.sha }}
@@ -60,7 +66,7 @@ jobs:
           format: table
 
       - name: Export image scan for targeted CVE verification
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: image
           image-ref: agent33:${{ github.sha }}
@@ -78,17 +84,17 @@ jobs:
     name: IaC Misconfiguration Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore Trivy DB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4 # TODO(node24): upgrade when v5 ships
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
       - name: Run Trivy config scan
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: config
           scan-ref: ./engine
@@ -100,17 +106,17 @@ jobs:
     name: Secret Leak Detection
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore Trivy DB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4 # TODO(node24): upgrade when v5 ships
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
       - name: Run Trivy secret scan
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: fs
           scan-ref: .
@@ -125,10 +131,10 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore Trivy DB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4 # TODO(node24): upgrade when v5 ships
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -138,7 +144,7 @@ jobs:
         run: mkdir -p results
 
       - name: Run Trivy scan (SARIF output)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 TODO(node24): audit in P3.12
         with:
           scan-type: fs
           scan-ref: ./engine
@@ -149,7 +155,7 @@ jobs:
           output: results/trivy-results.sarif
 
       - name: Upload Trivy SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v3 # TODO(node24): upgrade when v4 ships
         if: always()
         with:
           sarif_file: results/trivy-results.sarif
@@ -164,7 +170,7 @@ jobs:
       contents: read
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Determine Claude security review mode (API key only)
         id: claude-review
@@ -191,7 +197,7 @@ jobs:
 
       - name: Run Claude Code Security Review
         if: steps.claude-review.outputs.enabled == 'true'
-        uses: anthropics/claude-code-action@beta
+        uses: anthropics/claude-code-action@beta # TODO(node24): verify Node 24 compat at deadline
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: claude-sonnet-4-20250514

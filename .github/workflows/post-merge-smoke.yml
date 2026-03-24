@@ -1,3 +1,7 @@
+# Node.js 24 migration status (deadline: June 2, 2026)
+# - actions/checkout: upgraded to v5 (Node 24 ready)
+# - actions/setup-python: v5 (awaiting v6 for Node 24; monitor releases)
+# - actions/upload-artifact: v4 (awaiting v5 for Node 24; monitor releases)
 name: Post-Merge Smoke
 
 on:
@@ -11,9 +15,9 @@ jobs:
       run:
         working-directory: engine
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5 # TODO(node24): upgrade when v6 ships
         with:
           python-version: "3.11"
 
@@ -76,7 +80,7 @@ jobs:
 
       - name: Upload smoke summary artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4 # TODO(node24): upgrade when v5 ships
         with:
           name: post-merge-smoke-summary
           path: engine/smoke-results/
