@@ -49,8 +49,24 @@ class SearchResult:
 class LongTermMemory:
     """Semantic search over stored memories using pgvector."""
 
-    def __init__(self, database_url: str, embedding_dim: int = 1536) -> None:
-        self._engine = create_async_engine(database_url, echo=False)
+    def __init__(
+        self,
+        database_url: str,
+        embedding_dim: int = 1536,
+        *,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+        pool_pre_ping: bool = True,
+        pool_recycle: int = 1800,
+    ) -> None:
+        self._engine = create_async_engine(
+            database_url,
+            echo=False,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_pre_ping=pool_pre_ping,
+            pool_recycle=pool_recycle,
+        )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
         self._embedding_dim = embedding_dim
 
