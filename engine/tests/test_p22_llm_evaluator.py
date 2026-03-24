@@ -320,28 +320,19 @@ async def test_evaluate_skip_verdict_from_llm() -> None:
 
 @pytest.mark.asyncio
 async def test_evaluate_batch_returns_same_order() -> None:
-    responses = [
-        {"verdict": "pass", "score": 1.0, "reason": "a"},
-        {"verdict": "fail", "score": 0.0, "reason": "b"},
-        {"verdict": "pass", "score": 0.8, "reason": "c"},
-    ]
-    call_count = 0
-
-    async def _fake_complete(
-        messages: object,
-        *,
-        model: str,
-        temperature: float,
-        max_tokens: int,
-    ) -> MagicMock:
-        nonlocal call_count
+    def _resp(d: dict) -> MagicMock:
         r = MagicMock()
-        r.content = json.dumps(responses[call_count])
-        call_count += 1
+        r.content = json.dumps(d)
         return r
 
     router = MagicMock()
-    router.complete = _fake_complete
+    router.complete = AsyncMock(
+        side_effect=[
+            _resp({"verdict": "pass", "score": 1.0, "reason": "a"}),
+            _resp({"verdict": "fail", "score": 0.0, "reason": "b"}),
+            _resp({"verdict": "pass", "score": 0.8, "reason": "c"}),
+        ]
+    )
 
     ev = LLMEvaluator(model_router=router, model="m")
     inputs = [

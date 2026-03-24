@@ -139,6 +139,13 @@ class LLMEvaluator:
 
     def _parse_response(self, task_id: str, raw: str) -> EvaluationResult:
         """Parse the JSON verdict returned by the LLM."""
+        # Strip optional markdown code fences that some LLMs add despite the prompt
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            # drop first line (```json or ```) and last line (```)
+            inner = lines[1:-1] if len(lines) > 2 else lines[1:]
+            raw = "\n".join(inner).strip()
+
         try:
             data: dict[str, Any] = json.loads(raw)
             verdict_str = str(data.get("verdict", "")).lower()
