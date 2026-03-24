@@ -51,11 +51,19 @@ def _install_phase48_health_services(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "agent33.api.routes.health.httpx.AsyncClient", lambda timeout=3: _FakeAsyncClient()
     )
+    _fake_redis_async = SimpleNamespace(from_url=lambda *args, **kwargs: _FakeRedisClient())
     monkeypatch.setitem(
         sys.modules,
         "redis.asyncio",
-        SimpleNamespace(from_url=lambda *args, **kwargs: _FakeRedisClient()),
+        _fake_redis_async,
     )
+    # When the real ``redis`` package has already been imported by an earlier
+    # test (e.g. test_connection_pooling), ``import redis.asyncio as aioredis``
+    # resolves through the parent module's attribute rather than
+    # ``sys.modules["redis.asyncio"]``.  Patch the attribute on the parent
+    # module so the fake is used regardless of prior import state.
+    if "redis" in sys.modules:
+        monkeypatch.setattr(sys.modules["redis"], "asyncio", _fake_redis_async)
     monkeypatch.setitem(
         sys.modules,
         "asyncpg",
