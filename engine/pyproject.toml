@@ -32,6 +32,7 @@ dependencies = [
     "mcp>=1.0.0",
     "PyYAML>=6.0",
     "PyNaCl>=1.5",
+    "websockets>=13,<17",
 ]
 
 [project.optional-dependencies]
