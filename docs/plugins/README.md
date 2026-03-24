@@ -20,6 +20,128 @@ machine.
   tools, skills, agents, and hooks. Has its own manifest, dependency graph,
   permission model, and lifecycle.
 
+## Quick Start Example
+
+The fastest way to understand the plugin SDK is to look at the **word-count**
+example plugin that ships with the repository.
+
+### The plugin class (`engine/src/agent33/plugins/examples/word_count_plugin.py`)
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from agent33.plugins.base import PluginBase
+from agent33.plugins.manifest import PluginManifest, PluginPermission, PluginStatus
+
+if TYPE_CHECKING:
+    from agent33.plugins.context import PluginContext
+
+_DEFAULT_MAX_TEXT_LENGTH: int = 10_000
+
+
+def _build_manifest() -> PluginManifest:
+    return PluginManifest(
+        name="word-count",
+        version="1.0.0",
+        description="Count words, characters, and lines in a text string.",
+        author="AGENT-33 Contributors",
+        homepage="https://github.com/mattmre/AGENT33",
+        entry_point="word_count_plugin:WordCountPlugin",
+        permissions=[PluginPermission.CONFIG_READ],
+        status=PluginStatus.ACTIVE,
+        tags=["example", "text-processing", "utility"],
+    )
+
+
+class WordCountPlugin(PluginBase):
+    """Count words, characters, and lines in a text string."""
+
+    def __init__(self, manifest: PluginManifest, context: PluginContext) -> None:
+        super().__init__(manifest, context)
+        self._max_text_length: int = _DEFAULT_MAX_TEXT_LENGTH
+        self._initialized: bool = False
+
+    async def on_load(self) -> None:
+        raw = self._context.plugin_config.get("max_text_length", _DEFAULT_MAX_TEXT_LENGTH)
+        if not isinstance(raw, int) or isinstance(raw, bool):
+            raise ValueError(f"max_text_length must be an int, got {type(raw).__name__}")
+        if raw <= 0:
+            raise ValueError(f"max_text_length must be positive, got {raw}")
+        self._max_text_length = raw
+        self._initialized = True
+
+    async def on_unload(self) -> None:
+        self._initialized = False
+
+    def execute(self, input_text: str) -> dict[str, int]:
+        if not isinstance(input_text, str):
+            raise TypeError(f"input_text must be a str, got {type(input_text).__name__}")
+        if len(input_text) > self._max_text_length:
+            raise ValueError(
+                f"Text length {len(input_text)} exceeds max_text_length ({self._max_text_length})"
+            )
+        return {
+            "word_count": len(input_text.split()) if input_text else 0,
+            "char_count": len(input_text),
+            "line_count": input_text.count("\n") + 1 if input_text else 0,
+        }
+```
+
+### The YAML manifest (`engine/examples/plugins/word_count/plugin.yaml`)
+
+```yaml
+name: word-count
+version: "1.0.0"
+description: "Count words, characters, and lines in a text string."
+author: "AGENT-33 Contributors"
+homepage: "https://github.com/mattmre/AGENT33"
+entry_point: "word_count_plugin:WordCountPlugin"
+
+permissions:
+  - config:read
+
+tags:
+  - example
+  - text-processing
+  - utility
+
+status: active
+```
+
+### Using the plugin
+
+```python
+from pathlib import Path
+from agent33.plugins.registry import PluginRegistry
+
+registry = PluginRegistry()
+
+# 1. Discover from filesystem
+registry.discover(Path("engine/examples/plugins"))
+
+# 2. Load (provide a context factory)
+await registry.load("word-count", context_factory)
+
+# 3. Enable
+await registry.enable("word-count")
+
+# 4. Use
+entry = registry.get("word-count")
+result = entry.instance.execute("hello world")
+# -> {"word_count": 2, "char_count": 11, "line_count": 1}
+
+# 5. Tear down
+await registry.disable("word-count")
+await registry.unload("word-count")
+```
+
+The full source is in `engine/src/agent33/plugins/examples/word_count_plugin.py`
+with 42 tests in `engine/tests/test_plugin_example.py`.
+
+---
+
 ## Creating a Plugin
 
 ### 1. Create the Plugin Directory
