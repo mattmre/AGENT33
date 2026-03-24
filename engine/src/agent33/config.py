@@ -408,6 +408,10 @@ class Settings(BaseSettings):
     # Query profiling (P1.4)
     slow_query_threshold_ms: int = 100  # log WARNING when a tracked DB op exceeds this
 
+    # Agent streaming transport (P2.5)
+    streaming_max_connections: int = 100
+    streaming_ping_interval_seconds: int = 30
+
     # Workflow transport (S33: WS-first / SSE fallback)
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0

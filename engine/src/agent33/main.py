@@ -53,6 +53,7 @@ from agent33.api.routes import (
     research,
     reviews,
     sessions,
+    streaming,
     synthetic_envs,
     tool_approvals,
     tool_mutations,
@@ -847,6 +848,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ws_manager = ws_manager
     workflows.set_ws_manager(ws_manager)
     logger.info("workflow_ws_manager_initialized")
+
+    # -- Streaming manager for agent WebSocket transport (P2.5) -------------
+    from agent33.api.routes.streaming import StreamingManager
+
+    streaming_manager = StreamingManager(
+        max_connections=settings.streaming_max_connections,
+    )
+    app.state.streaming_manager = streaming_manager
+    logger.info(
+        "streaming_manager_initialized",
+        max_connections=settings.streaming_max_connections,
+    )
 
     # -- Workflow transport manager (S33: WS-first / SSE fallback) ----------
     from agent33.workflows.transport import (
@@ -1740,5 +1753,6 @@ app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
 app.include_router(rate_limits_routes.router)
+app.include_router(streaming.router)
 if settings.embedding_hot_swap_enabled:
     app.include_router(embedding_swap_routes.router)
