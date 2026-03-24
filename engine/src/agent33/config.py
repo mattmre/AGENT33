@@ -185,6 +185,8 @@ class Settings(BaseSettings):
     plugin_definitions_dir: str = "plugins"
     plugin_auto_enable: bool = True  # Auto-enable plugins after loading
     plugin_state_store_path: str = "var/plugin_lifecycle_state.json"
+    plugin_allowlist: str = ""  # comma-separated list of allowed plugin names (empty = allow all)
+    plugin_discovery_paths: str = ""  # comma-separated extra directories to scan for plugins
 
     # Skills
     skill_definitions_dir: str = "skills"
