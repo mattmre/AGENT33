@@ -28,6 +28,7 @@ class MetricsCollector:
         {
             "effort_routing_estimated_cost_usd",
             "effort_routing_estimated_token_budget",
+            "db_query_duration_seconds",
         }
     )
 
