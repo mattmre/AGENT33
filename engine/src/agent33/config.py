@@ -155,6 +155,15 @@ class Settings(BaseSettings):
     training_min_rollouts: int = 10
     training_eval_model: str = ""
 
+    # Evaluation
+    evaluation_judge_model: str = ""
+    """Model identifier for the LLM evaluation judge.
+
+    When empty (default), the LLM evaluator is not registered and the
+    rule-based evaluator remains the default.  Set to a model ID such as
+    ``"llama3.2"`` or ``"gpt-4o-mini"`` to enable the LLM judge backend.
+    """
+
     # Agent definitions
     agent_definitions_dir: str = "agent-definitions"
     agent_effort_routing_enabled: bool = False

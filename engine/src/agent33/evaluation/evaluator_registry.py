@@ -7,10 +7,11 @@ registration, lookup, and a configurable default evaluator.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent33.evaluation.evaluator_interface import Evaluator
+    from agent33.evaluation.llm_evaluator import LLMEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +92,32 @@ def _build_default_registry() -> EvaluatorRegistry:
 
 
 default_evaluator_registry: EvaluatorRegistry = _build_default_registry()
+
+
+# ---------------------------------------------------------------------------
+# LLM evaluator convenience registration (P2.2)
+# ---------------------------------------------------------------------------
+
+
+def register_llm_evaluator(
+    registry: EvaluatorRegistry,
+    model_router: Any,
+    model: str,
+) -> LLMEvaluator:
+    """Register an :class:`~agent33.evaluation.llm_evaluator.LLMEvaluator`
+    in *registry* and return the new instance.
+
+    Parameters
+    ----------
+    registry:
+        The target :class:`EvaluatorRegistry`.
+    model_router:
+        A configured ``ModelRouter`` instance.
+    model:
+        Model identifier for the LLM judge.
+    """
+    from agent33.evaluation.llm_evaluator import LLMEvaluator as _LLMEvaluator
+
+    evaluator = _LLMEvaluator(model_router=model_router, model=model)
+    registry.register(evaluator)
+    return evaluator
