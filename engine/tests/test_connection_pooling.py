@@ -139,44 +139,55 @@ class TestLongTermMemoryPoolParams:
 
 
 class TestRedisPoolParams:
-    """Verify that Redis from_url receives max_connections from config."""
+    """Verify that Redis from_url receives max_connections from config.
 
-    async def test_redis_from_url_receives_max_connections(self) -> None:
+    NOTE: These tests use patch.dict(sys.modules) rather than importing
+    redis.asyncio directly.  Importing the real redis.asyncio module sets the
+    ``asyncio`` attribute on the ``redis`` package object; that attribute
+    persists across tests and bypasses any subsequent sys.modules monkeypatching
+    done by test_health.py's autouse fixture, causing test_readyz to receive the
+    real module instead of the fake and therefore fail with 503.
+    """
+
+    def _make_mock_redis_module(self) -> tuple[MagicMock, MagicMock]:
+        """Return (mock_module, mock_client) for a fake redis.asyncio."""
+        mock_client = MagicMock()
+        mock_client.ping = AsyncMock()
+        mock_module = MagicMock()
+        mock_module.from_url = MagicMock(return_value=mock_client)
+        return mock_module, mock_client
+
+    def test_redis_from_url_receives_max_connections(self) -> None:
         """When main.py creates the Redis client, it passes max_connections."""
-        # We test this by directly verifying the from_url call pattern.
-        # Since main.py's lifespan is deeply integrated, we mock from_url
-        # at the redis.asyncio level and verify the call arguments.
-        import redis.asyncio as aioredis
+        mock_module, _mock_client = self._make_mock_redis_module()
 
-        mock_client = MagicMock()
-        mock_client.ping = AsyncMock()
+        with patch.dict("sys.modules", {"redis.asyncio": mock_module}):
+            import redis.asyncio as aioredis  # noqa: PLC0415
 
-        with patch.object(aioredis, "from_url", return_value=mock_client) as mock_from_url:
-            _redis_client = aioredis.from_url(
+            aioredis.from_url(
                 "redis://localhost:6379/0",
                 decode_responses=True,
                 max_connections=50,
             )
-            mock_from_url.assert_called_once_with(
+            mock_module.from_url.assert_called_once_with(
                 "redis://localhost:6379/0",
                 decode_responses=True,
                 max_connections=50,
             )
 
-    async def test_redis_from_url_custom_max_connections(self) -> None:
+    def test_redis_from_url_custom_max_connections(self) -> None:
         """Custom max_connections value is passed through."""
-        import redis.asyncio as aioredis
+        mock_module, _mock_client = self._make_mock_redis_module()
 
-        mock_client = MagicMock()
-        mock_client.ping = AsyncMock()
+        with patch.dict("sys.modules", {"redis.asyncio": mock_module}):
+            import redis.asyncio as aioredis  # noqa: PLC0415
 
-        with patch.object(aioredis, "from_url", return_value=mock_client) as mock_from_url:
             aioredis.from_url(
                 "redis://localhost:6379/0",
                 decode_responses=True,
                 max_connections=100,
             )
-            call_kwargs = mock_from_url.call_args
+            call_kwargs = mock_module.from_url.call_args
             assert call_kwargs.kwargs.get("max_connections") == 100
 
 
