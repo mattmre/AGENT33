@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5 # TODO(node24): upgrade when v6 ships
+      - uses: actions/setup-python@v6 # TODO(node24): upgrade when v6 ships
         with:
           python-version: "3.11"
 
