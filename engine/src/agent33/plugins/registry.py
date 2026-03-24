@@ -69,9 +69,29 @@ class PluginRegistry:
     - AgentRegistry for in-memory CRUD
     """
 
-    def __init__(self, *, event_store: PluginEventStore | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        event_store: PluginEventStore | None = None,
+        allowlist: list[str] | None = None,
+    ) -> None:
         self._plugins: dict[str, PluginEntry] = {}
         self._event_store = event_store
+        self._allowlist: list[str] | None = allowlist
+
+    # ------------------------------------------------------------------
+    # Allowlist
+    # ------------------------------------------------------------------
+
+    def is_allowed(self, name: str) -> bool:
+        """Check whether a plugin name is permitted by the allowlist.
+
+        If no allowlist is configured (``None`` or empty), all plugins are
+        allowed. Otherwise, the plugin name must appear in the list.
+        """
+        if not self._allowlist:
+            return True
+        return name in self._allowlist
 
     # ------------------------------------------------------------------
     # Tenant helpers
@@ -121,8 +141,21 @@ class PluginRegistry:
         return discovered
 
     def discover_plugin(self, plugin_dir: Path, *, tenant_id: str = "") -> PluginManifest:
-        """Discover a single plugin directory and return its manifest."""
+        """Discover a single plugin directory and return its manifest.
+
+        Raises:
+            PermissionError: If the plugin is not on the allowlist.
+            PluginConflictError: If a plugin with the same name is already registered.
+            FileNotFoundError: If no manifest file is found in the directory.
+        """
         manifest = load_manifest(plugin_dir)
+        if not self.is_allowed(manifest.name):
+            logger.warning(
+                "Plugin '%s' rejected by allowlist (dir: %s)",
+                manifest.name,
+                plugin_dir,
+            )
+            raise PermissionError(f"Plugin '{manifest.name}' is not on the plugin allowlist")
         if manifest.name in self._plugins:
             existing = self._plugins[manifest.name]
             logger.warning(

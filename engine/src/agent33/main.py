@@ -957,7 +957,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     plugin_state_store = OrchestrationStateStore(settings.plugin_state_store_path)
     plugin_event_store = PluginEventStore(plugin_state_store)
     plugin_config_store = PluginConfigStore(plugin_state_store)
-    plugin_registry = PluginRegistry(event_store=plugin_event_store)
+    _plugin_allowlist = (
+        [name.strip() for name in settings.plugin_allowlist.split(",") if name.strip()]
+        if settings.plugin_allowlist.strip()
+        else None
+    )
+    plugin_registry = PluginRegistry(
+        event_store=plugin_event_store,
+        allowlist=_plugin_allowlist,
+    )
     plugins_dir = Path(settings.plugin_definitions_dir)
 
     def _plugin_context_factory(manifest: Any, plugin_dir: Path) -> PluginContext:
@@ -1015,6 +1023,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                             )
     else:
         logger.debug("plugin_definitions_dir_not_found", path=str(plugins_dir))
+
+    # Scan extra plugin discovery paths (P2.7)
+    if settings.plugin_discovery_paths.strip():
+        for extra_path_str in settings.plugin_discovery_paths.split(","):
+            extra_path = Path(extra_path_str.strip())
+            if extra_path.is_dir():
+                extra_count = plugin_registry.discover(extra_path)
+                logger.info(
+                    "plugin_extra_path_discovered",
+                    count=extra_count,
+                    path=str(extra_path),
+                )
 
     app.state.plugin_registry = plugin_registry
     app.state.plugin_installer = PluginInstaller(
