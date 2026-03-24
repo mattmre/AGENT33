@@ -36,9 +36,14 @@ class Settings(BaseSettings):
 
     # PostgreSQL
     database_url: str = "postgresql+asyncpg://agent33:agent33@postgres:5432/agent33"
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_pre_ping: bool = True
+    db_pool_recycle: int = 1800  # seconds; recycle connections after 30 min
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
+    redis_max_connections: int = 50
 
     # NATS
     nats_url: str = "nats://nats:4222"

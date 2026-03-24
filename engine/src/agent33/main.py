@@ -127,10 +127,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("SECURITY: %s — override via environment variable", warning)
 
     # -- Database (PostgreSQL + pgvector) ----------------------------------
-    long_term_memory = LongTermMemory(settings.database_url)
+    long_term_memory = LongTermMemory(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_pre_ping=settings.db_pool_pre_ping,
+        pool_recycle=settings.db_pool_recycle,
+    )
     try:
         await long_term_memory.initialize()
-        logger.info("database_connected", url=_redact_url(settings.database_url))
+        logger.info(
+            "database_connected",
+            url=_redact_url(settings.database_url),
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_pre_ping=settings.db_pool_pre_ping,
+            pool_recycle=settings.db_pool_recycle,
+        )
     except Exception as exc:
         logger.warning("database_init_failed", error=str(exc))
     app.state.long_term_memory = long_term_memory
@@ -169,10 +182,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         import redis.asyncio as aioredis
 
-        _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]
+        _redis_client = aioredis.from_url(  # type: ignore[no-untyped-call]
+            settings.redis_url,
+            decode_responses=True,
+            max_connections=settings.redis_max_connections,
+        )
         await _redis_client.ping()
         redis_conn = _redis_client
-        logger.info("redis_connected", url=_redact_url(settings.redis_url))
+        logger.info(
+            "redis_connected",
+            url=_redact_url(settings.redis_url),
+            max_connections=settings.redis_max_connections,
+        )
     except Exception as exc:
         logger.warning("redis_init_failed", error=str(exc))
     app.state.redis = redis_conn
