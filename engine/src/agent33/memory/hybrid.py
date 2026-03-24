@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from agent33.observability.query_profiling import track_query
+
 if TYPE_CHECKING:
     from agent33.memory.bm25 import BM25Index
     from agent33.memory.embeddings import EmbeddingProvider
@@ -91,54 +93,55 @@ class HybridSearcher:
         bm25_only:
             Use only BM25 search (disable vector).
         """
-        # Fetch candidates from both systems (request more than top_k
-        # so the fusion has a richer candidate pool).
-        fetch_k = top_k * 3
+        async with track_query("hybrid_search", table="memory_records"):
+            # Fetch candidates from both systems (request more than top_k
+            # so the fusion has a richer candidate pool).
+            fetch_k = top_k * 3
 
-        vector_results: list[HybridResult] = []
-        bm25_results: list[HybridResult] = []
+            vector_results: list[HybridResult] = []
+            bm25_results: list[HybridResult] = []
 
-        if not bm25_only:
-            query_embedding = await self._embedder.embed(query)
-            raw_vector = await self._memory.search(query_embedding, top_k=fetch_k)
-            vector_results = [
-                HybridResult(
-                    text=r.text,
-                    score=0.0,
-                    vector_score=r.score,
-                    metadata=r.metadata,
-                )
-                for r in raw_vector
-            ]
+            if not bm25_only:
+                query_embedding = await self._embedder.embed(query)
+                raw_vector = await self._memory.search(query_embedding, top_k=fetch_k)
+                vector_results = [
+                    HybridResult(
+                        text=r.text,
+                        score=0.0,
+                        vector_score=r.score,
+                        metadata=r.metadata,
+                    )
+                    for r in raw_vector
+                ]
 
-        if not vector_only and self._bm25.size > 0:
-            raw_bm25 = self._bm25.search(query, top_k=fetch_k)
-            bm25_results = [
-                HybridResult(
-                    text=r.text,
-                    score=0.0,
-                    bm25_score=r.score,
-                    metadata=r.metadata,
-                )
-                for r in raw_bm25
-            ]
+            if not vector_only and self._bm25.size > 0:
+                raw_bm25 = self._bm25.search(query, top_k=fetch_k)
+                bm25_results = [
+                    HybridResult(
+                        text=r.text,
+                        score=0.0,
+                        bm25_score=r.score,
+                        metadata=r.metadata,
+                    )
+                    for r in raw_bm25
+                ]
 
-        if vector_only or self._bm25.size == 0:
-            # Pure vector mode.
-            for i, result in enumerate(vector_results):
-                result.vector_rank = i + 1
-                result.score = result.vector_score
-            return vector_results[:top_k]
+            if vector_only or self._bm25.size == 0:
+                # Pure vector mode.
+                for i, result in enumerate(vector_results):
+                    result.vector_rank = i + 1
+                    result.score = result.vector_score
+                return vector_results[:top_k]
 
-        if bm25_only:
-            # Pure BM25 mode.
-            for i, result in enumerate(bm25_results):
-                result.bm25_rank = i + 1
-                result.score = result.bm25_score
-            return bm25_results[:top_k]
+            if bm25_only:
+                # Pure BM25 mode.
+                for i, result in enumerate(bm25_results):
+                    result.bm25_rank = i + 1
+                    result.score = result.bm25_score
+                return bm25_results[:top_k]
 
-        # ── Reciprocal Rank Fusion ───────────────────────────────────
-        return self._fuse(vector_results, bm25_results, top_k)
+            # ── Reciprocal Rank Fusion ───────────────────────────────
+            return self._fuse(vector_results, bm25_results, top_k)
 
     def _fuse(
         self,

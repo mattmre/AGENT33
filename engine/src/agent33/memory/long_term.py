@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+from agent33.observability.query_profiling import track_query
+
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:  # pragma: no cover
@@ -72,7 +74,11 @@ class LongTermMemory:
             embedding=embedding,
             metadata_=metadata or {},
         )
-        async with self._session_factory() as session, session.begin():
+        async with (
+            track_query("memory_store", table="memory_records"),
+            self._session_factory() as session,
+            session.begin(),
+        ):
             session.add(record)
             await session.flush()
             record_id: int = record.id  # type: ignore[assignment]
@@ -92,7 +98,10 @@ class LongTermMemory:
             "ORDER BY embedding <=> :emb::vector "
             "LIMIT :k"
         )
-        async with self._session_factory() as session:
+        async with (
+            track_query("memory_search", table="memory_records"),
+            self._session_factory() as session,
+        ):
             result = await session.execute(sql, {"emb": embedding_literal, "k": top_k})
             rows = result.fetchall()
         return [
@@ -111,7 +120,10 @@ class LongTermMemory:
         sql = text(
             "SELECT content, metadata FROM memory_records ORDER BY id LIMIT :limit OFFSET :offset"
         )
-        async with self._session_factory() as session:
+        async with (
+            track_query("memory_scan", table="memory_records"),
+            self._session_factory() as session,
+        ):
             result = await session.execute(sql, {"limit": limit, "offset": offset})
             rows = result.fetchall()
         return [SearchResult(text=row[0], score=0.0, metadata=row[1] or {}) for row in rows]

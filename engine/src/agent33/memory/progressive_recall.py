@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from agent33.observability.query_profiling import track_query
+
 if TYPE_CHECKING:
     from agent33.memory.embeddings import EmbeddingProvider
     from agent33.memory.long_term import LongTermMemory
@@ -57,41 +59,42 @@ class ProgressiveRecall:
             level: Detail level - "index", "timeline", or "full"
             top_k: Max results (defaults to instance top_k)
         """
-        k = top_k or self._top_k
-        query_embedding = await self._embeddings.embed(query)
-        results = await self._memory.search(query_embedding, top_k=k)
+        async with track_query("progressive_recall_search", table="memory_records"):
+            k = top_k or self._top_k
+            query_embedding = await self._embeddings.embed(query)
+            results = await self._memory.search(query_embedding, top_k=k)
 
-        recall_results: list[RecallResult] = []
-        for r in results:
-            meta: dict[str, Any] = r.metadata or {}
-            obs_id = meta.get("observation_id", "")
-            citation = [obs_id] if obs_id else []
+            recall_results: list[RecallResult] = []
+            for r in results:
+                meta: dict[str, Any] = r.metadata or {}
+                obs_id = meta.get("observation_id", "")
+                citation = [obs_id] if obs_id else []
 
-            if level == "index":
-                # Compact: just topic + agent name + event type
-                agent = meta.get("agent_name", "unknown")
-                event = meta.get("event_type", "")
-                tags = meta.get("tags", [])
-                tag_str = ", ".join(tags[:3]) if tags else ""
-                content = f"[{agent}/{event}] {tag_str}: {r.text[:80]}..."
-                token_est = max(10, len(content.split()))
-            elif level == "timeline":
-                # Chronological: timestamp + summary content
-                ts = meta.get("timestamp", "")
-                agent = meta.get("agent_name", "unknown")
-                content = f"[{ts}] {agent}: {r.text[:300]}"
-                token_est = max(30, len(content.split()))
-            else:  # full
-                content = r.text
-                token_est = max(50, len(content.split()))
+                if level == "index":
+                    # Compact: just topic + agent name + event type
+                    agent = meta.get("agent_name", "unknown")
+                    event = meta.get("event_type", "")
+                    tags = meta.get("tags", [])
+                    tag_str = ", ".join(tags[:3]) if tags else ""
+                    content = f"[{agent}/{event}] {tag_str}: {r.text[:80]}..."
+                    token_est = max(10, len(content.split()))
+                elif level == "timeline":
+                    # Chronological: timestamp + summary content
+                    ts = meta.get("timestamp", "")
+                    agent = meta.get("agent_name", "unknown")
+                    content = f"[{ts}] {agent}: {r.text[:300]}"
+                    token_est = max(30, len(content.split()))
+                else:  # full
+                    content = r.text
+                    token_est = max(50, len(content.split()))
 
-            recall_results.append(
-                RecallResult(
-                    level=level,
-                    content=content,
-                    citations=citation,
-                    token_estimate=token_est,
+                recall_results.append(
+                    RecallResult(
+                        level=level,
+                        content=content,
+                        citations=citation,
+                        token_estimate=token_est,
+                    )
                 )
-            )
 
-        return recall_results
+            return recall_results

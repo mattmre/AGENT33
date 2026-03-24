@@ -405,6 +405,9 @@ class Settings(BaseSettings):
     webhook_delivery_max_delay: float = 300.0
     webhook_delivery_max_records: int = 10_000
 
+    # Query profiling (P1.4)
+    slow_query_threshold_ms: int = 100  # log WARNING when a tracked DB op exceeds this
+
     # Workflow transport (S33: WS-first / SSE fallback)
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
