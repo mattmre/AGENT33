@@ -21,19 +21,25 @@ Use this document with:
 - `P3.3` adds HTTP availability and latency SLOs backed by the new
   `http_requests_total` counter and `http_request_duration_seconds`
   observation emitted by `HTTPMetricsMiddleware`.
+- `P3.10` adds webhook delivery reliability SLO backed by
+  `webhook_delivery_total`, `webhook_delivery_failures_total`,
+  `dead_letter_queue_captures_total` counters and
+  `webhook_delivery_duration_seconds`, `dead_letter_queue_depth` observations
+  emitted by `WebhookDeliveryManager` and `DeadLetterQueue`.
 - A metric only becomes a formal objective here if it is already exported by
   `GET /metrics` and can be wired without inventing new exporters, labels, or
   target assumptions.
 
 ## Current Measurable Objective Baseline
 
-The current `/metrics` contract supports three formal objectives and a
+The current `/metrics` contract supports four formal objectives and a
 small set of operational guardrails:
 
 1. Formal internal objectives:
    - effort-routing telemetry export reliability (P0.8)
    - HTTP availability (P3.3)
    - HTTP latency (P3.3)
+   - webhook delivery reliability (P3.10)
 2. Operational guardrails:
    - sustained high-effort routing ratio
    - persistent estimated cost lifetime-average elevation
@@ -109,6 +115,32 @@ The `/health` endpoint emits a `health_check_result` observation (1.0 for OK,
 through `/metrics` for Prometheus scraping and can be used to build
 dependency-readiness dashboards.
 
+### Webhook Delivery Reliability (P3.10)
+
+Definition:
+
+- SLI: `1 - (rate(webhook_delivery_failures_total[window]) / rate(webhook_delivery_total[window]))`
+- Recording rule: `agent33:webhook_delivery:failure_rate_5m`
+- Window: `5m` rolling (for burn-rate alerting), `1h` for formal objective
+- Objective: 95% of webhook deliveries succeed over a 1-hour window
+- Error budget: 5% of total deliveries over the measurement window
+- Metrics:
+  - `webhook_delivery_total` -- counter with `webhook_id` and `status` labels
+  - `webhook_delivery_failures_total` -- counter with `webhook_id` label
+  - `webhook_delivery_duration_seconds` -- observation with `webhook_id` label
+  - `dead_letter_queue_captures_total` -- counter (no labels)
+  - `dead_letter_queue_depth` -- observation (no labels)
+
+The `WebhookDeliveryManager.process_result()` method emits delivery metrics
+after each attempt.  `DeadLetterQueue.capture()` emits capture count and
+current queue depth.
+
+Alert: `Agent33WebhookDeliveryFailures` fires when the 5-minute failure rate
+exceeds 5% for 5 consecutive minutes.
+
+Alert: `Agent33DeadLetterQueueGrowing` fires when the dead-letter queue depth
+exceeds 100 items for 10 consecutive minutes.
+
 ## Error Budget Policy
 
 ### Effort Telemetry
@@ -134,6 +166,14 @@ dependency-readiness dashboards.
 | p99 < 500 ms sustained | normal deployment velocity |
 | p99 500 ms - 1 s sustained `5m` | `Agent33HighLatency` fires as warning; investigate slow paths |
 | p99 > 1 s sustained `5m` | halt deploys and investigate; check DB pool, downstream timeouts |
+
+### Webhook Delivery
+
+| Budget State | Policy |
+| --- | --- |
+| failure rate < 5% over `1h` | normal deployment velocity |
+| failure rate 5% - 15% sustained `5m` | `Agent33WebhookDeliveryFailures` fires; investigate failing endpoints |
+| dead-letter depth > 100 sustained `10m` | `Agent33DeadLetterQueueGrowing` fires; drain or investigate root cause |
 
 ## Operational Guardrails
 
@@ -166,16 +206,16 @@ The following objectives remain explicitly deferred:
 | Objective | Deferred Reason |
 | --- | --- |
 | evaluation regression rate | evaluation results live behind API routes, not `/metrics` |
-| webhook backlog / dead-letter rate | webhook stats live behind admin routes, not `/metrics` |
 | connector fleet reliability | connector monitoring is not exported through the public Prometheus surface |
 
-Previously deferred objectives that are now formal SLOs (P3.3):
+Previously deferred objectives that are now formal SLOs:
 
 | Objective | Resolved In |
 | --- | --- |
 | API availability success rate | P3.3 -- `http_requests_total` counter with status_code labels |
 | request latency | P3.3 -- `http_request_duration_seconds` observation |
 | dependency readiness (partial) | P3.3 -- `health_check_result` observation per service |
+| webhook backlog / dead-letter rate | P3.10 -- `webhook_delivery_total`, `webhook_delivery_failures_total`, `dead_letter_queue_captures_total` counters |
 
 The remaining deferred items are operationally important, but they require
 additional instrumentation before they can become formal SLOs.
@@ -195,6 +235,8 @@ Current Prometheus-backed alert rule names:
 - `Agent33EstimatedCostDrift`
 - `Agent33HighErrorRate` (P3.3)
 - `Agent33HighLatency` (P3.3)
+- `Agent33WebhookDeliveryFailures` (P3.10)
+- `Agent33DeadLetterQueueGrowing` (P3.10)
 
 `Agent33EstimatedCostDrift` keeps its historical rule name for continuity. As
 of P3.6 it now alerts on the rolling-window average
@@ -212,6 +254,7 @@ Current recording rules:
 - `agent33:sli:estimated_token_budget_window_avg:max` (rolling window, P3.6)
 - `agent33:http_requests:error_rate_5m` (P3.3)
 - `agent33:http_request_duration_seconds:p99_5m` (P3.3)
+- `agent33:webhook_delivery:failure_rate_5m` (P3.10)
 
 ## Validation Sequence
 
@@ -227,8 +270,11 @@ Current recording rules:
 - This document does not create a customer SLA.
 - P3.3 adds HTTP availability (99.9%) and latency (p99 < 500 ms) SLOs backed
   by `HTTPMetricsMiddleware` and exported through `GET /metrics`.
-- Evaluation, webhook, and connector objectives remain deferred until the repo
-  exports the required Prometheus metrics.
+- P3.10 adds webhook delivery reliability (95% success rate) SLO backed by
+  `WebhookDeliveryManager` and `DeadLetterQueue` metrics, exported through
+  `GET /metrics`.
+- Evaluation and connector objectives remain deferred until the repo exports
+  the required Prometheus metrics.
 - SLO threshold config fields (`slo_availability_target`, `slo_latency_p99_ms`,
   `slo_latency_agent_p99_ms`) are defined in `engine/src/agent33/config.py`
   and can be overridden via environment variables.

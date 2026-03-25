@@ -6,9 +6,23 @@ import dataclasses
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent33.observability.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level metrics collector (wired during app lifespan)
+# ---------------------------------------------------------------------------
+_metrics: MetricsCollector | None = None
+
+
+def set_metrics(collector: MetricsCollector) -> None:
+    """Install the global metrics collector (called during app lifespan init)."""
+    global _metrics  # noqa: PLW0603
+    _metrics = collector
 
 
 @dataclasses.dataclass(slots=True)
@@ -69,6 +83,13 @@ class DeadLetterQueue:
             error_str,
             item_id,
         )
+
+        # -- Emit metrics ----------------------------------------------------
+        collector = _metrics
+        if collector is not None:
+            collector.increment("dead_letter_queue_captures_total", {})
+            collector.observe("dead_letter_queue_depth", float(len(self._items)), {})
+
         return item_id
 
     def list_failed(self, limit: int = 100) -> list[DeadLetterItem]:
