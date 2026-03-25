@@ -418,6 +418,10 @@ class Settings(BaseSettings):
     alembic_config_path: str = "alembic.ini"
     alembic_auto_check_on_startup: bool = False
 
+    # Control-plane repository backend (P4.5)
+    control_plane_backend: str = "memory"  # "memory" or "sqlite"
+    control_plane_db_path: str = "agent33_control_plane.db"
+
     # Webhook delivery reliability (S43)
     webhook_delivery_max_retries: int = 5
     webhook_delivery_base_delay: float = 1.0
@@ -440,6 +444,14 @@ class Settings(BaseSettings):
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
     workflow_ws_ping_timeout: float = 10.0
+
+    @field_validator("control_plane_backend")
+    @classmethod
+    def _validate_control_plane_backend(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"memory", "sqlite"}:
+            raise ValueError("control_plane_backend must be one of: memory, sqlite")
+        return normalized
 
     @field_validator("workflow_transport_preferred")
     @classmethod

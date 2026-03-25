@@ -1501,11 +1501,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.automation.webhook_repository import (
         InMemoryWebhookRepository,
         get_webhook_repository,
+        set_webhook_repository,
     )
     from agent33.security.auth_repository import (
         InMemoryAuthRepository,
         get_auth_repository,
     )
+
+    # Install SQLite-backed control-plane repositories when configured (P4.5).
+    if settings.control_plane_backend == "sqlite":
+        from agent33.automation.job_history_repository import set_job_history_repository
+        from agent33.automation.pg_job_history_repository import SqliteJobHistoryRepository
+        from agent33.automation.pg_scheduler_repository import SqliteSchedulerJobRepository
+        from agent33.automation.pg_webhook_repository import SqliteWebhookRepository
+        from agent33.automation.scheduler_repository import set_scheduler_job_repository
+
+        _cp_db = settings.control_plane_db_path
+        set_scheduler_job_repository(SqliteSchedulerJobRepository(_cp_db))
+        set_job_history_repository(SqliteJobHistoryRepository(_cp_db))
+        set_webhook_repository(SqliteWebhookRepository(_cp_db))
+        logger.info(
+            "control_plane_sqlite_repositories_installed",
+            db_path=_cp_db,
+        )
 
     # Use get_*() to reuse the lazily-created default repository instead of
     # creating a new one.  This preserves the reference that module-level
