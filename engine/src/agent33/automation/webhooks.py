@@ -8,8 +8,12 @@ import hmac
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent33.automation.webhook_repository import get_webhook_repository
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from agent33.automation.webhook_repository import WebhookRepository
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,9 @@ class WebhookRegistration:
 class WebhookTrigger:
     """Manages webhook registrations and dispatches incoming payloads.
 
+    Registrations are persisted via a :class:`WebhookRepository`. If no
+    repository is provided, the module-level default is used.
+
     When :meth:`trigger` is called the associated workflow callback is invoked
     with ``(workflow_name, payload)``.
     """
@@ -33,9 +40,18 @@ class WebhookTrigger:
     def __init__(
         self,
         on_trigger: Callable[[str, dict[str, Any]], Awaitable[Any]] | None = None,
+        *,
+        repository: WebhookRepository | None = None,
     ) -> None:
         self._hooks: dict[str, WebhookRegistration] = {}
         self._on_trigger = on_trigger
+        self._repository = repository
+
+    @property
+    def _repo(self) -> WebhookRepository:
+        if self._repository is not None:
+            return self._repository
+        return get_webhook_repository()
 
     def register(self, path: str, secret: str, workflow_name: str) -> None:
         """Register a webhook path that triggers a workflow.
@@ -52,6 +68,7 @@ class WebhookTrigger:
         self._hooks[path] = WebhookRegistration(
             path=path, secret=secret, workflow_name=workflow_name
         )
+        self._repo.register_webhook(path, secret, workflow_name)
         logger.info("Registered webhook %s -> workflow %s", path, workflow_name)
 
     # -- validation -----------------------------------------------------------

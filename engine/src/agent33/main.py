@@ -1486,6 +1486,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("alembic_auto_check_failed", exc_info=True)
 
+    # -- Multi-replica state repositories (P3.4) ----------------------------
+    from agent33.automation.webhook_repository import (
+        InMemoryWebhookRepository,
+        set_webhook_repository,
+    )
+    from agent33.security.auth_repository import (
+        InMemoryAuthRepository,
+        set_auth_repository,
+    )
+
+    auth_repo = InMemoryAuthRepository()
+    set_auth_repository(auth_repo)
+    logger.info("auth_repository_initialized", backend="in_memory")
+
+    webhook_repo = InMemoryWebhookRepository()
+    set_webhook_repository(webhook_repo)
+    logger.info("webhook_repository_initialized", backend="in_memory")
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
