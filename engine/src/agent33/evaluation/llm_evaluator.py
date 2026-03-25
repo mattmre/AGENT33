@@ -148,6 +148,14 @@ class LLMEvaluator:
 
         try:
             data: dict[str, Any] = json.loads(raw)
+            if not isinstance(data, dict):
+                return EvaluationResult(
+                    task_id=task_id,
+                    verdict=EvaluationVerdict.ERROR,
+                    score=0.0,
+                    reason=f"LLM returned {type(data).__name__} instead of JSON object",
+                    evaluator_id=self.evaluator_id,
+                )
             verdict_str = str(data.get("verdict", "")).lower()
             score = float(data.get("score", 0.0))
             reason = str(data.get("reason", ""))
@@ -160,7 +168,7 @@ class LLMEvaluator:
 
             score = max(0.0, min(1.0, score))  # clamp to [0, 1]
 
-        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as exc:
             logger.warning(
                 "llm_evaluator_parse_error task_id=%s raw=%r error=%s",
                 task_id,
