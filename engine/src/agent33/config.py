@@ -187,6 +187,9 @@ class Settings(BaseSettings):
     agent_effort_heuristic_large_payload_chars: int = 2000
     agent_effort_heuristic_many_input_fields_threshold: int = 10
     agent_effort_heuristic_high_iteration_threshold: int = 15
+    # Rolling-window metrics (P3.6)
+    metrics_rolling_window_seconds: int = 300  # 5-minute rolling window for observations
+
     observability_effort_alerts_enabled: bool = True
     observability_effort_alert_high_effort_count_threshold: int = 25
     observability_effort_alert_high_cost_usd_threshold: float = 5.0

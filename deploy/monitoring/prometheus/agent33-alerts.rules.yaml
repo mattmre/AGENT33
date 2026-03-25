@@ -10,10 +10,18 @@ groups:
         expr: >
           sum(increase(effort_routing_high_effort_total[15m]))
           / clamp_min(sum(increase(effort_routing_decisions_total[15m])), 1)
+      # Rolling-window observation gauges (P3.6).  The MetricsCollector now
+      # exports *_window_avg gauges that reflect a configurable rolling window
+      # (default 5 min) instead of process-lifetime averages.  The lifetime
+      # gauges (*_avg) remain available for persistent-elevation checks.
       - record: agent33:sli:estimated_cost_usd_avg:max
         expr: max(effort_routing_estimated_cost_usd_avg)
+      - record: agent33:sli:estimated_cost_usd_window_avg:max
+        expr: max(effort_routing_estimated_cost_usd_window_avg)
       - record: agent33:sli:estimated_token_budget_avg:max
         expr: max(effort_routing_estimated_token_budget_avg)
+      - record: agent33:sli:estimated_token_budget_window_avg:max
+        expr: max(effort_routing_estimated_token_budget_window_avg)
       - alert: Agent33EffortTelemetryExportFailures
         expr: agent33:sli:effort_telemetry_export_failures:count_15m > 0
         for: 5m
@@ -42,19 +50,23 @@ groups:
             the last 15 minutes. Review workload shape, threshold calibration,
             and downstream model cost implications.
       - alert: Agent33EstimatedCostDrift
-        expr: agent33:sli:estimated_cost_usd_avg:max > 0.25
+        # P3.6: switched from lifetime avg to rolling-window avg so the alert
+        # now detects recent cost spikes rather than persistent elevation only.
+        expr: agent33:sli:estimated_cost_usd_window_avg:max > 0.25
         for: 15m
         labels:
           severity: warning
           service: agent33-api
           owner: platform
         annotations:
-          summary: AGENT-33 estimated routing cost lifetime average is elevated
+          summary: AGENT-33 estimated routing cost rolling-window average is elevated
           description: >
-            The exported process-lifetime average estimated cost per routed
-            invocation has remained above the initial review threshold. Inspect
-            the Grafana dashboard to identify which effort/source series is
-            keeping the average elevated.
+            The rolling-window (default 5 min) average estimated cost per
+            routed invocation has remained above the review threshold for
+            15 minutes. Inspect the Grafana dashboard to identify which
+            effort/source series is driving the spike. The lifetime-average
+            recording rule (agent33:sli:estimated_cost_usd_avg:max) remains
+            available for persistent-elevation checks.
 
       # --- HTTP Availability & Latency SLO (P3.3) ---
       - record: agent33:http_requests:error_rate_5m

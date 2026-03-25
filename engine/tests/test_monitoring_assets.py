@@ -27,12 +27,20 @@ _PROMETHEUS_ONLY_METRICS = {
     "http_requests_total",
     "http_request_duration_seconds",
 }
+# Rolling-window metrics are exported by Prometheus but not yet referenced in
+# the Grafana dashboard, so they are checked separately.
+_EXPECTED_PROMETHEUS_WINDOW_METRICS = {
+    "effort_routing_estimated_cost_usd_window_avg",
+    "effort_routing_estimated_token_budget_window_avg",
+}
 _EXPECTED_RECORDS = {
     "agent33:sli:effort_telemetry_export_failures:count_15m",
     "agent33:sli:effort_telemetry_export_failures:count_28d",
     "agent33:sli:high_effort_routing_ratio:ratio_15m",
     "agent33:sli:estimated_cost_usd_avg:max",
+    "agent33:sli:estimated_cost_usd_window_avg:max",
     "agent33:sli:estimated_token_budget_avg:max",
+    "agent33:sli:estimated_token_budget_window_avg:max",
     "agent33:http_requests:error_rate_5m",
     "agent33:http_request_duration_seconds:p99_5m",
 }
@@ -87,7 +95,7 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert groups[0]["name"] == "agent33-observability"
 
     rules = groups[0].get("rules")
-    assert isinstance(rules, list) and len(rules) == 12
+    assert isinstance(rules, list) and len(rules) == 14
 
     record_names = {rule["record"] for rule in rules if "record" in rule}
     alert_names = {rule["alert"] for rule in rules if "alert" in rule}
@@ -101,7 +109,10 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert record_names == _EXPECTED_RECORDS
     assert alert_names == _EXPECTED_ALERTS
 
-    for metric in _EXPECTED_METRICS | _PROMETHEUS_ONLY_METRICS:
+    all_prom_metrics = (
+        _EXPECTED_METRICS | _PROMETHEUS_ONLY_METRICS | _EXPECTED_PROMETHEUS_WINDOW_METRICS
+    )
+    for metric in all_prom_metrics:
         assert any(metric in expr for expr in expressions), metric
 
     for token in _UNSUPPORTED_PROMQL_TOKENS:
@@ -126,10 +137,18 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert records_by_name["agent33:sli:estimated_cost_usd_avg:max"] == (
         "max(effort_routing_estimated_cost_usd_avg)"
     )
+    assert records_by_name["agent33:sli:estimated_cost_usd_window_avg:max"] == (
+        "max(effort_routing_estimated_cost_usd_window_avg)"
+    )
     assert records_by_name["agent33:sli:estimated_token_budget_avg:max"] == (
         "max(effort_routing_estimated_token_budget_avg)"
     )
+    assert records_by_name["agent33:sli:estimated_token_budget_window_avg:max"] == (
+        "max(effort_routing_estimated_token_budget_window_avg)"
+    )
     assert "count_15m > 0" in alerts_by_name["Agent33EffortTelemetryExportFailures"]
     assert "ratio_15m > 0.5" in alerts_by_name["Agent33HighEffortRoutingRatio"]
-    assert "estimated_cost_usd_avg:max > 0.25" in alerts_by_name["Agent33EstimatedCostDrift"]
-    assert "lifetime average" in alert_annotations["Agent33EstimatedCostDrift"]["summary"].lower()
+    assert (
+        "estimated_cost_usd_window_avg:max > 0.25" in alerts_by_name["Agent33EstimatedCostDrift"]
+    )
+    assert "rolling-window" in alert_annotations["Agent33EstimatedCostDrift"]["summary"].lower()

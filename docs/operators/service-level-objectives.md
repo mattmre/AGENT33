@@ -142,7 +142,9 @@ These stay alert-backed, but they are not promoted to full error-budgeted SLOs:
 | Guardrail | Source | Threshold Surface |
 | --- | --- | --- |
 | high-effort routing ratio | `effort_routing_high_effort_total` and `effort_routing_decisions_total` | `agent33:sli:high_effort_routing_ratio:ratio_15m` |
+| estimated cost rolling-window average | `effort_routing_estimated_cost_usd_window_avg` | `agent33:sli:estimated_cost_usd_window_avg:max` |
 | estimated cost lifetime average | `effort_routing_estimated_cost_usd_avg` | `agent33:sli:estimated_cost_usd_avg:max` |
+| token-budget rolling-window average | `effort_routing_estimated_token_budget_window_avg` | `agent33:sli:estimated_token_budget_window_avg:max` |
 | token-budget lifetime average | `effort_routing_estimated_token_budget_avg` | `agent33:sli:estimated_token_budget_avg:max` and `/v1/dashboard/alerts` |
 | in-app high-effort count | in-memory routing summary | `AlertManager` threshold in `engine/src/agent33/main.py` |
 
@@ -150,9 +152,12 @@ The Prometheus guardrails and the in-app dashboard alerts are related, but they
 are not identical. Prometheus is the production-facing alerting contract; the
 dashboard route remains a local operator spot-check surface.
 
-The exported `*_avg` series are process-lifetime averages computed by the
-current metrics collector. They are useful for persistent elevation checks, but
-they are not short-window drift or spike detectors.
+As of P3.6, the metrics collector exports both process-lifetime averages
+(`*_avg`) and rolling-window averages (`*_window_avg`). The lifetime averages
+remain useful for persistent-elevation checks. The rolling-window averages
+(default 5-minute window, configurable via `METRICS_ROLLING_WINDOW_SECONDS`)
+enable short-window drift and spike detection. The `Agent33EstimatedCostDrift`
+alert now fires on the rolling-window average rather than the lifetime average.
 
 ## Deferred Objectives
 
@@ -191,17 +196,20 @@ Current Prometheus-backed alert rule names:
 - `Agent33HighErrorRate` (P3.3)
 - `Agent33HighLatency` (P3.3)
 
-`Agent33EstimatedCostDrift` keeps its historical rule name for continuity, but
-it currently alerts on persistent lifetime-average elevation rather than a true
-rolling-window drift signal.
+`Agent33EstimatedCostDrift` keeps its historical rule name for continuity. As
+of P3.6 it now alerts on the rolling-window average
+(`agent33:sli:estimated_cost_usd_window_avg:max`) rather than the lifetime
+average, enabling true short-window spike detection.
 
 Current recording rules:
 
 - `agent33:sli:effort_telemetry_export_failures:count_15m`
 - `agent33:sli:effort_telemetry_export_failures:count_28d`
 - `agent33:sli:high_effort_routing_ratio:ratio_15m`
-- `agent33:sli:estimated_cost_usd_avg:max`
-- `agent33:sli:estimated_token_budget_avg:max`
+- `agent33:sli:estimated_cost_usd_avg:max` (lifetime)
+- `agent33:sli:estimated_cost_usd_window_avg:max` (rolling window, P3.6)
+- `agent33:sli:estimated_token_budget_avg:max` (lifetime)
+- `agent33:sli:estimated_token_budget_window_avg:max` (rolling window, P3.6)
 - `agent33:http_requests:error_rate_5m` (P3.3)
 - `agent33:http_request_duration_seconds:p99_5m` (P3.3)
 
