@@ -157,6 +157,33 @@ class SkillRegistry:
             return None
         return skill.instructions
 
+    def get_supporting_files(self, name: str) -> list[str]:
+        """Return relative paths to supporting files under the skill directory.
+
+        Scans for files inside conventional subdirectories:
+        ``references/``, ``templates/``, ``scripts/``, ``assets/``.
+
+        Returns an empty list if the skill is not found, has no
+        ``base_path``, or has no matching subdirectories.
+        """
+        from pathlib import Path as _Path
+
+        skill = self._skills.get(name)
+        if skill is None or skill.base_path is None:
+            return []
+
+        supporting: list[str] = []
+        for subdir_name in ("references", "templates", "scripts", "assets"):
+            subdir = skill.base_path / subdir_name
+            if not subdir.is_dir():
+                continue
+            for child in sorted(subdir.rglob("*")):
+                if child.is_file():
+                    rel = child.relative_to(skill.base_path)
+                    supporting.append(str(_Path(rel).as_posix()))
+
+        return supporting
+
     def get_resource(self, name: str, resource_path: str) -> str | None:
         """L2: Load a specific bundled resource on demand.
 

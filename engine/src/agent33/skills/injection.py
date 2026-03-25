@@ -75,6 +75,19 @@ class SkillInjector:
 
         return "\n".join(lines)
 
+    def build_preloaded_instructions(self, skill_names: list[str]) -> str:
+        """Build a combined instructions block for session-preloaded skills.
+
+        Unlike ``build_skill_instructions_block`` (which builds a block for
+        a *single* active skill), this method builds a system-prompt section
+        for *all* preloaded skills at once.  Each skill's L1 instructions
+        are wrapped in a ``[SYSTEM: ...]`` header so the LLM knows the
+        skill is always available during the session.
+        """
+        from agent33.skills.slash_commands import build_preloaded_prompt
+
+        return build_preloaded_prompt(skill_names, self._registry)
+
     # ------------------------------------------------------------------
     # Tool Context Resolution
     # ------------------------------------------------------------------
