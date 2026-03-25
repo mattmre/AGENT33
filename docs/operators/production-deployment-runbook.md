@@ -289,3 +289,28 @@ Recovery:
 - set `AUTH_BOOTSTRAP_ENABLED=false`
 - re-apply the production overlay
 - confirm the bootstrap credentials are no longer accepted
+
+## Docker Compose Smoke Test
+
+A CI workflow validates that the Docker Compose stack boots and serves its core
+endpoints.  The same script runs locally:
+
+```bash
+# From the repository root
+chmod +x scripts/docker-smoke-test.sh
+scripts/docker-smoke-test.sh engine/docker-compose.yml
+```
+
+The script:
+
+1. Creates a minimal `engine/.env` if one does not already exist.
+2. Starts `postgres`, `redis`, `nats`, `searxng`, and `api` via
+   `docker compose up`.
+3. Polls `/healthz` until the API process is ready (up to 120 seconds).
+4. Runs smoke checks against `/healthz`, `/health`, `/readyz`, `/docs`, and
+   `/metrics`.
+5. Tears down all containers and volumes on exit.
+
+The CI workflow (`.github/workflows/docker-smoke.yml`) triggers on PRs that
+touch the Dockerfile, docker-compose file, deployment manifests, or the smoke
+script itself.  It can also be triggered manually via `workflow_dispatch`.
