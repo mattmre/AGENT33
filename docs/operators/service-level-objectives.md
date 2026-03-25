@@ -32,7 +32,7 @@ Use this document with:
 
 ## Current Measurable Objective Baseline
 
-The current `/metrics` contract supports four formal objectives and a
+The current `/metrics` contract supports six formal objectives and a
 small set of operational guardrails:
 
 1. Formal internal objectives:
@@ -40,6 +40,8 @@ small set of operational guardrails:
    - HTTP availability (P3.3)
    - HTTP latency (P3.3)
    - webhook delivery reliability (P3.10)
+   - evaluation gate reliability (P4.7)
+   - connector health (P4.7)
 2. Operational guardrails:
    - sustained high-effort routing ratio
    - persistent estimated cost lifetime-average elevation
@@ -141,6 +143,47 @@ exceeds 5% for 5 consecutive minutes.
 Alert: `Agent33DeadLetterQueueGrowing` fires when the dead-letter queue depth
 exceeds 100 items for 10 consecutive minutes.
 
+### Evaluation Gate Reliability (P4.7)
+
+Definition:
+
+- SLI: `1 - (rate(evaluation_runs_total{status="fail"}[window]) / rate(evaluation_runs_total[window]))`
+- Recording rule: `agent33:evaluation:gate_error_rate_5m`
+- Window: `5m` rolling (for burn-rate alerting)
+- Objective: 99% of gate evaluations complete without error
+- Error budget: 1% of total evaluations over the measurement window
+- Metrics:
+  - `evaluation_runs_total` -- counter with `evaluator` and `status` labels
+  - `evaluation_score` -- observation with `evaluator` and `task_type` labels
+  - `evaluation_duration_seconds` -- observation with `evaluator` labels
+  - `evaluation_gate_results_total` -- counter with `gate` and `result` labels
+
+The `EvaluationService.submit_results()` method emits run count, duration,
+per-metric scores, and gate check pass/fail counts.
+
+Alert: `Agent33EvaluationGateErrors` fires when the 5-minute gate error rate
+exceeds 1% for 5 consecutive minutes.
+
+### Connector Health (P4.7)
+
+Definition:
+
+- SLI: `rate(connector_health_check_total{status="success"}[window]) / rate(connector_health_check_total[window])`
+- Recording rule: `agent33:connector:health_check_failure_rate_5m`
+- Window: `5m` rolling (for burn-rate alerting)
+- Objective: 95% health check pass rate per connector
+- Error budget: 5% of total health checks over the measurement window
+- Metrics:
+  - `connector_health_check_total` -- counter with `connector` and `status` labels
+  - `connector_message_send_total` -- counter with `connector` and `status` labels
+  - `connector_message_send_duration_seconds` -- observation with `connector` labels
+
+The `execute_messaging_boundary_call()` function emits connector metrics for
+each health check and message send operation through the boundary middleware.
+
+Alert: `Agent33ConnectorUnhealthy` fires when the 5-minute health check failure
+rate exceeds 5% for 5 consecutive minutes.
+
 ## Error Budget Policy
 
 ### Effort Telemetry
@@ -175,6 +218,22 @@ exceeds 100 items for 10 consecutive minutes.
 | failure rate 5% - 15% sustained `5m` | `Agent33WebhookDeliveryFailures` fires; investigate failing endpoints |
 | dead-letter depth > 100 sustained `10m` | `Agent33DeadLetterQueueGrowing` fires; drain or investigate root cause |
 
+### Evaluation Gate Reliability
+
+| Budget State | Policy |
+| --- | --- |
+| error rate < 1% over `1h` | normal deployment velocity |
+| error rate 1% - 5% sustained `5m` | `Agent33EvaluationGateErrors` fires; investigate failing evaluations |
+| error rate > 5% sustained `5m` | halt deploys and triage; check golden task definitions and gate thresholds |
+
+### Connector Health
+
+| Budget State | Policy |
+| --- | --- |
+| failure rate < 5% over `1h` | normal deployment velocity |
+| failure rate 5% - 15% sustained `5m` | `Agent33ConnectorUnhealthy` fires; investigate failing connectors |
+| failure rate > 15% sustained `5m` | halt connector-dependent operations; check upstream API status |
+
 ## Operational Guardrails
 
 These stay alert-backed, but they are not promoted to full error-budgeted SLOs:
@@ -201,12 +260,8 @@ alert now fires on the rolling-window average rather than the lifetime average.
 
 ## Deferred Objectives
 
-The following objectives remain explicitly deferred:
-
-| Objective | Deferred Reason |
-| --- | --- |
-| evaluation regression rate | evaluation results live behind API routes, not `/metrics` |
-| connector fleet reliability | connector monitoring is not exported through the public Prometheus surface |
+There are no objectives currently deferred. All previously deferred objectives
+have been promoted to formal SLOs.
 
 Previously deferred objectives that are now formal SLOs:
 
@@ -216,9 +271,8 @@ Previously deferred objectives that are now formal SLOs:
 | request latency | P3.3 -- `http_request_duration_seconds` observation |
 | dependency readiness (partial) | P3.3 -- `health_check_result` observation per service |
 | webhook backlog / dead-letter rate | P3.10 -- `webhook_delivery_total`, `webhook_delivery_failures_total`, `dead_letter_queue_captures_total` counters |
-
-The remaining deferred items are operationally important, but they require
-additional instrumentation before they can become formal SLOs.
+| evaluation regression rate | P4.7 -- `evaluation_runs_total`, `evaluation_gate_results_total` counters; `evaluation_score`, `evaluation_duration_seconds` observations |
+| connector fleet reliability | P4.7 -- `connector_health_check_total`, `connector_message_send_total` counters; `connector_message_send_duration_seconds` observation |
 
 ## Threshold Map
 
@@ -237,6 +291,8 @@ Current Prometheus-backed alert rule names:
 - `Agent33HighLatency` (P3.3)
 - `Agent33WebhookDeliveryFailures` (P3.10)
 - `Agent33DeadLetterQueueGrowing` (P3.10)
+- `Agent33EvaluationGateErrors` (P4.7)
+- `Agent33ConnectorUnhealthy` (P4.7)
 
 `Agent33EstimatedCostDrift` keeps its historical rule name for continuity. As
 of P3.6 it now alerts on the rolling-window average
@@ -255,6 +311,8 @@ Current recording rules:
 - `agent33:http_requests:error_rate_5m` (P3.3)
 - `agent33:http_request_duration_seconds:p99_5m` (P3.3)
 - `agent33:webhook_delivery:failure_rate_5m` (P3.10)
+- `agent33:evaluation:gate_error_rate_5m` (P4.7)
+- `agent33:connector:health_check_failure_rate_5m` (P4.7)
 
 ## Validation Sequence
 
@@ -273,8 +331,10 @@ Current recording rules:
 - P3.10 adds webhook delivery reliability (95% success rate) SLO backed by
   `WebhookDeliveryManager` and `DeadLetterQueue` metrics, exported through
   `GET /metrics`.
-- Evaluation and connector objectives remain deferred until the repo exports
-  the required Prometheus metrics.
+- P4.7 adds evaluation gate reliability (99% completion rate) SLO backed by
+  `EvaluationService` metrics, exported through `GET /metrics`.
+- P4.7 adds connector health (95% health check pass rate) SLO backed by
+  `execute_messaging_boundary_call()` metrics, exported through `GET /metrics`.
 - SLO threshold config fields (`slo_availability_target`, `slo_latency_p99_ms`,
   `slo_latency_agent_p99_ms`) are defined in `engine/src/agent33/config.py`
   and can be overridden via environment variables.
