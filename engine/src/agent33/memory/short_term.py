@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent33.agents.tokenizer import TokenCounter
+    from agent33.memory.context_compressor import ContextCompressor
 
 
 @dataclass
@@ -33,6 +34,8 @@ class ShortTermMemory:
 
     messages: list[Message] = field(default_factory=list)
     token_counter: TokenCounter | None = field(default=None, repr=False)
+    compressor: ContextCompressor | None = field(default=None, repr=False)
+    compression_count: int = 0
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens using the configured counter, or the legacy heuristic."""

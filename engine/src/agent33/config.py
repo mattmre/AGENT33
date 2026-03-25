@@ -408,6 +408,10 @@ class Settings(BaseSettings):
     operator_session_max_retained: int = 100
     operator_session_crash_recovery_enabled: bool = True
 
+    # Phase 50: Context compression engine
+    context_compression_enabled: bool = False
+    context_compression_threshold_percent: float = 0.50
+
     # Track 8: Context engine and session catalog
     context_engine_default: str = "builtin"
     context_compaction_enabled: bool = True
