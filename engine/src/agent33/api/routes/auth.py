@@ -17,6 +17,10 @@ from agent33.security.auth import (
     generate_api_key,
     revoke_api_key,
 )
+from agent33.security.auth_repository import (
+    InMemoryAuthRepository,
+    get_auth_repository,
+)
 from agent33.security.permissions import _get_token_payload, require_scope
 
 logger = logging.getLogger(__name__)
@@ -24,10 +28,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 # ---------------------------------------------------------------------------
-# In-memory user store — TODO: implement proper user store (database-backed)
+# User store -- backed by AuthRepository
 # ---------------------------------------------------------------------------
 
-_users: dict[str, dict[str, Any]] = {}
+
+def _get_users_dict() -> dict[str, dict[str, Any]]:
+    """Return the underlying users dict from the current repository.
+
+    Enables backwards compatibility for tests that directly import and
+    manipulate ``_users``.
+    """
+    repo = get_auth_repository()
+    if isinstance(repo, InMemoryAuthRepository):
+        return repo._users
+    return {}  # pragma: no cover
+
+
+# Backwards-compatible module-level reference.
+# Tests that import ``_users`` will get the dict from the default
+# InMemoryAuthRepository.
+_users: dict[str, dict[str, Any]] = _get_users_dict()
 _LEGACY_PBKDF2_SALT = b"agent33-salt"
 
 
@@ -60,14 +80,16 @@ def _bootstrap_default_user() -> None:
     password = settings.auth_bootstrap_admin_password.get_secret_value()
     if not username or not password:
         return
+    repo = get_auth_repository()
+    if repo.has_user(username):
+        return
     salt = secrets.token_bytes(16)
-    _users.setdefault(
-        username,
-        {
-            "salt": salt.hex(),
-            "password_hash": _hash_password(password, salt),
-            "scopes": _parse_scopes(settings.auth_bootstrap_admin_scopes, ensure_admin=True),
-        },
+    repo.create_user(
+        username=username,
+        password_hash=_hash_password(password, salt),
+        tenant_id="",
+        salt=salt.hex(),
+        scopes=_parse_scopes(settings.auth_bootstrap_admin_scopes, ensure_admin=True),
     )
 
 
@@ -107,7 +129,8 @@ class ApiKeyResponse(BaseModel):
 async def login(body: LoginRequest) -> TokenResponse:
     """Authenticate with username/password and receive a JWT."""
     _bootstrap_default_user()
-    user = _users.get(body.username)
+    repo = get_auth_repository()
+    user = repo.get_user(body.username)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
