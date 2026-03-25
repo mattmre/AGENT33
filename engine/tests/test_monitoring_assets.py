@@ -21,6 +21,8 @@ _EXPECTED_METRICS = {
     "effort_routing_export_failures_total",
     "effort_routing_estimated_cost_usd_avg",
     "effort_routing_estimated_token_budget_avg",
+    "http_requests_total",
+    "http_request_duration_seconds",
 }
 _EXPECTED_RECORDS = {
     "agent33:sli:effort_telemetry_export_failures:count_15m",
@@ -28,15 +30,17 @@ _EXPECTED_RECORDS = {
     "agent33:sli:high_effort_routing_ratio:ratio_15m",
     "agent33:sli:estimated_cost_usd_avg:max",
     "agent33:sli:estimated_token_budget_avg:max",
+    "agent33:http_requests:error_rate_5m",
+    "agent33:http_request_duration_seconds:p99_5m",
 }
 _EXPECTED_ALERTS = {
     "Agent33EffortTelemetryExportFailures",
     "Agent33HighEffortRoutingRatio",
     "Agent33EstimatedCostDrift",
+    "Agent33HighErrorRate",
+    "Agent33HighLatency",
 }
 _UNSUPPORTED_PROMQL_TOKENS = {
-    "http_requests_total",
-    "http_request_duration_seconds",
     "probe_success",
     "webhook",
     "evaluation",
@@ -80,7 +84,7 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert groups[0]["name"] == "agent33-observability"
 
     rules = groups[0].get("rules")
-    assert isinstance(rules, list) and len(rules) == 8
+    assert isinstance(rules, list) and len(rules) == 12
 
     record_names = {rule["record"] for rule in rules if "record" in rule}
     alert_names = {rule["alert"] for rule in rules if "alert" in rule}
