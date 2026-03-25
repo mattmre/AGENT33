@@ -159,6 +159,16 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
     else:
         checks["connectors"] = "unconfigured"
 
+    # Emit health check metrics when a metrics collector is available
+    collector = getattr(app_state, "metrics_collector", None)
+    if collector is not None:
+        for svc_name, svc_status in checks.items():
+            collector.observe(
+                "health_check_result",
+                1.0 if svc_status == "ok" else 0.0,
+                {"service": svc_name},
+            )
+
     all_ok = all(v == "ok" for v in checks.values())
     health_result: dict[str, Any] = {
         "status": "healthy" if all_ok else "degraded",

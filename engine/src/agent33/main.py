@@ -100,6 +100,7 @@ from agent33.config import settings
 from agent33.hooks.middleware import HookMiddleware
 from agent33.memory.long_term import LongTermMemory
 from agent33.messaging.bus import NATSMessageBus
+from agent33.observability.http_metrics import HTTPMetricsMiddleware
 from agent33.security.middleware import AuthMiddleware
 
 logger = structlog.get_logger()
@@ -1697,7 +1698,7 @@ app = FastAPI(
 )
 
 # -- Middleware (order matters: last added = first executed) --------------------
-# Execution order: CORS -> Auth -> RateLimit -> SizeLimit -> HookMiddleware -> Router
+# Order: HTTPMetrics -> CORS -> Auth -> RateLimit -> SizeLimit -> Hooks -> Router
 # HookMiddleware added first so it runs last (after auth resolves tenant_id)
 app.add_middleware(HookMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
@@ -1733,6 +1734,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
+
+# HTTP metrics middleware: outermost layer, records request count and latency.
+# Collector is resolved lazily from app.state.metrics_collector (set in lifespan).
+app.add_middleware(HTTPMetricsMiddleware)
 
 
 # -- Routers -------------------------------------------------------------------
