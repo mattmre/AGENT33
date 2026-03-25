@@ -36,6 +36,9 @@ class MetricsCollector:
             "effort_routing_high_effort_total",
             "effort_routing_export_failures_total",
             "http_requests_total",
+            "webhook_delivery_total",
+            "webhook_delivery_failures_total",
+            "dead_letter_queue_captures_total",
         }
     )
     _PROMETHEUS_OBSERVATION_ALLOWLIST = frozenset(
@@ -45,6 +48,8 @@ class MetricsCollector:
             "db_query_duration_seconds",
             "http_request_duration_seconds",
             "health_check_result",
+            "webhook_delivery_duration_seconds",
+            "dead_letter_queue_depth",
         }
     )
 

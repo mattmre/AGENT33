@@ -274,6 +274,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     agents.set_metrics(metrics_collector)
     dashboard.set_metrics(metrics_collector)
 
+    # Wire metrics into webhook delivery and dead-letter subsystems (P3.10)
+    from agent33.automation import dead_letter as dead_letter_mod
+    from agent33.automation import webhook_delivery as webhook_delivery_mod
+
+    webhook_delivery_mod.set_metrics(metrics_collector)
+    dead_letter_mod.set_metrics(metrics_collector)
+
     effort_telemetry_exporter = (
         FileEffortTelemetryExporter(settings.observability_effort_export_path)
         if settings.observability_effort_export_enabled

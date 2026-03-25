@@ -9,11 +9,25 @@ import time
 import uuid
 from collections import OrderedDict
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from agent33.observability.metrics import MetricsCollector
+
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level metrics collector (wired during app lifespan)
+# ---------------------------------------------------------------------------
+_metrics: MetricsCollector | None = None
+
+
+def set_metrics(collector: MetricsCollector) -> None:
+    """Install the global metrics collector (called during app lifespan init)."""
+    global _metrics  # noqa: PLW0603
+    _metrics = collector
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +213,7 @@ class WebhookDeliveryManager:
             record.current_retry = attempt.attempt_number
 
             success = 200 <= attempt.status_code < 300
+            webhook_id = record.webhook_id
 
             if success:
                 record.status = WebhookDeliveryStatus.DELIVERED
@@ -227,6 +242,40 @@ class WebhookDeliveryManager:
                     attempt.attempt_number,
                     backoff,
                 )
+
+        # -- Emit metrics (outside the lock) ---------------------------------
+        self._emit_delivery_metrics(
+            webhook_id=webhook_id,
+            success=success,
+            duration_seconds=attempt.duration_ms / 1000.0,
+        )
+
+    def _emit_delivery_metrics(
+        self,
+        *,
+        webhook_id: str,
+        success: bool,
+        duration_seconds: float,
+    ) -> None:
+        """Emit webhook delivery metrics to the metrics collector."""
+        collector = _metrics
+        if collector is None:
+            return
+        status = "success" if success else "failure"
+        collector.increment(
+            "webhook_delivery_total",
+            {"webhook_id": webhook_id, "status": status},
+        )
+        collector.observe(
+            "webhook_delivery_duration_seconds",
+            duration_seconds,
+            {"webhook_id": webhook_id},
+        )
+        if not success:
+            collector.increment(
+                "webhook_delivery_failures_total",
+                {"webhook_id": webhook_id},
+            )
 
     # -- queries --------------------------------------------------------------
 

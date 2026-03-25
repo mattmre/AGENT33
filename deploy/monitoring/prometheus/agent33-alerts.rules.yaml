@@ -107,3 +107,36 @@ groups:
           description: >
             5-minute p99 latency is {{ $value | humanizeDuration }},
             exceeding the 500ms SLO threshold.
+
+      # --- Webhook Delivery SLO (P3.10) ---
+      - record: agent33:webhook_delivery:failure_rate_5m
+        expr: |
+          sum(rate(webhook_delivery_failures_total[5m]))
+          /
+          clamp_min(sum(rate(webhook_delivery_total[5m])), 1)
+
+      - alert: Agent33WebhookDeliveryFailures
+        expr: agent33:webhook_delivery:failure_rate_5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: Webhook delivery failure rate exceeds 5%
+          description: >
+            5-minute webhook failure rate is {{ $value | humanizePercentage }},
+            exceeding the 5% SLO threshold.
+
+      - alert: Agent33DeadLetterQueueGrowing
+        expr: dead_letter_queue_depth > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: Dead-letter queue depth exceeds 100
+          description: >
+            Dead-letter queue has {{ $value }} items, indicating
+            persistent delivery failures.

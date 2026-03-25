@@ -22,10 +22,13 @@ _EXPECTED_METRICS = {
     "effort_routing_estimated_cost_usd_avg",
     "effort_routing_estimated_token_budget_avg",
 }
-# HTTP metrics only appear in Prometheus rules, not yet in Grafana dashboard
+# HTTP and webhook metrics only appear in Prometheus rules, not yet in Grafana dashboard
 _PROMETHEUS_ONLY_METRICS = {
     "http_requests_total",
     "http_request_duration_seconds",
+    "webhook_delivery_total",
+    "webhook_delivery_failures_total",
+    "dead_letter_queue_depth",
 }
 # Rolling-window metrics are exported by Prometheus but not yet referenced in
 # the Grafana dashboard, so they are checked separately.
@@ -43,6 +46,7 @@ _EXPECTED_RECORDS = {
     "agent33:sli:estimated_token_budget_window_avg:max",
     "agent33:http_requests:error_rate_5m",
     "agent33:http_request_duration_seconds:p99_5m",
+    "agent33:webhook_delivery:failure_rate_5m",
 }
 _EXPECTED_ALERTS = {
     "Agent33EffortTelemetryExportFailures",
@@ -50,10 +54,11 @@ _EXPECTED_ALERTS = {
     "Agent33EstimatedCostDrift",
     "Agent33HighErrorRate",
     "Agent33HighLatency",
+    "Agent33WebhookDeliveryFailures",
+    "Agent33DeadLetterQueueGrowing",
 }
 _UNSUPPORTED_PROMQL_TOKENS = {
     "probe_success",
-    "webhook",
     "evaluation",
     "readyz",
     "healthz",
@@ -95,7 +100,7 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert groups[0]["name"] == "agent33-observability"
 
     rules = groups[0].get("rules")
-    assert isinstance(rules, list) and len(rules) == 14
+    assert isinstance(rules, list) and len(rules) == 17
 
     record_names = {rule["record"] for rule in rules if "record" in rule}
     alert_names = {rule["alert"] for rule in rules if "alert" in rule}
@@ -152,3 +157,14 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
         "estimated_cost_usd_window_avg:max > 0.25" in alerts_by_name["Agent33EstimatedCostDrift"]
     )
     assert "rolling-window" in alert_annotations["Agent33EstimatedCostDrift"]["summary"].lower()
+
+    # P3.10: Webhook delivery recording rule and alerts
+    assert (
+        "webhook_delivery_failures_total"
+        in records_by_name["agent33:webhook_delivery:failure_rate_5m"]
+    )
+    assert "webhook_delivery_total" in records_by_name["agent33:webhook_delivery:failure_rate_5m"]
+    assert "failure_rate_5m > 0.05" in alerts_by_name["Agent33WebhookDeliveryFailures"]
+    assert "dead_letter_queue_depth > 100" in alerts_by_name["Agent33DeadLetterQueueGrowing"]
+    assert "failure rate" in alert_annotations["Agent33WebhookDeliveryFailures"]["summary"].lower()
+    assert "dead-letter" in alert_annotations["Agent33DeadLetterQueueGrowing"]["summary"].lower()
