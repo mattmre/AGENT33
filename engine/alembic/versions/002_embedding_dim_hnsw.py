@@ -3,10 +3,10 @@
 This migration:
 1. Drops the old IVFFlat index (which requires manual re-training and has
    lower recall than HNSW).
-2. Drops the old vector(1536) column (data loss — see note below).
+2. Drops the old vector(1536) column (data loss -- see note below).
 3. Re-creates the column at the configured dimension (default 768 for
    nomic-embed-text via Ollama).
-4. Creates an HNSW index with cosine distance ops — self-tuning, no
+4. Creates an HNSW index with cosine distance ops -- self-tuning, no
    training step, better recall at comparable speed.
 
 NOTE: This migration is destructive for existing embeddings.  If you have
@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "002"
@@ -43,53 +44,46 @@ _HNSW_M = 16
 _HNSW_EF_CONSTRUCTION = 200
 
 
+def _table_exists(table_name: str) -> bool:
+    """Check whether *table_name* exists in the current database."""
+    result = op.get_bind().execute(sa.text("SELECT to_regclass(:tbl)"), {"tbl": table_name})
+    return result.scalar() is not None
+
+
+def _upgrade_table(table_name: str) -> None:
+    """Drop old IVFFlat index/column and re-create with HNSW at target dim."""
+    op.execute(f"DROP INDEX IF EXISTS ix_{table_name}_embedding")
+    op.execute(f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS embedding")
+    op.execute(f"ALTER TABLE {table_name} ADD COLUMN embedding vector({_EMBEDDING_DIM})")
+    op.execute(
+        f"CREATE INDEX ix_{table_name}_embedding "
+        f"ON {table_name} USING hnsw (embedding vector_cosine_ops) "
+        f"WITH (m = {_HNSW_M}, ef_construction = {_HNSW_EF_CONSTRUCTION})"
+    )
+
+
+def _downgrade_table(table_name: str) -> None:
+    """Revert table back to vector(1536) with IVFFlat index."""
+    op.execute(f"DROP INDEX IF EXISTS ix_{table_name}_embedding")
+    op.execute(f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS embedding")
+    op.execute(f"ALTER TABLE {table_name} ADD COLUMN embedding vector(1536)")
+    op.execute(
+        f"CREATE INDEX ix_{table_name}_embedding "
+        f"ON {table_name} USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    )
+
+
 def upgrade() -> None:
-    # 1. Drop old IVFFlat index.
-    op.execute("DROP INDEX IF EXISTS ix_memory_documents_embedding")
+    _upgrade_table("memory_documents")
 
-    # 2. Drop old column and re-create at correct dimension.
-    op.execute("ALTER TABLE memory_documents DROP COLUMN IF EXISTS embedding")
-    op.execute(
-        f"ALTER TABLE memory_documents ADD COLUMN embedding vector({_EMBEDDING_DIM})"
-    )
-
-    # 3. Create HNSW index (cosine distance).
-    op.execute(
-        f"CREATE INDEX ix_memory_documents_embedding "
-        f"ON memory_documents USING hnsw (embedding vector_cosine_ops) "
-        f"WITH (m = {_HNSW_M}, ef_construction = {_HNSW_EF_CONSTRUCTION})"
-    )
-
-    # Also handle memory_records table created by ORM auto-create.
-    op.execute("DROP INDEX IF EXISTS ix_memory_records_embedding")
-    op.execute(
-        "ALTER TABLE memory_records DROP COLUMN IF EXISTS embedding"
-    )
-    op.execute(
-        f"ALTER TABLE memory_records ADD COLUMN embedding vector({_EMBEDDING_DIM})"
-    )
-    op.execute(
-        f"CREATE INDEX ix_memory_records_embedding "
-        f"ON memory_records USING hnsw (embedding vector_cosine_ops) "
-        f"WITH (m = {_HNSW_M}, ef_construction = {_HNSW_EF_CONSTRUCTION})"
-    )
+    # memory_records may not exist yet (created by ORM at startup).
+    if _table_exists("memory_records"):
+        _upgrade_table("memory_records")
 
 
 def downgrade() -> None:
-    # Revert memory_records.
-    op.execute("DROP INDEX IF EXISTS ix_memory_records_embedding")
-    op.execute("ALTER TABLE memory_records DROP COLUMN IF EXISTS embedding")
-    op.execute("ALTER TABLE memory_records ADD COLUMN embedding vector(1536)")
-    op.execute(
-        "CREATE INDEX ix_memory_records_embedding "
-        "ON memory_records USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    # memory_records may not exist yet (created by ORM at startup).
+    if _table_exists("memory_records"):
+        _downgrade_table("memory_records")
 
-    # Revert memory_documents.
-    op.execute("DROP INDEX IF EXISTS ix_memory_documents_embedding")
-    op.execute("ALTER TABLE memory_documents DROP COLUMN IF EXISTS embedding")
-    op.execute("ALTER TABLE memory_documents ADD COLUMN embedding vector(1536)")
-    op.execute(
-        "CREATE INDEX ix_memory_documents_embedding "
-        "ON memory_documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    _downgrade_table("memory_documents")

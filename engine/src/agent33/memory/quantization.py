@@ -135,10 +135,15 @@ class TurboQuantCompressor:
 
     def decompress(self, qv: QuantizedVector) -> list[float]:
         """Reconstruct a float vector from its quantized representation."""
+        if qv.dim != self._dim:
+            raise ValueError(
+                f"QuantizedVector dim={qv.dim} does not match compressor dim={self._dim}"
+            )
         quantized = self._unpack_codes(qv.codes, qv.dim, qv.bits)
         rotated = quantized.astype(np.float64) * qv.scale + qv.offset
         original = self._rotation_inv @ rotated
-        return original.tolist()
+        result: list[float] = original.tolist()
+        return result
 
     def compress_batch(self, vectors: list[list[float]]) -> list[QuantizedVector]:
         """Quantize multiple vectors."""
@@ -152,12 +157,14 @@ class TurboQuantCompressor:
         """Theoretical compression ratio vs float32 storage.
 
         At 4 bits/coord on 768 dimensions:
-          float32: 768 × 4 = 3072 bytes
-          quantized: 768 × 0.5 + 16 (header) = 400 bytes
-          ratio ≈ 7.7×
+          float32: 768 x 4 = 3072 bytes
+          quantized: 768 x 0.5 + 11 (header) = 395 bytes
+          ratio ~ 7.8x
+
+        Header layout: ``<HBff`` = u16 + u8 + f32 + f32 = 2+1+4+4 = 11 bytes.
         """
         original_bytes = self._dim * 4  # float32
-        compressed_bytes = math.ceil(self._dim * self._bits / 8) + 16  # codes + header
+        compressed_bytes = math.ceil(self._dim * self._bits / 8) + 11  # codes + header
         return original_bytes / compressed_bytes
 
     @property
@@ -198,6 +205,8 @@ class TurboQuantCompressor:
         there.  Since rotation preserves inner products, this is equivalent
         to cosine similarity in the original space (within quantization error).
         """
+        if qv1.dim != qv2.dim or qv1.bits != qv2.bits:
+            raise ValueError("Cannot compare QuantizedVectors with different dim/bits")
         c1 = self._unpack_codes(qv1.codes, qv1.dim, qv1.bits).astype(np.float64)
         c2 = self._unpack_codes(qv2.codes, qv2.dim, qv2.bits).astype(np.float64)
         r1 = c1 * qv1.scale + qv1.offset

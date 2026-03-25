@@ -154,14 +154,14 @@ class TestCompressionRatio:
     def test_4bit_768d_ratio(self) -> None:
         c = TurboQuantCompressor(dim=768, bits=4)
         ratio = c.compression_ratio()
-        # float32: 768*4=3072 bytes, 4-bit: 384+16=400 bytes → ~7.7×
+        # float32: 768*4=3072 bytes, 4-bit: 384+11=395 bytes -> ~7.8x
         assert ratio > 7.0
         assert ratio < 8.5
 
     def test_8bit_ratio(self) -> None:
         c = TurboQuantCompressor(dim=768, bits=8)
         ratio = c.compression_ratio()
-        # float32: 3072, 8-bit: 768+16=784 → ~3.9×
+        # float32: 3072, 8-bit: 768+11=779 -> ~3.9x
         assert ratio > 3.5
         assert ratio < 4.5
 
@@ -171,8 +171,8 @@ class TestCompressionRatio:
         v = _random_vector(768, seed=5)
         qv = c.compress(v)
         float32_size = 768 * 4  # 3072 bytes
-        quantized_size = len(qv.codes) + 16  # codes + scale/offset/dim/bits
-        assert quantized_size < float32_size / 5  # at least 5× smaller
+        quantized_size = len(qv.codes) + 11  # codes + header (u16+u8+f32+f32)
+        assert quantized_size < float32_size / 5  # at least 5x smaller
 
 
 # ── Edge cases ───────────────────────────────────────────────────────────
