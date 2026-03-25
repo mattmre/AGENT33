@@ -190,3 +190,25 @@ the following are true:
 
 Until then, the safe production posture is the single-instance baseline defined
 in [`production-deployment-runbook.md`](production-deployment-runbook.md).
+
+## Deployed Autoscaling Manifests
+
+The following autoscaling resources are deployed with `maxReplicas: 1` to
+preserve the single-instance guardrail while preparing the infrastructure for
+future multi-replica rollout:
+
+- **HorizontalPodAutoscaler** (`deploy/k8s/base/api-hpa.yaml`): targets the
+  `agent33-api` Deployment with CPU (75%) and memory (80%) utilization metrics.
+  `maxReplicas` is set to `1` and must not be increased until all blocking
+  surfaces listed above are resolved.
+- **PodDisruptionBudget** (`deploy/k8s/base/api-pdb.yaml`): enforces
+  `minAvailable: 1` to prevent voluntary disruptions from evicting the single
+  API pod during node drains or cluster upgrades.
+- **Resource requests/limits** (`deploy/k8s/base/api-deployment.yaml`):
+  `cpu: 250m / 2` and `memory: 512Mi / 2Gi` are set on the API container to
+  enable the HPA metrics pipeline and prevent unbounded resource consumption.
+
+The production overlay (`deploy/k8s/overlays/production/api-hpa-patch.yaml`)
+reinforces the `maxReplicas: 1` constraint with an explicit warning comment.
+When the readiness gate above is satisfied, increase `maxReplicas` in both the
+base and production overlay manifests.
