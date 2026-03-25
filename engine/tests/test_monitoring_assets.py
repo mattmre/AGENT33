@@ -21,6 +21,9 @@ _EXPECTED_METRICS = {
     "effort_routing_export_failures_total",
     "effort_routing_estimated_cost_usd_avg",
     "effort_routing_estimated_token_budget_avg",
+}
+# HTTP metrics only appear in Prometheus rules, not yet in Grafana dashboard
+_PROMETHEUS_ONLY_METRICS = {
     "http_requests_total",
     "http_request_duration_seconds",
 }
@@ -98,7 +101,7 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert record_names == _EXPECTED_RECORDS
     assert alert_names == _EXPECTED_ALERTS
 
-    for metric in _EXPECTED_METRICS:
+    for metric in _EXPECTED_METRICS | _PROMETHEUS_ONLY_METRICS:
         assert any(metric in expr for expr in expressions), metric
 
     for token in _UNSUPPORTED_PROMQL_TOKENS:
