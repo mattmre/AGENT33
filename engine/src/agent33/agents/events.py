@@ -20,6 +20,7 @@ EventType = Literal[
     "confirmation_prompt",
     "confirmation_result",
     "context_managed",
+    "context_compressed",
     "error",
     "completed",
 ]

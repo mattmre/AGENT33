@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.llm.text_tool_parser import TextToolParser
+    from agent33.memory.context_compressor import ContextCompressor
     from agent33.memory.observation import ObservationCapture
     from agent33.tools.base import ToolContext
     from agent33.tools.governance import ToolGovernance
@@ -122,6 +123,8 @@ class ToolLoop:
         hook_registry: Any | None = None,
         tenant_id: str = "",
         autonomy_level: AutonomyLevel | None = None,
+        context_compressor: ContextCompressor | None = None,
+        model_context_window: int = 128_000,
         *,
         redact_secrets: bool = True,
     ) -> None:
@@ -139,6 +142,8 @@ class ToolLoop:
         self._hook_registry = hook_registry
         self._tenant_id = tenant_id
         self._autonomy_level = autonomy_level
+        self._context_compressor = context_compressor
+        self._model_context_window = model_context_window
         self._redact_secrets = redact_secrets
 
     # ------------------------------------------------------------------
@@ -382,6 +387,29 @@ class ToolLoop:
             # --- Context management after message changes ---------------------
             if self._context_manager is not None:
                 messages = await self._context_manager.manage(messages)
+
+            # --- Phase 50: Context compression --------------------------------
+            if self._context_compressor is not None and self._context_compressor.needs_compression(
+                messages, self._model_context_window
+            ):
+                try:
+                    compressed, stats = await self._context_compressor.compress(
+                        messages, model, self._router
+                    )
+                    # Atomic swap: replace the message list contents
+                    messages.clear()
+                    messages.extend(compressed)
+                    logger.info(
+                        "Context compression applied: %d -> %d tokens (ratio=%.2f)",
+                        stats.original_tokens,
+                        stats.compressed_tokens,
+                        stats.compression_ratio,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Context compression failed, continuing with uncompressed context",
+                        exc_info=True,
+                    )
 
             # --- Check termination conditions ---------------------------------
             if state.consecutive_errors >= self._config.error_threshold:
@@ -627,6 +655,41 @@ class ToolLoop:
                             data={
                                 "before": before_len,
                                 "after": len(accumulated_messages),
+                            },
+                        )
+
+                # --- Phase 50: Context compression --------------------------------
+                if (
+                    self._context_compressor is not None
+                    and self._context_compressor.needs_compression(
+                        accumulated_messages, self._model_context_window
+                    )
+                ):
+                    try:
+                        compressed, comp_stats = await self._context_compressor.compress(
+                            accumulated_messages, model, self._router
+                        )
+                        before_count = len(accumulated_messages)
+                        accumulated_messages = compressed
+                        yield ToolLoopEvent(
+                            event_type="context_compressed",
+                            iteration=state.iteration,
+                            data={
+                                "before_tokens": comp_stats.original_tokens,
+                                "after_tokens": comp_stats.compressed_tokens,
+                                "messages_removed": comp_stats.messages_removed,
+                                "before_messages": before_count,
+                                "after_messages": len(accumulated_messages),
+                                "ratio": comp_stats.compression_ratio,
+                            },
+                        )
+                    except Exception as comp_exc:
+                        yield ToolLoopEvent(
+                            event_type="error",
+                            iteration=state.iteration,
+                            data={
+                                "error": str(comp_exc),
+                                "phase": "context_compression",
                             },
                         )
 
