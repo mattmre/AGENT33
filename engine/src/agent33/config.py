@@ -457,6 +457,10 @@ class Settings(BaseSettings):
     workflow_ws_ping_interval: float = 30.0
     workflow_ws_ping_timeout: float = 10.0
 
+    # Session trajectory capture (Phase 59)
+    trajectory_capture_enabled: bool = False  # opt-in
+    trajectory_output_dir: str = "trajectories"
+
     @field_validator("control_plane_backend")
     @classmethod
     def _validate_control_plane_backend(cls, value: str) -> str:
