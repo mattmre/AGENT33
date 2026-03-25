@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from agent33.api.middleware.session_pod import SessionPodMiddleware
 from agent33.api.routes import (
     agents,
     auth,
@@ -1732,7 +1733,7 @@ app = FastAPI(
 )
 
 # -- Middleware (order matters: last added = first executed) --------------------
-# Order: HTTPMetrics -> CORS -> Auth -> RateLimit -> SizeLimit -> Hooks -> Router
+# Order: SessionPod -> HTTPMetrics -> CORS -> Auth -> RateLimit -> SizeLimit -> Hooks -> Router
 # HookMiddleware added first so it runs last (after auth resolves tenant_id)
 app.add_middleware(HookMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
@@ -1769,9 +1770,13 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
-# HTTP metrics middleware: outermost layer, records request count and latency.
+# HTTP metrics middleware: records request count and latency.
 # Collector is resolved lazily from app.state.metrics_collector (set in lifespan).
 app.add_middleware(HTTPMetricsMiddleware)
+
+# Session pod identity middleware: outermost layer, adds X-Agent33-Session-Pod
+# header for debugging sticky routing in multi-replica deployments.
+app.add_middleware(SessionPodMiddleware)
 
 
 # -- Routers -------------------------------------------------------------------
