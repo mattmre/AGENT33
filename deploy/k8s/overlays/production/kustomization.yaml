@@ -5,3 +5,4 @@ resources:
 patches:
   - path: api-deployment-patch.yaml
   - path: api-hpa-patch.yaml
+  - path: api-ingress-patch.yaml

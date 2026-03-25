@@ -191,6 +191,64 @@ the following are true:
 Until then, the safe production posture is the single-instance baseline defined
 in [`production-deployment-runbook.md`](production-deployment-runbook.md).
 
+## Session Affinity (Ingress-Level Sticky Routing)
+
+The base Ingress resource (`deploy/k8s/base/api-ingress.yaml`) configures
+cookie-based session affinity via the nginx ingress controller. This ensures
+that all requests carrying the same affinity cookie are routed to the same
+backend pod for the lifetime of the cookie.
+
+### Cookie Details
+
+| Parameter | Value |
+| --- | --- |
+| Cookie name | `AGENT33_AFFINITY` |
+| Expiry / max-age | 3600 seconds (1 hour) |
+| Change on failure | `true` (re-sticky to a healthy pod if the original becomes unavailable) |
+
+### Session Types That Require Affinity
+
+The following session types are process-local and must return to the same pod:
+
+| Session type | Why affinity is needed |
+| --- | --- |
+| Workflow WebSocket / SSE | connection tables, replay buffers, and snapshots are process-local |
+| Browser tool sessions | Playwright browser/page objects live only in one process |
+| Voice sessions / daemons | active voice runtime ownership is process-local |
+| Jupyter kernel sessions | kernel handles are owned by one process |
+| Operator session hot cache | `_active` is local even though disk state can be reloaded |
+
+### Debugging Affinity
+
+Every response includes an `X-Agent33-Session-Pod` header containing the pod
+hostname (from the `HOSTNAME` environment variable set by Kubernetes). Compare
+this header across sequential requests to verify that affinity is working:
+
+```bash
+# First request — note the pod name
+curl -s -D - https://agent33.example.com/v1/health | grep X-Agent33-Session-Pod
+
+# Second request with affinity cookie — should show same pod
+curl -s -D - -b "AGENT33_AFFINITY=<cookie-value>" \
+  https://agent33.example.com/v1/health | grep X-Agent33-Session-Pod
+```
+
+### Traefik Alternative
+
+If the cluster uses Traefik instead of the nginx ingress controller, uncomment
+the Traefik annotations in `api-ingress.yaml` and comment out the nginx ones.
+The Traefik annotations provide the same cookie-based sticky routing:
+
+- `traefik.ingress.kubernetes.io/service.sticky.cookie: "true"`
+- `traefik.ingress.kubernetes.io/service.sticky.cookie.name: "AGENT33_AFFINITY"`
+- `traefik.ingress.kubernetes.io/service.sticky.cookie.httponly: "true"`
+
+### WebSocket Timeout
+
+The Ingress sets `proxy-read-timeout` and `proxy-send-timeout` to 3600 seconds
+to support long-lived WebSocket and SSE connections used by workflow streaming,
+voice sessions, and kernel execution.
+
 ## Deployed Autoscaling Manifests
 
 The following autoscaling resources are deployed with `maxReplicas: 1` to
