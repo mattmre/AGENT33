@@ -122,6 +122,8 @@ class ToolLoop:
         hook_registry: Any | None = None,
         tenant_id: str = "",
         autonomy_level: AutonomyLevel | None = None,
+        *,
+        redact_secrets: bool = True,
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -137,6 +139,7 @@ class ToolLoop:
         self._hook_registry = hook_registry
         self._tenant_id = tenant_id
         self._autonomy_level = autonomy_level
+        self._redact_secrets = redact_secrets
 
     # ------------------------------------------------------------------
     # Public API
@@ -274,6 +277,10 @@ class ToolLoop:
                         if tool_result.success
                         else f"Error: {truncate_tool_output(tool_result.error)}"
                     )
+                    # Phase 52: redact secrets from tool output
+                    from agent33.security.redaction import redact_secrets
+
+                    content = redact_secrets(content, enabled=self._redact_secrets)
                     messages.append(
                         ChatMessage(
                             role="tool",
@@ -591,6 +598,10 @@ class ToolLoop:
                             if tool_result.success
                             else f"Error: {truncate_tool_output(tool_result.error)}"
                         )
+                        # Phase 52: redact secrets from tool output
+                        from agent33.security.redaction import redact_secrets
+
+                        content = redact_secrets(content, enabled=self._redact_secrets)
                         accumulated_messages.append(
                             ChatMessage(
                                 role="tool",

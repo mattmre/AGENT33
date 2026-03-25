@@ -1,4 +1,4 @@
-"""Structured logging with PII redaction."""
+"""Structured logging with PII and secret redaction."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
 import structlog
+
+from agent33.security.redaction import redact_secrets
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 _PHONE_RE = re.compile(r"(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
@@ -38,8 +40,26 @@ def pii_redaction_processor(
     return {k: _redact_value(v) for k, v in event_dict.items()}
 
 
+def secret_redaction_processor(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Structlog processor that redacts secrets from all string values.
+
+    Reads ``redact_secrets_enabled`` from the application settings at
+    import time.  The processor is always installed in the chain; when
+    the setting is ``False`` it becomes a no-op pass-through.
+    """
+    from agent33.config import settings
+
+    enabled = settings.redact_secrets_enabled
+    return {
+        k: redact_secrets(v, enabled=enabled) if isinstance(v, str) else v
+        for k, v in event_dict.items()
+    }
+
+
 def configure_logging() -> None:
-    """Set up structlog with JSON rendering and PII redaction."""
+    """Set up structlog with JSON rendering, PII redaction, and secret redaction."""
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -47,6 +67,7 @@ def configure_logging() -> None:
             structlog.stdlib.add_logger_name,
             structlog.processors.TimeStamper(fmt="iso"),
             pii_redaction_processor,
+            secret_redaction_processor,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,

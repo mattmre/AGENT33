@@ -644,6 +644,8 @@ class AgentRuntime:
                 iterative=True,
                 max_iterations=loop_config.max_iterations,
             )
+            from agent33.config import settings as _settings
+
             tool_loop = ToolLoop(
                 router=self._router,
                 tool_registry=iterative_tool_registry,
@@ -656,6 +658,7 @@ class AgentRuntime:
                 session_id=self._session_id,
                 context_manager=self._context_manager,
                 autonomy_level=self._definition.autonomy_level,
+                redact_secrets=_settings.redact_secrets_enabled,
             )
 
             task_input = json.dumps(inputs, indent=2)
@@ -711,6 +714,8 @@ class AgentRuntime:
         ]
 
         # --- Create and run the tool loop ---
+        from agent33.config import settings as _settings
+
         loop = ToolLoop(
             router=self._router,
             tool_registry=iterative_tool_registry,
@@ -723,6 +728,7 @@ class AgentRuntime:
             session_id=self._session_id,
             context_manager=self._context_manager,
             autonomy_level=self._definition.autonomy_level,
+            redact_secrets=_settings.redact_secrets_enabled,
         )
 
         loop_result = await loop.run(
@@ -874,6 +880,8 @@ class AgentRuntime:
         ]
 
         # Create and run the tool loop
+        from agent33.config import settings as _settings
+
         loop_config = config or ToolLoopConfig()
         loop = ToolLoop(
             router=self._router,
@@ -887,6 +895,7 @@ class AgentRuntime:
             session_id=self._session_id,
             context_manager=self._context_manager,
             tenant_id=self._tenant_id,
+            redact_secrets=_settings.redact_secrets_enabled,
         )
 
         routed_model, routed_max_tokens = self._resolve_execution_parameters(
