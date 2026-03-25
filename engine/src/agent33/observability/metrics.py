@@ -22,6 +22,7 @@ class MetricsCollector:
             "effort_routing_decisions_total",
             "effort_routing_high_effort_total",
             "effort_routing_export_failures_total",
+            "http_requests_total",
         }
     )
     _PROMETHEUS_OBSERVATION_ALLOWLIST = frozenset(
@@ -29,6 +30,8 @@ class MetricsCollector:
             "effort_routing_estimated_cost_usd",
             "effort_routing_estimated_token_budget",
             "db_query_duration_seconds",
+            "http_request_duration_seconds",
+            "health_check_result",
         }
     )
 

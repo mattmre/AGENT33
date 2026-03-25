@@ -421,6 +421,11 @@ class Settings(BaseSettings):
     webhook_delivery_max_delay: float = 300.0
     webhook_delivery_max_records: int = 10_000
 
+    # SLO thresholds (P3.3)
+    slo_availability_target: float = 0.999  # 99.9%
+    slo_latency_p99_ms: int = 500  # milliseconds
+    slo_latency_agent_p99_ms: int = 10000  # milliseconds for agent invocations
+
     # Query profiling (P1.4)
     slow_query_threshold_ms: int = 100  # log WARNING when a tracked DB op exceeds this
 
