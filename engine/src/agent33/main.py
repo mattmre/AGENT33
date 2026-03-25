@@ -1521,6 +1521,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backend="in_memory" if isinstance(webhook_repo, InMemoryWebhookRepository) else "custom",
     )
 
+    from agent33.automation.job_history_repository import (
+        InMemoryJobHistoryRepository,
+        get_job_history_repository,
+    )
+    from agent33.automation.scheduler_repository import (
+        InMemorySchedulerJobRepository,
+        get_scheduler_job_repository,
+    )
+
+    scheduler_job_repo = get_scheduler_job_repository()
+    logger.info(
+        "scheduler_job_repository_initialized",
+        backend=(
+            "in_memory"
+            if isinstance(scheduler_job_repo, InMemorySchedulerJobRepository)
+            else "custom"
+        ),
+    )
+
+    job_history_repo = get_job_history_repository()
+    logger.info(
+        "job_history_repository_initialized",
+        backend=(
+            "in_memory" if isinstance(job_history_repo, InMemoryJobHistoryRepository) else "custom"
+        ),
+    )
+
     yield
 
     # -- Shutdown ----------------------------------------------------------

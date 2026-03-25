@@ -5,11 +5,14 @@ from __future__ import annotations
 import dataclasses
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+
+if TYPE_CHECKING:
+    from agent33.automation.scheduler_repository import SchedulerJobRepository
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,10 @@ class ScheduledJob:
 class WorkflowScheduler:
     """Schedules workflow executions via cron expressions or fixed intervals.
 
-    Jobs are stored in-memory through APScheduler's default job store.
+    Job metadata is delegated to a :class:`SchedulerJobRepository` so that
+    storage can be swapped between in-memory (default) and database-backed
+    implementations for multi-replica safety.
+
     A callback must be provided at construction time; it is invoked with
     ``(job_id, workflow_name, inputs)`` whenever a job fires.
     """
@@ -36,9 +42,12 @@ class WorkflowScheduler:
     def __init__(
         self,
         on_trigger: Any | None = None,
+        job_repository: SchedulerJobRepository | None = None,
     ) -> None:
+        from agent33.automation.scheduler_repository import get_scheduler_job_repository
+
         self._scheduler = AsyncIOScheduler()
-        self._jobs: dict[str, ScheduledJob] = {}
+        self._job_repo = job_repository or get_scheduler_job_repository()
         self._on_trigger = on_trigger
 
     # -- lifecycle ------------------------------------------------------------
@@ -91,12 +100,14 @@ class WorkflowScheduler:
             args=[job_id, workflow_name, inputs],
         )
 
-        self._jobs[job_id] = ScheduledJob(
-            job_id=job_id,
-            workflow_name=workflow_name,
-            schedule_type="cron",
-            schedule_expr=cron_expr,
-            inputs=inputs,
+        self._job_repo.add_job(
+            ScheduledJob(
+                job_id=job_id,
+                workflow_name=workflow_name,
+                schedule_type="cron",
+                schedule_expr=cron_expr,
+                inputs=inputs,
+            )
         )
         logger.info("Scheduled cron job %s for workflow %s", job_id, workflow_name)
         return job_id
@@ -123,28 +134,30 @@ class WorkflowScheduler:
             args=[job_id, workflow_name, inputs],
         )
 
-        self._jobs[job_id] = ScheduledJob(
-            job_id=job_id,
-            workflow_name=workflow_name,
-            schedule_type="interval",
-            schedule_expr=f"{seconds}s",
-            inputs=inputs,
+        self._job_repo.add_job(
+            ScheduledJob(
+                job_id=job_id,
+                workflow_name=workflow_name,
+                schedule_type="interval",
+                schedule_expr=f"{seconds}s",
+                inputs=inputs,
+            )
         )
         logger.info("Scheduled interval job %s for workflow %s", job_id, workflow_name)
         return job_id
 
     def remove(self, job_id: str) -> bool:
         """Remove a scheduled job by ID. Returns True if the job existed."""
-        if job_id not in self._jobs:
+        if self._job_repo.get_job(job_id) is None:
             return False
         self._scheduler.remove_job(job_id)
-        del self._jobs[job_id]
+        self._job_repo.remove_job(job_id)
         logger.info("Removed scheduled job %s", job_id)
         return True
 
     def list_jobs(self) -> list[ScheduledJob]:
         """Return all registered scheduled jobs."""
-        return list(self._jobs.values())
+        return self._job_repo.list_jobs()
 
     # -- internal -------------------------------------------------------------
 
