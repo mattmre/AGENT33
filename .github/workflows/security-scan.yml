@@ -17,7 +17,7 @@ jobs:
     name: Dependency CVE Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Restore Trivy DB cache
         uses: actions/cache@v5 # TODO(node24): upgrade when v5 ships
@@ -40,7 +40,7 @@ jobs:
     name: Container Image Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Restore Trivy DB cache
         uses: actions/cache@v5 # TODO(node24): upgrade when v5 ships
@@ -84,7 +84,7 @@ jobs:
     name: IaC Misconfiguration Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Restore Trivy DB cache
         uses: actions/cache@v5 # TODO(node24): upgrade when v5 ships
@@ -106,7 +106,7 @@ jobs:
     name: Secret Leak Detection
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Restore Trivy DB cache
         uses: actions/cache@v5 # TODO(node24): upgrade when v5 ships
@@ -131,7 +131,7 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Restore Trivy DB cache
         uses: actions/cache@v5 # TODO(node24): upgrade when v5 ships
@@ -170,7 +170,7 @@ jobs:
       contents: read
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Determine Claude security review mode (API key only)
         id: claude-review

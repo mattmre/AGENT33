@@ -81,7 +81,7 @@ jobs:
       run:
         working-directory: engine
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5 # TODO(node24): upgrade when v6 ships
         with:
@@ -105,7 +105,7 @@ jobs:
       run:
         working-directory: engine
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5 # TODO(node24): upgrade when v6 ships
         with:
@@ -123,7 +123,7 @@ jobs:
       run:
         working-directory: engine
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Build Docker images
         run: docker compose build
@@ -135,7 +135,7 @@ jobs:
       run:
         working-directory: engine
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5 # TODO(node24): upgrade when v6 ships
         with:
