@@ -5,6 +5,8 @@ resources:
   - namespace.yaml
   - api-configmap.yaml
   - api-deployment.yaml
+  - api-hpa.yaml
+  - api-pdb.yaml
   - api-service.yaml
   - postgres-statefulset.yaml
   - postgres-service.yaml
