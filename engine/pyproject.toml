@@ -110,6 +110,8 @@ markers = [
     "benchmark: marks benchmark and performance tests",
     "smoke: marks fast smoke tests for CI",
     "e2e: marks cross-subsystem end-to-end integration tests",
+    "live: marks tests that call real external services (LLM providers, etc.)",
+    "timeout: per-test timeout in seconds (enforced by pytest-timeout plugin if installed)",
 ]
 
 [tool.coverage.run]
