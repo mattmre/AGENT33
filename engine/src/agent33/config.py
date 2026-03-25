@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     component_security_scan_store_db_path: str = "var/component_security_scans.sqlite3"
     component_security_scan_store_retention_days: int = 90
 
+    # Secret redaction in logs & tool output (Phase 52)
+    redact_secrets_enabled: bool = True
+
     # Rate limiting (per-tenant, sliding window)
     rate_limit_enabled: bool = True
     rate_limit_default_tier: str = "standard"
