@@ -36,6 +36,7 @@ from agent33.api.routes import (
     health,
     hooks,
     improvements,
+    insights,
     marketplace,
     mcp,
     mcp_proxy,
@@ -325,6 +326,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     app.state.alert_manager = alert_manager
     dashboard.set_alert_manager(alert_manager)
+
+    # -- Session analytics (Phase 57) -----------------------------------------
+    insights.set_insights_dependencies(metrics_collector)
 
     # -- Connector metrics collector (Phase 32 UX) -------------------------
     from agent33.connectors.monitoring import ConnectorMetricsCollector
@@ -1878,6 +1882,7 @@ app.include_router(autonomy.router)
 app.include_router(releases.router)
 app.include_router(research.router)
 app.include_router(improvements.router)
+app.include_router(insights.router)
 app.include_router(training.router)
 app.include_router(benchmarks.router)
 app.include_router(component_security.router)
