@@ -267,7 +267,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     from agent33.observability.metrics import MetricsCollector
 
-    metrics_collector = MetricsCollector()
+    metrics_collector = MetricsCollector(
+        window_seconds=settings.metrics_rolling_window_seconds,
+    )
     app.state.metrics_collector = metrics_collector
     agents.set_metrics(metrics_collector)
     dashboard.set_metrics(metrics_collector)

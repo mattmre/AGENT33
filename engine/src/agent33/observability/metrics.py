@@ -10,12 +10,25 @@ from typing import Any
 
 
 @dataclass
+class _TimestampedValue:
+    """A single observation with a timestamp for rolling-window support."""
+
+    timestamp: float
+    value: float
+
+
+@dataclass
 class _Observation:
-    values: list[float] = field(default_factory=list)
+    values: list[_TimestampedValue] = field(default_factory=list)
 
 
 class MetricsCollector:
-    """Tracks counters and observations for key metrics."""
+    """Tracks counters and observations for key metrics.
+
+    Observations are stored with timestamps to support rolling-window
+    statistics in addition to lifetime aggregates.  The window size is
+    configurable via ``window_seconds`` (default 300 = 5 minutes).
+    """
 
     _PROMETHEUS_COUNTER_ALLOWLIST = frozenset(
         {
@@ -35,11 +48,12 @@ class MetricsCollector:
         }
     )
 
-    def __init__(self) -> None:
+    def __init__(self, *, window_seconds: int = 300) -> None:
         self._counters: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._observations: dict[str, dict[str, _Observation]] = defaultdict(
             lambda: defaultdict(_Observation)
         )
+        self.window_seconds = window_seconds
 
     @staticmethod
     def _label_key(labels: dict[str, str] | None) -> str:
@@ -88,10 +102,32 @@ class MetricsCollector:
     def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """Record an observed value (e.g. latency)."""
         key = self._label_key(labels)
-        self._observations[name][key].values.append(value)
+        self._observations[name][key].values.append(
+            _TimestampedValue(timestamp=time.time(), value=value)
+        )
+
+    def _prune_window(self, obs: _Observation) -> list[_TimestampedValue]:
+        """Return entries within the rolling window and prune expired ones.
+
+        Modifies the observation in-place by removing entries older than
+        ``self.window_seconds`` and returns the surviving entries.
+        """
+        cutoff = time.time() - self.window_seconds
+        # Partition: entries are appended chronologically, so we can bisect
+        # from the left to find the first entry that is within the window.
+        surviving: list[_TimestampedValue] = [tv for tv in obs.values if tv.timestamp >= cutoff]
+        obs.values[:] = surviving
+        return surviving
 
     def get_summary(self) -> dict[str, Any]:
-        """Return a summary of all metrics."""
+        """Return a summary of all metrics.
+
+        Each observation entry contains both lifetime statistics (``count``,
+        ``sum``, ``avg``, ``min``, ``max``) and rolling-window statistics
+        (``window_count``, ``window_sum``, ``window_avg``, ``window_min``,
+        ``window_max``).  The lifetime keys preserve backwards compatibility
+        with existing consumers such as ``AlertManager``.
+        """
         summary: dict[str, Any] = {}
 
         # Counters
@@ -102,23 +138,45 @@ class MetricsCollector:
                 summary[name] = dict(label_map)
 
         # Observations
+        cutoff = time.time() - self.window_seconds
         for name, obs_map in self._observations.items():
             for label_key, obs in obs_map.items():
                 display = f"{name}({label_key})" if label_key else name
-                vals = obs.values
-                if vals:
-                    summary[display] = {
-                        "count": len(vals),
-                        "sum": sum(vals),
-                        "avg": sum(vals) / len(vals),
-                        "min": min(vals),
-                        "max": max(vals),
+                all_vals = [tv.value for tv in obs.values]
+                if all_vals:
+                    entry: dict[str, Any] = {
+                        # Lifetime stats (backwards-compatible)
+                        "count": len(all_vals),
+                        "sum": sum(all_vals),
+                        "avg": sum(all_vals) / len(all_vals),
+                        "min": min(all_vals),
+                        "max": max(all_vals),
                     }
+                    # Rolling-window stats
+                    window_vals = [tv.value for tv in obs.values if tv.timestamp >= cutoff]
+                    if window_vals:
+                        entry["window_count"] = len(window_vals)
+                        entry["window_sum"] = sum(window_vals)
+                        entry["window_avg"] = sum(window_vals) / len(window_vals)
+                        entry["window_min"] = min(window_vals)
+                        entry["window_max"] = max(window_vals)
+                    else:
+                        entry["window_count"] = 0
+                        entry["window_sum"] = 0.0
+                        entry["window_avg"] = 0.0
+                        entry["window_min"] = 0.0
+                        entry["window_max"] = 0.0
+                    summary[display] = entry
 
         return summary
 
     def render_prometheus(self) -> str:
-        """Render a low-cardinality Prometheus exposition payload."""
+        """Render a low-cardinality Prometheus exposition payload.
+
+        Includes both lifetime and rolling-window observation gauges.
+        Window gauges use a ``_window_`` infix to distinguish them from
+        lifetime gauges.
+        """
         lines: list[str] = []
 
         for name in sorted(self._PROMETHEUS_COUNTER_ALLOWLIST):
@@ -130,11 +188,13 @@ class MetricsCollector:
             for label_key, value in sorted(label_map.items()):
                 lines.append(f"{metric_name}{self._render_prometheus_labels(label_key)} {value}")
 
+        cutoff = time.time() - self.window_seconds
         for name in sorted(self._PROMETHEUS_OBSERVATION_ALLOWLIST):
             obs_map = self._observations.get(name)
             if not obs_map:
                 continue
             metric_name = self._sanitize_metric_name(name)
+            # Lifetime TYPE declarations
             lines.extend(
                 [
                     f"# TYPE {metric_name}_count gauge",
@@ -144,23 +204,47 @@ class MetricsCollector:
                     f"# TYPE {metric_name}_max gauge",
                 ]
             )
+            # Rolling-window TYPE declarations
+            lines.extend(
+                [
+                    f"# TYPE {metric_name}_window_count gauge",
+                    f"# TYPE {metric_name}_window_avg gauge",
+                    f"# TYPE {metric_name}_window_min gauge",
+                    f"# TYPE {metric_name}_window_max gauge",
+                ]
+            )
             for label_key, observation in sorted(obs_map.items()):
-                values = observation.values
-                if not values:
+                all_values = [tv.value for tv in observation.values]
+                if not all_values:
                     continue
-                labels = self._render_prometheus_labels(label_key)
-                total = sum(values)
-                count = len(values)
-                minimum = min(values)
-                maximum = max(values)
+                prom_labels = self._render_prometheus_labels(label_key)
+                total = sum(all_values)
+                count = len(all_values)
+                minimum = min(all_values)
+                maximum = max(all_values)
                 average = total / count
+                # Lifetime gauges
                 lines.extend(
                     [
-                        f"{metric_name}_count{labels} {count}",
-                        f"{metric_name}_sum{labels} {total}",
-                        f"{metric_name}_avg{labels} {average}",
-                        f"{metric_name}_min{labels} {minimum}",
-                        f"{metric_name}_max{labels} {maximum}",
+                        f"{metric_name}_count{prom_labels} {count}",
+                        f"{metric_name}_sum{prom_labels} {total}",
+                        f"{metric_name}_avg{prom_labels} {average}",
+                        f"{metric_name}_min{prom_labels} {minimum}",
+                        f"{metric_name}_max{prom_labels} {maximum}",
+                    ]
+                )
+                # Rolling-window gauges
+                window_values = [tv.value for tv in observation.values if tv.timestamp >= cutoff]
+                w_count = len(window_values)
+                w_avg = (sum(window_values) / w_count) if w_count else 0.0
+                w_min = min(window_values) if w_count else 0.0
+                w_max = max(window_values) if w_count else 0.0
+                lines.extend(
+                    [
+                        f"{metric_name}_window_count{prom_labels} {w_count}",
+                        f"{metric_name}_window_avg{prom_labels} {w_avg}",
+                        f"{metric_name}_window_min{prom_labels} {w_min}",
+                        f"{metric_name}_window_max{prom_labels} {w_max}",
                     ]
                 )
 
