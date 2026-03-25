@@ -205,18 +205,22 @@ class TestJsonParsingEdgeCases:
         result = await ev.evaluate(_make_input())
         assert result.verdict == EvaluationVerdict.ERROR
 
-    async def test_json_array_response_raises_unhandled(self) -> None:
-        """A JSON array (instead of object) raises AttributeError.
+    async def test_json_array_response_returns_error(self) -> None:
+        """A JSON array (instead of object) is gracefully handled as ERROR.
 
-        NOTE: This documents a gap in _parse_response -- json.loads succeeds
-        on an array, but data.get() raises AttributeError on a list, and only
-        (JSONDecodeError, TypeError, ValueError) are caught.  A follow-up PR
-        should widen the except clause or add a type guard.
+        json.loads succeeds on an array, but list has no .get() method.
+        The type guard catches this and returns an ERROR result with
+        a descriptive reason instead of raising AttributeError.
         """
         router = _mock_router(response_text='[{"verdict": "pass"}]')
         ev = LLMEvaluator(model_router=router, model="m")
-        with pytest.raises(AttributeError, match="get"):
-            await ev.evaluate(_make_input())
+        result = await ev.evaluate(_make_input())
+        assert result.verdict == EvaluationVerdict.ERROR
+        assert result.score == 0.0
+        assert "list" in result.reason.lower()
+        assert "JSON object" in result.reason
+        assert result.evaluator_id == "llm_judge_v1"
+        assert result.task_id == "t1"
 
     async def test_numeric_verdict_treated_as_unknown(self) -> None:
         """Numeric verdict value is stringified and rejected as unknown."""
