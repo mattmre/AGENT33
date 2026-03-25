@@ -33,7 +33,7 @@ _EXPECTED_STRINGS = {
     "agent33:sli:estimated_cost_usd_avg:max",
     "at least `28d`",
     "process-lifetime averages",
-    "persistent lifetime-average elevation",
+    "persistent estimated cost lifetime-average elevation",
     "/metrics",
     "/v1/dashboard/alerts",
     "API availability success rate",
