@@ -107,7 +107,7 @@ run_check "GET /health" "${API_URL}/health"
 # 3. Kubernetes readiness probe (may be 503 if Ollama is absent -- that is
 #    expected in CI where Ollama is not started)
 echo "    (readiness probe -- 503 is acceptable when Ollama is not running)"
-READYZ_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${API_URL}/readyz" 2>&1 || echo "000")
+READYZ_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/readyz" 2>/dev/null || echo "000")
 if [ "$READYZ_CODE" = "200" ] || [ "$READYZ_CODE" = "503" ]; then
     echo "    [PASS] GET /readyz (HTTP $READYZ_CODE -- endpoint responded)"
 else
@@ -119,7 +119,7 @@ fi
 run_check "GET /docs" "${API_URL}/docs"
 
 # 5. Prometheus metrics endpoint
-METRICS_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${API_URL}/metrics" 2>&1 || echo "000")
+METRICS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/metrics" 2>/dev/null || echo "000")
 if [ "$METRICS_CODE" = "200" ] || [ "$METRICS_CODE" = "404" ]; then
     # 404 is acceptable if the metrics middleware is disabled in test mode
     echo "    [PASS] GET /metrics (HTTP $METRICS_CODE)"
