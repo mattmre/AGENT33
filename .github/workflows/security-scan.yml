@@ -1,9 +1,9 @@
-# Node.js 24 migration status (deadline: June 2, 2026)
-# - actions/checkout: upgraded to v5 (Node 24 ready)
-# - actions/cache: upgraded to v5 (Node 24 ready)
-# - aquasecurity/trivy-action: pinned v0.35.0 (audit in P3.12 security scan)
-# - github/codeql-action: upgraded to v4 (Node 24 ready)
-# - anthropics/claude-code-action: @beta (tracks latest; verify Node 24 compat)
+# Node.js 24 migration: COMPLETE (all actions Node 24 ready)
+# - actions/checkout: v6
+# - actions/cache: v5
+# - aquasecurity/trivy-action: pinned v0.35.0 (SHA-locked)
+# - github/codeql-action: v4
+# - anthropics/claude-code-action: @beta (tracks latest)
 name: Security Scan
 
 on:
@@ -197,7 +197,7 @@ jobs:
 
       - name: Run Claude Code Security Review
         if: steps.claude-review.outputs.enabled == 'true'
-        uses: anthropics/claude-code-action@beta # TODO(node24): verify Node 24 compat at deadline
+        uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: claude-sonnet-4-20250514

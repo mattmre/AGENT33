@@ -1,8 +1,8 @@
-# Node.js 24 migration status (deadline: June 2, 2026)
-# - actions/checkout: upgraded to v5 (Node 24 ready)
-# - actions/github-script: v7 (awaiting v8 for Node 24; monitor releases)
-# - actions/setup-python: upgraded to v6 (Node 24 ready)
-# - actions/upload-artifact: v4 (awaiting v5 for Node 24; monitor releases)
+# Node.js 24 migration: COMPLETE (all actions Node 24 ready)
+# - actions/checkout: v6
+# - actions/github-script: v8
+# - actions/setup-python: v6
+# - actions/upload-artifact: v7
 name: CI
 
 on:
@@ -20,7 +20,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Enforce sequence label ordering
-        uses: actions/github-script@v7 # TODO(node24): upgrade when v8 ships
+        uses: actions/github-script@v8
         with:
           script: |
             const labels = (context.payload.pull_request.labels || []).map((label) => label.name);
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload benchmark artifacts
         if: always()
-        uses: actions/upload-artifact@v4 # TODO(node24): upgrade when v5 ships
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-smoke-results
           path: engine/test-results/

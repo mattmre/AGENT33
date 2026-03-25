@@ -2,7 +2,6 @@
 # Validates the full API stack boots and serves health/metrics/docs endpoints.
 # Runs on PRs that touch Dockerfile, docker-compose, deployment manifests,
 # the smoke script itself, or this workflow.
-# TODO(node24): Upgrade actions when Node.js 24-compatible versions are released.
 
 name: Docker Smoke
 
