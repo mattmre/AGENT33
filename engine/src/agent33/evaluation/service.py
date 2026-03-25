@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from agent33.observability.metrics import MetricsCollector
 
 from agent33.evaluation.ctrf import CTRFGenerator, CTRFReport, CTRFReportGenerator
 from agent33.evaluation.experiment import ExperimentRunner
@@ -37,6 +40,18 @@ from agent33.evaluation.regression import RegressionDetector, RegressionRecorder
 
 logger = logging.getLogger(__name__)
 _MAX_MULTI_TRIAL_RUNS = 1000
+
+# ---------------------------------------------------------------------------
+# Module-level metrics collector (wired during app lifespan)
+# ---------------------------------------------------------------------------
+_metrics: MetricsCollector | None = None
+
+
+def set_metrics(collector: MetricsCollector) -> None:
+    """Install the global metrics collector (called during app lifespan init)."""
+    global _metrics  # noqa: PLW0603
+    _metrics = collector
+
 
 # Gate → required tag (§ Gate Execution Matrix)
 _GATE_TAG: dict[GateType, GoldenTag] = {
@@ -132,6 +147,7 @@ class EvaluationService:
         if run is None:
             return None
 
+        start_time = time.monotonic()
         run.task_results = task_results
 
         # Compute metrics
@@ -156,13 +172,59 @@ class EvaluationService:
             run.regressions = regressions
 
         run.complete()
+
+        # Emit observability metrics (P4.7)
+        duration = time.monotonic() - start_time
+        gate_result = run.gate_report.overall.value if run.gate_report else "unknown"
+        self._emit_evaluation_metrics(run, duration, gate_result)
+
         logger.info(
             "evaluation_run_completed id=%s gate=%s result=%s",
             run.run_id,
             run.gate.value,
-            run.gate_report.overall.value if run.gate_report else "unknown",
+            gate_result,
         )
         return run
+
+    @staticmethod
+    def _emit_evaluation_metrics(
+        run: EvaluationRun,
+        duration: float,
+        gate_result: str,
+    ) -> None:
+        """Emit Prometheus metrics for a completed evaluation run."""
+        if _metrics is None:
+            return
+
+        evaluator = run.gate.value
+        _metrics.increment(
+            "evaluation_runs_total",
+            {"evaluator": evaluator, "status": gate_result},
+        )
+        _metrics.observe(
+            "evaluation_duration_seconds",
+            duration,
+            {"evaluator": evaluator},
+        )
+
+        # Emit per-metric scores
+        for mv in run.metrics:
+            _metrics.observe(
+                "evaluation_score",
+                mv.value,
+                {"evaluator": evaluator, "task_type": mv.metric_id.value},
+            )
+
+        # Emit gate check results
+        if run.gate_report is not None:
+            for check in run.gate_report.check_results:
+                _metrics.increment(
+                    "evaluation_gate_results_total",
+                    {
+                        "gate": evaluator,
+                        "result": "pass" if check.passed else "fail",
+                    },
+                )
 
     def _build_threshold_map(self, gate: GateType) -> dict[MetricId, float]:
         """Build a metric→threshold map for the given gate."""

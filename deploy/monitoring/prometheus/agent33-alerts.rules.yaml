@@ -140,3 +140,47 @@ groups:
           description: >
             Dead-letter queue has {{ $value }} items, indicating
             persistent delivery failures.
+
+      # --- Evaluation Gate Reliability SLO (P4.7) ---
+      - record: agent33:evaluation:gate_error_rate_5m
+        expr: |
+          sum(rate(evaluation_runs_total{status="fail"}[5m]))
+          /
+          clamp_min(sum(rate(evaluation_runs_total[5m])), 1)
+
+      - alert: Agent33EvaluationGateErrors
+        expr: agent33:evaluation:gate_error_rate_5m > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: Evaluation gate error rate exceeds 1%
+          description: >
+            5-minute evaluation gate error rate is
+            {{ $value | humanizePercentage }}, exceeding the 1% SLO
+            threshold. Investigate failing golden tasks and gate
+            thresholds.
+
+      # --- Connector Health SLO (P4.7) ---
+      - record: agent33:connector:health_check_failure_rate_5m
+        expr: |
+          sum(rate(connector_health_check_total{status="error"}[5m]))
+          /
+          clamp_min(sum(rate(connector_health_check_total[5m])), 1)
+
+      - alert: Agent33ConnectorUnhealthy
+        expr: agent33:connector:health_check_failure_rate_5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: agent33-api
+          owner: platform
+        annotations:
+          summary: Connector health check failure rate exceeds 5%
+          description: >
+            5-minute connector health check failure rate is
+            {{ $value | humanizePercentage }}, exceeding the 5% SLO
+            threshold. Check upstream API availability and connector
+            configuration.

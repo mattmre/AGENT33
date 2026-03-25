@@ -283,6 +283,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     webhook_delivery_mod.set_metrics(metrics_collector)
     dead_letter_mod.set_metrics(metrics_collector)
 
+    # Wire metrics into evaluation subsystem (P4.7)
+    from agent33.evaluation import service as evaluation_service_mod
+
+    evaluation_service_mod.set_metrics(metrics_collector)
+
+    # Wire metrics into messaging connector boundary (P4.7)
+    from agent33.messaging import boundary as messaging_boundary_mod
+
+    messaging_boundary_mod.set_metrics(metrics_collector)
+
     effort_telemetry_exporter = (
         FileEffortTelemetryExporter(settings.observability_effort_export_path)
         if settings.observability_effort_export_enabled

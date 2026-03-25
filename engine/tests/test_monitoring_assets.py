@@ -21,6 +21,17 @@ _EXPECTED_METRICS = {
     "effort_routing_export_failures_total",
     "effort_routing_estimated_cost_usd_avg",
     "effort_routing_estimated_token_budget_avg",
+    "evaluation_runs_total",
+    "connector_health_check_total",
+}
+# Metrics referenced in the Grafana dashboard but not in Prometheus recording/alert
+# rules.  Checked only against the dashboard, not against rule expressions.
+_DASHBOARD_ONLY_METRICS = {
+    "evaluation_score",
+    "evaluation_gate_results_total",
+    "evaluation_duration_seconds",
+    "connector_message_send_total",
+    "connector_message_send_duration_seconds",
 }
 # HTTP and webhook metrics only appear in Prometheus rules, not yet in Grafana dashboard
 _PROMETHEUS_ONLY_METRICS = {
@@ -47,6 +58,8 @@ _EXPECTED_RECORDS = {
     "agent33:http_requests:error_rate_5m",
     "agent33:http_request_duration_seconds:p99_5m",
     "agent33:webhook_delivery:failure_rate_5m",
+    "agent33:evaluation:gate_error_rate_5m",
+    "agent33:connector:health_check_failure_rate_5m",
 }
 _EXPECTED_ALERTS = {
     "Agent33EffortTelemetryExportFailures",
@@ -56,10 +69,11 @@ _EXPECTED_ALERTS = {
     "Agent33HighLatency",
     "Agent33WebhookDeliveryFailures",
     "Agent33DeadLetterQueueGrowing",
+    "Agent33EvaluationGateErrors",
+    "Agent33ConnectorUnhealthy",
 }
 _UNSUPPORTED_PROMQL_TOKENS = {
     "probe_success",
-    "evaluation",
     "readyz",
     "healthz",
 }
@@ -87,7 +101,7 @@ def test_grafana_dashboard_is_parseable_and_references_expected_metrics() -> Non
     assert len(dashboard["panels"]) >= 5
 
     strings = _walk_strings(dashboard)
-    for metric in _EXPECTED_METRICS:
+    for metric in _EXPECTED_METRICS | _DASHBOARD_ONLY_METRICS:
         assert any(metric in item for item in strings), metric
 
 
@@ -100,7 +114,7 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert groups[0]["name"] == "agent33-observability"
 
     rules = groups[0].get("rules")
-    assert isinstance(rules, list) and len(rules) == 17
+    assert isinstance(rules, list) and len(rules) == 21
 
     record_names = {rule["record"] for rule in rules if "record" in rule}
     alert_names = {rule["alert"] for rule in rules if "alert" in rule}
@@ -168,3 +182,16 @@ def test_prometheus_rules_are_parseable_and_reference_expected_metrics() -> None
     assert "dead_letter_queue_depth > 100" in alerts_by_name["Agent33DeadLetterQueueGrowing"]
     assert "failure rate" in alert_annotations["Agent33WebhookDeliveryFailures"]["summary"].lower()
     assert "dead-letter" in alert_annotations["Agent33DeadLetterQueueGrowing"]["summary"].lower()
+
+    # P4.7: Evaluation gate recording rule and alert
+    assert "evaluation_runs_total" in records_by_name["agent33:evaluation:gate_error_rate_5m"]
+    assert "gate_error_rate_5m > 0.01" in alerts_by_name["Agent33EvaluationGateErrors"]
+    assert "evaluation gate" in alert_annotations["Agent33EvaluationGateErrors"]["summary"].lower()
+
+    # P4.7: Connector health recording rule and alert
+    assert (
+        "connector_health_check_total"
+        in records_by_name["agent33:connector:health_check_failure_rate_5m"]
+    )
+    assert "health_check_failure_rate_5m > 0.05" in alerts_by_name["Agent33ConnectorUnhealthy"]
+    assert "connector" in alert_annotations["Agent33ConnectorUnhealthy"]["summary"].lower()
