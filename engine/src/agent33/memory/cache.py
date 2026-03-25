@@ -2,6 +2,11 @@
 
 Wraps an :class:`EmbeddingProvider` and caches results keyed by
 a SHA-256 hash of the input text.  Thread-safe via ``asyncio.Lock``.
+
+When ``compressor`` is provided, embeddings are stored in quantized form
+(typically 8× smaller at 4 bits/coord) and decompressed on cache hits.
+This trades a small amount of reconstruction error for dramatically
+higher cache capacity at the same memory budget.
 """
 
 from __future__ import annotations
@@ -9,10 +14,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections import OrderedDict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent33.memory.embeddings import EmbeddingProvider
+    from agent33.memory.quantization import TurboQuantCompressor
 
 
 def _text_key(text: str) -> str:
@@ -29,19 +35,25 @@ class EmbeddingCache:
         The underlying embedding provider to delegate cache misses to.
     max_size:
         Maximum number of embeddings to hold in cache (default 1024).
+    compressor:
+        Optional :class:`TurboQuantCompressor`.  When provided, embeddings
+        are stored quantized (~8× smaller) and decompressed on retrieval.
     """
 
     def __init__(
         self,
         provider: EmbeddingProvider,
         max_size: int = 1024,
+        compressor: TurboQuantCompressor | None = None,
     ) -> None:
         self._provider = provider
         self._max_size = max(1, max_size)
-        self._cache: OrderedDict[str, list[float]] = OrderedDict()
+        # Values are either list[float] (uncompressed) or QuantizedVector.
+        self._cache: OrderedDict[str, Any] = OrderedDict()
         self._lock = asyncio.Lock()
         self._hits: int = 0
         self._misses: int = 0
+        self._compressor = compressor
 
     # ── Single embedding ─────────────────────────────────────────────
 
@@ -53,13 +65,19 @@ class EmbeddingCache:
             if key in self._cache:
                 self._cache.move_to_end(key)
                 self._hits += 1
-                return self._cache[key]
+                cached = self._cache[key]
+                if self._compressor is not None:
+                    return self._compressor.decompress(cached)
+                return cached
 
         # Cache miss — call the underlying provider (outside the lock).
         embedding = await self._provider.embed(text)
 
         async with self._lock:
-            self._cache[key] = embedding
+            if self._compressor is not None:
+                self._cache[key] = self._compressor.compress(embedding)
+            else:
+                self._cache[key] = embedding
             self._cache.move_to_end(key)
             self._misses += 1
             self._evict()
@@ -86,7 +104,11 @@ class EmbeddingCache:
             for i, key in enumerate(keys):
                 if key in self._cache:
                     self._cache.move_to_end(key)
-                    results[i] = self._cache[key]
+                    cached = self._cache[key]
+                    if self._compressor is not None:
+                        results[i] = self._compressor.decompress(cached)
+                    else:
+                        results[i] = cached
                     self._hits += 1
                 else:
                     miss_indices.append(i)
@@ -98,7 +120,10 @@ class EmbeddingCache:
             async with self._lock:
                 for j, idx in enumerate(miss_indices):
                     key = keys[idx]
-                    self._cache[key] = new_embeddings[j]
+                    if self._compressor is not None:
+                        self._cache[key] = self._compressor.compress(new_embeddings[j])
+                    else:
+                        self._cache[key] = new_embeddings[j]
                     self._cache.move_to_end(key)
                     results[idx] = new_embeddings[j]
                     self._misses += 1

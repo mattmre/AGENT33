@@ -132,6 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Database (PostgreSQL + pgvector) ----------------------------------
     long_term_memory = LongTermMemory(
         settings.database_url,
+        embedding_dim=settings.embedding_dim,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
         pool_pre_ping=settings.db_pool_pre_ping,
@@ -490,17 +491,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.embedding_provider = embedding_provider
 
     active_embedder: Any = embedding_provider
+    compressor = None
+    if settings.embedding_quantization_enabled:
+        from agent33.memory.quantization import TurboQuantCompressor
+
+        compressor = TurboQuantCompressor(
+            dim=settings.embedding_dim,
+            bits=settings.embedding_quantization_bits,
+            seed=settings.embedding_quantization_seed,
+        )
+        logger.info(
+            "turboquant_compressor_initialized",
+            dim=settings.embedding_dim,
+            bits=settings.embedding_quantization_bits,
+            ratio=f"{compressor.compression_ratio():.1f}x",
+        )
+
     if settings.embedding_cache_enabled:
         from agent33.memory.cache import EmbeddingCache
 
         embedding_cache = EmbeddingCache(
             provider=embedding_provider,
             max_size=settings.embedding_cache_max_size,
+            compressor=compressor,
         )
         active_embedder = embedding_cache
         app.state.embedding_cache = embedding_cache
 
-    logger.info("embedding_provider_initialized", cache=settings.embedding_cache_enabled)
+    logger.info(
+        "embedding_provider_initialized",
+        cache=settings.embedding_cache_enabled,
+        quantized=settings.embedding_quantization_enabled,
+    )
 
     # -- Embedding hot-swap manager (S44) ----------------------------------
     embedding_swap_manager = None
