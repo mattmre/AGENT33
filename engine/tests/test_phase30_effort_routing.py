@@ -343,8 +343,11 @@ class TestAgentEffortRouter:
             max_tokens=100,
             inputs=payload,
         )
-        assert baseline.effort == AgentEffort.LOW
-        assert baseline.heuristic_score == 1
+        # Phase 49: expanded keyword categories count "analyze" (analysis
+        # category) and "architecture" (architecture category) separately,
+        # yielding score=2 instead of the pre-Phase-49 score=1.
+        assert baseline.effort == AgentEffort.MEDIUM
+        assert baseline.heuristic_score == 2
         assert baseline.heuristic_low_threshold == 1
         assert baseline.heuristic_high_threshold == 4
 
@@ -360,7 +363,7 @@ class TestAgentEffortRouter:
             inputs=payload,
         )
         assert tuned.effort == AgentEffort.HIGH
-        assert tuned.heuristic_score == 1
+        assert tuned.heuristic_score == 2
         assert tuned.heuristic_low_threshold == 0
         assert tuned.heuristic_high_threshold == 1
 
@@ -656,7 +659,8 @@ class TestAgentRuntimeEffortRouting:
         result = await runtime.invoke({"task": "analyze architecture tradeoffs"})
 
         assert result.routing_decision is not None
-        assert result.routing_decision["heuristic_score"] == 1
+        # Phase 49: "analyze" (analysis) + "architecture" (architecture) = 2 categories.
+        assert result.routing_decision["heuristic_score"] == 2
         assert result.routing_decision["heuristic_low_threshold"] == 0
         assert result.routing_decision["heuristic_high_threshold"] == 1
 
@@ -1268,3 +1272,242 @@ class TestEffortConfigValidation:
                 agent_effort_heuristic_medium_payload_chars=1000,
                 agent_effort_heuristic_large_payload_chars=1000,
             )
+
+
+class TestPhase49FastPathPreFilter:
+    """Phase 49: fast-path pre-filter for short simple messages."""
+
+    def test_short_simple_message_returns_low_via_fast_path(self) -> None:
+        """Short messages with no complexity signals skip full scoring."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "hello world"},
+        )
+        assert decision.effort == AgentEffort.LOW
+        assert decision.effort_source == EffortSelectionSource.HEURISTIC
+        assert decision.heuristic_confidence == 0.85
+        assert decision.heuristic_reasons == ("simple_message_fast_path",)
+        assert decision.heuristic_score == 0
+
+    def test_long_message_skips_fast_path(self) -> None:
+        """Messages exceeding max_chars do not use fast-path."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_chars=50,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "x" * 200},
+        )
+        # Should NOT be fast-path; no keywords so score=0 -> LOW via normal path
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+    def test_message_with_url_skips_fast_path(self) -> None:
+        """Messages containing URLs are not simple."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "check https://example.com"},
+        )
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+    def test_message_with_code_fence_skips_fast_path(self) -> None:
+        """Messages containing code fences are not simple."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "run ```print('hi')```"},
+        )
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+    def test_message_with_keyword_skips_fast_path(self) -> None:
+        """Messages containing complex keywords skip fast-path."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "debug this"},
+        )
+        # "debug" is a keyword -> not simple
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+    def test_many_words_skips_fast_path(self) -> None:
+        """Messages with too many words skip fast-path."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_words=5,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "one two three four five six seven"},
+        )
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+    def test_iterative_mode_skips_fast_path(self) -> None:
+        """Iterative mode always skips the fast-path even for simple messages."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "hi"},
+            iterative=True,
+        )
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+        assert "iterative_mode" in decision.heuristic_reasons
+
+    def test_configurable_thresholds_from_settings(self) -> None:
+        """Config fields for fast-path thresholds exist and have defaults."""
+        s = Settings()
+        assert s.heuristic_simple_max_chars == 160
+        assert s.heuristic_simple_max_words == 28
+
+
+class TestPhase49ExpandedKeywords:
+    """Phase 49: expanded keyword categories in heuristic classification."""
+
+    @pytest.mark.parametrize(
+        ("keyword", "expected_min_score"),
+        [
+            ("debug", 1),
+            ("traceback", 1),
+            ("implement", 1),
+            ("refactor", 1),
+            ("analyze", 1),
+            ("investigate", 1),
+            ("architecture", 1),
+            ("design", 1),
+            ("pytest", 1),
+            ("coverage", 1),
+            ("deploy", 1),
+            ("kubernetes", 1),
+            ("security", 1),
+            ("vulnerability", 1),
+            ("root cause", 1),
+            ("postmortem", 1),
+            ("optimize", 1),
+            ("performance", 1),
+        ],
+    )
+    def test_keyword_triggers_score_increment(self, keyword: str, expected_min_score: int) -> None:
+        """Each keyword from the expanded set contributes to scoring."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        # Use enough padding to exceed fast-path char limit
+        padded = keyword + " " + ("filler " * 30)
+        decision = router.classify_effort(inputs={"task": padded})
+        assert decision.score >= expected_min_score
+        assert "complex_task_keywords" in decision.reasons
+
+    def test_multiple_categories_score_independently(self) -> None:
+        """Keywords from different categories each add +1 to the score."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        # "debug" (debugging) + "deploy" (operations) + "analyze" (analysis) = 3 categories
+        decision = router.classify_effort(
+            inputs={"task": "debug deploy analyze " + ("padding " * 25)},
+        )
+        assert decision.score >= 3
+        assert "complex_task_keywords" in decision.reasons
+
+    def test_same_category_counts_once(self) -> None:
+        """Multiple keywords from the same category only add +1 total."""
+        router = AgentEffortRouter(enabled=True, heuristic_enabled=True)
+        # "debug" and "traceback" are both in the "debugging" category
+        decision = router.classify_effort(
+            inputs={"task": "debug traceback " + ("padding " * 25)},
+        )
+        # Only 1 category matched (debugging), so score increment = 1
+        assert decision.score == 1
+
+
+class TestPhase49PricingIntegration:
+    """Phase 49: pricing catalog integration in effort router resolve()."""
+
+    def test_resolve_with_provider_uses_pricing_catalog(self) -> None:
+        """When provider is given, cost comes from the pricing catalog."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.HIGH,
+            high_token_multiplier=1.0,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="gpt-4.1",
+            max_tokens=1000,
+            provider="openai",
+        )
+        # Pricing catalog: gpt-4.1 input=$2/M, output=$8/M
+        # _estimate_cost_for_tokens uses input_tokens=output_tokens=token_budget
+        # So: (2/1M * 1000) + (8/1M * 1000) = 0.002 + 0.008 = 0.01
+        assert decision.estimated_cost is not None
+        assert decision.estimated_cost == pytest.approx(0.01, abs=1e-6)
+
+    def test_resolve_without_provider_uses_legacy_flat_rate(self) -> None:
+        """Without provider param, legacy cost_per_1k_tokens is used."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.HIGH,
+            high_token_multiplier=1.0,
+            cost_per_1k_tokens=0.25,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="some-model",
+            max_tokens=1000,
+        )
+        # Legacy: (1000/1000) * 0.25 = 0.25
+        assert decision.estimated_cost is not None
+        assert decision.estimated_cost == pytest.approx(0.25, abs=1e-6)
+
+    def test_resolve_with_unknown_provider_model_falls_back_to_flat_rate(self) -> None:
+        """Unknown provider+model with flat rate falls back to flat rate."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.MEDIUM,
+            medium_token_multiplier=1.0,
+            cost_per_1k_tokens=0.1,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="mystery-model",
+            max_tokens=2000,
+            provider="mystery-provider",
+        )
+        # Unknown model -> CostStatus.UNKNOWN from catalog -> fall back to flat rate
+        # (2000/1000) * 0.1 = 0.2
+        assert decision.estimated_cost is not None
+        assert decision.estimated_cost == pytest.approx(0.2, abs=1e-6)
+
+    def test_resolve_ollama_model_is_free(self) -> None:
+        """Ollama models should estimate at $0 via the pricing catalog."""
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.LOW,
+            low_token_multiplier=1.0,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="llama3.2",
+            max_tokens=5000,
+            provider="ollama",
+        )
+        # Ollama wildcard: $0 for everything
+        assert decision.estimated_cost is not None
+        assert decision.estimated_cost == 0.0

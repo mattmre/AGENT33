@@ -193,6 +193,9 @@ class Settings(BaseSettings):
     agent_effort_heuristic_large_payload_chars: int = 2000
     agent_effort_heuristic_many_input_fields_threshold: int = 10
     agent_effort_heuristic_high_iteration_threshold: int = 15
+    # Phase 49: fast-path pre-filter thresholds for simple messages
+    heuristic_simple_max_chars: int = 160
+    heuristic_simple_max_words: int = 28
     # Rolling-window metrics (P3.6)
     metrics_rolling_window_seconds: int = 300  # 5-minute rolling window for observations
 

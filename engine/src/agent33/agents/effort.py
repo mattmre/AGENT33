@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 from enum import StrEnum
 from typing import Any
 
@@ -103,6 +104,54 @@ class EffortHeuristicDecision:
 class AgentEffortRouter:
     """Resolves model and max_tokens based on effort and feature flags."""
 
+    # Expanded keyword categories for heuristic classification (Phase 49).
+    # Each keyword contributes +1 to the heuristic score when found in the
+    # lowered payload.  Only one match per category is counted.
+    _KEYWORD_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+        (
+            "debugging",
+            ("debug", "traceback", "stacktrace", "exception", "error", "crash"),
+        ),
+        (
+            "implementation",
+            ("implement", "refactor", "patch", "migrate", "rewrite"),
+        ),
+        (
+            "analysis",
+            ("analyze", "investigate", "compare", "benchmark", "profile"),
+        ),
+        (
+            "architecture",
+            ("architecture", "design", "plan", "planning", "proposal"),
+        ),
+        (
+            "testing",
+            ("pytest", "test", "tests", "coverage", "regression"),
+        ),
+        (
+            "operations",
+            ("deploy", "docker", "kubernetes", "terraform", "helm"),
+        ),
+        (
+            "security",
+            ("security", "vulnerability", "exploit", "cve", "pentest"),
+        ),
+        (
+            "incident",
+            ("root cause", "postmortem", "incident", "outage", "downtime"),
+        ),
+        (
+            "optimization",
+            ("optimize", "performance", "latency", "throughput", "bottleneck"),
+        ),
+    )
+
+    # Pre-compiled regex for detecting URLs in payload text.
+    _URL_RE: re.Pattern[str] = re.compile(r"https?://", re.IGNORECASE)
+
+    # Pre-compiled regex for detecting code fences in payload text.
+    _CODE_FENCE_RE: re.Pattern[str] = re.compile(r"```")
+
     def __init__(
         self,
         *,
@@ -125,6 +174,8 @@ class AgentEffortRouter:
         heuristic_large_payload_chars: int = 2000,
         heuristic_many_input_fields_threshold: int = 10,
         heuristic_high_iteration_threshold: int = 15,
+        heuristic_simple_max_chars: int = 160,
+        heuristic_simple_max_words: int = 28,
     ) -> None:
         self._enabled = enabled
         self._heuristic_enabled = heuristic_enabled
@@ -155,6 +206,8 @@ class AgentEffortRouter:
             heuristic_many_input_fields_threshold,
         )
         self._heuristic_high_iteration_threshold = max(1, heuristic_high_iteration_threshold)
+        self._heuristic_simple_max_chars = max(1, heuristic_simple_max_chars)
+        self._heuristic_simple_max_words = max(1, heuristic_simple_max_words)
         self._tenant_policies = self._coerce_policy_map(tenant_policies or {})
         self._domain_policies = self._coerce_policy_map(domain_policies or {}, lower_keys=True)
         self._tenant_domain_policies = self._coerce_policy_map(
@@ -221,6 +274,34 @@ class AgentEffortRouter:
             return self._domain_policies[domain], domain
         return None, None
 
+    def _is_simple_message(self, payload: str, lowered: str) -> bool:
+        """Fast-path check: return True if the payload is short and simple.
+
+        A message is "simple" when ALL of the following hold:
+        - Character length <= ``heuristic_simple_max_chars``
+        - Character length < ``heuristic_medium_payload_chars`` (so the
+          fast-path never bypasses payload-size scoring)
+        - Word count <= ``heuristic_simple_max_words``
+        - No code fences (```````)
+        - No URLs (``http://`` or ``https://``)
+        - No complex-task keywords from any category
+        """
+        if len(payload) > self._heuristic_simple_max_chars:
+            return False
+        if len(payload) >= self._heuristic_medium_payload_chars:
+            return False
+        if len(payload.split()) > self._heuristic_simple_max_words:
+            return False
+        if self._CODE_FENCE_RE.search(payload):
+            return False
+        if self._URL_RE.search(payload):
+            return False
+        # Check all keyword categories
+        for _cat_name, keywords in self._KEYWORD_CATEGORIES:
+            if any(kw in lowered for kw in keywords):
+                return False
+        return True
+
     def classify_effort(
         self,
         *,
@@ -244,6 +325,18 @@ class AgentEffortRouter:
         top_level_keys = len(inputs)
         lowered = payload.lower()
 
+        # Fast-path pre-filter (Phase 49): if the message is short and simple
+        # and we are not in iterative mode, skip the full scoring pipeline.
+        if not iterative and self._is_simple_message(payload, lowered):
+            return EffortHeuristicDecision(
+                effort=AgentEffort.LOW,
+                confidence=0.85,
+                score=0,
+                low_threshold=self._heuristic_low_score_threshold,
+                high_threshold=self._heuristic_high_score_threshold,
+                reasons=("simple_message_fast_path",),
+            )
+
         score = 0
         reasons: list[str] = []
 
@@ -265,18 +358,15 @@ class AgentEffortRouter:
         if top_level_keys >= self._heuristic_many_input_fields_threshold:
             score += 1
             reasons.append("many_input_fields")
-        if any(
-            keyword in lowered
-            for keyword in (
-                "analyze",
-                "architecture",
-                "optimize",
-                "security",
-                "root cause",
-                "postmortem",
-            )
-        ):
-            score += 1
+
+        # Expanded keyword detection (Phase 49): check each category, adding
+        # +1 per category that has at least one keyword match.
+        matched_categories = 0
+        for _cat_name, keywords in self._KEYWORD_CATEGORIES:
+            if any(kw in lowered for kw in keywords):
+                matched_categories += 1
+        if matched_categories > 0:
+            score += matched_categories
             reasons.append("complex_task_keywords")
 
         if score >= self._heuristic_high_score_threshold:
@@ -297,6 +387,34 @@ class AgentEffortRouter:
             reasons=tuple(reasons) if reasons else ("balanced_request",),
         )
 
+    def _estimate_cost_for_tokens(
+        self,
+        model: str,
+        provider: str | None,
+        token_budget: int,
+    ) -> float | None:
+        """Compute estimated cost, preferring pricing catalog over flat rate.
+
+        If a ``provider`` is given, tries the per-model pricing catalog first.
+        Falls back to the legacy ``cost_per_1k_tokens`` flat rate.
+        """
+        if provider:
+            from agent33.llm.pricing import CostStatus, estimate_cost
+
+            result = estimate_cost(
+                model=model,
+                provider=provider,
+                input_tokens=token_budget,
+                output_tokens=token_budget,
+            )
+            if result.status != CostStatus.UNKNOWN:
+                return float(result.amount_usd)
+
+        # Legacy flat-rate fallback
+        if self._cost_per_1k_tokens > 0:
+            return round((token_budget / 1000.0) * self._cost_per_1k_tokens, 6)
+        return None
+
     def resolve(
         self,
         *,
@@ -309,8 +427,17 @@ class AgentEffortRouter:
         inputs: dict[str, Any] | None = None,
         iterative: bool = False,
         max_iterations: int | None = None,
+        provider: str | None = None,
     ) -> EffortRoutingDecision:
-        """Resolve effective model + max_tokens for this execution."""
+        """Resolve effective model + max_tokens for this execution.
+
+        Parameters
+        ----------
+        provider:
+            Optional LLM provider name (e.g. ``"openai"``, ``"ollama"``).
+            When supplied, cost estimation uses the per-model pricing catalog
+            (Phase 49) instead of the flat ``cost_per_1k_tokens`` rate.
+        """
         normalized_tenant = self._normalize_tenant(tenant_id)
         normalized_domain = self._normalize_domain(domain)
 
@@ -346,17 +473,16 @@ class AgentEffortRouter:
             effort_source = EffortSelectionSource.DEFAULT
 
         if not self._enabled:
+            effective_model = requested_model or default_model
             return EffortRoutingDecision(
                 effort=resolved_effort,
                 effort_source=effort_source,
-                model=requested_model or default_model,
+                model=effective_model,
                 max_tokens=max_tokens,
                 token_multiplier=1.0,
                 estimated_token_budget=max_tokens,
-                estimated_cost=(
-                    round((max_tokens / 1000.0) * self._cost_per_1k_tokens, 6)
-                    if self._cost_per_1k_tokens > 0
-                    else None
+                estimated_cost=self._estimate_cost_for_tokens(
+                    effective_model, provider, max_tokens
                 ),
                 tenant_id=normalized_tenant or None,
                 domain=normalized_domain or None,
@@ -381,10 +507,8 @@ class AgentEffortRouter:
         selected_model = requested_model or self._models[resolved_effort] or default_model
         multiplier = self._token_multipliers[resolved_effort]
         routed_max_tokens = max(1, int(max_tokens * multiplier))
-        estimated_cost = (
-            round((routed_max_tokens / 1000.0) * self._cost_per_1k_tokens, 6)
-            if self._cost_per_1k_tokens > 0
-            else None
+        estimated_cost = self._estimate_cost_for_tokens(
+            selected_model, provider, routed_max_tokens
         )
         return EffortRoutingDecision(
             effort=resolved_effort,
