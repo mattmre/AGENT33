@@ -121,6 +121,12 @@ class SkillDefinition(BaseModel):
         description="Skill format version for migration.",
     )
 
+    # Supporting files (populated during loading, not from file)
+    supporting_files: list[str] = Field(
+        default_factory=list,
+        description="Relative paths to supporting files discovered under the skill directory.",
+    )
+
     # Runtime (set during loading, not from file)
     base_path: Path | None = Field(
         default=None,

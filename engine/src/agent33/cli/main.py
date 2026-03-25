@@ -170,6 +170,65 @@ def test(
 
 
 @app.command()
+def chat(
+    message: str = typer.Argument(..., help="Message text (may start with /skill-name)."),
+    base_url: str = typer.Option(
+        "http://localhost:8000",
+        "--base-url",
+        "-b",
+        help="API base URL.",
+    ),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        "-t",
+        help="Bearer token. Falls back to TOKEN env var.",
+    ),
+    preload: list[str] | None = typer.Option(  # noqa: B008
+        None,
+        "--preload",
+        "-p",
+        help="Skills to preload for the session (repeatable).",
+    ),
+) -> None:
+    """Send a chat message with optional slash-command skill routing.
+
+    Examples::
+
+        agent33 chat "/research-agent analyze this codebase"
+        agent33 chat "hello" --preload research-agent --preload deploy
+    """
+    import httpx
+
+    auth_token = token or os.getenv("TOKEN")
+    headers: dict[str, str] = {}
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    payload: dict[str, object] = {
+        "message": message,
+    }
+    if preload:
+        payload["preloaded_skills"] = preload
+
+    try:
+        with httpx.Client(base_url=base_url, timeout=120.0) as client:
+            resp = client.post(
+                "/v1/chat",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            typer.echo(json.dumps(resp.json(), indent=2))
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"API error {exc.response.status_code}: {exc.response.text}", err=True)
+        raise typer.Exit(code=1) from exc
+    except httpx.ConnectError as exc:
+        typer.echo(f"Cannot connect to {base_url}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command()
 def status(
     base_url: str = typer.Option(
         "http://localhost:8000",
