@@ -468,6 +468,12 @@ class Settings(BaseSettings):
     trajectory_capture_enabled: bool = False  # opt-in
     trajectory_output_dir: str = "trajectories"
 
+    # Mixture-of-Agents (Phase 58)
+    moa_reference_models: str = ""  # comma-separated model IDs for the parallel reference layer
+    moa_aggregator_model: str = ""  # model ID for the aggregator/synthesis step
+    moa_reference_temperature: float = 0.6
+    moa_aggregator_temperature: float = 0.4
+
     @field_validator("control_plane_backend")
     @classmethod
     def _validate_control_plane_backend(cls, value: str) -> str:
