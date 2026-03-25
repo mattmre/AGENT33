@@ -1489,20 +1489,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Multi-replica state repositories (P3.4) ----------------------------
     from agent33.automation.webhook_repository import (
         InMemoryWebhookRepository,
-        set_webhook_repository,
+        get_webhook_repository,
     )
     from agent33.security.auth_repository import (
         InMemoryAuthRepository,
-        set_auth_repository,
+        get_auth_repository,
     )
 
-    auth_repo = InMemoryAuthRepository()
-    set_auth_repository(auth_repo)
-    logger.info("auth_repository_initialized", backend="in_memory")
+    # Use get_*() to reuse the lazily-created default repository instead of
+    # creating a new one.  This preserves the reference that module-level
+    # ``_users`` / ``_api_keys`` backwards-compatible aliases already hold.
+    auth_repo = get_auth_repository()
+    logger.info(
+        "auth_repository_initialized",
+        backend="in_memory" if isinstance(auth_repo, InMemoryAuthRepository) else "custom",
+    )
 
-    webhook_repo = InMemoryWebhookRepository()
-    set_webhook_repository(webhook_repo)
-    logger.info("webhook_repository_initialized", backend="in_memory")
+    webhook_repo = get_webhook_repository()
+    logger.info(
+        "webhook_repository_initialized",
+        backend="in_memory" if isinstance(webhook_repo, InMemoryWebhookRepository) else "custom",
+    )
 
     yield
 
