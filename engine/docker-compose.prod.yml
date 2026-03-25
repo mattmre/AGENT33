@@ -24,6 +24,9 @@ services:
   ollama:
     restart: always
     ports: []
+    environment:
+      OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
+      OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
     deploy:
       resources:
         limits:

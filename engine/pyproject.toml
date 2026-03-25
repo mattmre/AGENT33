@@ -33,6 +33,7 @@ dependencies = [
     "PyYAML>=6.0",
     "PyNaCl>=1.5",
     "websockets>=13,<17",
+    "numpy>=1.24,<3",
 ]
 
 [project.optional-dependencies]
@@ -87,7 +88,6 @@ dev = [
 
 [project.scripts]
 agent33 = "agent33.cli.main:app"
-agent33-voice-sidecar = "agent33.voice.__main__:app"
 
 [project.entry-points."agent33.tools"]
 tldr_read = "agent33.tools.tldr_enforcer:TLDRReadEnforcerTool"
@@ -188,4 +188,8 @@ module = [
     "PIL",
     "PIL.*",
 ]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
 ignore_missing_imports = true

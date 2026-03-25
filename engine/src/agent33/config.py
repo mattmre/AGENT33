@@ -117,6 +117,7 @@ class Settings(BaseSettings):
 
     # Embeddings
     embedding_provider: str = "ollama"  # "ollama" | "jina"
+    embedding_dim: int = 768  # nomic-embed-text=768, text-embedding-3-large=1536
 
     # HTTP client pool settings
     http_max_connections: int = 20
@@ -131,6 +132,11 @@ class Settings(BaseSettings):
     embedding_hot_swap_enabled: bool = False
     embedding_default_model: str = "nomic-embed-text"
     embedding_default_dimensions: int = 768
+
+    # Embedding quantization (TurboQuant-style compression)
+    embedding_quantization_enabled: bool = False  # opt-in, requires numpy
+    embedding_quantization_bits: int = 4  # 4-bit = ~8× compression
+    embedding_quantization_seed: int = 42
 
     # RAG / Hybrid search
     rag_top_k: int = 5

@@ -30,7 +30,9 @@ class MemoryRecord(_Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(1536) if Vector is not None else Text, nullable=False)
+    # Dimension is set at migration time; use unparameterized Vector() for ORM
+    # mapping so that any dimension is accepted for read/write.
+    embedding = Column(Vector() if Vector is not None else Text, nullable=False)
     metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
     created_at = Column(
         DateTime(timezone=True),
@@ -54,7 +56,7 @@ class LongTermMemory:
     def __init__(
         self,
         database_url: str,
-        embedding_dim: int = 1536,
+        embedding_dim: int = 768,
         *,
         pool_size: int = 10,
         max_overflow: int = 20,
