@@ -208,22 +208,21 @@ class TestEdgeCases:
         result = ArtifactFilter().apply(arts)
         assert len(result) == len(arts)
 
-    @pytest.mark.xfail(
-        reason="BUG: late-binding closure in apply() loop — only last predicate is evaluated",
-        strict=True,
-    )
     def test_multiple_regex_filters_compose(self) -> None:
-        """Two by_regex calls should both be applied (AND logic).
-
-        BUG FOUND: In ArtifactFilter.apply(), the ``for pred in self._predicates``
-        loop creates generator expressions that capture ``pred`` by reference.  When
-        multiple predicates exist, all generators end up using the *last* predicate
-        because Python closures bind to the variable, not the value.  Fix: use a
-        default-argument capture, e.g.
-            filtered = (a for a in filtered if _pred(a))
-        where the loop binds ``_pred=pred``.
-        """
+        """Regression test: multiple regex filters must compose with AND logic."""
         arts = _make_artifacts()
         result = ArtifactFilter().by_regex(r"\.py$").by_regex(r"^report").apply(arts)
         assert len(result) == 1
         assert result[0].name == "report.py"
+
+    def test_predicate_and_regex_filters_compose(self) -> None:
+        """Predicate and regex filters should compose generically, not just regex+regex."""
+        arts = _make_artifacts()
+        result = (
+            ArtifactFilter()
+            .by_regex(r"^report")
+            .by_predicate(lambda a: a.artifact_type == "doc")
+            .apply(arts)
+        )
+        assert len(result) == 1
+        assert result[0].name == "report.md"
