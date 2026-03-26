@@ -1,13 +1,13 @@
 # Next Session Briefing
 
-Last updated: 2026-03-26 (Session 111 — PRs #300 and #301 merged, B2B next)
+Last updated: 2026-03-26 (Session 111 wrap complete — PRs #300, #301, and #302 merged; B2B next)
 
 ## Current State
 
 - **Branch**: `main`
-- **Latest commit on `main`**: `33406e5` (PR #301 — `run_stream()` retry and budget parity)
-- **Open PRs**: 1 (`#302` — Session 111 wrap docs, docs-only)
-- **PRs merged this session**: 2 (`#300`, `#301`)
+- **Latest commit on `main`**: `f274b16` (PR #302 — Session 111 wrap backlog and merge handoff)
+- **Open PRs**: 0
+- **PRs merged this session**: 3 (`#300`, `#301`, `#302`)
 - **Regression coverage updated this session**: B1 xfail converted to passing + B2A streaming parity coverage expanded
 - **Task plan**: `docs/research/session111-pr-manager-queue-plan.md`
 - **Session log**: `docs/sessions/session-111-2026-03-26.md`
@@ -44,7 +44,7 @@ Last updated: 2026-03-26 (Session 111 — PRs #300 and #301 merged, B2B next)
 | 32 | Mostly Complete | Residual middleware hardening remains (Task 14) |
 | 35 | In Progress | Voice sidecar finalization needed (Task 15) |
 | 36-46 | Complete | Includes later hardening slices |
-| 47-48 | Planned | Capability packs, voice sidecar, production hardening |
+| 47-48 | Planned / Folded | Capability packs remain planned; the former Phase 48 voice sidecar work is tracked under the Phase 35 replacement slice |
 | 55-56 | Complete | Browser automation (#294), programmatic tool calling (#292) |
 | P4.13-P4.17 | Complete | Coverage push, secret runbook, Alembic safety, load tests, plugin SDK |
 | OpenClaw T1-T6 | Complete | Closed in PRs `#167`, `#171`, `#178`-`#183` |
@@ -67,12 +67,7 @@ Last updated: 2026-03-26 (Session 111 — PRs #300 and #301 merged, B2B next)
 |----|-------------|-------|
 | #300 | B1: ArtifactFilter predicate composition fix | 24 targeted pass |
 | #301 | B2A: `run_stream()` retry and budget parity | 82 targeted pass in fresh post-merge verify |
-
-## Session 111 In Flight
-
-| PR | Description | Status |
-|----|-------------|--------|
-| #302 | Session 111 wrap docs | Missing Session 111 queue-plan doc added; ready for merge after docs revalidation |
+| #302 | Session 111 wrap backlog and merge handoff | Docs-only handoff refresh |
 
 ## Key Paths
 
