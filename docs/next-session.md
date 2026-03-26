@@ -1,31 +1,33 @@
 # Next Session Briefing
 
-Last updated: 2026-03-26 (Session 110 — 6 PRs merged, 8/15 tasks done)
+Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
 
 ## Current State
 
 - **Branch**: `main`
-- **Latest commit**: `a97c587` (PR #299 — secret rotation runbook)
-- **Open PRs**: 0
-- **PRs merged this session**: 6 (#294-#299)
-- **Tests added this session**: 215 (201 coverage + 3 DAG + 11 security lifespan)
-- **Task plan**: `docs/research/session110-task-plan.md` (7 remaining items)
-- **Session log**: `docs/sessions/session-110-2026-03-26.md`
+- **Latest commit on `main`**: `970f1fa` (PR #300 — ArtifactFilter predicate chaining fix)
+- **Open PRs**: 1 (`#301` — `run_stream` retry and budget parity, rerun pending after CI fix)
+- **PRs merged this session**: 1 (#300)
+- **Regression coverage updated this session**: 1 xfail converted to passing + 1 new mixed-composition test
+- **Task plan**: `docs/research/session111-pr-manager-queue-plan.md`
+- **Session log**: `docs/sessions/session-111-2026-03-26.md`
 
-## Immediate Priorities (7 remaining from Session 110 plan)
+## Immediate Priorities (9 remaining items)
 
-1. **OpenClaw Track 7**: Web research and trust — research + implement
-2. **OpenClaw Track 8**: Sessions and context UX — research + implement
-3. **OpenClaw Track 9**: Operations, config, and doctor — research + implement
-4. **OpenClaw Track 10**: Provenance, FE hardening, closeout — research + implement
-5. **Phase 31 residuals**: Learning analytics and signal tuning
-6. **Phase 32 residuals**: Middleware operational hardening (circuit-breaker tuning)
-7. **Phase 35**: Voice sidecar finalization (Phase 48 replacement)
+1. **B2A**: `run_stream()` parity — LLM retry, budget enforcement, consecutive-error reset
+2. **B2B**: `run_stream()` parity — handoff interceptor, double-confirmation, observation recording
+3. **OpenClaw Track 7**: Web research and trust — research + implement
+4. **OpenClaw Track 8**: Sessions and context UX — research + implement
+5. **OpenClaw Track 9**: Operations, config, and doctor — research + implement
+6. **OpenClaw Track 10**: Provenance, FE hardening, closeout — research + implement
+7. **Phase 31 residuals**: Learning analytics and signal tuning
+8. **Phase 32 residuals**: Middleware operational hardening (circuit-breaker tuning)
+9. **Phase 35**: Voice sidecar finalization (Phase 48 replacement)
 
 ## Known Bugs to Fix
 
-1. **ArtifactFilter closure bug** (`engine/src/agent33/automation/filters.py`): Late-binding closure in multi-predicate composition — only the last predicate evaluates when chaining 2+ `by_regex()`/`by_predicate()` calls. Has xfail test in `test_automation_filters.py`.
-2. **run_stream() has 6 parity gaps** with run(): handoff interceptor, double-confirmation, LLM retry, budget enforcement, error reset, observation recording. See `docs/research/session110-p03-stream-parity.md`.
+1. **`run_stream()` has 6 parity gaps** with `run()`: handoff interceptor, double-confirmation, LLM retry, budget enforcement, error reset, observation recording. `#301` addresses the first subset and is awaiting CI rerun.
+2. **ArtifactFilter closure bug**: fixed on `main` in PR `#300` / commit `970f1fa`.
 
 ## Architectural Decisions (Session 110)
 
@@ -60,9 +62,23 @@ Last updated: 2026-03-26 (Session 110 — 6 PRs merged, 8/15 tasks done)
 | #298 | P4.13: Coverage push across 10 modules | 201 new |
 | #299 | P4.14: K8s secret rotation runbook (42 secrets) | — |
 
+## Session 111 Completed Work
+
+| PR | Description | Tests |
+|----|-------------|-------|
+| #300 | B1: ArtifactFilter predicate composition fix | 24 targeted pass |
+
+## Session 111 In Flight
+
+| PR | Description | Status |
+|----|-------------|--------|
+| #301 | B2A: `run_stream()` retry and budget parity | CI rerun pending after full-suite compatibility fix |
+
 ## Key Paths
 
 - Session 110 log: `docs/sessions/session-110-2026-03-26.md`
+- Session 111 log: `docs/sessions/session-111-2026-03-26.md`
+- Session 111 task plan: `docs/research/session111-pr-manager-queue-plan.md`
 - Session 110 task plan: `docs/research/session110-task-plan.md`
 - Coverage analysis: `docs/research/session110-p413-coverage-analysis.md`
 - Stream parity research: `docs/research/session110-p03-stream-parity.md`
