@@ -211,7 +211,7 @@ class TestStreamingToolLoop:
         assert "completed" in event_types
         # completed should be last
         assert events[-1].event_type == "completed"
-        assert events[-1].data["termination_reason"] == "natural"
+        assert events[-1].data["termination_reason"] == "completed"
 
     async def test_stream_with_tool_calls(self) -> None:
         """Stream with tool calls should emit tool events."""
@@ -237,7 +237,7 @@ class TestStreamingToolLoop:
         assert "tool_call_started" in event_types
         assert "tool_call_completed" in event_types
         assert events[-1].event_type == "completed"
-        assert events[-1].data["termination_reason"] == "natural"
+        assert events[-1].data["termination_reason"] == "completed"
 
         # Check tool_call_requested data
         req_event = next(e for e in events if e.event_type == "tool_call_requested")
@@ -310,7 +310,7 @@ class TestStreamingToolLoop:
         assert len(error_events) == 1
         assert error_events[0].data["retrying"] is True
         assert events[-1].event_type == "completed"
-        assert events[-1].data["termination_reason"] == "natural"
+        assert events[-1].data["termination_reason"] == "completed"
         assert router.complete.await_count == 2
 
     async def test_stream_max_iterations(self) -> None:
@@ -481,7 +481,7 @@ class TestStreamingToolLoop:
 
         error_events = [e for e in events if e.event_type == "error"]
         assert len(error_events) == 2
-        assert events[-1].data["termination_reason"] == "natural"
+        assert events[-1].data["termination_reason"] == "completed"
         assert router.complete.await_count == 4
 
     async def test_stream_falls_back_to_non_streaming_when_finish_reason_requires_tools(
@@ -512,7 +512,7 @@ class TestStreamingToolLoop:
         event_types = [event.event_type for event in events]
         assert "tool_call_requested" in event_types
         assert events[-1].event_type == "completed"
-        assert events[-1].data["termination_reason"] == "natural"
+        assert events[-1].data["termination_reason"] == "completed"
         assert router.complete.await_count == 2
 
     async def test_stream_preserves_chunk_usage_and_finish_reason(self) -> None:
@@ -545,6 +545,446 @@ class TestStreamingToolLoop:
         assert llm_response.data["completion_tokens"] == 13
         assert llm_response.data["finish_reason"] == "length"
         assert events[-1].data["total_tokens"] == 24
+
+
+# ---------------------------------------------------------------------------
+# Handoff interceptor tests (Gap 2 parity)
+# ---------------------------------------------------------------------------
+
+
+class TestStreamHandoffInterceptor:
+    """Verify run_stream() performs context wipe when a handoff tool succeeds."""
+
+    def _handoff_tool_call(
+        self,
+        *,
+        source: str = "researcher",
+        target: str = "implementer",
+        objective: str = "Build the widget",
+    ) -> ToolCall:
+        ledger_data = {
+            "source_agent": source,
+            "target_agent": target,
+            "objective": objective,
+            "synthesized_context": "Context goes here",
+        }
+        return ToolCall(
+            id="call_handoff_1",
+            function=ToolCallFunction(
+                name="handoff",
+                arguments=json.dumps({"ledger_data": ledger_data}),
+            ),
+        )
+
+    async def test_handoff_emits_context_wipe_event(self) -> None:
+        """A successful handoff tool call should yield a handoff_context_wipe event."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = self._handoff_tool_call(objective="Build the widget")
+        handoff_tool = _make_mock_tool("handoff")
+        router = _make_router(
+            _tool_response([tc]),
+            _text_response("Done after handoff"),
+        )
+        registry = _make_registry(handoff_tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        assert "handoff_context_wipe" in event_types
+
+        wipe_event = next(e for e in events if e.event_type == "handoff_context_wipe")
+        assert wipe_event.data["source"] == "researcher"
+        assert wipe_event.data["target"] == "implementer"
+        assert wipe_event.data["objective"] == "Build the widget"
+
+    async def test_handoff_wipes_accumulated_messages(self) -> None:
+        """After a handoff, accumulated_messages should contain only system + ledger."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = self._handoff_tool_call()
+        handoff_tool = _make_mock_tool("handoff")
+
+        # Track the messages passed to the second LLM call (post-wipe)
+        captured_messages: list[Any] = []
+        call_count = 0
+
+        async def _complete(messages: Any, **kwargs: Any) -> LLMResponse:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _tool_response([tc])
+            captured_messages.extend(messages)
+            return _text_response("Done after handoff")
+
+        router = MagicMock()
+        router.complete = AsyncMock(side_effect=_complete)
+        registry = _make_registry(handoff_tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Post-wipe messages should be: system prompt + user (ledger serialized)
+        assert len(captured_messages) == 2
+        assert captured_messages[0].role == "system"
+        assert captured_messages[1].role == "user"
+        assert "Build the widget" in captured_messages[1].content
+
+    async def test_handoff_records_observation(self) -> None:
+        """Handoff interceptor should call _record_observation with handoff_context_wipe."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = self._handoff_tool_call(objective="Deploy service")
+        handoff_tool = _make_mock_tool("handoff")
+        router = _make_router(
+            _tool_response([tc]),
+            _text_response("Done"),
+        )
+        registry = _make_registry(handoff_tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        obs_capture = AsyncMock()
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            config=config,
+            observation_capture=obs_capture,
+            session_id="sess-1",
+            agent_name="test-agent",
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Find the handoff observation call
+        handoff_obs_calls = [
+            c
+            for c in obs_capture.record.call_args_list
+            if c.args[0].event_type == "handoff_context_wipe"
+        ]
+        assert len(handoff_obs_calls) == 1
+        obs = handoff_obs_calls[0].args[0]
+        assert "Deploy service" in obs.content
+        assert obs.metadata["source"] == "researcher"
+
+    async def test_handoff_failure_does_not_crash_loop(self) -> None:
+        """If handoff parsing fails, the loop should log an error and continue."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        # Malformed ledger_data (missing required fields)
+        bad_tc = ToolCall(
+            id="call_bad",
+            function=ToolCallFunction(
+                name="handoff",
+                arguments=json.dumps({"ledger_data": {"bad": "data"}}),
+            ),
+        )
+        handoff_tool = _make_mock_tool("handoff")
+        router = _make_router(
+            _tool_response([bad_tc]),
+            _text_response("Recovered"),
+        )
+        registry = _make_registry(handoff_tool)
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Should complete without handoff_context_wipe (it failed silently)
+        event_types = [e.event_type for e in events]
+        assert "handoff_context_wipe" not in event_types
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Double-confirmation tests (Gap 3 parity)
+# ---------------------------------------------------------------------------
+
+
+class TestStreamDoubleConfirmation:
+    """Verify run_stream() double-confirmation flow matches run()."""
+
+    async def test_no_confirmation_when_disabled(self) -> None:
+        """With enable_double_confirmation=False, text responses break immediately."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(_text_response("Final answer"))
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        assert "confirmation_prompt" not in event_types
+        assert events[-1].data["termination_reason"] == "completed"
+
+    async def test_confirmation_prompt_emitted_on_first_text_response(self) -> None:
+        """With double-confirmation enabled, the first text response triggers a prompt."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(
+            _text_response("I think I'm done"),
+            _text_response("COMPLETED: The answer is 42"),
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        assert "confirmation_prompt" in event_types
+        prompt_event = next(e for e in events if e.event_type == "confirmation_prompt")
+        assert prompt_event.data["content"] == "I think I'm done"
+
+    async def test_confirmed_completion_emits_result_event(self) -> None:
+        """COMPLETED: prefix should be stripped and confirmation_result emitted."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(
+            _text_response("I think I'm done"),
+            _text_response("COMPLETED: The answer is 42"),
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        result_events = [e for e in events if e.event_type == "confirmation_result"]
+        assert len(result_events) == 1
+        assert result_events[0].data["confirmed"] is True
+        assert result_events[0].data["content"] == "The answer is 42"
+        assert events[-1].data["termination_reason"] == "completed"
+
+    async def test_continue_response_resets_confirmation_and_loops(self) -> None:
+        """CONTINUE: response should reset confirmation_pending and keep looping."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(
+            _text_response("I think I'm done"),
+            _text_response("CONTINUE: need to check one more thing"),
+            _text_response("Now truly done"),
+            _text_response("COMPLETED: verified answer"),
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=10, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        confirmation_prompts = [e for e in events if e.event_type == "confirmation_prompt"]
+        confirmation_results = [e for e in events if e.event_type == "confirmation_result"]
+
+        # Should have 2 prompts (first text, third text) and 2 results (CONTINUE, COMPLETED)
+        assert len(confirmation_prompts) == 2
+        assert len(confirmation_results) == 2
+        assert confirmation_results[0].data["confirmed"] is False
+        assert confirmation_results[1].data["confirmed"] is True
+        assert events[-1].data["termination_reason"] == "completed"
+
+    async def test_ambiguous_response_resends_prompt(self) -> None:
+        """Ambiguous confirmation response should re-send the prompt."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(
+            _text_response("I think I'm done"),
+            _text_response("Maybe? I'm not sure"),  # ambiguous
+            _text_response("COMPLETED: Yes, the answer is 42"),
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=10, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        prompts = [e for e in events if e.event_type == "confirmation_prompt"]
+        # First text triggers prompt, ambiguous re-triggers prompt
+        assert len(prompts) == 2
+        assert events[-1].data["termination_reason"] == "completed"
+
+    async def test_confirmed_output_has_stripped_prefix(self) -> None:
+        """The final output should have the COMPLETED: prefix stripped."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(
+            _text_response("Almost done"),
+            _text_response("COMPLETED: Final result here"),
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        completed = events[-1]
+        assert completed.event_type == "completed"
+        # The output should reflect the stripped content from final_response
+        assert "Final result here" in str(completed.data["output"])
+
+    async def test_tool_calls_reset_confirmation_pending(self) -> None:
+        """Tool calls in the middle should reset confirmation_pending flag."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = _make_tool_call()
+        tool = _make_mock_tool()
+        router = _make_router(
+            _text_response("I think I'm done"),  # triggers confirmation
+            _text_response("CONTINUE: need tools"),  # CONTINUE resets
+            _tool_response([tc]),  # tool call resets confirmation_pending
+            _text_response("Now truly done"),  # fresh confirmation cycle
+            _text_response("COMPLETED: Final answer"),
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(max_iterations=10, enable_double_confirmation=True)
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Should complete without errors
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "completed"
+        # Tool call should have happened
+        assert events[-1].data["tool_calls_made"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Observation recording tests (Gap 1 parity)
+# ---------------------------------------------------------------------------
+
+
+class TestStreamObservationRecording:
+    """Verify run_stream() records LLM response observations like run()."""
+
+    async def test_llm_response_observation_recorded(self) -> None:
+        """Each LLM response should trigger an observation record."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(_text_response("Hello world", model="obs-model"))
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        obs_capture = AsyncMock()
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            config=config,
+            observation_capture=obs_capture,
+            session_id="sess-obs",
+            agent_name="obs-agent",
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        # Find llm_response observations
+        llm_obs = [
+            c for c in obs_capture.record.call_args_list if c.args[0].event_type == "llm_response"
+        ]
+        assert len(llm_obs) >= 1
+        obs = llm_obs[0].args[0]
+        assert obs.session_id == "sess-obs"
+        assert obs.agent_name == "obs-agent"
+        assert obs.content == "Hello world"
+        assert obs.metadata["model"] == "obs-model"
+        assert obs.metadata["iteration"] == 1
+
+    async def test_observation_metadata_includes_token_info(self) -> None:
+        """Observation metadata should include token counts when available."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = _make_router(_text_response("Answer", prompt_tokens=50, completion_tokens=25))
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        obs_capture = AsyncMock()
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            config=config,
+            observation_capture=obs_capture,
+            session_id="sess-2",
+            agent_name="agent-2",
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        llm_obs = [
+            c for c in obs_capture.record.call_args_list if c.args[0].event_type == "llm_response"
+        ]
+        assert len(llm_obs) >= 1
+        meta = llm_obs[0].args[0].metadata
+        assert meta["tokens"] == 75  # total_tokens = 50 + 25
+        assert meta["usage_available"] is True
+        assert meta["has_tool_calls"] is False
+
+    async def test_observation_content_truncated_at_2000_chars(self) -> None:
+        """LLM response observation content should be truncated to 2000 chars."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        long_content = "x" * 5000
+        router = _make_router(_text_response(long_content))
+        registry = _make_registry()
+        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+
+        obs_capture = AsyncMock()
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            config=config,
+            observation_capture=obs_capture,
+            session_id="sess-3",
+            agent_name="agent-3",
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        llm_obs = [
+            c for c in obs_capture.record.call_args_list if c.args[0].event_type == "llm_response"
+        ]
+        assert len(llm_obs) >= 1
+        assert len(llm_obs[0].args[0].content) == 2000
 
 
 # ---------------------------------------------------------------------------

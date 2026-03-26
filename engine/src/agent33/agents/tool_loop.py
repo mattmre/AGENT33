@@ -556,6 +556,19 @@ class ToolLoop:
                     },
                 )
 
+                # --- Record observation for LLM response (parity with run()) ----
+                await self._record_observation(
+                    event_type="llm_response",
+                    content=(response.content or "")[:2000],
+                    metadata={
+                        "model": response.model,
+                        "tokens": (response.total_tokens if response.usage_available else None),
+                        "usage_available": response.usage_available,
+                        "has_tool_calls": response.has_tool_calls,
+                        "iteration": state.iteration,
+                    },
+                )
+
                 # --- Text-based tool call parsing (Phase 36) ------------------
                 if (
                     not response.tool_calls
@@ -674,11 +687,120 @@ class ToolLoop:
                                 name=tc_name,
                             )
                         )
+
+                    # --- PHASE 34: Segmented Context Wipe (Handoff Interceptor) ---
+                    for tc, result in zip(processed_calls, results, strict=False):
+                        if tc.function.name == "handoff" and result.success:
+                            logger.info(
+                                "PHASE 34: Intercepting Handoff -> "
+                                "Triggering Context Wipe (stream)."
+                            )
+                            from agent33.workflows.actions.handoff import (
+                                StateLedger,
+                                execute_handoff,
+                            )
+
+                            try:
+                                parsed_args = json.loads(tc.function.arguments)
+                                ledger = StateLedger(**parsed_args.get("ledger_data", {}))
+                                system_content = (
+                                    accumulated_messages[0].content if accumulated_messages else ""
+                                )
+                                accumulated_messages.clear()
+                                wiped_messages = execute_handoff(
+                                    ledger,
+                                    [
+                                        ChatMessage(
+                                            role="system",
+                                            content=system_content,
+                                        )
+                                    ],
+                                )
+                                accumulated_messages.extend(wiped_messages)
+
+                                obj = ledger.objective
+                                yield ToolLoopEvent(
+                                    event_type="handoff_context_wipe",
+                                    iteration=state.iteration,
+                                    data={
+                                        "source": ledger.source_agent,
+                                        "target": ledger.target_agent,
+                                        "objective": obj,
+                                    },
+                                )
+                                await self._record_observation(
+                                    event_type="handoff_context_wipe",
+                                    content=(
+                                        f"Agent memory wiped. Fresh context + Objective: {obj}"
+                                    ),
+                                    metadata={
+                                        "source": ledger.source_agent,
+                                        "target": ledger.target_agent,
+                                    },
+                                )
+                            except Exception as e:
+                                logger.error(f"Handoff wipe failed unexpectedly: {e}")
                 else:
-                    # --- No tool calls — text response ------------------------
-                    final_response = response
-                    termination_reason = "natural"
-                    break
+                    # --- No tool calls — text response (double-confirmation) ---
+                    if not self._config.enable_double_confirmation:
+                        final_response = response
+                        termination_reason = "completed"
+                        break
+
+                    if not state.confirmation_pending:
+                        # First text-only response: ask for confirmation
+                        state.confirmation_pending = True
+                        accumulated_messages.append(
+                            ChatMessage(role="assistant", content=response.content)
+                        )
+                        accumulated_messages.append(
+                            ChatMessage(role="user", content=CONFIRMATION_PROMPT)
+                        )
+                        yield ToolLoopEvent(
+                            event_type="confirmation_prompt",
+                            iteration=state.iteration,
+                            data={"content": response.content},
+                        )
+                        continue
+                    else:
+                        # Second+ text-only response: parse confirmation
+                        confirmed = _parse_confirmation(response.content)
+
+                        if confirmed is True:
+                            final_text = _strip_completion_prefix(response.content)
+                            final_response = dataclasses.replace(response, content=final_text)
+                            yield ToolLoopEvent(
+                                event_type="confirmation_result",
+                                iteration=state.iteration,
+                                data={"confirmed": True, "content": final_text},
+                            )
+                            termination_reason = "completed"
+                            break
+                        elif confirmed is False:
+                            state.confirmation_pending = False
+                            accumulated_messages.append(
+                                ChatMessage(role="assistant", content=response.content)
+                            )
+                            yield ToolLoopEvent(
+                                event_type="confirmation_result",
+                                iteration=state.iteration,
+                                data={"confirmed": False},
+                            )
+                            continue
+                        else:
+                            # Ambiguous — re-send confirmation prompt
+                            accumulated_messages.append(
+                                ChatMessage(role="assistant", content=response.content)
+                            )
+                            accumulated_messages.append(
+                                ChatMessage(role="user", content=CONFIRMATION_PROMPT)
+                            )
+                            yield ToolLoopEvent(
+                                event_type="confirmation_prompt",
+                                iteration=state.iteration,
+                                data={"content": response.content},
+                            )
+                            continue
 
                 # --- Context management ---------------------------------------
                 if self._context_manager is not None:
