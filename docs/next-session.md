@@ -1,12 +1,12 @@
 # Next Session Briefing
 
-Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
+Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 green and awaiting merge)
 
 ## Current State
 
 - **Branch**: `main`
 - **Latest commit on `main`**: `970f1fa` (PR #300 — ArtifactFilter predicate chaining fix)
-- **Open PRs**: 1 (`#301` — `run_stream` retry and budget parity, rerun pending after CI fix)
+- **Open PRs**: 1 (`#301` — `run_stream` retry and budget parity, checks green and awaiting merge)
 - **PRs merged this session**: 1 (#300)
 - **Regression coverage updated this session**: 1 xfail converted to passing + 1 new mixed-composition test
 - **Task plan**: `docs/research/session111-pr-manager-queue-plan.md`
@@ -14,8 +14,8 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
 
 ## Immediate Priorities (9 remaining items)
 
-1. **B2A**: `run_stream()` parity — LLM retry, budget enforcement, consecutive-error reset
-2. **B2B**: `run_stream()` parity — handoff interceptor, double-confirmation, observation recording
+1. **B2A**: Merge PR `#301` and run fresh post-merge verification from `origin/main`
+2. **B2B**: `run_stream()` parity — handoff interceptor, double-confirmation, observation recording, final `completed` event payload parity
 3. **OpenClaw Track 7**: Web research and trust — research + implement
 4. **OpenClaw Track 8**: Sessions and context UX — research + implement
 5. **OpenClaw Track 9**: Operations, config, and doctor — research + implement
@@ -26,7 +26,7 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
 
 ## Known Bugs to Fix
 
-1. **`run_stream()` has 6 parity gaps** with `run()`: handoff interceptor, double-confirmation, LLM retry, budget enforcement, error reset, observation recording. `#301` addresses the first subset and is awaiting CI rerun.
+1. **`run_stream()` still has remaining parity gaps** with `run()`: handoff interceptor, double-confirmation, observation recording, and final `completed` event payload parity. `#301` closes the retry, budget-enforcement, and consecutive-error-reset subset and is ready to merge after green checks.
 2. **ArtifactFilter closure bug**: fixed on `main` in PR `#300` / commit `970f1fa`.
 
 ## Architectural Decisions (Session 110)
@@ -72,7 +72,7 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
 
 | PR | Description | Status |
 |----|-------------|--------|
-| #301 | B2A: `run_stream()` retry and budget parity | CI rerun pending after full-suite compatibility fix |
+| #301 | B2A: `run_stream()` retry and budget parity | Checks green after full-suite compatibility fix; merge + post-merge verify next |
 
 ## Key Paths
 
@@ -90,6 +90,11 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 in CI rerun)
 ## Environmental Notes
 
 - Use a fresh worktree from `origin/main` for each new implementation slice
+- After merging `#301`, create a fresh verification worktree (for example `worktrees/session111-b2a-postmerge-verify`) and rerun:
+  - `$env:PYTHONPATH='<verify-worktree>\\engine\\src'; python -m pytest engine/tests/test_streaming_tool_loop.py engine/tests/test_tool_loop.py engine/tests/test_streaming.py -q --no-cov`
+  - `python -m ruff check engine/src/agent33/agents/tool_loop.py engine/tests/test_streaming_tool_loop.py`
+  - `python -m ruff format --check engine/src/agent33/agents/tool_loop.py engine/tests/test_streaming_tool_loop.py`
+  - `$env:PYTHONPATH='<verify-worktree>\\engine\\src'; python -m mypy engine/src/agent33/agents/tool_loop.py --config-file engine/pyproject.toml`
 - Read task plan and research docs before starting work
 - Create `engine/.venv` inside worktree before running Python checks
 - Run `npm install` inside worktree-local `frontend/` before frontend checks
