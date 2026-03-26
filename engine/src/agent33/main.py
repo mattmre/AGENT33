@@ -44,6 +44,7 @@ from agent33.api.routes import (
     memory_search,
     migrations,
     multimodal,
+    operations,
     operations_hub,
     operator,
     outcomes,
@@ -1359,6 +1360,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.onboarding_service = onboarding_service
     logger.info("onboarding_service_initialized")
 
+    # --- Ops subsystem (Track 9 — doctor, config, cron, onboarding) ---
+    from agent33.ops.config_manager import ConfigManager
+    from agent33.ops.cron_manager import CronManager
+    from agent33.ops.doctor import SystemDoctor
+    from agent33.ops.onboarding import OnboardingChecklistService
+
+    _ops_version = ""
+    _ops_version_info = getattr(app.state, "runtime_version_info", None)
+    if _ops_version_info is not None:
+        _ops_version = getattr(_ops_version_info, "version", "0.1.0")
+
+    system_doctor = SystemDoctor(
+        app_state=app.state,
+        settings=settings,
+        version=_ops_version,
+    )
+    app.state.system_doctor = system_doctor
+
+    ops_config_manager = ConfigManager(
+        settings_instance=settings,
+    )
+    app.state.ops_config_manager = ops_config_manager
+
+    ops_cron_manager = CronManager(
+        job_store=cron_job_store,
+        scheduler=getattr(app.state, "workflow_scheduler", None),
+        history_store=job_history_store,
+    )
+    app.state.ops_cron_manager = ops_cron_manager
+
+    ops_onboarding = OnboardingChecklistService(
+        app_state=app.state,
+        settings=settings,
+    )
+    app.state.ops_onboarding = ops_onboarding
+
+    app.state.start_time = _start_time
+    logger.info("ops_subsystem_initialized")
+
     # --- Training subsystem (optional) ---
     if settings.training_enabled:
         try:
@@ -1961,6 +2001,7 @@ app.include_router(context.router)
 app.include_router(operator.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
+app.include_router(operations.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
 app.include_router(workflow_marketplace.router)
