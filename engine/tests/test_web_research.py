@@ -233,7 +233,8 @@ class TestSearXNGSearchProvider:
         assert diag.kind == ResearchProviderKind.SEARCH
         assert diag.status == "ok"
         assert diag.configured is True
-        assert diag.is_default is True
+        # SearXNG is no longer the global default; DuckDuckGo is now the
+        # zero-config fallback. The `is_default` flag is set by the registry.
         assert "search" in diag.capabilities
         assert "8080" in diag.detail
 

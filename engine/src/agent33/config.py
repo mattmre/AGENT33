@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # SearXNG
     searxng_url: str = "http://searxng:8080"
 
+    # Web search providers (Track 7)
+    tavily_api_key: SecretStr = SecretStr("")
+    brave_api_key: SecretStr = SecretStr("")
+    web_search_max_results: int = 10
+    web_search_default_provider: str | None = None
+
     # Optional cloud LLM
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
