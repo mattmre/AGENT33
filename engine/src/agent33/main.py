@@ -508,6 +508,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backup_dir=str(Path(settings.backup_dir).resolve()),
     )
 
+    # -- Component security persistence (AEP-B01) ----------------------------
+    from agent33.api.routes.component_security import init_component_security_service
+
+    init_component_security_service(app, settings)
+    logger.info("component_security_service_initialized")
+
     # -- Embedding provider + cache ----------------------------------------
     from agent33.memory.embeddings import EmbeddingProvider
 
@@ -1701,6 +1707,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("instance_deregistered")
         except Exception:
             logger.warning("instance_deregister_failed", exc_info=True)
+
+    _security_store: Any = getattr(app.state, "security_scan_store", None)
+    if _security_store is not None:
+        _security_store.close()
+        logger.info("security_scan_store_closed")
 
     if nats_bus.is_connected:
         await nats_bus.close()
