@@ -23,16 +23,17 @@ At the start of Session 111, the recommended execution order was:
 9. `R6` — Phase 32 residuals: middleware operational hardening
 10. `R7` — Phase 35: voice sidecar finalization
 
-### Current state after PRs #300 and #301
+### Current state after PRs #300, #301, and #302
 
 - `B1` is complete on `main` via PR `#300` / commit `970f1fa`
 - `B2A` is complete on `main` via PR `#301` / commit `33406e5`
+- Session 111 wrap docs are complete on `main` via PR `#302` / commit `f274b16`
 - The next implementation slice is `B2B`
 
 ## Current Baseline
 
 - Branch: `main`
-- Latest merged commit on `main`: `33406e5` (`fix(agents): add run_stream retry and budget parity`)
+- Latest merged commit on `main`: `f274b16` (`docs(session-111): wrap backlog and merge handoff`)
 - Active queue sources:
   - `docs/next-session.md`
   - `docs/research/session110-task-plan.md`
