@@ -305,14 +305,15 @@ class ToolLoop:
                             # Re-parse args, the registry already validated them
                             parsed_args = json.loads(tc.function.arguments)
                             ledger = StateLedger(**parsed_args.get("ledger_data", {}))
-                            # Wipe and reset the entire conversation array
+                            # Save system prompt before wiping, then reset conversation
+                            system_content = messages[0].content if messages else ""
                             messages.clear()
                             wiped_messages = execute_handoff(
                                 ledger,
                                 [
                                     ChatMessage(
                                         role="system",
-                                        content=messages[0].content if messages else "",
+                                        content=system_content,
                                     )
                                 ],
                             )
