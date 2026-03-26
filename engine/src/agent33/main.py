@@ -460,6 +460,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.mutation_audit_store = mutation_audit_store
     tool_mutations.set_mutation_audit_store(mutation_audit_store)
     tool_registry.register(ApplyPatchTool(audit_store=mutation_audit_store))
+
+    from agent33.tools.builtin.delegate_subtask import DelegateSubtaskTool
+
+    tool_registry.register(DelegateSubtaskTool(router=model_router, tool_registry=tool_registry))
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
     from agent33.processes.service import ProcessManagerService
