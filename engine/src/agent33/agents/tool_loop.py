@@ -496,6 +496,23 @@ class ToolLoop:
                         yield token_event
                     response = stream_result["response"]
                 except Exception as exc:
+                    if isinstance(exc, TypeError):
+                        logger.warning(
+                            "Streaming LLM call failed with non-retryable TypeError",
+                            exc_info=True,
+                        )
+                        yield ToolLoopEvent(
+                            event_type="error",
+                            iteration=state.iteration,
+                            data={
+                                "error": str(exc),
+                                "phase": "llm_call",
+                                "retrying": False,
+                            },
+                        )
+                        termination_reason = "llm_error"
+                        break
+
                     state.consecutive_errors += 1
                     logger.warning(
                         "Streaming LLM call failed (attempt %d, consecutive_errors=%d)",
