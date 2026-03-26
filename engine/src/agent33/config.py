@@ -474,6 +474,12 @@ class Settings(BaseSettings):
     moa_reference_temperature: float = 0.6
     moa_aggregator_temperature: float = 0.4
 
+    # Browser automation (Phase 55)
+    browser_cloud_api_key: SecretStr = SecretStr("")  # BrowserBase API key; empty = local only
+    browser_session_ttl_seconds: int = 300  # idle TTL before session cleanup
+    browser_vision_model: str = ""  # model for vision_analyze; empty = auto-detect
+    browser_cloud_api_url: str = "https://www.browserbase.com/v1"
+
     @field_validator("control_plane_backend")
     @classmethod
     def _validate_control_plane_backend(cls, value: str) -> str:
