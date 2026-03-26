@@ -152,6 +152,6 @@ class ArtifactFilter:
 
         # Predicate filters (including regex)
         for pred in self._predicates:
-            filtered = (a for a in filtered if pred(a))
+            filtered = filter(pred, filtered)
 
         return list(filtered)
