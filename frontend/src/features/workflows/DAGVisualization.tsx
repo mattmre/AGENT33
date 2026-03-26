@@ -99,7 +99,7 @@ function DAGNodeElement({
   onHoverEnd: () => void;
 }): JSX.Element {
   const color = dagStatusToColor(node.status);
-  const isRunning = node.status === "running";
+  const isRunning = node.status === "running" || node.status === "retrying";
 
   return (
     <g
