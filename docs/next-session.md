@@ -1,32 +1,31 @@
 # Next Session Briefing
 
-Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 green and awaiting merge)
+Last updated: 2026-03-26 (Session 111 — PRs #300 and #301 merged, B2B next)
 
 ## Current State
 
 - **Branch**: `main`
-- **Latest commit on `main`**: `970f1fa` (PR #300 — ArtifactFilter predicate chaining fix)
-- **Open PRs**: 1 (`#301` — `run_stream` retry and budget parity, checks green and awaiting merge)
-- **PRs merged this session**: 1 (#300)
-- **Regression coverage updated this session**: 1 xfail converted to passing + 1 new mixed-composition test
+- **Latest commit on `main`**: `33406e5` (PR #301 — `run_stream()` retry and budget parity)
+- **Open PRs**: 1 (`#302` — Session 111 wrap docs, docs-only)
+- **PRs merged this session**: 2 (`#300`, `#301`)
+- **Regression coverage updated this session**: B1 xfail converted to passing + B2A streaming parity coverage expanded
 - **Task plan**: `docs/research/session111-pr-manager-queue-plan.md`
 - **Session log**: `docs/sessions/session-111-2026-03-26.md`
 
-## Immediate Priorities (9 remaining items)
+## Immediate Priorities (8 remaining items)
 
-1. **B2A**: Merge PR `#301` and run fresh post-merge verification from `origin/main`
-2. **B2B**: `run_stream()` parity — handoff interceptor, double-confirmation, observation recording, final `completed` event payload parity
-3. **OpenClaw Track 7**: Web research and trust — research + implement
-4. **OpenClaw Track 8**: Sessions and context UX — research + implement
-5. **OpenClaw Track 9**: Operations, config, and doctor — research + implement
-6. **OpenClaw Track 10**: Provenance, FE hardening, closeout — research + implement
-7. **Phase 31 residuals**: Learning analytics and signal tuning
-8. **Phase 32 residuals**: Middleware operational hardening (circuit-breaker tuning)
-9. **Phase 35**: Voice sidecar finalization (Phase 48 replacement)
+1. **B2B**: `run_stream()` parity — handoff interceptor, double-confirmation, observation recording
+2. **OpenClaw Track 7**: Web research and trust — research + implement
+3. **OpenClaw Track 8**: Sessions and context UX — research + implement
+4. **OpenClaw Track 9**: Operations, config, and doctor — research + implement
+5. **OpenClaw Track 10**: Provenance, FE hardening, closeout — research + implement
+6. **Phase 31 residuals**: Learning analytics and signal tuning
+7. **Phase 32 residuals**: Middleware operational hardening (circuit-breaker tuning)
+8. **Phase 35**: Voice sidecar finalization (Phase 48 replacement)
 
 ## Known Bugs to Fix
 
-1. **`run_stream()` still has remaining parity gaps** with `run()`: handoff interceptor, double-confirmation, observation recording, and final `completed` event payload parity. `#301` closes the retry, budget-enforcement, and consecutive-error-reset subset and is ready to merge after green checks.
+1. **`run_stream()` still has remaining parity gaps** with `run()`: handoff interceptor, double-confirmation, and observation recording. PR `#301` closed retry, budget-enforcement, consecutive-error-reset, and `max_iterations` completed-event output parity.
 2. **ArtifactFilter closure bug**: fixed on `main` in PR `#300` / commit `970f1fa`.
 
 ## Architectural Decisions (Session 110)
@@ -67,12 +66,13 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 green and awai
 | PR | Description | Tests |
 |----|-------------|-------|
 | #300 | B1: ArtifactFilter predicate composition fix | 24 targeted pass |
+| #301 | B2A: `run_stream()` retry and budget parity | 82 targeted pass in fresh post-merge verify |
 
 ## Session 111 In Flight
 
 | PR | Description | Status |
 |----|-------------|--------|
-| #301 | B2A: `run_stream()` retry and budget parity | Checks green after full-suite compatibility fix; merge + post-merge verify next |
+| #302 | Session 111 wrap docs | Missing Session 111 queue-plan doc added; ready for merge after docs revalidation |
 
 ## Key Paths
 
@@ -90,11 +90,6 @@ Last updated: 2026-03-26 (Session 111 — PR #300 merged, PR #301 green and awai
 ## Environmental Notes
 
 - Use a fresh worktree from `origin/main` for each new implementation slice
-- After merging `#301`, create a fresh verification worktree (for example `worktrees/session111-b2a-postmerge-verify`) and rerun:
-  - `$env:PYTHONPATH='<verify-worktree>\\engine\\src'; python -m pytest engine/tests/test_streaming_tool_loop.py engine/tests/test_tool_loop.py engine/tests/test_streaming.py -q --no-cov`
-  - `python -m ruff check engine/src/agent33/agents/tool_loop.py engine/tests/test_streaming_tool_loop.py`
-  - `python -m ruff format --check engine/src/agent33/agents/tool_loop.py engine/tests/test_streaming_tool_loop.py`
-  - `$env:PYTHONPATH='<verify-worktree>\\engine\\src'; python -m mypy engine/src/agent33/agents/tool_loop.py --config-file engine/pyproject.toml`
 - Read task plan and research docs before starting work
 - Create `engine/.venv` inside worktree before running Python checks
 - Run `npm install` inside worktree-local `frontend/` before frontend checks
