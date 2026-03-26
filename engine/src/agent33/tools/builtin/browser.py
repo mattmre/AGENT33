@@ -1,4 +1,13 @@
-"""Browser automation tool using Playwright (optional dependency)."""
+"""Browser automation tool using Playwright (optional dependency).
+
+Phase 55 additions:
+  - ``vision_analyze`` action: captures a screenshot and sends it to a
+    vision-capable LLM via ModelRouter for structured page analysis.
+  - Constructor-injected ``ModelRouter`` (optional) for vision support.
+  - Configurable session TTL via ``session_ttl_seconds`` parameter.
+  - Tenant-scoped session isolation via ``ToolContext.tenant_id``.
+  - ``list_sessions`` action for cleanup visibility.
+"""
 
 from __future__ import annotations
 
@@ -21,8 +30,30 @@ except ImportError:
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
 
+    from agent33.llm.router import ModelRouter
+
 _DEFAULT_TIMEOUT_MS = 30_000
-_SESSION_TTL_SECONDS = 300  # 5 minutes idle
+_DEFAULT_SESSION_TTL_SECONDS = 300  # 5 minutes idle
+
+_VISION_SYSTEM_PROMPT = (
+    "You are a web page analysis assistant. Analyze the provided screenshot "
+    "and answer the user's question. Describe the page layout, key UI elements, "
+    "text content, and any actionable items you can identify. Be specific and "
+    "structured in your response."
+)
+
+# Known vision-capable model prefixes for auto-detection.
+_VISION_MODEL_PREFIXES = (
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4-vision",
+    "claude-3",
+    "claude-4",
+    "gemini",
+    "llava",
+    "llama3.2-vision",
+    "minicpm-v",
+)
 
 
 @dataclass
@@ -32,23 +63,30 @@ class BrowserSession:
     pw: Playwright  # Playwright context manager
     browser: Browser  # Browser instance
     page: Page  # Page instance
+    tenant_id: str = ""  # owning tenant
     last_used: float = field(default_factory=time.monotonic)
 
 
 _sessions: dict[str, BrowserSession] = {}
 
 
-async def _get_session(session_id: str) -> BrowserSession:
-    """Get or create a browser session."""
+async def _get_session(
+    session_id: str,
+    *,
+    tenant_id: str = "",
+) -> BrowserSession:
+    """Get or create a browser session with tenant isolation."""
     if session_id in _sessions:
         sess = _sessions[session_id]
+        if tenant_id and sess.tenant_id and sess.tenant_id != tenant_id:
+            raise PermissionError(f"Session '{session_id}' belongs to a different tenant")
         sess.last_used = time.monotonic()
         return sess
 
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(headless=True)
     page = await browser.new_page()
-    sess = BrowserSession(pw=pw, browser=browser, page=page)
+    sess = BrowserSession(pw=pw, browser=browser, page=page, tenant_id=tenant_id)
     _sessions[session_id] = sess
     return sess
 
@@ -64,10 +102,10 @@ async def _close_session(session_id: str) -> None:
             logger.debug("Error closing session %s", session_id, exc_info=True)
 
 
-async def _cleanup_stale_sessions() -> None:
+async def _cleanup_stale_sessions(ttl_seconds: int = _DEFAULT_SESSION_TTL_SECONDS) -> None:
     """Close sessions idle beyond TTL."""
     now = time.monotonic()
-    stale = [sid for sid, s in _sessions.items() if now - s.last_used > _SESSION_TTL_SECONDS]
+    stale = [sid for sid, s in _sessions.items() if now - s.last_used > ttl_seconds]
     for sid in stale:
         await _close_session(sid)
 
@@ -84,6 +122,8 @@ _VALID_ACTIONS = frozenset(
         "wait_for",
         "get_elements",
         "close_session",
+        "vision_analyze",
+        "list_sessions",
     }
 )
 
@@ -92,8 +132,22 @@ class BrowserTool:
     """Navigate pages, take screenshots, extract text, and perform interactive
     automation via Playwright.
 
+    Phase 55: now supports ``vision_analyze`` for LLM-based page analysis and
+    tenant-scoped session management.
+
     Degrades gracefully when Playwright is not installed.
     """
+
+    def __init__(
+        self,
+        *,
+        router: ModelRouter | None = None,
+        session_ttl_seconds: int = _DEFAULT_SESSION_TTL_SECONDS,
+        vision_model: str = "",
+    ) -> None:
+        self._router = router
+        self._session_ttl_seconds = session_ttl_seconds
+        self._vision_model = vision_model
 
     @property
     def name(self) -> str:
@@ -103,9 +157,57 @@ class BrowserTool:
     def description(self) -> str:
         return (
             "Headless browser automation: navigate, screenshot, extract text, "
-            "click, type, select, scroll, wait for elements. Supports persistent "
-            "sessions for multi-step interactions."
+            "click, type, select, scroll, wait for elements, vision analysis. "
+            "Supports persistent sessions for multi-step interactions."
         )
+
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": (
+                        "One of: navigate, screenshot, extract_text, click, "
+                        "type_text, select, scroll, wait_for, get_elements, "
+                        "close_session, vision_analyze, list_sessions."
+                    ),
+                    "default": "navigate",
+                },
+                "url": {"type": "string", "description": "Page URL."},
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID for persistent browser reuse.",
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector for interactive actions.",
+                },
+                "text": {"type": "string", "description": "Text to type."},
+                "value": {"type": "string", "description": "Value to select."},
+                "direction": {
+                    "type": "string",
+                    "description": "'up' or 'down' for scroll.",
+                    "default": "down",
+                },
+                "amount": {
+                    "type": "integer",
+                    "description": "Scroll pixels.",
+                    "default": 500,
+                },
+                "timeout_ms": {
+                    "type": "integer",
+                    "description": "Timeout in milliseconds.",
+                    "default": _DEFAULT_TIMEOUT_MS,
+                },
+                "question": {
+                    "type": "string",
+                    "description": "Question for vision_analyze action.",
+                },
+            },
+            "required": [],
+        }
 
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Run a browser action.
@@ -114,9 +216,7 @@ class BrowserTool:
         ----------
         params:
             url         : str  - Page URL (required for navigate/screenshot/extract_text).
-            action      : str  - One of: navigate, screenshot, extract_text, click,
-                                 type_text, select, scroll, wait_for, get_elements,
-                                 close_session.
+            action      : str  - One of the supported actions.
             session_id  : str  - Optional session ID to reuse a browser across calls.
             selector    : str  - CSS selector (for click/type_text/select/wait_for/get_elements).
             text        : str  - Text to type (for type_text).
@@ -124,22 +224,29 @@ class BrowserTool:
             direction   : str  - 'up' or 'down' (for scroll, default 'down').
             amount      : int  - Scroll pixels (for scroll, default 500).
             timeout_ms  : int  - Timeout in milliseconds (default 30000).
+            question    : str  - Question about the page (for vision_analyze).
         """
+        action: str = params.get("action", "navigate")
+
+        # list_sessions does not need Playwright
+        if action == "list_sessions":
+            return self._list_sessions(context)
+
         if not _PLAYWRIGHT_AVAILABLE:
             return ToolResult.fail(
                 "Playwright is not installed. "
                 "Install it with: pip install playwright && playwright install chromium"
             )
 
-        action: str = params.get("action", "navigate")
         if action not in _VALID_ACTIONS:
             return ToolResult.fail(f"Unknown action: {action}")
 
         session_id: str | None = params.get("session_id")
         timeout_ms: int = params.get("timeout_ms", _DEFAULT_TIMEOUT_MS)
+        tenant_id: str = context.tenant_id
 
         try:
-            await _cleanup_stale_sessions()
+            await _cleanup_stale_sessions(self._session_ttl_seconds)
 
             if action == "close_session":
                 if session_id:
@@ -147,9 +254,14 @@ class BrowserTool:
                     return ToolResult.ok(f"Session '{session_id}' closed")
                 return ToolResult.fail("No session_id provided for close_session")
 
+            if action == "vision_analyze":
+                return await self._handle_vision_analyze(session_id, params, context, timeout_ms)
+
             # Session-based execution
             if session_id:
-                return await self._run_with_session(session_id, action, params, timeout_ms)
+                return await self._run_with_session(
+                    session_id, action, params, timeout_ms, tenant_id=tenant_id
+                )
 
             # Legacy one-shot execution (backward compatible)
             url: str = params.get("url", "").strip()
@@ -157,14 +269,154 @@ class BrowserTool:
                 return ToolResult.fail("No URL provided")
             return await self._run_oneshot(url, action, params, timeout_ms)
 
+        except PermissionError as exc:
+            return ToolResult.fail(str(exc))
         except Exception as exc:
             logger.exception("Browser tool error")
             return ToolResult.fail(f"Browser error: {exc}")
 
-    async def _run_with_session(
-        self, session_id: str, action: str, params: dict[str, Any], timeout_ms: int
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _list_sessions(context: ToolContext) -> ToolResult:
+        """List active browser sessions, filtered to the calling tenant."""
+        tenant_id = context.tenant_id
+        now = time.monotonic()
+        entries: list[str] = []
+        for sid, sess in _sessions.items():
+            if tenant_id and sess.tenant_id and sess.tenant_id != tenant_id:
+                continue
+            idle = int(now - sess.last_used)
+            entries.append(f"{sid} (idle {idle}s, tenant={sess.tenant_id or 'none'})")
+        if not entries:
+            return ToolResult.ok("No active sessions.")
+        return ToolResult.ok(f"Active sessions ({len(entries)}):\n" + "\n".join(entries))
+
+    # ------------------------------------------------------------------
+    # Vision analysis (Phase 55)
+    # ------------------------------------------------------------------
+
+    async def _handle_vision_analyze(
+        self,
+        session_id: str | None,
+        params: dict[str, Any],
+        context: ToolContext,
+        timeout_ms: int,
     ) -> ToolResult:
-        sess = await _get_session(session_id)
+        """Capture a screenshot and send it to a vision-capable LLM."""
+        if self._router is None:
+            return ToolResult.fail(
+                "Vision analysis requires a ModelRouter. "
+                "The BrowserTool was not initialized with a router."
+            )
+
+        question: str = params.get("question", "").strip()
+        if not question:
+            return ToolResult.fail("No question provided for vision_analyze")
+
+        # Resolve which vision model to use
+        vision_model = self._vision_model
+        if not vision_model:
+            vision_model = await self._detect_vision_model()
+            if not vision_model:
+                return ToolResult.fail(
+                    "No vision-capable model detected. Set browser_vision_model "
+                    "in configuration or register a vision model."
+                )
+
+        # Capture screenshot
+        screenshot_b64 = await self._capture_screenshot(
+            session_id, params, timeout_ms, tenant_id=context.tenant_id
+        )
+
+        # Build vision request
+        from agent33.llm.base import ChatMessage, ImageBlock, TextBlock
+
+        messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=_VISION_SYSTEM_PROMPT),
+            ChatMessage(
+                role="user",
+                content=[
+                    ImageBlock(base64_data=screenshot_b64, media_type="image/png"),
+                    TextBlock(text=question),
+                ],
+            ),
+        ]
+
+        response = await self._router.complete(
+            messages,
+            model=vision_model,
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        return ToolResult.ok(response.content)
+
+    async def _detect_vision_model(self) -> str:
+        """Try to find a vision-capable model among registered providers."""
+        if self._router is None:
+            return ""
+        for _name, provider in self._router.providers.items():
+            try:
+                models = await provider.list_models()
+                for model in models:
+                    lower = model.lower()
+                    for prefix in _VISION_MODEL_PREFIXES:
+                        if lower.startswith(prefix):
+                            logger.info("Auto-detected vision model: %s", model)
+                            return model
+            except Exception:
+                continue
+        return ""
+
+    async def _capture_screenshot(
+        self,
+        session_id: str | None,
+        params: dict[str, Any],
+        timeout_ms: int,
+        *,
+        tenant_id: str = "",
+    ) -> str:
+        """Capture a screenshot and return it as base64-encoded PNG."""
+        if session_id:
+            sess = await _get_session(session_id, tenant_id=tenant_id)
+            page = sess.page
+            # Navigate if URL provided and not already on a page
+            url: str = params.get("url", "").strip()
+            if url:
+                await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            raw = await page.screenshot(full_page=True, type="png")
+            return base64.b64encode(raw).decode()
+
+        # One-shot: require URL
+        url = params.get("url", "").strip()
+        if not url:
+            raise ValueError("No URL provided for vision_analyze without session_id")
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                raw = await page.screenshot(full_page=True, type="png")
+                return base64.b64encode(raw).decode()
+            finally:
+                await browser.close()
+
+    # ------------------------------------------------------------------
+    # Session-based execution
+    # ------------------------------------------------------------------
+
+    async def _run_with_session(
+        self,
+        session_id: str,
+        action: str,
+        params: dict[str, Any],
+        timeout_ms: int,
+        *,
+        tenant_id: str = "",
+    ) -> ToolResult:
+        sess = await _get_session(session_id, tenant_id=tenant_id)
         page = sess.page
 
         url: str = params.get("url", "").strip()

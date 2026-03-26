@@ -468,6 +468,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.tools.builtin.delegate_subtask import DelegateSubtaskTool
 
     tool_registry.register(DelegateSubtaskTool(router=model_router, tool_registry=tool_registry))
+
+    from agent33.tools.builtin.browser import BrowserTool
+
+    tool_registry.register(
+        BrowserTool(
+            router=model_router,
+            session_ttl_seconds=settings.browser_session_ttl_seconds,
+            vision_model=settings.browser_vision_model,
+        )
+    )
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
     from agent33.processes.service import ProcessManagerService
