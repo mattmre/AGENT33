@@ -29,6 +29,9 @@ _session_catalog: Any = None
 _session_lineage_builder: Any = None
 _session_spawn_service: Any = None
 _session_archive_service: Any = None
+_memory_session_catalog: Any = None
+_context_slot_manager: Any = None
+_compaction_diagnostics: Any = None
 
 
 def set_session_service(service: Any) -> None:
@@ -59,6 +62,24 @@ def set_session_archive_service(service: Any) -> None:
     """Set the session archive service (called from lifespan)."""
     global _session_archive_service  # noqa: PLW0603
     _session_archive_service = service
+
+
+def set_memory_session_catalog(catalog: Any) -> None:
+    """Set the memory-layer session catalog (Track 8 OpenClaw)."""
+    global _memory_session_catalog  # noqa: PLW0603
+    _memory_session_catalog = catalog
+
+
+def set_context_slot_manager(manager: Any) -> None:
+    """Set the context slot manager (Track 8 OpenClaw)."""
+    global _context_slot_manager  # noqa: PLW0603
+    _context_slot_manager = manager
+
+
+def set_compaction_diagnostics(diagnostics: Any) -> None:
+    """Set the compaction diagnostics service (Track 8 OpenClaw)."""
+    global _compaction_diagnostics  # noqa: PLW0603
+    _compaction_diagnostics = diagnostics
 
 
 def _get_session_service(request: Request) -> Any:
@@ -577,3 +598,256 @@ async def archive_session(session_id: str, request: Request) -> SessionResponse:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return _session_to_response(session)
+
+
+# ---------------------------------------------------------------------------
+# Track 8 OpenClaw: Memory-layer session catalog, context slots, compaction
+# ---------------------------------------------------------------------------
+
+
+def _get_memory_catalog(request: Request) -> Any:
+    """Extract memory-layer session catalog from app state or module fallback."""
+    if hasattr(request.app.state, "memory_session_catalog"):
+        cat = request.app.state.memory_session_catalog
+    else:
+        cat = _memory_session_catalog
+    if cat is None:
+        raise HTTPException(status_code=503, detail="Memory session catalog not initialized")
+    return cat
+
+
+def _get_context_slot_manager(request: Request) -> Any:
+    """Extract context slot manager from app state or module fallback."""
+    if hasattr(request.app.state, "context_slot_manager"):
+        mgr = request.app.state.context_slot_manager
+    else:
+        mgr = _context_slot_manager
+    if mgr is None:
+        raise HTTPException(status_code=503, detail="Context slot manager not initialized")
+    return mgr
+
+
+def _get_compaction_diagnostics(request: Request) -> Any:
+    """Extract compaction diagnostics from app state or module fallback."""
+    if hasattr(request.app.state, "compaction_diagnostics"):
+        diag = request.app.state.compaction_diagnostics
+    else:
+        diag = _compaction_diagnostics
+    if diag is None:
+        raise HTTPException(status_code=503, detail="Compaction diagnostics not initialized")
+    return diag
+
+
+# -- Request/Response schemas for OpenClaw T8 ------------------------------
+
+
+class MemorySessionCreateRequest(BaseModel):
+    """Body for POST /v1/sessions/memory (standalone catalog)."""
+
+    agent_id: str = ""
+    tenant_id: str = ""
+    parent_session_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemorySessionUpdateRequest(BaseModel):
+    """Body for PATCH /v1/sessions/memory/{session_id}."""
+
+    status: str | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+    message_count: int | None = None
+    token_count: int | None = None
+
+
+class ContextSlotCreateRequest(BaseModel):
+    """Body for registering a context slot."""
+
+    name: str
+    content: str = ""
+    token_count: int = 0
+    priority: str = "optional"
+    max_tokens: int = 0
+    source: str = ""
+
+
+# -- Memory catalog routes --------------------------------------------------
+
+
+@router.post(
+    "/memory",
+    status_code=201,
+    dependencies=[require_scope("sessions:write")],
+)
+async def create_memory_session(
+    body: MemorySessionCreateRequest, request: Request
+) -> dict[str, Any]:
+    """Create a session in the standalone memory catalog."""
+    catalog = _get_memory_catalog(request)
+    entry = catalog.create_session(
+        agent_id=body.agent_id,
+        tenant_id=body.tenant_id,
+        parent_session_id=body.parent_session_id,
+        tags=body.tags,
+        metadata=body.metadata,
+    )
+    return dict(entry.model_dump())
+
+
+@router.get(
+    "/memory",
+    dependencies=[require_scope("sessions:read")],
+)
+async def list_memory_sessions(
+    request: Request,
+    status: str | None = Query(default=None, description="Filter by status"),
+    agent_id: str | None = Query(default=None, description="Filter by agent_id"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """List sessions from the standalone memory catalog."""
+    from agent33.memory.session_catalog import SessionStatus
+
+    catalog = _get_memory_catalog(request)
+    status_enum = SessionStatus(status) if status else None
+    entries, total = catalog.list_sessions(
+        status=status_enum,
+        agent_id=agent_id,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "entries": [e.model_dump() for e in entries],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+    }
+
+
+@router.get(
+    "/memory/{session_id}",
+    dependencies=[require_scope("sessions:read")],
+)
+async def get_memory_session(session_id: str, request: Request) -> dict[str, Any]:
+    """Get a single session from the memory catalog."""
+    catalog = _get_memory_catalog(request)
+    try:
+        entry = catalog.get_session(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    return dict(entry.model_dump())
+
+
+@router.patch(
+    "/memory/{session_id}",
+    dependencies=[require_scope("sessions:write")],
+)
+async def update_memory_session(
+    session_id: str, body: MemorySessionUpdateRequest, request: Request
+) -> dict[str, Any]:
+    """Update tags, metadata, status, or counters on a memory catalog session."""
+    from agent33.memory.session_catalog import SessionStatus
+
+    catalog = _get_memory_catalog(request)
+    status_enum = SessionStatus(body.status) if body.status else None
+    try:
+        entry = catalog.update_session(
+            session_id,
+            status=status_enum,
+            tags=body.tags,
+            metadata=body.metadata,
+            message_count=body.message_count,
+            token_count=body.token_count,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    return dict(entry.model_dump())
+
+
+@router.get(
+    "/memory/{session_id}/lineage",
+    dependencies=[require_scope("sessions:read")],
+)
+async def memory_session_lineage(session_id: str, request: Request) -> dict[str, Any]:
+    """Return the delegation tree from the memory catalog."""
+    catalog = _get_memory_catalog(request)
+    try:
+        tree = catalog.get_lineage_tree(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found") from None
+    return dict(tree.model_dump())
+
+
+# -- Context slot routes ----------------------------------------------------
+
+
+@router.get(
+    "/memory/{session_id}/context-slots",
+    dependencies=[require_scope("sessions:read")],
+)
+async def list_context_slots(session_id: str, request: Request) -> dict[str, Any]:
+    """List context slots for a session."""
+    mgr = _get_context_slot_manager(request)
+    result: dict[str, Any] = mgr.to_summary(session_id)
+    return result
+
+
+@router.post(
+    "/memory/{session_id}/context-slots",
+    status_code=201,
+    dependencies=[require_scope("sessions:write")],
+)
+async def register_context_slot(
+    session_id: str, body: ContextSlotCreateRequest, request: Request
+) -> dict[str, Any]:
+    """Register a new context slot for a session."""
+    from agent33.memory.context_slots import ContextSlot as MemoryContextSlot
+    from agent33.memory.context_slots import SlotPriority
+
+    mgr = _get_context_slot_manager(request)
+    slot = MemoryContextSlot(
+        name=body.name,
+        content=body.content,
+        token_count=body.token_count,
+        priority=SlotPriority(body.priority),
+        max_tokens=body.max_tokens,
+        source=body.source,
+    )
+    mgr.register(session_id, slot)
+    return slot.model_dump()
+
+
+@router.delete(
+    "/memory/{session_id}/context-slots/{slot_name}",
+    dependencies=[require_scope("sessions:write")],
+)
+async def evict_context_slot(session_id: str, slot_name: str, request: Request) -> dict[str, str]:
+    """Evict a context slot from a session."""
+    mgr = _get_context_slot_manager(request)
+    try:
+        mgr.evict(session_id, slot_name)
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Slot '{slot_name}' not found for session '{session_id}'"
+        ) from None
+    return {"status": "evicted", "slot": slot_name}
+
+
+# -- Compaction history routes ----------------------------------------------
+
+
+@router.get(
+    "/memory/{session_id}/compaction-history",
+    dependencies=[require_scope("sessions:read")],
+)
+async def compaction_history(session_id: str, request: Request) -> dict[str, Any]:
+    """Get compaction events for a session."""
+    diag = _get_compaction_diagnostics(request)
+    events = diag.history(session_id)
+    summary = diag.summary(session_id)
+    return {
+        "session_id": session_id,
+        "events": [e.model_dump() for e in events],
+        "summary": summary.model_dump(),
+    }
