@@ -320,7 +320,7 @@ class TestStreamingToolLoop:
         tc = _make_tool_call()
         tool = _make_mock_tool()
         # Always return tool calls so loop continues
-        router = _make_router(*[_tool_response([tc]) for _ in range(10)])
+        router = _make_router(*[_tool_response([tc], content="working") for _ in range(10)])
         registry = _make_registry(tool)
         config = ToolLoopConfig(max_iterations=2, enable_double_confirmation=False)
 
@@ -332,6 +332,7 @@ class TestStreamingToolLoop:
 
         assert events[-1].event_type == "completed"
         assert events[-1].data["termination_reason"] == "max_iterations"
+        assert events[-1].data["output"] == {"response": "working"}
 
     async def test_stream_loop_started_data(self) -> None:
         """The loop_started event should include max_iterations and tools_count."""

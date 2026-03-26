@@ -459,6 +459,7 @@ class ToolLoop:
 
         termination_reason = "max_iterations"
         final_response: LLMResponse | None = None
+        last_response: LLMResponse | None = None
 
         try:
             while state.iteration < self._config.max_iterations:
@@ -536,6 +537,7 @@ class ToolLoop:
                     continue
 
                 self._track_token_usage(state, response)
+                last_response = response
 
                 yield ToolLoopEvent(
                     event_type="llm_response",
@@ -766,7 +768,8 @@ class ToolLoop:
             termination_reason = "error"
 
         # --- Always emit completed event --------------------------------------
-        raw = (final_response.content if final_response else "") or ""
+        response_for_output = final_response or last_response
+        raw = (response_for_output.content if response_for_output else "") or ""
         parsed_output = self._parse_output(raw)
         yield ToolLoopEvent(
             event_type="completed",
