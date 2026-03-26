@@ -17,6 +17,7 @@ EventType = Literal[
     "tool_call_completed",
     "tool_call_blocked",
     "loop_detected",
+    "handoff_context_wipe",
     "confirmation_prompt",
     "confirmation_result",
     "context_managed",

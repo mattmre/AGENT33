@@ -399,7 +399,7 @@ async def test_tool_loop_stream_falls_back_to_complete_when_streaming_unsupporte
 
     assert isinstance(events[-1], ToolLoopEvent)
     assert events[-1].event_type == "completed"
-    assert events[-1].data["termination_reason"] == "natural"
+    assert events[-1].data["termination_reason"] == "completed"
     assert router.complete.await_count == 1
 
 
