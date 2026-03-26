@@ -904,6 +904,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         default_engine=settings.context_engine_default,
     )
 
+    # -- Track 8 OpenClaw: Memory session catalog, context slots, compaction --
+    from agent33.memory.compaction import CompactionDiagnostics
+    from agent33.memory.context_slots import ContextSlotManager
+    from agent33.memory.session_catalog import SessionCatalog as MemorySessionCatalog
+
+    memory_session_catalog = MemorySessionCatalog()
+    app.state.memory_session_catalog = memory_session_catalog
+    sessions.set_memory_session_catalog(memory_session_catalog)
+
+    context_slot_manager = ContextSlotManager()
+    app.state.context_slot_manager = context_slot_manager
+    sessions.set_context_slot_manager(context_slot_manager)
+
+    compaction_diagnostics = CompactionDiagnostics()
+    app.state.compaction_diagnostics = compaction_diagnostics
+    sessions.set_compaction_diagnostics(compaction_diagnostics)
+
+    logger.info("track8_openclaw_memory_services_initialized")
+
     # -- Web research service (Track 7) ------------------------------------
     from agent33.web_research.service import (
         create_default_web_research_service,
