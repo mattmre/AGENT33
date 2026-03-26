@@ -9,7 +9,7 @@ export interface DAGNode {
   label: string;
   /** Action type: invoke-agent, run-command, etc. */
   type: string;
-  status: "pending" | "running" | "completed" | "failed" | "skipped" | "success";
+  status: "pending" | "running" | "completed" | "failed" | "skipped" | "success" | "retrying";
   duration_ms: number | null;
   agent_id: string | null;
   x: number;
@@ -44,6 +44,8 @@ export function dagStatusToColor(status: DAGNode["status"]): string {
       return "#ef4444";
     case "running":
       return "#3b82f6";
+    case "retrying":
+      return "#f59e0b";
     case "skipped":
       return "#a855f7";
     case "pending":
@@ -62,6 +64,8 @@ export function dagStatusLabel(status: DAGNode["status"]): string {
       return "failed";
     case "running":
       return "running";
+    case "retrying":
+      return "retrying";
     case "skipped":
       return "skipped";
     case "pending":

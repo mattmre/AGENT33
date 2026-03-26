@@ -64,6 +64,10 @@ describe("dagStatusToColor", () => {
   it("returns gray for pending", () => {
     expect(dagStatusToColor("pending")).toBe("#9ca3af");
   });
+
+  it("returns amber for retrying", () => {
+    expect(dagStatusToColor("retrying")).toBe("#f59e0b");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,10 @@ describe("dagStatusLabel", () => {
 
   it("returns skipped for skipped status", () => {
     expect(dagStatusLabel("skipped")).toBe("skipped");
+  });
+
+  it("returns retrying for retrying status", () => {
+    expect(dagStatusLabel("retrying")).toBe("retrying");
   });
 });
 
@@ -236,6 +244,17 @@ describe("DAGVisualization", () => {
     // Leave node
     fireEvent.mouseLeave(screen.getByTestId("node-hover-node"));
     expect(screen.queryByTestId("dag-tooltip")).not.toBeInTheDocument();
+  });
+
+  it("applies retrying aria-label and animation for retrying nodes", () => {
+    const layout = makeLayout({
+      nodes: [makeNode({ id: "r1", label: "Retry Step", status: "retrying", x: 40, y: 40 })]
+    });
+
+    render(createElement(DAGVisualization, { dagLayout: layout }));
+
+    const node = screen.getByTestId("node-r1");
+    expect(node).toHaveAttribute("aria-label", "Retry Step: retrying");
   });
 
   it("renders empty graph without errors", () => {
