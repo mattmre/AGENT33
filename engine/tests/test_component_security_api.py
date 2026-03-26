@@ -49,13 +49,13 @@ def _default_command_runner(
 
 @pytest.fixture(autouse=True)
 def reset_component_security_service() -> None:
-    service = component_security._service
+    service = component_security.get_component_security_service()
     service._runs.clear()
     service._findings.clear()
     service._command_runner = _default_command_runner
     service._allowed_roots = []
     yield
-    service = component_security._service
+    service = component_security.get_component_security_service()
     service._runs.clear()
     service._findings.clear()
     service._command_runner = _default_command_runner

@@ -33,34 +33,58 @@ router = APIRouter(prefix="/v1/component-security", tags=["component-security"])
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 
 
-def _build_security_scan_store() -> SecurityScanStore | None:
+_service: SecurityScanService | None = None
+_mcp_scanner = MCPSecurityScanner()
+_llm_scanner = LLMSecurityScanner()
+
+
+def _build_security_scan_store(cfg: Any = None) -> SecurityScanStore | None:
     """Construct optional persistent store for security scan runs."""
-    if not settings.component_security_scan_store_enabled:
+    cfg = cfg or settings
+    if not cfg.component_security_scan_store_enabled:
         return None
-    db_path = settings.component_security_scan_store_db_path.strip()
+    db_path = cfg.component_security_scan_store_db_path.strip()
     if not db_path:
         return None
     return SecurityScanStore(db_path=db_path)
 
 
-_service = SecurityScanService(
-    allowed_roots=[str(_WORKSPACE_ROOT)],
-    store=_build_security_scan_store(),
-    store_retention_days=settings.component_security_scan_store_retention_days,
-)
-_mcp_scanner = MCPSecurityScanner()
-_llm_scanner = LLMSecurityScanner()
+def init_component_security_service(app: Any, cfg: Any = None) -> None:
+    """Initialize the component-security service during app lifespan.
+
+    Stores the service on ``app.state.security_scan_service`` and
+    optionally the store on ``app.state.security_scan_store`` for
+    proper shutdown cleanup.
+    """
+    global _service  # noqa: PLW0603
+    cfg = cfg or settings
+    store = _build_security_scan_store(cfg)
+    _service = SecurityScanService(
+        allowed_roots=[str(_WORKSPACE_ROOT)],
+        store=store,
+        store_retention_days=cfg.component_security_scan_store_retention_days,
+    )
+    app.state.security_scan_service = _service
+    app.state.security_scan_store = store
 
 
 def get_component_security_service() -> SecurityScanService:
-    """Return singleton component security service."""
+    """Return the component security service.
+
+    Falls back to a default in-memory service if init_component_security_service
+    was not called (e.g., during isolated tests).
+    """
+    global _service  # noqa: PLW0603
+    if _service is None:
+        _service = SecurityScanService(
+            allowed_roots=[str(_WORKSPACE_ROOT)],
+        )
     return _service
 
 
 def _reset_service() -> None:
     """Rebuild the component-security singleton for tests."""
     global _service  # noqa: PLW0603
-
     _service = SecurityScanService(
         allowed_roots=[str(_WORKSPACE_ROOT)],
         store=_build_security_scan_store(),
