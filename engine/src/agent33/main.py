@@ -62,6 +62,7 @@ from agent33.api.routes import (
     traces,
     training,
     visualizations,
+    web_research,
     webhook_delivery,
     webhooks,
     workflow_marketplace,
@@ -478,6 +479,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             vision_model=settings.browser_vision_model,
         )
     )
+
+    from agent33.tools.builtin.search import SearchTool
+
+    # SearchTool is initialized without a registry here; it will be
+    # re-registered with the full SearchProviderRegistry later in lifespan
+    # once the registry is created.
+    tool_registry.register(SearchTool())
     logger.info("tool_registry_initialized", tool_count=len(tool_registry.list_all()))
 
     from agent33.processes.service import ProcessManagerService
@@ -897,11 +905,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     # -- Web research service (Track 7) ------------------------------------
-    from agent33.web_research.service import create_default_web_research_service
+    from agent33.web_research.service import (
+        create_default_web_research_service,
+        create_search_provider_registry,
+    )
 
-    web_research_service = create_default_web_research_service()
+    search_provider_registry = create_search_provider_registry()
+    app.state.search_provider_registry = search_provider_registry
+    web_research.set_search_provider_registry(search_provider_registry)
+    logger.info(
+        "search_provider_registry_initialized",
+        providers=search_provider_registry.list_provider_ids(),
+        default=search_provider_registry.default_provider_id,
+    )
+
+    web_research_service = create_default_web_research_service(
+        search_registry=search_provider_registry,
+    )
     app.state.web_research_service = web_research_service
     research.set_research_service(web_research_service)
+
+    # Re-register the SearchTool with the full provider registry
+    from agent33.tools.builtin.search import SearchTool
+
+    tool_registry.register(SearchTool(search_registry=search_provider_registry))
     logger.info("web_research_service_initialized")
 
     # -- Voice sidecar probe / status-line services ------------------------
@@ -1906,6 +1933,7 @@ app.include_router(evaluations.router)
 app.include_router(autonomy.router)
 app.include_router(releases.router)
 app.include_router(research.router)
+app.include_router(web_research.router)
 app.include_router(improvements.router)
 app.include_router(insights.router)
 app.include_router(training.router)

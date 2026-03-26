@@ -11,6 +11,7 @@ from agent33.tools.builtin.search import SearchTool
 from agent33.web_research.models import (
     ResearchSearchResponse,
     ResearchTrustLevel,
+    TrustLabel,
     WebResearchCitation,
     WebResearchResult,
 )
@@ -27,7 +28,7 @@ def context() -> ToolContext:
 
 
 async def test_name(tool: SearchTool) -> None:
-    assert tool.name == "search"
+    assert tool.name == "web_search"
 
 
 async def test_missing_query(tool: SearchTool, context: ToolContext) -> None:
@@ -57,6 +58,8 @@ async def test_search_returns_results(tool: SearchTool, context: ToolContext) ->
             trust_level=ResearchTrustLevel.SEARCH_INDEXED,
             trust_reason="Indexed by searxng",
             citation=citation,
+            trust_label=TrustLabel.UNKNOWN,
+            trust_label_reason="No established reputation",
         ),
         WebResearchResult(
             title="Result 2",
@@ -69,6 +72,8 @@ async def test_search_returns_results(tool: SearchTool, context: ToolContext) ->
             trust_level=ResearchTrustLevel.SEARCH_INDEXED,
             trust_reason="Indexed by searxng",
             citation=citation,
+            trust_label=TrustLabel.UNKNOWN,
+            trust_label_reason="No established reputation",
         ),
     ]
     response = ResearchSearchResponse(query="test query", provider_id="searxng", results=results)
@@ -84,7 +89,7 @@ async def test_search_returns_results(tool: SearchTool, context: ToolContext) ->
         assert result.success
         assert "Result 1" in result.output
         assert "Result 2" in result.output
-        assert "search-indexed" in result.output
+        assert "UNKNOWN" in result.output
 
 
 async def test_search_connection_error(tool: SearchTool, context: ToolContext) -> None:
