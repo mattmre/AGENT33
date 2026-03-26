@@ -408,6 +408,9 @@ class Settings(BaseSettings):
     operator_session_max_retained: int = 100
     operator_session_crash_recovery_enabled: bool = True
 
+    # Phase 51: Anthropic prompt caching
+    prompt_cache_enabled: bool = True
+
     # Phase 50: Context compression engine
     context_compression_enabled: bool = False
     context_compression_threshold_percent: float = 0.50

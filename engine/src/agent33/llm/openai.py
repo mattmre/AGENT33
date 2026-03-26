@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
+from agent33.config import settings
 from agent33.connectors.boundary import (
     build_connector_boundary_executor,
     map_connector_exception,
@@ -26,6 +27,7 @@ from agent33.llm.base import (
     ToolCallDelta,
     ToolCallFunction,
 )
+from agent33.llm.prompt_caching import apply_anthropic_cache_control, is_anthropic_model
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -292,7 +294,23 @@ class OpenAIProvider:
             # Wrap each tool dict in the OpenAI function tool format
             payload["tools"] = [{"type": "function", "function": tool_def} for tool_def in tools]
 
+        # Phase 51: inject Anthropic prompt-cache breakpoints
+        if is_anthropic_model(resolved_model) and settings.prompt_cache_enabled:
+            payload["messages"] = apply_anthropic_cache_control(payload["messages"])
+
         data = await self._post("/chat/completions", payload)
+
+        # Log Anthropic cache usage when available
+        usage_data = data.get("usage", {})
+        if isinstance(usage_data, dict):
+            cache_read = usage_data.get("cache_read_input_tokens")
+            cache_creation = usage_data.get("cache_creation_input_tokens")
+            if cache_read is not None or cache_creation is not None:
+                logger.info(
+                    "anthropic cache usage: read=%s creation=%s",
+                    cache_read,
+                    cache_creation,
+                )
 
         choices = data.get("choices", [])
         usage = data.get("usage")
@@ -373,6 +391,10 @@ class OpenAIProvider:
             body["max_tokens"] = max_tokens
         if tools is not None:
             body["tools"] = [{"type": "function", "function": t} for t in tools]
+
+        # Phase 51: inject Anthropic prompt-cache breakpoints
+        if is_anthropic_model(resolved_model) and settings.prompt_cache_enabled:
+            body["messages"] = apply_anthropic_cache_control(body["messages"])
 
         async for line in self._stream_lines("/chat/completions", body):
             line = line.strip()
