@@ -254,14 +254,18 @@ class TestStreamingToolLoop:
         assert comp_event.data["tool"] == "shell"
         assert comp_event.data["success"] is True
 
-    async def test_stream_llm_error(self) -> None:
-        """LLM error should produce error event."""
+    async def test_stream_llm_error_retries_until_threshold(self) -> None:
+        """Streaming should retry LLM errors until the configured threshold is reached."""
         from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
 
         router = MagicMock()
         router.complete = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
         registry = _make_registry()
-        config = ToolLoopConfig(max_iterations=5, enable_double_confirmation=False)
+        config = ToolLoopConfig(
+            max_iterations=5,
+            error_threshold=2,
+            enable_double_confirmation=False,
+        )
 
         loop = ToolLoop(router=router, tool_registry=registry, config=config)
 
@@ -269,15 +273,45 @@ class TestStreamingToolLoop:
         async for event in loop.run_stream(_initial_messages(), model="test-model"):
             events.append(event)
 
-        event_types = [e.event_type for e in events]
-        assert "error" in event_types
+        error_events = [e for e in events if e.event_type == "error"]
+        assert len(error_events) == 2
         assert events[-1].event_type == "completed"
-        assert events[-1].data["termination_reason"] == "llm_error"
+        assert events[-1].data["termination_reason"] == "error"
+        assert router.complete.await_count == 2
 
         # Verify error event data
-        error_event = next(e for e in events if e.event_type == "error")
-        assert "LLM unavailable" in error_event.data["error"]
-        assert error_event.data["phase"] == "llm_call"
+        assert "LLM unavailable" in error_events[0].data["error"]
+        assert error_events[0].data["phase"] == "llm_call"
+        assert error_events[0].data["retrying"] is True
+        assert error_events[1].data["retrying"] is False
+
+    async def test_stream_llm_error_can_recover_on_retry(self) -> None:
+        """A transient LLM error should not force streaming termination."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        router = MagicMock()
+        router.complete = AsyncMock(
+            side_effect=[RuntimeError("LLM unavailable"), _text_response("Recovered")]
+        )
+        registry = _make_registry()
+        config = ToolLoopConfig(
+            max_iterations=5,
+            error_threshold=3,
+            enable_double_confirmation=False,
+        )
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        error_events = [e for e in events if e.event_type == "error"]
+        assert len(error_events) == 1
+        assert error_events[0].data["retrying"] is True
+        assert events[-1].event_type == "completed"
+        assert events[-1].data["termination_reason"] == "natural"
+        assert router.complete.await_count == 2
 
     async def test_stream_max_iterations(self) -> None:
         """Reaching max iterations should complete with max_iterations reason."""
@@ -357,6 +391,97 @@ class TestStreamingToolLoop:
         assert completed.data["total_tokens"] > 0
         assert completed.data["tool_calls_made"] == 1
         assert "shell" in completed.data["tools_used"]
+
+    async def test_stream_budget_enforcement_blocks_after_tool_iteration(self) -> None:
+        """End-of-iteration budget checks should terminate streaming with budget_exceeded."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.autonomy.models import EnforcementResult
+
+        tc = _make_tool_call()
+        tool = _make_mock_tool()
+        router = _make_router(_tool_response([tc]))
+        registry = _make_registry(tool)
+        enforcer = MagicMock()
+        enforcer.record_iteration.return_value = EnforcementResult.BLOCKED
+        enforcer.check_duration.return_value = EnforcementResult.ALLOWED
+
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            runtime_enforcer=enforcer,
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        blocked = next(e for e in events if e.event_type == "tool_call_blocked")
+        assert blocked.data["reason"] == "budget_exceeded"
+        assert blocked.data["phase"] == "iteration"
+        assert events[-1].data["termination_reason"] == "budget_exceeded"
+
+    async def test_stream_duration_budget_enforcement_blocks_after_tool_iteration(self) -> None:
+        """Duration budget checks should also terminate streaming with budget_exceeded."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.autonomy.models import EnforcementResult
+
+        tc = _make_tool_call()
+        tool = _make_mock_tool()
+        router = _make_router(_tool_response([tc]))
+        registry = _make_registry(tool)
+        enforcer = MagicMock()
+        enforcer.record_iteration.return_value = EnforcementResult.ALLOWED
+        enforcer.check_duration.return_value = EnforcementResult.BLOCKED
+
+        loop = ToolLoop(
+            router=router,
+            tool_registry=registry,
+            runtime_enforcer=enforcer,
+            config=ToolLoopConfig(enable_double_confirmation=False),
+        )
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        blocked = next(e for e in events if e.event_type == "tool_call_blocked")
+        assert blocked.data["reason"] == "budget_exceeded"
+        assert blocked.data["phase"] == "duration"
+        assert events[-1].data["termination_reason"] == "budget_exceeded"
+
+    async def test_stream_tool_iteration_resets_consecutive_errors(self) -> None:
+        """A successful tool iteration should reset the LLM consecutive-error counter."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        tc = _make_tool_call("shell", '{"command": "ls"}', "call_good")
+        tool = _make_mock_tool("shell")
+        router = MagicMock()
+        router.complete = AsyncMock(
+            side_effect=[
+                RuntimeError("first failure"),
+                _tool_response([tc]),
+                RuntimeError("second failure"),
+                _text_response("Recovered after tool call"),
+            ]
+        )
+        registry = _make_registry(tool)
+        config = ToolLoopConfig(
+            max_iterations=5,
+            error_threshold=2,
+            enable_double_confirmation=False,
+        )
+
+        loop = ToolLoop(router=router, tool_registry=registry, config=config)
+
+        events: list[ToolLoopEvent] = []
+        async for event in loop.run_stream(_initial_messages(), model="test-model"):
+            events.append(event)
+
+        error_events = [e for e in events if e.event_type == "error"]
+        assert len(error_events) == 2
+        assert events[-1].data["termination_reason"] == "natural"
+        assert router.complete.await_count == 4
 
     async def test_stream_falls_back_to_non_streaming_when_finish_reason_requires_tools(
         self,

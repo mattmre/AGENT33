@@ -496,13 +496,27 @@ class ToolLoop:
                         yield token_event
                     response = stream_result["response"]
                 except Exception as exc:
+                    state.consecutive_errors += 1
+                    logger.warning(
+                        "Streaming LLM call failed (attempt %d, consecutive_errors=%d)",
+                        state.iteration,
+                        state.consecutive_errors,
+                        exc_info=True,
+                    )
                     yield ToolLoopEvent(
                         event_type="error",
                         iteration=state.iteration,
-                        data={"error": str(exc), "phase": "llm_call"},
+                        data={
+                            "error": str(exc),
+                            "phase": "llm_call",
+                            "consecutive_errors": state.consecutive_errors,
+                            "retrying": state.consecutive_errors < self._config.error_threshold,
+                        },
                     )
-                    termination_reason = "llm_error"
-                    break
+                    if state.consecutive_errors >= self._config.error_threshold:
+                        termination_reason = "error"
+                        break
+                    continue
 
                 self._track_token_usage(state, response)
 
@@ -536,6 +550,8 @@ class ToolLoop:
                 has_tool_calls = bool(response.tool_calls)
 
                 if has_tool_calls:
+                    state.consecutive_errors = 0
+                    state.confirmation_pending = False
                     tool_names = [tc.function.name for tc in (response.tool_calls or [])]
                     yield ToolLoopEvent(
                         event_type="tool_call_requested",
@@ -693,6 +709,36 @@ class ToolLoop:
                                 "phase": "context_compression",
                             },
                         )
+
+                if state.consecutive_errors >= self._config.error_threshold:
+                    termination_reason = "error"
+                    final_response = response
+                    break
+
+                if self._runtime_enforcer is not None:
+                    from agent33.autonomy.models import EnforcementResult
+
+                    iter_result = self._runtime_enforcer.record_iteration()
+                    if iter_result == EnforcementResult.BLOCKED:
+                        yield ToolLoopEvent(
+                            event_type="tool_call_blocked",
+                            iteration=state.iteration,
+                            data={"reason": "budget_exceeded", "phase": "iteration"},
+                        )
+                        termination_reason = "budget_exceeded"
+                        final_response = response
+                        break
+
+                    dur_result = self._runtime_enforcer.check_duration()
+                    if dur_result == EnforcementResult.BLOCKED:
+                        yield ToolLoopEvent(
+                            event_type="tool_call_blocked",
+                            iteration=state.iteration,
+                            data={"reason": "budget_exceeded", "phase": "duration"},
+                        )
+                        termination_reason = "budget_exceeded"
+                        final_response = response
+                        break
 
         except Exception as exc:
             yield ToolLoopEvent(
