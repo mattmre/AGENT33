@@ -277,7 +277,8 @@ class Settings(BaseSettings):
     connector_circuit_breaker_enabled: bool = False
     connector_circuit_failure_threshold: int = 3
     connector_circuit_recovery_seconds: float = 30.0
-    connector_circuit_half_open_successes: int = 1
+    connector_circuit_half_open_successes: int = 2
+    connector_circuit_max_recovery_seconds: float = 300.0
 
     # Jupyter kernel execution
     jupyter_kernel_enabled: bool = False

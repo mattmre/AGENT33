@@ -7,12 +7,17 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
+import structlog
+
 from agent33.connectors.circuit_breaker import CircuitOpenError
 from agent33.connectors.models import ConnectorRequest
 
 if TYPE_CHECKING:
     from agent33.connectors.circuit_breaker import CircuitBreaker
     from agent33.connectors.governance import ConnectorGovernancePolicy
+    from agent33.connectors.monitoring import ConnectorMetricsCollector
+
+logger = structlog.get_logger()
 
 ConnectorHandler = Callable[[ConnectorRequest], Awaitable[Any]]
 
@@ -41,6 +46,12 @@ class GovernanceMiddleware:
         decision = self._policy.evaluate(request)
         if not decision.allowed:
             reason = decision.reason or "connector call blocked by governance policy"
+            logger.warning(
+                "connector_governance_denied",
+                connector=request.connector,
+                operation=request.operation,
+                reason=reason,
+            )
             raise PermissionError(reason)
         return await call_next(request)
 
@@ -56,7 +67,16 @@ class CircuitBreakerMiddleware:
         request: ConnectorRequest,
         call_next: ConnectorHandler,
     ) -> Any:
-        self._breaker.before_call()
+        try:
+            self._breaker.before_call()
+        except CircuitOpenError:
+            logger.warning(
+                "connector_circuit_open_rejected",
+                connector=request.connector,
+                operation=request.operation,
+                state=self._breaker.state.value,
+            )
+            raise
         try:
             result = await call_next(request)
         except Exception:
@@ -86,6 +106,12 @@ class TimeoutMiddleware:
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout_value)
         except TimeoutError as exc:
+            logger.warning(
+                "connector_timeout",
+                connector=request.connector,
+                operation=request.operation,
+                timeout_seconds=timeout_value,
+            )
             raise TimeoutError(
                 f"connector call timed out after {timeout_value:.2f}s: "
                 f"{request.connector}/{request.operation}"
@@ -104,19 +130,37 @@ class RetryMiddleware:
         call_next: ConnectorHandler,
     ) -> Any:
         last_error: Exception | None = None
-        for _attempt in range(1, self._max_attempts + 1):
+        for attempt in range(1, self._max_attempts + 1):
             try:
                 return await call_next(request)
             except (PermissionError, CircuitOpenError):
                 raise
-            except Exception as exc:  # pragma: no cover - covered by successful retry path
+            except Exception as exc:
                 last_error = exc
+                logger.info(
+                    "connector_retry_attempt",
+                    connector=request.connector,
+                    operation=request.operation,
+                    attempt=attempt,
+                    max_attempts=self._max_attempts,
+                    error=str(exc),
+                )
         assert last_error is not None
         raise last_error
 
 
 class MetricsMiddleware:
-    """Record call count/success/failure/latency in request metadata."""
+    """Record call count/success/failure/latency in request metadata.
+
+    When a ``ConnectorMetricsCollector`` is provided, call metrics are also
+    pushed to the collector for aggregation and monitoring.
+    """
+
+    def __init__(
+        self,
+        collector: ConnectorMetricsCollector | None = None,
+    ) -> None:
+        self._collector = collector
 
     async def __call__(
         self,
@@ -129,9 +173,17 @@ class MetricsMiddleware:
         try:
             result = await call_next(request)
         except Exception:
+            latency_ms = round((time.monotonic() - started) * 1000, 2)
             metrics["failure"] = int(metrics.get("failure", 0)) + 1
-            metrics["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+            metrics["latency_ms"] = latency_ms
+            if self._collector is not None:
+                self._collector.record_call(
+                    request.connector, success=False, latency_ms=latency_ms
+                )
             raise
+        latency_ms = round((time.monotonic() - started) * 1000, 2)
         metrics["success"] = int(metrics.get("success", 0)) + 1
-        metrics["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+        metrics["latency_ms"] = latency_ms
+        if self._collector is not None:
+            self._collector.record_call(request.connector, success=True, latency_ms=latency_ms)
         return result

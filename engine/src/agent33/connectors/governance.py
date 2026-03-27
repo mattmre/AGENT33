@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
+import structlog
+
 if TYPE_CHECKING:
     from agent33.connectors.models import ConnectorRequest
+
+logger = structlog.get_logger()
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from agent33.connectors.middleware import ConnectorHandler, ConnectorMiddleware
     from agent33.connectors.models import ConnectorRequest
+
+logger = structlog.get_logger()
 
 
 class ConnectorExecutor:

@@ -332,12 +332,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- Session analytics (Phase 57) -----------------------------------------
     insights.set_insights_dependencies(metrics_collector)
 
-    # -- Connector metrics collector (Phase 32 UX) -------------------------
+    # -- Connector metrics collector & breaker registry (Phase 32) ----------
+    from agent33.connectors.circuit_breaker import CircuitBreakerRegistry
     from agent33.connectors.monitoring import ConnectorMetricsCollector
 
     connector_metrics = ConnectorMetricsCollector()
     app.state.connector_metrics = connector_metrics
-    logger.info("connector_metrics_collector_initialized")
+    breaker_registry = CircuitBreakerRegistry()
+    app.state.breaker_registry = breaker_registry
+    logger.info("connector_metrics_and_registry_initialized")
 
     # -- Agent runtime / workflow integration ------------------------------
     from agent33.llm.router import ModelRouter

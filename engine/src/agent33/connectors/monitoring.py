@@ -8,6 +8,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
+import structlog
+
+logger = structlog.get_logger()
+
 
 @dataclass(slots=True)
 class _ConnectorStats:

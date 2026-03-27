@@ -7,8 +7,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = structlog.get_logger()
 
 
 class CircuitState(StrEnum):
@@ -25,11 +29,17 @@ class CircuitOpenError(RuntimeError):
 
 @dataclass(slots=True)
 class CircuitBreaker:
-    """Simple consecutive-failure circuit breaker."""
+    """Consecutive-failure circuit breaker with progressive backoff.
+
+    When the breaker trips, the recovery timeout grows exponentially with
+    each successive trip:
+    ``actual_timeout = min(recovery_timeout * 2^(total_trips-1), max_recovery_timeout)``
+    """
 
     failure_threshold: int = 3
     recovery_timeout_seconds: float = 30.0
-    half_open_success_threshold: int = 1
+    half_open_success_threshold: int = 2
+    max_recovery_timeout_seconds: float = 300.0
     clock: Callable[[], float] = time.monotonic
     state: CircuitState = CircuitState.CLOSED
     consecutive_failures: int = 0
@@ -41,12 +51,31 @@ class CircuitBreaker:
         default=None, repr=False
     )
 
+    @property
+    def effective_recovery_timeout(self) -> float:
+        """Compute the progressive backoff recovery timeout.
+
+        Returns ``min(base * 2^(trips-1), max)`` for trips >= 1, or the
+        base timeout when no trips have occurred yet.
+        """
+        if self.total_trips <= 0:
+            return self.recovery_timeout_seconds
+        exponent = self.total_trips - 1
+        backoff: float = self.recovery_timeout_seconds * (2**exponent)
+        return float(min(backoff, self.max_recovery_timeout_seconds))
+
     def _transition(self, new_state: CircuitState) -> None:
         """Apply a state transition and fire the callback if set."""
         old_state = self.state
         if old_state == new_state:
             return
         self.state = new_state
+        logger.info(
+            "circuit_breaker_state_transition",
+            old_state=old_state.value,
+            new_state=new_state.value,
+            total_trips=self.total_trips,
+        )
         if self.on_state_change is not None:
             self.on_state_change(old_state, new_state)
 
@@ -57,7 +86,8 @@ class CircuitBreaker:
         if self.opened_at is None:
             raise CircuitOpenError("Circuit is open")
         elapsed = self.clock() - self.opened_at
-        if elapsed < self.recovery_timeout_seconds:
+        timeout = self.effective_recovery_timeout
+        if elapsed < timeout:
             raise CircuitOpenError("Circuit is open")
         self._transition(CircuitState.HALF_OPEN)
         self.half_open_successes = 0
@@ -93,6 +123,11 @@ class CircuitBreaker:
         self.last_trip_at = self.opened_at
         self.consecutive_failures = 0
         self.half_open_successes = 0
+        logger.warning(
+            "circuit_breaker_tripped",
+            total_trips=self.total_trips,
+            effective_recovery_timeout=self.effective_recovery_timeout,
+        )
 
     def snapshot(self) -> dict[str, Any]:
         """Return a serializable dict of the breaker's current state."""
@@ -105,3 +140,29 @@ class CircuitBreaker:
             "recovery_timeout_seconds": self.recovery_timeout_seconds,
             "half_open_success_threshold": self.half_open_success_threshold,
         }
+
+
+class CircuitBreakerRegistry:
+    """Shared registry for per-connector circuit breaker instances.
+
+    Ensures that callers using the same connector identity share one
+    breaker rather than creating independent instances.
+    """
+
+    def __init__(self) -> None:
+        self._breakers: dict[str, CircuitBreaker] = {}
+
+    def get_or_create(self, name: str, **kwargs: Any) -> CircuitBreaker:
+        """Return the breaker for *name*, creating one if absent."""
+        if name not in self._breakers:
+            self._breakers[name] = CircuitBreaker(**kwargs)
+            logger.info("circuit_breaker_registry_created", breaker_name=name)
+        return self._breakers[name]
+
+    def get(self, name: str) -> CircuitBreaker | None:
+        """Return the breaker for *name* or ``None``."""
+        return self._breakers.get(name)
+
+    def all(self) -> dict[str, CircuitBreaker]:
+        """Return a shallow copy of all registered breakers."""
+        return dict(self._breakers)
