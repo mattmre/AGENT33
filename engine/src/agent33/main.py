@@ -77,6 +77,9 @@ from agent33.api.routes import (
     workflows,
 )
 from agent33.api.routes import (
+    capability_packs as capability_packs_routes,
+)
+from agent33.api.routes import (
     config as config_routes,
 )
 from agent33.api.routes import (
@@ -256,6 +259,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.warning("agent_definitions_dir_not_found", path=str(defs_dir))
     app.state.agent_registry = agent_registry
+
+    # -- Capability pack registry (Phase 47) --------------------------------
+    from agent33.agents.capability_packs import CapabilityPackRegistry
+
+    app.state.capability_pack_registry = CapabilityPackRegistry()
+    logger.info(
+        "capability_pack_registry_initialized",
+        pack_count=len(app.state.capability_pack_registry),
+    )
 
     # -- Agent profiler (S40) ----------------------------------------------
     from agent33.agents.profiling import AgentProfiler
@@ -2093,6 +2105,7 @@ app.include_router(mcp_proxy.router)
 app.include_router(mcp_sync.router)
 app.include_router(plugins_routes.router)
 app.include_router(packs.router)
+app.include_router(capability_packs_routes.router)
 app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)
