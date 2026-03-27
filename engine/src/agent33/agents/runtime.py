@@ -8,6 +8,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from agent33.agents.trajectory import save_trajectory
 from agent33.llm.base import ChatMessage, LLMResponse
 
 if TYPE_CHECKING:
@@ -475,6 +476,29 @@ class AgentRuntime:
             raise HookAbortError(hook_ctx.abort_reason)
         return hook_ctx.inputs, hook_ctx.system_prompt
 
+    async def _maybe_save_trajectory(
+        self,
+        *,
+        conversation: list[dict[str, str]],
+        model: str,
+        completed: bool,
+    ) -> None:
+        from agent33.config import settings as _settings
+
+        if not _settings.trajectory_capture_enabled:
+            return
+
+        try:
+            await save_trajectory(
+                conversation,
+                model,
+                completed,
+                _settings.trajectory_output_dir,
+                redaction_enabled=_settings.redact_secrets_enabled,
+            )
+        except Exception:
+            logger.debug("failed to persist invoke trajectory", exc_info=True)
+
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
         system_prompt = _build_system_prompt(self._definition)
@@ -514,6 +538,10 @@ class AgentRuntime:
         self._validate_required_inputs(inputs)
 
         user_content = json.dumps(inputs, indent=2)
+        base_conversation = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
 
         # --- Context window budgeting (S27) ---
         if self._context_window_manager is not None:
@@ -533,98 +561,120 @@ class AgentRuntime:
 
         last_exc: Exception | None = None
         response: LLMResponse | None = None
+        try:
+            for attempt in range(max_retries + 1):
+                try:
+                    response = await self._router.complete(
+                        messages,
+                        model=routed_model,
+                        temperature=self._temperature,
+                        max_tokens=max_tokens,
+                    )
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    logger.warning(
+                        "agent %s invoke attempt %d/%d failed: %s",
+                        self._definition.name,
+                        attempt + 1,
+                        max_retries + 1,
+                        exc,
+                    )
 
-        for attempt in range(max_retries + 1):
-            try:
-                response = await self._router.complete(
-                    messages,
-                    model=routed_model,
-                    temperature=self._temperature,
-                    max_tokens=max_tokens,
-                )
-                break
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "agent %s invoke attempt %d/%d failed: %s",
-                    self._definition.name,
-                    attempt + 1,
-                    max_retries + 1,
-                    exc,
-                )
+            if response is None:
+                raise RuntimeError(
+                    f"Agent '{self._definition.name}' failed after {max_retries + 1} attempts"
+                ) from last_exc
 
-        if response is None:
-            raise RuntimeError(
-                f"Agent '{self._definition.name}' failed after {max_retries + 1} attempts"
-            ) from last_exc
+            output = _parse_output(response.content, self._definition)
 
-        output = _parse_output(response.content, self._definition)
-
-        result = AgentResult(
-            output=output,
-            raw_response=response.content,
-            tokens_used=response.total_tokens,
-            model=response.model,
-            routing_decision=self._routing_decision_metadata,
-        )
-        self._update_routing_outcome(
-            actual_model=response.model,
-            tokens_used=response.total_tokens,
-            completion_status="completed",
-        )
-        self._emit_routing_metrics()
-        self._record_cost(routed_model, response)
-
-        # --- Hook: agent.invoke.post ---
-        if self._hook_registry is not None:
-            from agent33.hooks.models import AgentHookContext, HookEventType
-
-            post_runner = self._hook_registry.get_chain_runner(
-                HookEventType.AGENT_INVOKE_POST, self._tenant_id
+            result = AgentResult(
+                output=output,
+                raw_response=response.content,
+                tokens_used=response.total_tokens,
+                model=response.model,
+                routing_decision=self._routing_decision_metadata,
             )
-            hook_ctx = AgentHookContext(
-                event_type=HookEventType.AGENT_INVOKE_POST,
-                tenant_id=self._tenant_id,
-                metadata={},
-                agent_name=self._definition.name,
-                agent_definition=self._definition,
-                inputs=inputs,
-                result=result,
+            self._update_routing_outcome(
+                actual_model=response.model,
+                tokens_used=response.total_tokens,
+                completion_status="completed",
             )
-            await post_runner.run(hook_ctx)
-            # Post hooks cannot modify the result (immutable AgentResult)
+            self._emit_routing_metrics()
+            self._record_cost(routed_model, response)
 
-        # Record observation if capture is available
-        if self._observation_capture is not None:
-            try:
-                from agent33.memory.observation import Observation
+            # --- Hook: agent.invoke.post ---
+            if self._hook_registry is not None:
+                from agent33.hooks.models import AgentHookContext, HookEventType
 
-                obs = Observation(
-                    session_id=self._session_id,
+                post_runner = self._hook_registry.get_chain_runner(
+                    HookEventType.AGENT_INVOKE_POST, self._tenant_id
+                )
+                hook_ctx = AgentHookContext(
+                    event_type=HookEventType.AGENT_INVOKE_POST,
+                    tenant_id=self._tenant_id,
+                    metadata={},
                     agent_name=self._definition.name,
-                    event_type="llm_response",
-                    content=response.content[:2000],
-                    metadata={"model": response.model, "tokens": response.total_tokens},
-                    tags=[],
+                    agent_definition=self._definition,
+                    inputs=inputs,
+                    result=result,
                 )
-                if self._routing_decision_metadata is not None:
-                    obs.metadata["routing"] = self._routing_decision_metadata
-                await self._observation_capture.record(obs)
-            except Exception:
-                logger.debug("failed to record observation", exc_info=True)
+                await post_runner.run(hook_ctx)
+                # Post hooks cannot modify the result (immutable AgentResult)
 
-        # Emit trace spans if emitter is available
-        if self._trace_emitter is not None:
-            try:
-                self._trace_emitter.emit_prompt(
-                    self._definition.name,
-                    [{"role": m.role, "content": m.content} for m in messages],
-                )
-                self._trace_emitter.emit_result(self._definition.name, response.content)
-            except Exception:
-                logger.debug("failed to emit trace", exc_info=True)
+            # Record observation if capture is available
+            if self._observation_capture is not None:
+                try:
+                    from agent33.memory.observation import Observation
 
-        return result
+                    obs = Observation(
+                        session_id=self._session_id,
+                        agent_name=self._definition.name,
+                        event_type="llm_response",
+                        content=response.content[:2000],
+                        metadata={"model": response.model, "tokens": response.total_tokens},
+                        tags=[],
+                    )
+                    if self._routing_decision_metadata is not None:
+                        obs.metadata["routing"] = self._routing_decision_metadata
+                    await self._observation_capture.record(obs)
+                except Exception:
+                    logger.debug("failed to record observation", exc_info=True)
+
+            # Emit trace spans if emitter is available
+            if self._trace_emitter is not None:
+                try:
+                    self._trace_emitter.emit_prompt(
+                        self._definition.name,
+                        [{"role": m.role, "content": m.content} for m in messages],
+                    )
+                    self._trace_emitter.emit_result(self._definition.name, response.content)
+                except Exception:
+                    logger.debug("failed to emit trace", exc_info=True)
+
+            await self._maybe_save_trajectory(
+                conversation=base_conversation
+                + [{"role": "assistant", "content": response.content}],
+                model=response.model,
+                completed=True,
+            )
+            return result
+        except Exception as exc:
+            failure_conversation = list(base_conversation)
+            if response is not None:
+                failure_conversation.append({"role": "assistant", "content": response.content})
+            failure_conversation.append(
+                {
+                    "role": "assistant",
+                    "content": f"[invoke failed] {type(exc).__name__}: {exc}",
+                }
+            )
+            await self._maybe_save_trajectory(
+                conversation=failure_conversation,
+                model=response.model if response is not None else routed_model,
+                completed=False,
+            )
+            raise
 
     async def invoke_iterative(
         self,

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from agent33.agents.runtime import AgentRuntime
 from agent33.agents.trajectory import (
     _build_trajectory_record,
     _trajectory_filename,
@@ -278,3 +282,180 @@ class TestGetTrajectoryStats:
         assert stats["files"]["trajectories_success.jsonl"]["record_count"] == 3
         assert stats["files"]["trajectories_failed.jsonl"]["record_count"] == 1
         assert stats["files"]["trajectories_success.jsonl"]["size_bytes"] > 0
+
+
+def _mock_runtime_definition() -> MagicMock:
+    definition = MagicMock()
+    definition.name = "trajectory-agent"
+    definition.inputs = {}
+    definition.outputs = {"result": MagicMock(type="string", description="result")}
+    definition.constraints = MagicMock(
+        max_tokens=256,
+        max_retries=0,
+        timeout_seconds=30,
+    )
+    definition.capabilities = []
+    definition.spec_capabilities = []
+    definition.governance = MagicMock(
+        scope="",
+        commands="",
+        network="",
+        approval_required=[],
+        tool_policies={},
+    )
+    definition.autonomy_level = MagicMock(value="full")
+    definition.ownership = MagicMock(owner="", escalation_target="")
+    definition.dependencies = []
+    definition.skills = []
+    definition.description = "trajectory runtime test"
+    definition.agent_id = ""
+    return definition
+
+
+def _mock_runtime_router(
+    *,
+    response_content: str = '{"result": "ok"}',
+    side_effect: Exception | None = None,
+) -> MagicMock:
+    response = MagicMock()
+    response.content = response_content
+    response.total_tokens = 42
+    response.model = "test-model"
+
+    router = MagicMock()
+    if side_effect is None:
+        router.complete = AsyncMock(return_value=response)
+    else:
+        router.complete = AsyncMock(side_effect=side_effect)
+    return router
+
+
+class TestRuntimeInvokeTrajectory:
+    async def test_invoke_saves_successful_trajectory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        runtime = AgentRuntime(
+            definition=_mock_runtime_definition(),
+            router=_mock_runtime_router(),
+        )
+
+        result = await runtime.invoke({"query": "hello"})
+
+        assert result.output == {"result": "ok"}
+        save_mock.assert_awaited_once()
+        args, kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert model == "test-model"
+        assert completed is True
+        assert output_dir == str(tmp_path)
+        assert conversation[0]["role"] == "system"
+        assert conversation[1]["role"] == "user"
+        assert '"query": "hello"' in conversation[1]["content"]
+        assert conversation[2] == {"role": "assistant", "content": '{"result": "ok"}'}
+        assert kwargs["redaction_enabled"] == config_module.settings.redact_secrets_enabled
+
+    async def test_invoke_saves_failed_trajectory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        runtime = AgentRuntime(
+            definition=_mock_runtime_definition(),
+            router=_mock_runtime_router(side_effect=RuntimeError("router boom")),
+        )
+
+        with pytest.raises(RuntimeError, match="failed after 1 attempts"):
+            await runtime.invoke({"query": "hello"})
+
+        save_mock.assert_awaited_once()
+        args, _kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert model == "llama3.2"
+        assert completed is False
+        assert output_dir == str(tmp_path)
+        assert conversation[-1]["role"] == "assistant"
+        assert (
+            "RuntimeError: Agent 'trajectory-agent' failed after 1 attempts"
+            in conversation[-1]["content"]
+        )
+
+    async def test_invoke_saves_trajectory_on_post_llm_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+        monkeypatch.setattr(
+            runtime_module,
+            "_parse_output",
+            MagicMock(side_effect=ValueError("parse boom")),
+        )
+
+        runtime = AgentRuntime(
+            definition=_mock_runtime_definition(),
+            router=_mock_runtime_router(),
+        )
+
+        with pytest.raises(ValueError, match="parse boom"):
+            await runtime.invoke({"query": "hello"})
+
+        save_mock.assert_awaited_once()
+        args, _kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert model == "test-model"
+        assert completed is False
+        assert output_dir == str(tmp_path)
+        assert conversation[-2] == {"role": "assistant", "content": '{"result": "ok"}'}
+        assert "ValueError: parse boom" in conversation[-1]["content"]
+
+    async def test_invoke_trajectory_save_is_fail_open(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(
+            runtime_module,
+            "save_trajectory",
+            AsyncMock(side_effect=RuntimeError("disk full")),
+        )
+
+        runtime = AgentRuntime(
+            definition=_mock_runtime_definition(),
+            router=_mock_runtime_router(),
+        )
+
+        result = await runtime.invoke({"query": "hello"})
+
+        assert result.output == {"result": "ok"}
