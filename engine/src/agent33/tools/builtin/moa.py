@@ -14,6 +14,7 @@ from typing import Any
 import structlog
 
 from agent33.tools.base import ToolContext, ToolResult
+from agent33.workflows.actions.invoke_agent import get_agent
 from agent33.workflows.executor import WorkflowExecutor
 from agent33.workflows.templates.mixture_of_agents import (
     build_moa_workflow,
@@ -22,6 +23,26 @@ from agent33.workflows.templates.mixture_of_agents import (
 )
 
 logger = structlog.get_logger()
+
+
+def _resolve_workflow_agent_name(model_name: str) -> str:
+    """Resolve a model identifier to a workflow agent name.
+
+    Prefer an exact registered workflow agent. If the model is not registered,
+    fall back to the shared ``__default__`` bridge. Raise ``ValueError`` when
+    neither path is available.
+    """
+    try:
+        get_agent(model_name)
+        return model_name
+    except KeyError:
+        try:
+            get_agent("__default__")
+        except KeyError as exc:
+            raise ValueError(
+                f"No workflow agent or __default__ bridge available for model '{model_name}'"
+            ) from exc
+        return "__default__"
 
 
 class MoATool:
@@ -170,6 +191,16 @@ class MoATool:
                 return ToolResult.fail(f"Cost estimation failed: {exc}")
 
         try:
+            resolved_reference_agents = {
+                model: _resolve_workflow_agent_name(model) for model in reference_models
+            }
+            resolved_aggregator_agent = _resolve_workflow_agent_name(aggregator)
+
+            def resolve_agent_name(model_name: str) -> str:
+                if model_name == aggregator:
+                    return resolved_aggregator_agent
+                return resolved_reference_agents[model_name]
+
             workflow = build_moa_workflow(
                 query=query,
                 reference_models=reference_models,
@@ -178,6 +209,7 @@ class MoATool:
                 aggregator_temperature=agg_temp,
                 rounds=rounds,
                 temperature_diversity=temp_diversity,
+                agent_resolver=resolve_agent_name,
             )
         except ValueError as exc:
             return ToolResult.fail(f"Failed to build MoA workflow: {exc}")
