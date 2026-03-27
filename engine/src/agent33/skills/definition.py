@@ -121,6 +121,18 @@ class SkillDefinition(BaseModel):
         description="Skill format version for migration.",
     )
 
+    # Slash-command metadata (Phase 54)
+    command_name: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Custom slash-command name (without /). Auto-derived if not set.",
+    )
+    command_help: str = Field(
+        default="",
+        max_length=200,
+        description="Short help text shown in /commands listing.",
+    )
+
     # Supporting files (populated during loading, not from file)
     supporting_files: list[str] = Field(
         default_factory=list,

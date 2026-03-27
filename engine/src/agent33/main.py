@@ -25,6 +25,7 @@ from agent33.api.routes import (
     backups,
     benchmarks,
     chat,
+    commands,
     comparative,
     component_security,
     connectors,
@@ -673,6 +674,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     skill_injector = SkillInjector(skill_registry)
     app.state.skill_injector = skill_injector
     logger.info("skill_injector_initialized")
+
+    # -- Command registry (Phase 54) --------------------------------------
+    from agent33.skills.slash_commands import CommandRegistry
+
+    command_registry = CommandRegistry(skill_registry)
+    app.state.command_registry = command_registry
+    logger.info("command_registry_initialized", count=command_registry.count)
 
     # -- Hybrid skill matcher (S29) ----------------------------------------
     from agent33.skills.calibration import HybridSkillMatcher, MatchThresholds
@@ -2075,6 +2083,7 @@ app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(skill_matching_routes.router)
+app.include_router(commands.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
 app.include_router(rate_limits_routes.router)
