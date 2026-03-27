@@ -646,6 +646,7 @@ async def invoke_agent_iterative(
         enable_double_confirmation=body.enable_double_confirmation,
         loop_detection_threshold=body.loop_detection_threshold,
     )
+    context_compressor = getattr(request.app.state, "context_compressor", None)
     context_manager = getattr(request.app.state, "context_manager", None)
     if context_manager is None and settings.skillsbench_context_manager_enabled:
         from agent33.agents.context_manager import ContextManager, budget_for_model
@@ -655,6 +656,7 @@ async def invoke_agent_iterative(
             budget=budget_for_model(selected_model),
             router=model_router,
             summarize_model=selected_model,
+            skip_summarization=context_compressor is not None,
         )
 
     hook_registry = getattr(request.app.state, "hook_registry", None)
@@ -682,6 +684,7 @@ async def invoke_agent_iterative(
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
         hook_registry=hook_registry,
+        context_compressor=context_compressor,
     )
 
     try:
@@ -744,6 +747,7 @@ async def invoke_agent_iterative_stream(
     progressive_recall = getattr(request.app.state, "progressive_recall", None)
     observation_capture = getattr(request.app.state, "observation_capture", None)
     context_manager = getattr(request.app.state, "context_manager", None)
+    context_compressor = getattr(request.app.state, "context_compressor", None)
     hook_registry = getattr(request.app.state, "hook_registry", None)
     token_payload = _get_token_payload(request)
     domain = _resolve_domain_context(request, body.domain)
@@ -797,6 +801,7 @@ async def invoke_agent_iterative_stream(
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
         hook_registry=hook_registry,
+        context_compressor=context_compressor,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:

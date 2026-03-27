@@ -158,6 +158,7 @@ class ContextManager:
         summarize_model: str = "llama3.2",
         chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN,
         token_counter: TokenCounter | None = None,
+        skip_summarization: bool = False,
     ) -> None:
         self._budget = budget or ContextBudget()
         self._router = router
@@ -166,6 +167,7 @@ class ContextManager:
         self._token_counter: TokenCounter = token_counter or EstimateTokenCounter(
             chars_per_token=chars_per_token,
         )
+        self._skip_summarization = skip_summarization
 
     @property
     def budget(self) -> ContextBudget:
@@ -390,10 +392,21 @@ class ContextManager:
         1. If under summarization threshold — do nothing
         2. If over threshold but under limit — summarize older messages
         3. If over limit — unwind (drop oldest non-system messages)
+
+        When ``skip_summarization`` is True (e.g. because the Phase 50
+        ContextCompressor is handling compression), summarization is
+        skipped but hard-limit unwinding is still performed as a safety
+        net.
         """
         snap = self.snapshot(messages)
 
         if not snap.needs_summarization:
+            return list(messages)
+
+        if self._skip_summarization:
+            # Compressor handles summarization; only unwind if over hard limit.
+            if snap.needs_unwinding:
+                return self.unwind(messages)
             return list(messages)
 
         if snap.needs_unwinding:
