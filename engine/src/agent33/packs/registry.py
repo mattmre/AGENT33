@@ -31,6 +31,7 @@ from agent33.packs.provenance import (
     verify_pack,
 )
 from agent33.packs.provenance_models import PackProvenance, PackTrustPolicy
+from agent33.packs.version import Version, VersionConstraint
 
 if TYPE_CHECKING:
     from agent33.packs.marketplace import PackMarketplace
@@ -291,6 +292,18 @@ class PackRegistry:
                 ],
             )
 
+        # Check declared pack dependencies are met
+        dep_errors = self._check_dependencies_met(pack)
+        if dep_errors:
+            # Unregister skills that were loaded during load_pack
+            self._unregister_pack_skills(pack)
+            return InstallResult(
+                success=False,
+                pack_name=pack.name,
+                version=pack.version,
+                errors=dep_errors,
+            )
+
         self._installed[pack.name] = pack.model_copy(
             update={
                 "source": install_source,
@@ -348,6 +361,71 @@ class PackRegistry:
                     dependents.append(pack_name)
                     break
         return dependents
+
+    def _check_dependencies_met(self, pack: InstalledPack) -> list[str]:
+        """Check that all declared pack dependencies are installed and version-compatible.
+
+        Returns a list of error messages (empty means all satisfied).
+        """
+        errors: list[str] = []
+        for dep in pack.pack_dependencies:
+            installed_dep = self._installed.get(dep.name)
+            if installed_dep is None:
+                errors.append(
+                    f"Missing dependency: pack '{pack.name}' requires '{dep.name}' "
+                    f"({dep.version_constraint}) but it is not installed"
+                )
+                continue
+            try:
+                constraint = VersionConstraint.parse(dep.version_constraint)
+                installed_version = Version.parse(installed_dep.version)
+                if not constraint.satisfies(installed_version):
+                    errors.append(
+                        f"Incompatible dependency: pack '{pack.name}' requires "
+                        f"'{dep.name}' {dep.version_constraint} but installed "
+                        f"version is {installed_dep.version}"
+                    )
+            except ValueError as exc:
+                errors.append(
+                    f"Invalid version constraint for dependency '{dep.name}' "
+                    f"in pack '{pack.name}': {exc}"
+                )
+        return errors
+
+    def _check_dependents_compatible(self, name: str, new_version: str) -> list[str]:
+        """Check that upgrading a pack won't break any dependent packs.
+
+        Finds all installed packs that declare a dependency on *name* and
+        verifies their version constraints are still satisfied by *new_version*.
+
+        Returns a list of error messages (empty means upgrade is safe).
+        """
+        errors: list[str] = []
+        try:
+            new_ver = Version.parse(new_version)
+        except ValueError as exc:
+            return [f"Invalid new version '{new_version}': {exc}"]
+
+        for pack_name, pack in self._installed.items():
+            if pack_name == name:
+                continue
+            for dep in pack.pack_dependencies:
+                if dep.name != name:
+                    continue
+                try:
+                    constraint = VersionConstraint.parse(dep.version_constraint)
+                    if not constraint.satisfies(new_ver):
+                        errors.append(
+                            f"Upgrade would break dependent: pack '{pack_name}' requires "
+                            f"'{name}' {dep.version_constraint} but new version is "
+                            f"{new_version}"
+                        )
+                except ValueError as exc:
+                    errors.append(
+                        f"Invalid version constraint in dependent '{pack_name}' "
+                        f"for '{name}': {exc}"
+                    )
+        return errors
 
     # ------------------------------------------------------------------
     # Enable/Disable (tenant-scoped)
@@ -510,6 +588,18 @@ class PackRegistry:
                     f"Version mismatch: expected '{target_version}' "
                     f"but pack is '{new_pack.version}'"
                 ],
+            )
+
+        # Check that dependents are still compatible with the new version
+        compat_errors = self._check_dependents_compatible(name, new_pack.version)
+        if compat_errors:
+            # Unregister skills that were loaded during load_pack for the new version
+            self._unregister_pack_skills(new_pack)
+            return InstallResult(
+                success=False,
+                pack_name=name,
+                version=new_pack.version,
+                errors=compat_errors,
             )
 
         # Unload old skills
