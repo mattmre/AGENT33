@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
 
     from agent33.llm.router import ModelRouter
+    from agent33.tools.builtin.browser_cloud import CloudBrowserBackend
 
 _DEFAULT_TIMEOUT_MS = 30_000
 _DEFAULT_SESSION_TTL_SECONDS = 300  # 5 minutes idle
@@ -53,6 +54,12 @@ _VISION_MODEL_PREFIXES = (
     "llava",
     "llama3.2-vision",
     "minicpm-v",
+    "qwen2.5-vl",
+    "qwen-vl",
+    "internvl",
+    "cogvlm",
+    "phi-3-vision",
+    "phi-3.5-vision",
 )
 
 
@@ -70,12 +77,33 @@ class BrowserSession:
 _sessions: dict[str, BrowserSession] = {}
 
 
+class _CloudSessionStub:
+    """Lightweight stub for ``pw`` / ``browser`` in cloud-backed sessions.
+
+    When a session is created via the cloud backend, Playwright lifecycle
+    (``browser.close()``, ``pw.stop()``) is managed by the cloud provider.
+    This stub satisfies ``_close_session`` without side-effects.
+    """
+
+    async def close(self) -> None:  # noqa: D102
+        pass
+
+    async def stop(self) -> None:  # noqa: D102
+        pass
+
+
 async def _get_session(
     session_id: str,
     *,
     tenant_id: str = "",
+    cloud_backend: CloudBrowserBackend | None = None,
 ) -> BrowserSession:
-    """Get or create a browser session with tenant isolation."""
+    """Get or create a browser session with tenant isolation.
+
+    When *cloud_backend* is provided and local Playwright is unavailable or
+    fails to launch, the function falls back to creating a cloud session via
+    the ``CloudBrowserBackend``.
+    """
     if session_id in _sessions:
         sess = _sessions[session_id]
         if tenant_id and sess.tenant_id and sess.tenant_id != tenant_id:
@@ -83,12 +111,47 @@ async def _get_session(
         sess.last_used = time.monotonic()
         return sess
 
-    pw = await async_playwright().start()
-    browser = await pw.chromium.launch(headless=True)
-    page = await browser.new_page()
-    sess = BrowserSession(pw=pw, browser=browser, page=page, tenant_id=tenant_id)
-    _sessions[session_id] = sess
-    return sess
+    # Try local Playwright first
+    if _PLAYWRIGHT_AVAILABLE:
+        try:
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            page = await browser.new_page()
+            sess = BrowserSession(pw=pw, browser=browser, page=page, tenant_id=tenant_id)
+            _sessions[session_id] = sess
+            return sess
+        except Exception:
+            logger.warning(
+                "Local Playwright launch failed for session %s, trying cloud fallback",
+                session_id,
+            )
+            if cloud_backend is None:
+                raise
+
+    # Fallback to cloud backend
+    if cloud_backend is not None and cloud_backend.is_configured:
+        cloud_session = await cloud_backend.connect(session_label=session_id)
+        if cloud_session is not None:
+            cloud_page = await cloud_backend.get_playwright_page(cloud_session)
+            if cloud_page is not None:
+                # Wrap the cloud-provided page in a BrowserSession.
+                # The cloud provider manages Playwright/browser lifecycle,
+                # so we use lightweight stubs for pw/browser to satisfy
+                # ``_close_session`` without side-effects.
+                stub = _CloudSessionStub()
+                sess = BrowserSession(
+                    pw=stub,
+                    browser=stub,
+                    page=cloud_page,
+                    tenant_id=tenant_id,
+                )
+                _sessions[session_id] = sess
+                logger.info("Created cloud-backed browser session %s", session_id)
+                return sess
+
+    if not _PLAYWRIGHT_AVAILABLE:
+        raise RuntimeError("Playwright is not installed and no cloud backend is available")
+    raise RuntimeError("Failed to create browser session via local or cloud backend")
 
 
 async def _close_session(session_id: str) -> None:
@@ -144,10 +207,12 @@ class BrowserTool:
         router: ModelRouter | None = None,
         session_ttl_seconds: int = _DEFAULT_SESSION_TTL_SECONDS,
         vision_model: str = "",
+        cloud_backend: CloudBrowserBackend | None = None,
     ) -> None:
         self._router = router
         self._session_ttl_seconds = session_ttl_seconds
         self._vision_model = vision_model
+        self._cloud_backend = cloud_backend
 
     @property
     def name(self) -> str:
@@ -232,7 +297,7 @@ class BrowserTool:
         if action == "list_sessions":
             return self._list_sessions(context)
 
-        if not _PLAYWRIGHT_AVAILABLE:
+        if not _PLAYWRIGHT_AVAILABLE and self._cloud_backend is None:
             return ToolResult.fail(
                 "Playwright is not installed. "
                 "Install it with: pip install playwright && playwright install chromium"
@@ -255,19 +320,27 @@ class BrowserTool:
                 return ToolResult.fail("No session_id provided for close_session")
 
             if action == "vision_analyze":
-                return await self._handle_vision_analyze(session_id, params, context, timeout_ms)
+                result = await self._handle_vision_analyze(session_id, params, context, timeout_ms)
+                return self._maybe_redact(action, result)
 
             # Session-based execution
             if session_id:
-                return await self._run_with_session(
-                    session_id, action, params, timeout_ms, tenant_id=tenant_id
+                result = await self._run_with_session(
+                    session_id,
+                    action,
+                    params,
+                    timeout_ms,
+                    tenant_id=tenant_id,
+                    cloud_backend=self._cloud_backend,
                 )
+                return self._maybe_redact(action, result)
 
             # Legacy one-shot execution (backward compatible)
             url: str = params.get("url", "").strip()
             if not url:
                 return ToolResult.fail("No URL provided")
-            return await self._run_oneshot(url, action, params, timeout_ms)
+            result = await self._run_oneshot(url, action, params, timeout_ms)
+            return self._maybe_redact(action, result)
 
         except PermissionError as exc:
             return ToolResult.fail(str(exc))
@@ -293,6 +366,28 @@ class BrowserTool:
         if not entries:
             return ToolResult.ok("No active sessions.")
         return ToolResult.ok(f"Active sessions ({len(entries)}):\n" + "\n".join(entries))
+
+    # ------------------------------------------------------------------
+    # Secret redaction
+    # ------------------------------------------------------------------
+
+    # Actions whose text output may contain secrets extracted from pages.
+    _REDACT_ACTIONS = frozenset({"extract_text", "vision_analyze", "get_elements"})
+
+    @staticmethod
+    def _maybe_redact(action: str, result: ToolResult) -> ToolResult:
+        """Apply secret redaction to text-extracting actions (fail-safe)."""
+        if not result.success or action not in BrowserTool._REDACT_ACTIONS:
+            return result
+        try:
+            from agent33.security.redaction import redact_secrets
+
+            redacted = redact_secrets(result.output)
+            if redacted != result.output:
+                return ToolResult.ok(redacted)
+        except Exception:
+            logger.debug("Secret redaction unavailable or failed", exc_info=True)
+        return result
 
     # ------------------------------------------------------------------
     # Vision analysis (Phase 55)
@@ -380,7 +475,9 @@ class BrowserTool:
     ) -> str:
         """Capture a screenshot and return it as base64-encoded PNG."""
         if session_id:
-            sess = await _get_session(session_id, tenant_id=tenant_id)
+            sess = await _get_session(
+                session_id, tenant_id=tenant_id, cloud_backend=self._cloud_backend
+            )
             page = sess.page
             # Navigate if URL provided and not already on a page
             url: str = params.get("url", "").strip()
@@ -415,8 +512,9 @@ class BrowserTool:
         timeout_ms: int,
         *,
         tenant_id: str = "",
+        cloud_backend: CloudBrowserBackend | None = None,
     ) -> ToolResult:
-        sess = await _get_session(session_id, tenant_id=tenant_id)
+        sess = await _get_session(session_id, tenant_id=tenant_id, cloud_backend=cloud_backend)
         page = sess.page
 
         url: str = params.get("url", "").strip()

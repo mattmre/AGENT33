@@ -505,11 +505,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from agent33.tools.builtin.browser import BrowserTool
 
+    cloud_backend = None
+    if settings.browser_cloud_api_key.get_secret_value():
+        from agent33.tools.builtin.browser_cloud import CloudBrowserBackend
+
+        cloud_backend = CloudBrowserBackend(
+            api_key=settings.browser_cloud_api_key.get_secret_value(),
+            api_url=settings.browser_cloud_api_url,
+        )
+        logger.info("browser_cloud_backend_configured")
+
     tool_registry.register(
         BrowserTool(
             router=model_router,
             session_ttl_seconds=settings.browser_session_ttl_seconds,
             vision_model=settings.browser_vision_model,
+            cloud_backend=cloud_backend,
         )
     )
 

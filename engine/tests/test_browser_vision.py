@@ -19,9 +19,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent33.llm.base import LLMResponse
-from agent33.tools.base import ToolContext
+from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.builtin.browser import (
     _DEFAULT_SESSION_TTL_SECONDS,
+    _VISION_MODEL_PREFIXES,
     BrowserSession,
     BrowserTool,
     _sessions,
@@ -632,3 +633,266 @@ class TestBrowserConfig:
         assert s.browser_vision_model == "claude-3-opus"
         assert s.browser_cloud_api_key.get_secret_value() == "bb-key-123"
         assert s.browser_cloud_api_url == "https://custom.browserbase.dev/v2"
+
+
+# ===========================================================================
+# Cloud backend wiring (Gap 1)
+# ===========================================================================
+
+
+class TestCloudBackendWiring:
+    """Tests for CloudBrowserBackend integration into BrowserTool."""
+
+    def test_browser_tool_accepts_cloud_backend(self) -> None:
+        """BrowserTool constructor accepts and stores a cloud_backend parameter."""
+        backend = CloudBrowserBackend(api_key="test-key")
+        tool = BrowserTool(cloud_backend=backend)
+        assert tool._cloud_backend is backend
+
+    def test_browser_tool_cloud_backend_defaults_to_none(self) -> None:
+        """BrowserTool defaults cloud_backend to None when not provided."""
+        tool = BrowserTool()
+        assert tool._cloud_backend is None
+
+    async def test_cloud_fallback_when_playwright_unavailable(self) -> None:
+        """When Playwright is unavailable and cloud backend is configured,
+        the cloud backend is used to create a session."""
+        backend = CloudBrowserBackend(api_key="test-key")
+        cloud_session = CloudSession(
+            session_id="cloud-1", connect_url="wss://cloud.example.com/cdp"
+        )
+        backend.connect = AsyncMock(return_value=cloud_session)
+        mock_page = _make_mock_page()
+        backend.get_playwright_page = AsyncMock(return_value=mock_page)
+
+        tool = BrowserTool(cloud_backend=backend)
+
+        with patch("agent33.tools.builtin.browser._PLAYWRIGHT_AVAILABLE", False):
+            result = await tool.execute(
+                {
+                    "action": "extract_text",
+                    "session_id": "cloud-session-1",
+                },
+                _make_context(),
+            )
+
+        assert result.success is True
+        assert "Page text content" in result.output
+        backend.connect.assert_awaited_once()
+        backend.get_playwright_page.assert_awaited_once()
+        # Session should be registered
+        assert "cloud-session-1" in _sessions
+
+    async def test_cloud_fallback_not_used_when_local_succeeds(self) -> None:
+        """Cloud backend is not called when local Playwright session already exists."""
+        backend = CloudBrowserBackend(api_key="test-key")
+        backend.connect = AsyncMock()
+
+        tool = BrowserTool(cloud_backend=backend)
+        # Pre-install a local session
+        _install_fake_session("s1")
+
+        with patch("agent33.tools.builtin.browser._PLAYWRIGHT_AVAILABLE", True):
+            result = await tool.execute(
+                {"action": "extract_text", "session_id": "s1"},
+                _make_context(),
+            )
+
+        assert result.success is True
+        backend.connect.assert_not_awaited()
+
+    async def test_playwright_unavailable_no_cloud_returns_error(self) -> None:
+        """When Playwright is unavailable and no cloud backend is configured,
+        an error is returned (not a crash)."""
+        tool = BrowserTool(cloud_backend=None)
+
+        with patch("agent33.tools.builtin.browser._PLAYWRIGHT_AVAILABLE", False):
+            result = await tool.execute(
+                {"action": "navigate", "url": "https://example.com"},
+                _make_context(),
+            )
+
+        assert result.success is False
+        assert "Playwright" in result.error
+
+
+# ===========================================================================
+# Secret redaction (Gap 2)
+# ===========================================================================
+
+
+@patch("agent33.tools.builtin.browser._PLAYWRIGHT_AVAILABLE", True)
+class TestSecretRedaction:
+    """Tests for secret redaction on text-extracting browser actions."""
+
+    async def test_extract_text_redacts_secrets(self) -> None:
+        """extract_text action applies secret redaction to output."""
+        tool = BrowserTool()
+        page = _install_fake_session("s1")
+        # Simulate page text containing an API key
+        page.inner_text = AsyncMock(
+            return_value="Config: sk-abcdefghijklmnopqrstuvwxyz1234567890 is the key"
+        )
+
+        with patch(
+            "agent33.security.redaction.redact_secrets",
+            side_effect=lambda text, **kw: text.replace(
+                "sk-abcdefghijklmnopqrstuvwxyz1234567890", "sk-abc...7890"
+            ),
+        ) as mock_redact:
+            result = await tool.execute(
+                {"action": "extract_text", "session_id": "s1"},
+                _make_context(),
+            )
+
+        assert result.success is True
+        mock_redact.assert_called_once()
+        # The secret should be masked in the output
+        assert "sk-abcdefghijklmnopqrstuvwxyz1234567890" not in result.output
+        assert "sk-abc...7890" in result.output
+
+    async def test_redaction_called_on_vision_analyze(self) -> None:
+        """vision_analyze action also applies redaction to its output."""
+        router = _make_mock_router(content="Found API key sk-testkey1234567890123456 on page")
+        tool = BrowserTool(router=router, vision_model="gpt-4o")
+        _install_fake_session("s1")
+
+        with patch(
+            "agent33.security.redaction.redact_secrets",
+            side_effect=lambda text, **kw: text.replace(
+                "sk-testkey1234567890123456", "sk-tes...3456"
+            ),
+        ) as mock_redact:
+            result = await tool.execute(
+                {
+                    "action": "vision_analyze",
+                    "session_id": "s1",
+                    "question": "What secrets are visible?",
+                },
+                _make_context(),
+            )
+
+        assert result.success is True
+        mock_redact.assert_called_once()
+
+    async def test_redaction_not_applied_to_navigate(self) -> None:
+        """navigate action does not trigger redaction (not a text-extraction action)."""
+        tool = BrowserTool()
+        _install_fake_session("s1")
+
+        with patch(
+            "agent33.security.redaction.redact_secrets",
+        ) as mock_redact:
+            result = await tool.execute(
+                {
+                    "action": "navigate",
+                    "session_id": "s1",
+                    "url": "https://example.com",
+                },
+                _make_context(),
+            )
+
+        assert result.success is True
+        mock_redact.assert_not_called()
+
+    async def test_redaction_failure_returns_original_output(self) -> None:
+        """If redaction fails, the original output is returned (fail-safe)."""
+        tool = BrowserTool()
+        page = _install_fake_session("s1")
+        page.inner_text = AsyncMock(return_value="Page content with secrets")
+
+        with patch(
+            "agent33.security.redaction.redact_secrets",
+            side_effect=RuntimeError("redaction broke"),
+        ):
+            result = await tool.execute(
+                {"action": "extract_text", "session_id": "s1"},
+                _make_context(),
+            )
+
+        assert result.success is True
+        assert result.output == "Page content with secrets"
+
+    async def test_redaction_not_applied_to_failed_results(self) -> None:
+        """Redaction is skipped for failed tool results."""
+        result = ToolResult.fail("Some error")
+        out = BrowserTool._maybe_redact("extract_text", result)
+        assert out is result
+
+
+# ===========================================================================
+# Extended vision model prefixes (Gap 3)
+# ===========================================================================
+
+
+class TestExtendedVisionPrefixes:
+    """Tests for the extended vision model prefix list."""
+
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "qwen2.5-vl-7b",
+            "qwen-vl-plus",
+            "internvl2-26b",
+            "cogvlm-chat-hf",
+            "phi-3-vision-128k",
+            "phi-3.5-vision-instruct",
+        ],
+    )
+    def test_new_vision_prefixes_recognized(self, model_name: str) -> None:
+        """Each new vision model prefix is recognized by the prefix list."""
+        lower = model_name.lower()
+        matched = any(lower.startswith(p) for p in _VISION_MODEL_PREFIXES)
+        assert matched, f"{model_name} should match a vision prefix"
+
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "gpt-4o-mini",
+            "claude-3-opus",
+            "claude-4-sonnet",
+            "gemini-pro",
+            "llava-v1.6",
+            "llama3.2-vision-11b",
+            "minicpm-v-2",
+        ],
+    )
+    def test_original_vision_prefixes_still_work(self, model_name: str) -> None:
+        """Original vision model prefixes continue to match."""
+        lower = model_name.lower()
+        matched = any(lower.startswith(p) for p in _VISION_MODEL_PREFIXES)
+        assert matched, f"{model_name} should match a vision prefix"
+
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "codellama-34b",
+            "phi-2",
+            "mistral-7b",
+        ],
+    )
+    def test_non_vision_models_not_matched(self, model_name: str) -> None:
+        """Non-vision models are not matched by the prefix list."""
+        lower = model_name.lower()
+        matched = any(lower.startswith(p) for p in _VISION_MODEL_PREFIXES)
+        assert not matched, f"{model_name} should NOT match a vision prefix"
+
+    async def test_auto_detect_finds_new_vision_models(self) -> None:
+        """Auto-detection finds new vision-capable models like qwen2.5-vl."""
+        router = _make_mock_router(models=["codellama-34b", "qwen2.5-vl-7b", "mistral-7b"])
+        tool = BrowserTool(router=router, vision_model="")
+        _install_fake_session("s1")
+
+        with patch("agent33.tools.builtin.browser._PLAYWRIGHT_AVAILABLE", True):
+            result = await tool.execute(
+                {
+                    "action": "vision_analyze",
+                    "session_id": "s1",
+                    "question": "Describe the page",
+                },
+                _make_context(),
+            )
+
+        assert result.success is True
+        call_args = router.complete.call_args
+        assert call_args.kwargs["model"] == "qwen2.5-vl-7b"
