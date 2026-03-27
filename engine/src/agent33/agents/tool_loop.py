@@ -148,6 +148,7 @@ class ToolLoop:
         self._model_context_window = model_context_window
         self._metrics = metrics_collector
         self._redact_secrets = redact_secrets
+        self._last_accumulated_messages: list[ChatMessage] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -891,6 +892,9 @@ class ToolLoop:
                 data={"error": str(exc), "phase": "loop"},
             )
             termination_reason = "error"
+
+        # --- Expose accumulated messages for trajectory capture ----------------
+        self._last_accumulated_messages = list(accumulated_messages)
 
         # --- Always emit completed event --------------------------------------
         response_for_output = final_response or last_response

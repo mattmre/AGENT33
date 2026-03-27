@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -459,3 +459,411 @@ class TestRuntimeInvokeTrajectory:
         result = await runtime.invoke({"query": "hello"})
 
         assert result.output == {"result": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Iterative invoke trajectory tests
+# ---------------------------------------------------------------------------
+
+
+def _mock_tool_registry() -> MagicMock:
+    """Create a minimal ToolRegistry mock for iterative tests."""
+    registry = MagicMock()
+    registry.list_all.return_value = []
+    return registry
+
+
+def _mock_tool_loop_result(
+    *,
+    output: dict[str, object] | None = None,
+    raw_response: str = '{"result": "ok"}',
+    model: str = "test-model",
+    termination_reason: str = "completed",
+) -> object:
+    """Create a ToolLoopResult for testing."""
+    from agent33.agents.tool_loop import ToolLoopResult
+
+    return ToolLoopResult(
+        output=output or {"result": "ok"},
+        raw_response=raw_response,
+        tokens_used=42,
+        model=model,
+        iterations=3,
+        tool_calls_made=2,
+        tools_used=["shell", "file_read"],
+        termination_reason=termination_reason,
+    )
+
+
+class TestIterativeTrajectory:
+    """Tests for trajectory persistence in invoke_iterative()."""
+
+    async def test_invoke_iterative_saves_successful_trajectory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        loop_result = _mock_tool_loop_result()
+
+        with patch("agent33.agents.tool_loop.ToolLoop.run", new_callable=AsyncMock) as run_mock:
+            run_mock.return_value = loop_result
+
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+            result = await runtime.invoke_iterative({"query": "hello"})
+
+        assert result.output == {"result": "ok"}
+        assert result.iterations == 3
+        save_mock.assert_awaited_once()
+        args, kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert model == "test-model"
+        assert completed is True
+        assert output_dir == str(tmp_path)
+        # Conversation should have at least system + user messages
+        assert conversation[0]["role"] == "system"
+        assert conversation[1]["role"] == "user"
+        assert '"query": "hello"' in conversation[1]["content"]
+
+    async def test_invoke_iterative_saves_failed_trajectory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        with patch("agent33.agents.tool_loop.ToolLoop.run", new_callable=AsyncMock) as run_mock:
+            run_mock.side_effect = RuntimeError("tool loop exploded")
+
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+
+            with pytest.raises(RuntimeError, match="tool loop exploded"):
+                await runtime.invoke_iterative({"query": "hello"})
+
+        save_mock.assert_awaited_once()
+        args, _kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert completed is False
+        assert output_dir == str(tmp_path)
+        # Last message should be the synthetic error turn
+        assert conversation[-1]["role"] == "assistant"
+        assert "RuntimeError: tool loop exploded" in conversation[-1]["content"]
+
+    async def test_invoke_iterative_trajectory_is_fail_open(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Trajectory save errors must not affect the returned result."""
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
+        monkeypatch.setattr(
+            runtime_module,
+            "save_trajectory",
+            AsyncMock(side_effect=RuntimeError("disk full")),
+        )
+
+        loop_result = _mock_tool_loop_result()
+
+        with patch("agent33.agents.tool_loop.ToolLoop.run", new_callable=AsyncMock) as run_mock:
+            run_mock.return_value = loop_result
+
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+            result = await runtime.invoke_iterative({"query": "hello"})
+
+        # Result must still be returned despite trajectory save failure
+        assert result.output == {"result": "ok"}
+        assert result.iterations == 3
+
+    async def test_invoke_iterative_trajectory_disabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When trajectory capture is disabled, save_trajectory must not be called."""
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", False)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        loop_result = _mock_tool_loop_result()
+
+        with patch("agent33.agents.tool_loop.ToolLoop.run", new_callable=AsyncMock) as run_mock:
+            run_mock.return_value = loop_result
+
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+            await runtime.invoke_iterative({"query": "hello"})
+
+        save_mock.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Streaming invoke trajectory tests
+# ---------------------------------------------------------------------------
+
+
+def _make_stream_events(
+    *,
+    termination_reason: str = "completed",
+) -> list[object]:
+    """Build a minimal sequence of ToolLoopEvents for stream tests."""
+    from agent33.agents.events import ToolLoopEvent
+
+    return [
+        ToolLoopEvent(
+            event_type="loop_started",
+            iteration=0,
+            data={"max_iterations": 20, "tools_count": 0},
+        ),
+        ToolLoopEvent(
+            event_type="iteration_started",
+            iteration=1,
+            data={"message_count": 2},
+        ),
+        ToolLoopEvent(
+            event_type="completed",
+            iteration=1,
+            data={
+                "termination_reason": termination_reason,
+                "total_tokens": 42,
+                "tokens_available": True,
+                "tool_calls_made": 0,
+                "tools_used": [],
+                "output": {"result": "ok"},
+            },
+        ),
+    ]
+
+
+class TestStreamingTrajectory:
+    """Tests for trajectory persistence in invoke_iterative_stream()."""
+
+    async def test_streaming_saves_successful_trajectory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+        from agent33.llm.base import ChatMessage
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        events = _make_stream_events()
+        fake_accumulated = [
+            ChatMessage(role="system", content="You are a test agent."),
+            ChatMessage(role="user", content='{"query": "hello"}'),
+            ChatMessage(role="assistant", content='{"result": "ok"}'),
+        ]
+
+        import agent33.agents.tool_loop as tl_mod
+
+        original_init = tl_mod.ToolLoop.__init__
+        captured_loop: dict[str, object] = {}
+
+        def patched_init(self_loop, *a, **kw):  # type: ignore[no-untyped-def]
+            original_init(self_loop, *a, **kw)  # type: ignore[misc]
+            captured_loop["instance"] = self_loop
+
+        async def fake_run_stream(
+            self_loop,  # noqa: ARG001
+            messages: list[ChatMessage],  # noqa: ARG001
+            model: str,  # noqa: ARG001
+            temperature: float = 0.7,  # noqa: ARG001
+            max_tokens: int | None = None,  # noqa: ARG001
+        ):  # type: ignore[override]
+            for event in events:
+                yield event
+            # Set accumulated messages after yielding all events
+            if "instance" in captured_loop:
+                captured_loop["instance"]._last_accumulated_messages = fake_accumulated  # type: ignore[union-attr]
+
+        with (
+            patch.object(tl_mod.ToolLoop, "__init__", patched_init),
+            patch.object(tl_mod.ToolLoop, "run_stream", fake_run_stream),
+        ):
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+
+            collected_events = []
+            async for event in runtime.invoke_iterative_stream({"query": "hello"}):
+                collected_events.append(event)
+
+        assert any(e.event_type == "completed" for e in collected_events)
+        save_mock.assert_awaited_once()
+        args, kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert completed is True
+        assert output_dir == str(tmp_path)
+        # Verify conversation content matches fake_accumulated
+        assert conversation[0]["role"] == "system"
+        assert conversation[-1]["role"] == "assistant"
+        assert conversation[-1]["content"] == '{"result": "ok"}'
+
+    async def test_streaming_trajectory_is_fail_open(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Trajectory save errors must not affect the stream output."""
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+        from agent33.llm.base import ChatMessage
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
+        monkeypatch.setattr(
+            runtime_module,
+            "save_trajectory",
+            AsyncMock(side_effect=RuntimeError("disk full")),
+        )
+
+        events = _make_stream_events()
+        fake_accumulated = [
+            ChatMessage(role="system", content="sys"),
+            ChatMessage(role="user", content="usr"),
+        ]
+
+        import agent33.agents.tool_loop as tl_mod
+
+        original_init = tl_mod.ToolLoop.__init__
+        captured_loop: dict[str, object] = {}
+
+        def patched_init(self_loop, *a, **kw):  # type: ignore[no-untyped-def]
+            original_init(self_loop, *a, **kw)  # type: ignore[misc]
+            captured_loop["instance"] = self_loop
+
+        async def fake_run_stream(
+            self_loop,  # noqa: ARG001
+            messages: list[ChatMessage],  # noqa: ARG001
+            model: str,  # noqa: ARG001
+            temperature: float = 0.7,  # noqa: ARG001
+            max_tokens: int | None = None,  # noqa: ARG001
+        ):  # type: ignore[override]
+            for event in events:
+                yield event
+            if "instance" in captured_loop:
+                captured_loop["instance"]._last_accumulated_messages = fake_accumulated  # type: ignore[union-attr]
+
+        with (
+            patch.object(tl_mod.ToolLoop, "__init__", patched_init),
+            patch.object(tl_mod.ToolLoop, "run_stream", fake_run_stream),
+        ):
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+
+            collected_events = []
+            async for event in runtime.invoke_iterative_stream({"query": "hello"}):
+                collected_events.append(event)
+
+        # Stream must complete even though save_trajectory raised
+        assert any(e.event_type == "completed" for e in collected_events)
+
+    async def test_streaming_trajectory_disabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When trajectory capture is disabled, save_trajectory must not be called."""
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+        from agent33.llm.base import ChatMessage
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", False)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+
+        events = _make_stream_events()
+
+        import agent33.agents.tool_loop as tl_mod
+
+        original_init = tl_mod.ToolLoop.__init__
+        captured_loop: dict[str, object] = {}
+
+        def patched_init(self_loop, *a, **kw):  # type: ignore[no-untyped-def]
+            original_init(self_loop, *a, **kw)  # type: ignore[misc]
+            captured_loop["instance"] = self_loop
+
+        async def fake_run_stream(
+            self_loop,  # noqa: ARG001
+            messages: list[ChatMessage],  # noqa: ARG001
+            model: str,  # noqa: ARG001
+            temperature: float = 0.7,  # noqa: ARG001
+            max_tokens: int | None = None,  # noqa: ARG001
+        ):  # type: ignore[override]
+            for event in events:
+                yield event
+            if "instance" in captured_loop:
+                captured_loop["instance"]._last_accumulated_messages = [  # type: ignore[union-attr]
+                    ChatMessage(role="system", content="sys"),
+                ]
+
+        with (
+            patch.object(tl_mod.ToolLoop, "__init__", patched_init),
+            patch.object(tl_mod.ToolLoop, "run_stream", fake_run_stream),
+        ):
+            runtime = AgentRuntime(
+                definition=_mock_runtime_definition(),
+                router=_mock_runtime_router(),
+                tool_registry=_mock_tool_registry(),
+            )
+
+            async for _ in runtime.invoke_iterative_stream({"query": "hello"}):
+                pass
+
+        save_mock.assert_not_awaited()
