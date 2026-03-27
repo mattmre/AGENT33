@@ -330,7 +330,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     dashboard.set_alert_manager(alert_manager)
 
     # -- Session analytics (Phase 57) -----------------------------------------
-    insights.set_insights_dependencies(metrics_collector)
+    from agent33.observability.metrics import CostTracker
+
+    cost_tracker = CostTracker()  # uses PricingCatalog by default (no legacy pricing dict)
+    app.state.cost_tracker = cost_tracker
+    insights.set_insights_dependencies(metrics_collector, cost_tracker)
 
     # -- Connector metrics collector (Phase 32 UX) -------------------------
     from agent33.connectors.monitoring import ConnectorMetricsCollector

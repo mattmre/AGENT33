@@ -528,6 +528,8 @@ async def invoke_agent(
     )
 
     hook_registry = getattr(request.app.state, "hook_registry", None)
+    cost_tracker = getattr(request.app.state, "cost_tracker", None)
+    metrics_collector = getattr(request.app.state, "metrics_collector", None)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -545,6 +547,8 @@ async def invoke_agent(
         tenant_id=tenant_id,
         domain=domain,
         hook_registry=hook_registry,
+        cost_tracker=cost_tracker,
+        metrics_collector=metrics_collector,
     )
 
     try:
@@ -659,6 +663,8 @@ async def invoke_agent_iterative(
 
     hook_registry = getattr(request.app.state, "hook_registry", None)
     tool_activation_manager = getattr(request.app.state, "tool_activation_manager", None)
+    cost_tracker = getattr(request.app.state, "cost_tracker", None)
+    metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -682,6 +688,8 @@ async def invoke_agent_iterative(
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
         hook_registry=hook_registry,
+        cost_tracker=cost_tracker,
+        metrics_collector=metrics_collector_iter,
     )
 
     try:
@@ -774,6 +782,9 @@ async def invoke_agent_iterative_stream(
         loop_detection_threshold=body.loop_detection_threshold,
     )
 
+    cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
+    metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
+
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
@@ -797,6 +808,8 @@ async def invoke_agent_iterative_stream(
         tenant_id=token_payload.tenant_id or "",
         domain=domain,
         hook_registry=hook_registry,
+        cost_tracker=cost_tracker_stream,
+        metrics_collector=metrics_collector_stream,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:

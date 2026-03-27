@@ -6,7 +6,10 @@ import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent33.llm.pricing import PricingCatalog
 
 
 @dataclass
@@ -267,7 +270,8 @@ class MetricsCollector:
 # CA-060: Dollar-Cost Attribution
 # ---------------------------------------------------------------------------
 
-# Default pricing per 1K tokens (USD)
+# Legacy pricing per 1K tokens (USD).  Kept for backwards-compatible
+# ``CostTracker(pricing={...})`` construction in existing tests.
 DEFAULT_MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4": {"input": 0.03, "output": 0.06},
     "gpt-4-turbo": {"input": 0.01, "output": 0.03},
@@ -303,18 +307,31 @@ class _UsageRecord:
 class CostTracker:
     """Tracks dollar costs per agent invocation, workflow run, and org.
 
-    Pricing tables are configurable at init time.
+    Pricing resolution order:
+
+    1.  If an explicit ``pricing`` dict is provided (legacy per-1K table),
+        use it directly.  This preserves backwards compatibility with
+        existing callers and tests.
+    2.  Otherwise, delegate to a :class:`~agent33.llm.pricing.PricingCatalog`
+        (Phase 49) for model-aware Decimal-precision cost estimation.
+
+    The optional ``provider`` parameter on :meth:`record_usage` is used for
+    catalog lookups when available.
     """
 
     def __init__(
         self,
         pricing: dict[str, dict[str, float]] | None = None,
+        pricing_catalog: PricingCatalog | None = None,
     ) -> None:
-        self._pricing = pricing or dict(DEFAULT_MODEL_PRICING)
+        self._pricing = pricing  # None means "use catalog"
+        self._pricing_catalog = pricing_catalog
         self._records: list[_UsageRecord] = []
 
     def set_pricing(self, model: str, input_per_1k: float, output_per_1k: float) -> None:
-        """Set or update pricing for a model."""
+        """Set or update pricing for a model (legacy path)."""
+        if self._pricing is None:
+            self._pricing = {}
         self._pricing[model] = {"input": input_per_1k, "output": output_per_1k}
 
     def record_usage(
@@ -323,27 +340,31 @@ class CostTracker:
         tokens_in: int,
         tokens_out: int,
         scope: str = "global",
+        *,
+        provider: str = "",
     ) -> float:
         """Record a usage event and return the computed cost.
 
         Parameters
         ----------
         model:
-            Model identifier (must be in pricing table).
+            Model identifier.
         tokens_in:
             Number of input tokens.
         tokens_out:
             Number of output tokens.
         scope:
             Attribution scope (e.g. ``"workflow:build"``, ``"user:alice"``).
+        provider:
+            Provider name for PricingCatalog lookup (e.g. ``"openai"``).
+            Ignored when an explicit ``pricing`` dict was provided.
 
         Returns
         -------
         float
             Dollar cost of this invocation.
         """
-        prices = self._pricing.get(model, {"input": 0.0, "output": 0.0})
-        cost = (tokens_in / 1000.0) * prices["input"] + (tokens_out / 1000.0) * prices["output"]
+        cost = self._compute_cost(model, tokens_in, tokens_out, provider)
         self._records.append(
             _UsageRecord(
                 model=model,
@@ -355,6 +376,24 @@ class CostTracker:
             )
         )
         return cost
+
+    def _compute_cost(self, model: str, tokens_in: int, tokens_out: int, provider: str) -> float:
+        """Resolve dollar cost via legacy dict or PricingCatalog."""
+        # Path 1: explicit pricing dict (legacy / tests)
+        if self._pricing is not None:
+            prices = self._pricing.get(model, {"input": 0.0, "output": 0.0})
+            return (tokens_in / 1000.0) * prices["input"] + (tokens_out / 1000.0) * prices[
+                "output"
+            ]
+
+        # Path 2: PricingCatalog (Phase 49)
+        from agent33.llm.pricing import estimate_cost, get_default_catalog
+
+        catalog = self._pricing_catalog or get_default_catalog()
+        result = estimate_cost(
+            model, provider or "unknown", tokens_in, tokens_out, catalog=catalog
+        )
+        return float(result.amount_usd)
 
     def get_cost(
         self,

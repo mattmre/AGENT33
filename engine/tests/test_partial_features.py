@@ -338,7 +338,9 @@ def test_cost_tracker_record_and_report():
     from agent33.observability.metrics import CostTracker
 
     tracker = CostTracker()
-    cost = tracker.record_usage("gpt-4", tokens_in=1000, tokens_out=500, scope="workflow:build")
+    cost = tracker.record_usage(
+        "gpt-4o", tokens_in=1000, tokens_out=500, scope="workflow:build", provider="openai"
+    )
 
     assert cost > 0
 
