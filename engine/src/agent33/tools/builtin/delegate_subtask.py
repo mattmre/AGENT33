@@ -21,6 +21,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from agent33.tools.base import ToolContext, ToolResult
@@ -39,6 +40,15 @@ logger = logging.getLogger(__name__)
 MAX_DEPTH = 2
 """Maximum delegation depth. Parent is depth 0, child is depth 1.
 Any request at depth >= MAX_DEPTH is rejected."""
+
+
+async def _safe_emit(event_sink: Any, event: Any) -> None:
+    """Emit an event through the sink, swallowing errors (fail-open)."""
+    try:
+        await event_sink(event)
+    except Exception:
+        logger.debug("event_sink failed for %s, continuing", event.event_type, exc_info=True)
+
 
 _DEFAULT_MAX_ITERATIONS = 20
 _DEFAULT_TIMEOUT_SECONDS = 300
@@ -381,6 +391,10 @@ class DelegateSubtaskTool:
         - Runs its own tool loop with max_iterations (if tools provided)
         - Returns only its final output to the caller
 
+        When ``child_context.event_sink`` is set, the child tool loop
+        runs in streaming mode (``run_stream``), and every child event
+        is relayed through the sink as ``delegation_progress``.
+
         We bypass ``AgentRuntime`` and call the LLM router directly so
         the child gets our custom ``build_child_system_prompt`` rather
         than the standard ``_build_system_prompt(definition)`` that
@@ -433,6 +447,18 @@ class DelegateSubtaskTool:
                 agent_name="delegate-child",
                 session_id=child_context.session_id,
             )
+
+            # --- Streaming path: relay child events through event_sink ---
+            if child_context.event_sink is not None:
+                return await self._run_child_streaming(
+                    loop=loop,
+                    messages=messages,
+                    model=model,
+                    goal=goal,
+                    event_sink=child_context.event_sink,
+                )
+
+            # --- Non-streaming path (backward compatible) ---
             loop_result = await loop.run(
                 messages=messages,
                 model=model,
@@ -451,3 +477,89 @@ class DelegateSubtaskTool:
             max_tokens=4096,
         )
         return ToolResult.ok(response.content)
+
+    async def _run_child_streaming(
+        self,
+        *,
+        loop: Any,
+        messages: list[Any],
+        model: str,
+        goal: str,
+        event_sink: Any,
+    ) -> ToolResult:
+        """Run a child tool loop in streaming mode, relaying events.
+
+        Emits ``delegation_started`` before the child runs,
+        ``delegation_progress`` for each child event, and
+        ``delegation_completed`` when the child finishes.
+
+        All event_sink errors are caught and logged (fail-open):
+        delegation must succeed even if the event relay fails.
+        """
+        from agent33.agents.events import ToolLoopEvent
+
+        delegation_id = uuid.uuid4().hex[:12]
+
+        # Emit delegation_started
+        await _safe_emit(
+            event_sink,
+            ToolLoopEvent(
+                event_type="delegation_started",
+                iteration=0,
+                data={"goal": goal, "delegation_id": delegation_id},
+            ),
+        )
+
+        # Stream child events and relay as delegation_progress
+        output_text = ""
+        child_status = "success"
+        try:
+            async for event in loop.run_stream(
+                messages=messages,
+                model=model,
+                temperature=0.7,
+                max_tokens=4096,
+            ):
+                await _safe_emit(
+                    event_sink,
+                    ToolLoopEvent(
+                        event_type="delegation_progress",
+                        iteration=event.iteration,
+                        data={
+                            "delegation_id": delegation_id,
+                            "child_event_type": event.event_type,
+                            "child_event": event.data,
+                        },
+                    ),
+                )
+                if event.event_type == "completed":
+                    completed_data = event.data
+                    raw = completed_data.get("output", {}).get("response", "")
+                    if not raw:
+                        raw = json.dumps(completed_data.get("output", {}))
+                    output_text = raw
+                    child_status = completed_data.get("termination_reason", "completed")
+        except Exception:
+            logger.exception(
+                "Streaming delegation failed for goal: %s (delegation_id=%s)",
+                goal[:200],
+                delegation_id,
+            )
+            child_status = "error"
+
+        # Emit delegation_completed
+        await _safe_emit(
+            event_sink,
+            ToolLoopEvent(
+                event_type="delegation_completed",
+                iteration=0,
+                data={
+                    "delegation_id": delegation_id,
+                    "status": child_status,
+                },
+            ),
+        )
+
+        if child_status == "error" and not output_text:
+            return ToolResult.fail(f"Delegation failed for goal: {goal[:200]}")
+        return ToolResult.ok(output_text)

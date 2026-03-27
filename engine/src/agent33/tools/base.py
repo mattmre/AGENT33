@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -20,6 +23,7 @@ class ToolContext:
     requested_by: str = ""
     tenant_id: str = ""
     session_id: str = ""
+    event_sink: Callable[[Any], Awaitable[None]] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

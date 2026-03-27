@@ -8,6 +8,7 @@ analysis.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import inspect
 import json
@@ -94,6 +95,10 @@ class ToolLoopResult:
     tokens_available: bool = True
 
 
+class _ToolExecError(Exception):
+    """Raised inside the delegation relay to propagate tool execution errors."""
+
+
 # ---------------------------------------------------------------------------
 # ToolLoop
 # ---------------------------------------------------------------------------
@@ -149,6 +154,7 @@ class ToolLoop:
         self._metrics = metrics_collector
         self._redact_secrets = redact_secrets
         self._last_accumulated_messages: list[ChatMessage] | None = None
+        self._last_relay_results: list[ToolResult] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -618,17 +624,28 @@ class ToolLoop:
                             data={"tool": tc.function.name, "call_id": tc.id},
                         )
 
-                    # --- Execute tool calls -----------------------------------
+                    # --- Execute tool calls (with delegation relay) ------
+                    _relay_result = self._execute_with_delegation_relay(response, state)
+                    _relay_broke = False
                     try:
-                        results = await self._execute_tool_calls(response, state)
-                    except Exception as exc:
+                        async for _relay_evt in _relay_result:
+                            yield _relay_evt
+                    except _ToolExecError as _te:
                         yield ToolLoopEvent(
                             event_type="error",
                             iteration=state.iteration,
-                            data={"error": str(exc), "phase": "tool_execution"},
+                            data={
+                                "error": str(_te),
+                                "phase": "tool_execution",
+                            },
                         )
                         termination_reason = "tool_error"
+                        _relay_broke = True
+
+                    if _relay_broke:
                         break
+
+                    results = self._last_relay_results
 
                     # Emit tool_call_completed for each result
                     assert response.tool_calls is not None
@@ -1095,6 +1112,62 @@ class ToolLoop:
 
         recent_calls = state.call_history[-threshold:]
         return len(set(recent_calls)) == 1
+
+    async def _execute_with_delegation_relay(
+        self,
+        response: LLMResponse,
+        state: ToolLoopState,
+    ) -> AsyncGenerator[ToolLoopEvent, None]:
+        """Run ``_execute_tool_calls`` while relaying delegation events.
+
+        Temporarily injects an ``event_sink`` into the tool context so
+        that tools (e.g. ``delegate_subtask``) can push delegation
+        events into an ``asyncio.Queue``.  The queue is drained
+        concurrently and each event is yielded to the caller.
+
+        On completion, ``self._last_relay_results`` is populated with
+        the tool-call results.  If tool execution raises, a
+        ``_ToolExecError`` is raised after draining remaining events.
+        """
+        queue: asyncio.Queue[ToolLoopEvent | None] = asyncio.Queue()
+
+        async def _sink(evt: ToolLoopEvent) -> None:
+            queue.put_nowait(evt)
+
+        original_context = self._tool_context
+        if self._tool_context is not None:
+            self._tool_context = dataclasses.replace(self._tool_context, event_sink=_sink)
+        else:
+            from agent33.tools.base import ToolContext
+
+            self._tool_context = ToolContext(event_sink=_sink)
+
+        exec_exception: Exception | None = None
+        exec_results: list[ToolResult] = []
+
+        async def _run() -> None:
+            nonlocal exec_exception, exec_results
+            try:
+                exec_results = await self._execute_tool_calls(response, state)
+            except Exception as exc:
+                exec_exception = exc
+            finally:
+                queue.put_nowait(None)
+
+        task = asyncio.create_task(_run())
+
+        while True:
+            evt = await queue.get()
+            if evt is None:
+                break
+            yield evt
+
+        await task
+        self._tool_context = original_context
+        self._last_relay_results = exec_results
+
+        if exec_exception is not None:
+            raise _ToolExecError(str(exec_exception)) from exec_exception
 
     async def _execute_tool_calls(
         self,

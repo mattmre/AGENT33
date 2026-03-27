@@ -22,6 +22,9 @@ EventType = Literal[
     "confirmation_result",
     "context_managed",
     "context_compressed",
+    "delegation_started",
+    "delegation_progress",
+    "delegation_completed",
     "error",
     "completed",
 ]
