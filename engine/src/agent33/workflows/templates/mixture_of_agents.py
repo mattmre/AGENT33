@@ -19,7 +19,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from agent33.llm.pricing import (
     CostResult,
@@ -360,6 +363,7 @@ def build_moa_workflow(
     rounds: int = 1,
     temperature_diversity: bool = False,
     temperature_spread: float = DEFAULT_TEMPERATURE_SPREAD,
+    agent_resolver: Callable[[str], str] | None = None,
 ) -> WorkflowDefinition:
     """Build a Mixture-of-Agents DAG workflow.
 
@@ -382,6 +386,9 @@ def build_moa_workflow(
         temperature_diversity: If True, spread temperatures across proposers
             for response variety instead of using a uniform temperature.
         temperature_spread: Half-range for temperature diversity (default 0.3).
+        agent_resolver: Optional callback that maps a model identifier to an
+            executable workflow agent name. If omitted, the model identifier is
+            used as-is for backward compatibility.
 
     Returns:
         A fully-formed ``WorkflowDefinition`` ready for ``WorkflowExecutor``.
@@ -415,6 +422,7 @@ def build_moa_workflow(
 
         for idx, (step_id, model_name) in enumerate(id_model_pairs):
             temp = temperatures[idx]
+            agent_name = agent_resolver(model_name) if agent_resolver else model_name
 
             if rnd == 0:
                 # First round: use the raw query
@@ -430,6 +438,7 @@ def build_moa_workflow(
             inputs: dict[str, Any] = {
                 "prompt": prompt,
                 "temperature": temp,
+                "agent_name": model_name,
                 "model": model_name,
             }
             if system_prompt is not None:
@@ -443,7 +452,7 @@ def build_moa_workflow(
                     else f"Reference: {model_name}"
                 ),
                 action=StepAction.INVOKE_AGENT,
-                agent=model_name,
+                agent=agent_name,
                 depends_on=deps,
                 inputs=inputs,
             )
@@ -456,12 +465,13 @@ def build_moa_workflow(
         id="moa-aggregator",
         name=f"MoA Aggregator: {aggregator_model}",
         action=StepAction.INVOKE_AGENT,
-        agent=aggregator_model,
+        agent=agent_resolver(aggregator_model) if agent_resolver else aggregator_model,
         depends_on=previous_round_step_ids,
         inputs={
             "system_prompt": MOA_AGGREGATOR_SYSTEM_PROMPT,
             "prompt": _build_aggregator_user_prompt(query, previous_round_step_ids),
             "temperature": aggregator_temperature,
+            "agent_name": aggregator_model,
             "model": aggregator_model,
         },
     )

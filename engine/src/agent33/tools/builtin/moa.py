@@ -14,6 +14,7 @@ from typing import Any
 import structlog
 
 from agent33.tools.base import ToolContext, ToolResult
+from agent33.workflows.actions.invoke_agent import has_registered_agent_handler
 from agent33.workflows.executor import WorkflowExecutor
 from agent33.workflows.templates.mixture_of_agents import (
     build_moa_workflow,
@@ -22,6 +23,22 @@ from agent33.workflows.templates.mixture_of_agents import (
 )
 
 logger = structlog.get_logger()
+
+
+def _resolve_workflow_agent_name(model_name: str) -> str:
+    """Resolve a model identifier to a workflow agent name.
+
+    Prefer an exact executable workflow agent. If one is not registered, fall
+    back to the shared ``__default__`` bridge. Raise ``ValueError`` when
+    neither path is available.
+    """
+    if has_registered_agent_handler(model_name):
+        return model_name
+
+    if has_registered_agent_handler("__default__"):
+        return "__default__"
+
+    raise ValueError(f"No workflow agent or __default__ bridge available for model '{model_name}'")
 
 
 class MoATool:
@@ -170,6 +187,12 @@ class MoATool:
                 return ToolResult.fail(f"Cost estimation failed: {exc}")
 
         try:
+            unique_models = set(reference_models)
+            unique_models.add(aggregator)
+            resolved_agents = {
+                model: _resolve_workflow_agent_name(model) for model in unique_models
+            }
+
             workflow = build_moa_workflow(
                 query=query,
                 reference_models=reference_models,
@@ -178,6 +201,7 @@ class MoATool:
                 aggregator_temperature=agg_temp,
                 rounds=rounds,
                 temperature_diversity=temp_diversity,
+                agent_resolver=lambda model_name: resolved_agents[model_name],
             )
         except ValueError as exc:
             return ToolResult.fail(f"Failed to build MoA workflow: {exc}")

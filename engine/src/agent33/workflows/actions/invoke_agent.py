@@ -34,6 +34,11 @@ def register_agent(name: str, handler: Any) -> None:
     _agent_registry[name] = handler
 
 
+def has_registered_agent_handler(name: str) -> bool:
+    """Return whether an executable workflow handler is registered by name."""
+    return name in _agent_registry
+
+
 def get_agent(name: str) -> Any:
     """Retrieve a registered agent handler by name.
 

@@ -132,7 +132,9 @@ class TestBuildMoaWorkflow:
         wf = build_moa_workflow("q", ["llama3.2"], "gpt-4o")
         ref = next(s for s in wf.steps if s.id != "moa-aggregator")
         agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        assert ref.inputs["agent_name"] == "llama3.2"
         assert ref.inputs["model"] == "llama3.2"
+        assert agg.inputs["agent_name"] == "gpt-4o"
         assert agg.inputs["model"] == "gpt-4o"
 
 
@@ -300,6 +302,13 @@ class TestMoaTool:
     def _make_context(self) -> ToolContext:
         return ToolContext(tenant_id="test-tenant")
 
+    def _registered_handler_names(self, *names: str):
+        registered_names = set(names)
+        return patch(
+            "agent33.tools.builtin.moa.has_registered_agent_handler",
+            side_effect=lambda name: name in registered_names,
+        )
+
     def test_name_and_description(self) -> None:
         tool = self._make_tool()
         assert tool.name == "mixture_of_agents"
@@ -350,6 +359,7 @@ class TestMoaTool:
         mock_executor.execute.return_value = mock_result
 
         with (
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -365,6 +375,57 @@ class TestMoaTool:
 
         assert result.success
         assert result.output == "Synthesized answer"
+
+    async def test_default_bridge_path_resolves_unknown_models(self) -> None:
+        """Unknown model IDs should resolve through the shared bridge and preserve routing."""
+        tool = self._make_tool()
+
+        mock_result = WorkflowResult(
+            outputs={"result": "Synthesized answer"},
+            steps_executed=["ref-m1", "moa-aggregator"],
+            step_results=[],
+            duration_ms=100.0,
+            status=WorkflowStatus.SUCCESS,
+        )
+
+        captured_definitions: list[Any] = []
+        original_init = WorkflowExecutor.__init__
+
+        def capture_init(
+            self: Any,
+            definition: Any,
+            **kwargs: Any,
+        ) -> None:
+            captured_definitions.append(definition)
+            original_init(self, definition, **kwargs)
+
+        with (
+            self._registered_handler_names("__default__"),
+            patch.object(
+                WorkflowExecutor,
+                "__init__",
+                capture_init,
+            ),
+            patch.object(
+                WorkflowExecutor,
+                "execute",
+                return_value=mock_result,
+            ),
+        ):
+            result = await tool.execute({"query": "What is AI?"}, self._make_context())
+
+        assert result.success
+        assert result.output == "Synthesized answer"
+        assert len(captured_definitions) == 1
+        wf = captured_definitions[0]
+        ref = next(s for s in wf.steps if s.id != "moa-aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        assert ref.agent == "__default__"
+        assert agg.agent == "__default__"
+        assert ref.inputs["agent_name"] == "m1"
+        assert ref.inputs["model"] == "m1"
+        assert agg.inputs["agent_name"] == "aggregator"
+        assert agg.inputs["model"] == "aggregator"
 
     async def test_workflow_failure_returns_error(self) -> None:
         """When the workflow fails, the tool must return a ToolResult.fail."""
@@ -387,6 +448,7 @@ class TestMoaTool:
         )
 
         with (
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -428,6 +490,7 @@ class TestMoaTool:
             original_init(self, definition, **kwargs)
 
         with (
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -466,6 +529,7 @@ class TestMoaTool:
         tool = self._make_tool()
 
         with (
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -481,3 +545,13 @@ class TestMoaTool:
 
         assert not result.success
         assert "connection refused" in result.error
+
+    async def test_missing_bridge_returns_clear_failure(self) -> None:
+        """If no exact agent or default bridge exists, execution should fail early."""
+        tool = self._make_tool()
+
+        with self._registered_handler_names():
+            result = await tool.execute({"query": "test"}, self._make_context())
+
+        assert not result.success
+        assert "No workflow agent or __default__ bridge available" in result.error
