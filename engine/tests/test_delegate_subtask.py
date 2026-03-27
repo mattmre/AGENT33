@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +29,7 @@ from agent33.tools.builtin.delegate_subtask import (
     MAX_DEPTH,
     DelegateSubtaskTool,
 )
+from agent33.tools.registry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -47,6 +50,15 @@ def mock_tool_registry() -> MagicMock:
     registry = MagicMock()
     registry.list_all.return_value = []
     return registry
+
+
+class _StubTool:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.description = f"{name} tool"
+
+    async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        return ToolResult.ok(f"ran {self.name}")
 
 
 @pytest.fixture()
@@ -338,6 +350,79 @@ class TestChildIsolation:
         system_msg = messages[0]
         assert "Delegated Subtask" in system_msg.content
         assert "Find Python files" in system_msg.content
+
+
+class TestFilteredChildRegistry:
+    """Verify delegated children only see and execute allowlisted tools."""
+
+    async def test_child_tool_registry_blocks_disallowed_tools(
+        self, mock_router: MagicMock, base_context: ToolContext
+    ) -> None:
+        registry = ToolRegistry()
+        registry.register(_StubTool("shell"))
+        registry.register(_StubTool("web_fetch"))
+        tool = DelegateSubtaskTool(router=mock_router, tool_registry=registry)
+
+        class _FakeToolLoop:
+            instances: list[_FakeToolLoop] = []
+
+            def __init__(
+                self,
+                *,
+                router: Any,
+                tool_registry: Any,
+                tool_context: ToolContext,
+                config: Any,
+                agent_name: str,
+                session_id: str,
+            ) -> None:
+                self.tool_registry = tool_registry
+                self.tool_context = tool_context
+                self.agent_name = agent_name
+                self.session_id = session_id
+                self.visible_tools: list[str] = []
+                self.allowed_result: ToolResult | None = None
+                self.blocked_result: ToolResult | None = None
+                _FakeToolLoop.instances.append(self)
+
+            async def run(
+                self,
+                *,
+                messages: list[Any],
+                model: str,
+                temperature: float,
+                max_tokens: int,
+            ) -> Any:
+                self.visible_tools = [item.name for item in self.tool_registry.list_all()]
+                self.allowed_result = await self.tool_registry.validated_execute(
+                    "shell",
+                    {},
+                    self.tool_context,
+                )
+                self.blocked_result = await self.tool_registry.validated_execute(
+                    "web_fetch",
+                    {},
+                    self.tool_context,
+                )
+                return SimpleNamespace(
+                    raw_response="",
+                    output={"result": "delegated summary"},
+                )
+
+        with patch("agent33.agents.tool_loop.ToolLoop", _FakeToolLoop):
+            result = await tool.execute(
+                {"goal": "delegate this", "toolsets": ["shell", "delegate_subtask"]},
+                base_context,
+            )
+
+        assert result.success
+        assert result.output == '{"result": "delegated summary"}'
+        assert len(_FakeToolLoop.instances) == 1
+        instance = _FakeToolLoop.instances[0]
+        assert instance.visible_tools == ["shell"]
+        assert instance.allowed_result is not None and instance.allowed_result.success
+        assert instance.blocked_result is not None and not instance.blocked_result.success
+        assert "not available to delegated children" in instance.blocked_result.error.lower()
 
 
 # ---------------------------------------------------------------------------

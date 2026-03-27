@@ -45,6 +45,42 @@ _DEFAULT_TIMEOUT_SECONDS = 300
 _MAX_CONCURRENT_CHILDREN = 3
 
 
+class _ChildToolRegistryView:
+    """Allowlisted registry view used for delegated children."""
+
+    def __init__(self, base_registry: ToolRegistry, allowed_tools: list[str]) -> None:
+        self._base_registry = base_registry
+        self._allowed_tools = frozenset(allowed_tools)
+
+    def _is_allowed(self, name: str) -> bool:
+        return name in self._allowed_tools
+
+    def get(self, name: str) -> Any | None:
+        if not self._is_allowed(name):
+            return None
+        return self._base_registry.get(name)
+
+    def get_entry(self, name: str) -> Any | None:
+        if not self._is_allowed(name):
+            return None
+        return self._base_registry.get_entry(name)
+
+    def list_all(self) -> list[Any]:
+        return [
+            tool for tool in self._base_registry.list_all() if tool.name in self._allowed_tools
+        ]
+
+    async def validated_execute(
+        self,
+        name: str,
+        params: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        if not self._is_allowed(name):
+            return ToolResult.fail(f"Tool '{name}' is not available to delegated children")
+        return await self._base_registry.validated_execute(name, params, context)
+
+
 class DelegateSubtaskTool:
     """Delegate a focused subtask to a child agent with fresh context.
 
@@ -364,6 +400,12 @@ class DelegateSubtaskTool:
                 ", ".join(sorted(removed)),
             )
 
+        child_tool_registry: Any = (
+            _ChildToolRegistryView(self._tool_registry, filtered_tools)
+            if filtered_tools
+            else self._tool_registry
+        )
+
         # Build child-specific system prompt (NOT the standard AgentRuntime prompt)
         system_prompt = build_child_system_prompt(goal, context)
 
@@ -385,7 +427,7 @@ class DelegateSubtaskTool:
             )
             loop = ToolLoop(
                 router=self._router,
-                tool_registry=self._tool_registry,
+                tool_registry=child_tool_registry,
                 tool_context=child_context,
                 config=child_config,
                 agent_name="delegate-child",
