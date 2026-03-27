@@ -112,6 +112,16 @@ class Settings(BaseSettings):
     voice_livekit_api_secret: SecretStr = SecretStr("")
     voice_livekit_ws_url: str = ""
 
+    # Phase 35: provider-agnostic TTS/STT
+    voice_tts_provider: str = "stub"  # stub | elevenlabs | piper
+    voice_stt_provider: str = "stub"  # stub | whisper | openai_whisper
+    voice_stt_whisper_model_size: str = "base"  # tiny | base | small | medium | large
+    voice_stt_whisper_device: str = "cpu"  # cpu | cuda
+    voice_tts_piper_model_path: str = ""
+    voice_tts_piper_voice_id: str = "en_US-lessac-medium"
+    voice_stt_openai_api_key: SecretStr = SecretStr("")
+    voice_stt_openai_model: str = "whisper-1"
+
     # AirLLM (layer-sharded large model inference)
     airllm_enabled: bool = False
     airllm_model_path: str = ""
@@ -546,6 +556,22 @@ class Settings(BaseSettings):
         normalized = value.strip().lower()
         if normalized not in {"stub", "sidecar", "livekit"}:
             raise ValueError("voice_daemon_transport must be one of: stub, sidecar, livekit")
+        return normalized
+
+    @field_validator("voice_tts_provider")
+    @classmethod
+    def _validate_voice_tts_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"stub", "elevenlabs", "piper"}:
+            raise ValueError("voice_tts_provider must be one of: stub, elevenlabs, piper")
+        return normalized
+
+    @field_validator("voice_stt_provider")
+    @classmethod
+    def _validate_voice_stt_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"stub", "whisper", "openai_whisper"}:
+            raise ValueError("voice_stt_provider must be one of: stub, whisper, openai_whisper")
         return normalized
 
     @field_validator("tool_discovery_mode")

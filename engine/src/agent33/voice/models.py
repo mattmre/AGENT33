@@ -27,6 +27,19 @@ class VoicePersona(BaseModel):
     description: str = ""
 
 
+class AudioFormatConfig(BaseModel):
+    """Audio format settings attached to a voice session.
+
+    Phase 35: allows callers to specify the desired wire format
+    for TTS output and STT input within a session.
+    """
+
+    encoding: str = "pcm_s16le"
+    sample_rate: int = 16000
+    channels: int = 1
+    bit_depth: int = 16
+
+
 class VoiceSidecarSession(BaseModel):
     """Runtime state for a standalone sidecar session."""
 
@@ -39,6 +52,10 @@ class VoiceSidecarSession(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     websocket_connections: int = 0
     artifacts_path: str = ""
+    audio_format: AudioFormatConfig = Field(default_factory=AudioFormatConfig)
+    agent_session_id: str = ""
+    tts_provider: str = "stub"
+    stt_provider: str = "stub"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     stopped_at: datetime | None = None
@@ -57,5 +74,7 @@ class VoiceSidecarHealth(BaseModel):
     session_count: int = 0
     active_sessions: int = 0
     websocket_connections: int = 0
+    tts_provider: str = "stub"
+    stt_provider: str = "stub"
     shutting_down: bool = False
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

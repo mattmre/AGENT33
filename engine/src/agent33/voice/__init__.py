@@ -15,11 +15,34 @@ from agent33.voice.livekit_transport import (
     LiveKitTransport,
     LiveKitTransportError,
 )
+from agent33.voice.models import AudioFormatConfig
+from agent33.voice.providers import (
+    AudioEncoding,
+    AudioFormat,
+    BaseSTTProvider,
+    BaseTTSProvider,
+    ElevenLabsTTSProviderAdapter,
+    OpenAIWhisperSTTProvider,
+    PiperTTSProvider,
+    STTProvider,
+    STTResult,
+    StubSTTProvider,
+    StubTTSProvider,
+    TTSProvider,
+    TTSResult,
+    WhisperSTTProvider,
+)
 from agent33.voice.service import VoiceSidecarService
 
 __all__ = [
+    "AudioEncoding",
+    "AudioFormat",
+    "AudioFormatConfig",
+    "BaseSTTProvider",
+    "BaseTTSProvider",
     "ElevenLabsArtifactStore",
     "ElevenLabsConfig",
+    "ElevenLabsTTSProviderAdapter",
     "ElevenLabsTransport",
     "ElevenLabsTransportError",
     "LiveKitConfig",
@@ -27,8 +50,17 @@ __all__ = [
     "LiveKitRoom",
     "LiveKitTransport",
     "LiveKitTransportError",
+    "OpenAIWhisperSTTProvider",
+    "PiperTTSProvider",
+    "STTProvider",
+    "STTResult",
     "SidecarVoiceDaemon",
+    "StubSTTProvider",
+    "StubTTSProvider",
+    "TTSProvider",
+    "TTSResult",
     "VoiceSidecarProbe",
     "VoiceSidecarService",
+    "WhisperSTTProvider",
     "create_voice_sidecar_app",
 ]

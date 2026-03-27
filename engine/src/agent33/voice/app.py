@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, Form, HTTPException, UploadFile, WebSocket
 from pydantic import BaseModel, Field
 
 from agent33.voice.elevenlabs import (
@@ -21,10 +21,13 @@ from agent33.voice.livekit_transport import (
     LiveKitTransport,
     LiveKitTransportError,
 )
+from agent33.voice.models import AudioFormatConfig  # noqa: TC001 (Pydantic runtime)
 from agent33.voice.service import VoiceSidecarService
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from agent33.voice.providers import STTProvider, TTSProvider
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +39,27 @@ class StartVoiceSidecarSessionRequest(BaseModel):
     requested_by: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     persona_id: str = "default"
+    audio_format: AudioFormatConfig | None = None
+    agent_session_id: str = ""
 
 
 class SynthesizeRequest(BaseModel):
-    """Request body for ElevenLabs text-to-speech synthesis."""
+    """Request body for text-to-speech synthesis."""
 
     text: str
     voice_id: str = ""
+    session_id: str = ""
+
+
+class TranscribeRequest(BaseModel):
+    """Request body for speech-to-text transcription (JSON mode).
+
+    For binary audio upload, use the multipart ``/v1/voice/transcribe``
+    endpoint with a file field.
+    """
+
+    audio_base64: str = ""
+    language: str = ""
     session_id: str = ""
 
 
@@ -67,12 +84,16 @@ def create_voice_sidecar_app(
     elevenlabs_config: ElevenLabsConfig | None = None,
     elevenlabs_artifact_store: ElevenLabsArtifactStore | None = None,
     livekit_config: LiveKitConfig | None = None,
+    tts_provider: TTSProvider | None = None,
+    stt_provider: STTProvider | None = None,
 ) -> FastAPI:
     """Create a standalone FastAPI voice sidecar app."""
     resolved_service = service or VoiceSidecarService(
         voices_path=Path("config/voice/voices.json"),
         artifacts_dir=Path("var/voice-sidecar"),
         playback_backend="noop",
+        tts_provider=tts_provider,
+        stt_provider=stt_provider,
     )
 
     el_config = elevenlabs_config or ElevenLabsConfig()
@@ -89,7 +110,7 @@ def create_voice_sidecar_app(
         yield
         await resolved_service.shutdown()
 
-    app = FastAPI(title="AGENT-33 Voice Sidecar", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="AGENT-33 Voice Sidecar", version="0.2.0", lifespan=_lifespan)
     app.state.voice_sidecar_service = resolved_service
     app.state.elevenlabs_transport = el_transport
     app.state.elevenlabs_artifact_store = el_store
@@ -119,6 +140,8 @@ def create_voice_sidecar_app(
             requested_by=body.requested_by,
             metadata=body.metadata,
             persona_id=body.persona_id,
+            audio_format=body.audio_format,
+            agent_session_id=body.agent_session_id,
         )
         return session.model_dump(mode="json")
 
@@ -137,6 +160,13 @@ def create_voice_sidecar_app(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return session.model_dump(mode="json")
 
+    @app.delete("/v1/voice/sessions/{session_id}")
+    async def delete_session(session_id: str) -> dict[str, Any]:
+        deleted = resolved_service.delete_session(session_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Voice sidecar session not found")
+        return {"status": "deleted", "session_id": session_id}
+
     @app.websocket("/ws/voice/{session_id}")
     async def voice_stream(websocket: WebSocket, session_id: str) -> None:
         try:
@@ -145,62 +175,154 @@ def create_voice_sidecar_app(
             await websocket.close(code=1008, reason="voice session not found")
 
     # ------------------------------------------------------------------
-    # ElevenLabs endpoints
+    # Provider-agnostic TTS endpoint (Phase 35)
     # ------------------------------------------------------------------
 
     @app.post("/v1/voice/synthesize")
     async def synthesize(body: SynthesizeRequest) -> dict[str, Any]:
-        """Synthesize text to audio using ElevenLabs TTS."""
-        if el_transport is None:
-            raise HTTPException(
-                status_code=503,
-                detail="ElevenLabs transport is not configured (missing API key)",
-            )
+        """Synthesize text to audio using the configured TTS provider.
+
+        Falls back to the ElevenLabs direct transport for backward
+        compatibility when the provider-agnostic layer returns stub results
+        and an ElevenLabs transport is configured.
+        """
+        if not body.text:
+            raise HTTPException(status_code=400, detail="text must not be empty")
+
+        # Try provider-agnostic path first
         try:
-            audio_data = await el_transport.synthesize(
+            result = await resolved_service.synthesize(
                 body.text,
-                voice_id=body.voice_id or None,
+                voice_id=body.voice_id,
+                session_id=body.session_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except ElevenLabsTransportError as exc:
-            raise HTTPException(
-                status_code=exc.status_code or 502,
-                detail=exc.detail or str(exc),
-            ) from exc
 
-        # Persist artifact if a session_id was provided
-        file_path = ""
-        if body.session_id:
-            file_path = el_store.save_audio(
-                session_id=body.session_id,
-                text=body.text,
-                audio_data=audio_data,
-                audio_format=el_config.output_format.split("_")[0],
+        # If the TTS provider is non-stub, use its result directly
+        if result.provider != "stub":
+            file_path = ""
+            if body.session_id:
+                file_path = el_store.save_audio(
+                    session_id=body.session_id,
+                    text=body.text,
+                    audio_data=result.audio_data,
+                    audio_format=result.audio_format.encoding.value.split("_")[0],
+                )
+            return {
+                "status": "ok",
+                "size_bytes": len(result.audio_data),
+                "format": result.audio_format.encoding.value,
+                "provider": result.provider,
+                "duration_ms": result.duration_ms,
+                "artifact_path": file_path,
+            }
+
+        # Backward compat: if ElevenLabs transport is configured, use it
+        if el_transport is not None:
+            try:
+                audio_data = await el_transport.synthesize(
+                    body.text,
+                    voice_id=body.voice_id or None,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except ElevenLabsTransportError as exc:
+                raise HTTPException(
+                    status_code=exc.status_code or 502,
+                    detail=exc.detail or str(exc),
+                ) from exc
+
+            file_path = ""
+            if body.session_id:
+                file_path = el_store.save_audio(
+                    session_id=body.session_id,
+                    text=body.text,
+                    audio_data=audio_data,
+                    audio_format=el_config.output_format.split("_")[0],
+                )
+            return {
+                "status": "ok",
+                "size_bytes": len(audio_data),
+                "format": el_config.output_format,
+                "provider": "elevenlabs",
+                "duration_ms": 0.0,
+                "artifact_path": file_path,
+            }
+
+        # Stub result
+        return {
+            "status": "ok",
+            "size_bytes": len(result.audio_data),
+            "format": result.audio_format.encoding.value,
+            "provider": result.provider,
+            "duration_ms": result.duration_ms,
+            "artifact_path": "",
+        }
+
+    # ------------------------------------------------------------------
+    # Provider-agnostic STT endpoint (Phase 35)
+    # ------------------------------------------------------------------
+
+    @app.post("/v1/voice/transcribe")
+    async def transcribe(
+        file: UploadFile | None = None,
+        language: str = Form(""),
+        session_id: str = Form(""),
+    ) -> dict[str, Any]:
+        """Transcribe audio to text using the configured STT provider.
+
+        Accepts multipart file upload. The ``file`` field should contain
+        raw audio bytes.
+        """
+        if file is None:
+            raise HTTPException(status_code=400, detail="audio file is required")
+
+        audio_data = await file.read()
+        if not audio_data:
+            raise HTTPException(status_code=400, detail="audio file must not be empty")
+
+        try:
+            result = await resolved_service.transcribe(
+                audio_data,
+                language=language,
+                session_id=session_id,
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         return {
             "status": "ok",
-            "size_bytes": len(audio_data),
-            "format": el_config.output_format,
-            "artifact_path": file_path,
+            "text": result.text,
+            "confidence": result.confidence,
+            "language": result.language,
+            "provider": result.provider,
+            "duration_ms": result.duration_ms,
+            "is_partial": result.is_partial,
         }
+
+    # ------------------------------------------------------------------
+    # Voice listing (provider-agnostic + ElevenLabs fallback)
+    # ------------------------------------------------------------------
 
     @app.get("/v1/voice/voices")
     async def list_voices() -> dict[str, Any]:
-        """List available ElevenLabs voices."""
-        if el_transport is None:
-            raise HTTPException(
-                status_code=503,
-                detail="ElevenLabs transport is not configured (missing API key)",
-            )
+        """List available voices from the configured TTS provider."""
+        tts = resolved_service.tts_provider
         try:
-            voices = await el_transport.list_voices()
-        except ElevenLabsTransportError as exc:
-            raise HTTPException(
-                status_code=exc.status_code or 502,
-                detail=exc.detail or str(exc),
-            ) from exc
+            voices = await tts.list_voices()
+        except Exception:
+            voices = []
+
+        # Append ElevenLabs voices if transport is configured and provider
+        # is not already elevenlabs
+        if el_transport is not None and tts.provider_name != "elevenlabs":
+            try:
+                el_voices = await el_transport.list_voices()
+                voices.extend(el_voices)
+            except ElevenLabsTransportError:
+                pass
+
         return {"voices": voices}
 
     @app.get("/v1/voice/health/elevenlabs")
@@ -216,6 +338,22 @@ def create_voice_sidecar_app(
             "status": "ok" if healthy else "unavailable",
             "model_id": el_config.model_id,
             "voice_id": el_config.voice_id,
+        }
+
+    @app.get("/v1/voice/health/providers")
+    async def providers_health() -> dict[str, Any]:
+        """Check health of configured TTS and STT providers."""
+        tts_healthy = await resolved_service.tts_provider.health_check()
+        stt_healthy = await resolved_service.stt_provider.health_check()
+        return {
+            "tts": {
+                "provider": resolved_service.tts_provider.provider_name,
+                "healthy": tts_healthy,
+            },
+            "stt": {
+                "provider": resolved_service.stt_provider.provider_name,
+                "healthy": stt_healthy,
+            },
         }
 
     # ------------------------------------------------------------------
