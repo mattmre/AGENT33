@@ -32,6 +32,8 @@ _session_archive_service: Any = None
 _memory_session_catalog: Any = None
 _context_slot_manager: Any = None
 _compaction_diagnostics: Any = None
+_trajectory_tracker: Any = None
+_title_generator: Any = None
 
 
 def set_session_service(service: Any) -> None:
@@ -80,6 +82,18 @@ def set_compaction_diagnostics(diagnostics: Any) -> None:
     """Set the compaction diagnostics service (Track 8 OpenClaw)."""
     global _compaction_diagnostics  # noqa: PLW0603
     _compaction_diagnostics = diagnostics
+
+
+def set_trajectory_tracker(tracker: Any) -> None:
+    """Set the session trajectory tracker (Phase 59)."""
+    global _trajectory_tracker  # noqa: PLW0603
+    _trajectory_tracker = tracker
+
+
+def set_title_generator(generator: Any) -> None:
+    """Set the title generator (Phase 59)."""
+    global _title_generator  # noqa: PLW0603
+    _title_generator = generator
 
 
 def _get_session_service(request: Request) -> Any:
@@ -851,3 +865,107 @@ async def compaction_history(session_id: str, request: Request) -> dict[str, Any
         "events": [e.model_dump() for e in events],
         "summary": summary.model_dump(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 59: Session Trajectory & Title endpoints
+# ---------------------------------------------------------------------------
+
+
+def _get_trajectory_tracker(request: Request) -> Any:
+    """Extract trajectory tracker from app state or module-level fallback."""
+    if hasattr(request.app.state, "trajectory_tracker"):
+        tracker = request.app.state.trajectory_tracker
+    else:
+        tracker = _trajectory_tracker
+    if tracker is None:
+        raise HTTPException(status_code=503, detail="Trajectory tracker not initialized")
+    return tracker
+
+
+def _get_title_generator(request: Request) -> Any:
+    """Extract title generator from app state or module-level fallback."""
+    if hasattr(request.app.state, "title_generator"):
+        gen = request.app.state.title_generator
+    else:
+        gen = _title_generator
+    if gen is None:
+        raise HTTPException(status_code=503, detail="Title generator not initialized")
+    return gen
+
+
+class TitleSetRequest(BaseModel):
+    """Body for PATCH /v1/sessions/{session_id}/title."""
+
+    title: str = Field(..., min_length=1, max_length=200, description="The session title")
+
+
+@router.get(
+    "/{session_id}/trajectory",
+    dependencies=[require_scope("sessions:read")],
+)
+async def get_session_trajectory(session_id: str, request: Request) -> dict[str, Any]:
+    """Retrieve the trajectory for a session.
+
+    Returns the full trajectory including events, token usage over time,
+    counters, and outcome.
+    """
+    tracker = _get_trajectory_tracker(request)
+    try:
+        trajectory = tracker.get(session_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' not found in trajectory tracker",
+        ) from None
+    return dict(trajectory.model_dump())
+
+
+@router.get(
+    "/{session_id}/title",
+    dependencies=[require_scope("sessions:read")],
+)
+async def get_session_title(session_id: str, request: Request) -> dict[str, str]:
+    """Get or generate the title for a session.
+
+    If a title has already been set, returns it immediately.  Otherwise,
+    generates one from the first user message using the title generator.
+    """
+    tracker = _get_trajectory_tracker(request)
+    try:
+        trajectory = tracker.get(session_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' not found in trajectory tracker",
+        ) from None
+
+    if trajectory.title:
+        return {"session_id": session_id, "title": trajectory.title, "source": "stored"}
+
+    # Generate a title from the first user message.
+    generator = _get_title_generator(request)
+    title = await generator.generate(trajectory.first_user_message)
+    if title:
+        tracker.set_title(session_id, title)
+
+    return {"session_id": session_id, "title": title, "source": "generated"}
+
+
+@router.patch(
+    "/{session_id}/title",
+    dependencies=[require_scope("sessions:write")],
+)
+async def set_session_title(
+    session_id: str, body: TitleSetRequest, request: Request
+) -> dict[str, str]:
+    """Manually set the title for a session."""
+    tracker = _get_trajectory_tracker(request)
+    try:
+        tracker.set_title(session_id, body.title)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' not found in trajectory tracker",
+        ) from None
+    return {"session_id": session_id, "title": body.title, "source": "manual"}
