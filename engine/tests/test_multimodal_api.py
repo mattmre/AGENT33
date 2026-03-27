@@ -560,9 +560,8 @@ async def test_voice_session_uses_real_sidecar_service_and_persists_artifacts(
         assert health_payload["healthy"] is True
         assert health_payload["details"]["health"]["status"] == "ok"
         assert health_payload["details"]["health"]["persona_count"] == 2
-        assert health_payload["details"]["health"]["voices_path"].endswith(
-            "config\\voice\\voices.json"
-        )
+        resolved_voices_path = Path(health_payload["details"]["health"]["voices_path"])
+        assert resolved_voices_path.parts[-3:] == ("config", "voice", "voices.json")
         sidecar_session_id = health_payload["details"]["sidecar_session_id"]
         assert sidecar_session_id
 
