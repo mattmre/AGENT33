@@ -1,21 +1,23 @@
-"""Tests for the Session Analytics & Insights Engine (Phase 57)."""
+"""Tests for the Session Analytics & Insights Engine (Phase 57).
+
+Extended by ARCH-AEP H-03: tenant isolation enforcement, CostTracker
+bounded records, and iter_records() public API.
+"""
 
 from __future__ import annotations
 
 import time
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from agent33.api.routes.insights import set_insights_dependencies
 from agent33.observability.insights import InsightsEngine, InsightsReport
-from agent33.observability.metrics import CostTracker, MetricsCollector
-
-if TYPE_CHECKING:
-    from starlette.testclient import TestClient
-
+from agent33.observability.metrics import CostTracker, MetricsCollector, UsageRecord
+from agent33.security.auth import create_access_token
 
 # ---------------------------------------------------------------------------
 # Unit tests: InsightsEngine
@@ -677,3 +679,236 @@ class TestToolLoopMetricsEmission:
         assert report.tool_usage["shell"] == 2
         assert "web_fetch" in report.tool_usage
         assert report.tool_usage["web_fetch"] == 1
+
+
+# ---------------------------------------------------------------------------
+# ARCH-AEP H-03: Tenant isolation enforcement tests
+# ---------------------------------------------------------------------------
+
+
+class TestInsightsRouteTenantIsolation:
+    """Verify the insights endpoint enforces tenant isolation (ARCH-AEP H-03).
+
+    Non-admin callers must only see their own tenant's data.  Admin callers
+    may view any tenant's data or all tenants.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _seed_data(self) -> None:
+        """Seed cost data for two tenants."""
+        self.mc = MetricsCollector()
+        self.ct = CostTracker(pricing={"gpt-4": {"input": 0.03, "output": 0.06}})
+        self.ct.record_usage("gpt-4", tokens_in=1000, tokens_out=500, scope="tenant:acme")
+        self.ct.record_usage("gpt-4", tokens_in=2000, tokens_out=1000, scope="tenant:globex")
+        self.ct.record_usage("gpt-4", tokens_in=300, tokens_out=100, scope="global")
+        set_insights_dependencies(self.mc, self.ct)
+
+    def _make_client(self, scopes: list[str], tenant_id: str = "") -> TestClient:
+        """Build a TestClient with a JWT carrying specific scopes and tenant."""
+        from agent33.main import app
+
+        token = create_access_token("test-user", scopes=scopes, tenant_id=tenant_id)
+        return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+    def test_nonadmin_scoped_to_own_tenant(self) -> None:
+        """A non-admin caller sees only their own tenant's data."""
+        client = self._make_client(scopes=["agents:read"], tenant_id="acme")
+        resp = client.get("/v1/insights")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Only the tenant:acme record (1000+500 = 1500 tokens)
+        assert data["total_tokens"] == 1500
+
+    def test_nonadmin_cannot_view_other_tenant(self) -> None:
+        """A non-admin caller gets 403 when requesting a different tenant."""
+        client = self._make_client(scopes=["agents:read"], tenant_id="acme")
+        resp = client.get("/v1/insights?tenant_id=globex")
+        assert resp.status_code == 403
+        assert "different tenant" in resp.json()["detail"].lower()
+
+    def test_nonadmin_can_pass_own_tenant_id(self) -> None:
+        """A non-admin caller may explicitly pass their own tenant_id."""
+        client = self._make_client(scopes=["agents:read"], tenant_id="acme")
+        resp = client.get("/v1/insights?tenant_id=acme")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_tokens"] == 1500
+
+    def test_admin_views_all_tenants(self) -> None:
+        """An admin caller with no tenant_id param sees all data."""
+        client = self._make_client(scopes=["admin"], tenant_id="acme")
+        resp = client.get("/v1/insights")
+        assert resp.status_code == 200
+        data = resp.json()
+        # All records: 1000+500 + 2000+1000 + 300+100 = 4900 tokens
+        assert data["total_tokens"] == 4900
+
+    def test_admin_can_filter_any_tenant(self) -> None:
+        """An admin caller can request data for any specific tenant."""
+        client = self._make_client(scopes=["admin"], tenant_id="acme")
+        resp = client.get("/v1/insights?tenant_id=globex")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Only tenant:globex: 2000+1000 = 3000 tokens
+        assert data["total_tokens"] == 3000
+
+    def test_nonadmin_no_tenant_sees_unscoped_data(self) -> None:
+        """A non-admin caller with empty tenant_id (no tenant) sees all data.
+
+        When the caller's token has no tenant_id, ``_resolve_tenant_id``
+        returns None which means no tenant filter is applied.  This is
+        the expected behavior for tenantless installations.
+        """
+        client = self._make_client(scopes=["agents:read"], tenant_id="")
+        resp = client.get("/v1/insights")
+        assert resp.status_code == 200
+        data = resp.json()
+        # No tenant filter -> all records included
+        assert data["total_tokens"] == 4900
+
+    def test_missing_scope_returns_403(self) -> None:
+        """Caller without agents:read scope gets 403."""
+        client = self._make_client(scopes=["workflows:read"], tenant_id="acme")
+        resp = client.get("/v1/insights")
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# ARCH-AEP H-03 / M-01: CostTracker bounded records & iter_records()
+# ---------------------------------------------------------------------------
+
+
+class TestCostTrackerMaxRecords:
+    """Verify FIFO eviction when max_records is exceeded."""
+
+    def test_eviction_removes_oldest_records(self) -> None:
+        """When max_records is exceeded, the oldest records are evicted."""
+        ct = CostTracker(
+            pricing={"m": {"input": 0.01, "output": 0.01}},
+            max_records=3,
+        )
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="s1")
+        ct.record_usage("m", tokens_in=200, tokens_out=50, scope="s2")
+        ct.record_usage("m", tokens_in=300, tokens_out=50, scope="s3")
+        # At capacity (3 records)
+        assert len(ct._records) == 3
+
+        # Adding a 4th should evict the first
+        ct.record_usage("m", tokens_in=400, tokens_out=50, scope="s4")
+        assert len(ct._records) == 3
+        scopes = [r.scope for r in ct._records]
+        assert scopes == ["s2", "s3", "s4"]
+
+    def test_eviction_handles_burst(self) -> None:
+        """Multiple records can push past the limit; eviction catches up."""
+        ct = CostTracker(
+            pricing={"m": {"input": 0.01, "output": 0.01}},
+            max_records=2,
+        )
+        for i in range(10):
+            ct.record_usage("m", tokens_in=i * 10, tokens_out=0, scope=f"s{i}")
+        assert len(ct._records) == 2
+        # Should be the last two
+        assert ct._records[0].scope == "s8"
+        assert ct._records[1].scope == "s9"
+
+    def test_default_max_records(self) -> None:
+        """Default max_records is 100_000."""
+        ct = CostTracker()
+        assert ct._max_records == 100_000
+
+    def test_max_records_clamped_to_1(self) -> None:
+        """max_records < 1 is clamped to 1."""
+        ct = CostTracker(max_records=0)
+        assert ct._max_records == 1
+        ct2 = CostTracker(max_records=-5)
+        assert ct2._max_records == 1
+
+
+class TestCostTrackerIterRecords:
+    """Verify the public iter_records() API."""
+
+    def test_iter_records_no_filter(self) -> None:
+        """iter_records with no arguments returns all records."""
+        ct = CostTracker(pricing={"m": {"input": 0.01, "output": 0.01}})
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="tenant:a")
+        ct.record_usage("m", tokens_in=200, tokens_out=50, scope="tenant:b")
+        ct.record_usage("m", tokens_in=300, tokens_out=50, scope="global")
+
+        records = ct.iter_records()
+        assert len(records) == 3
+
+    def test_iter_records_scope_filter(self) -> None:
+        """iter_records filters by scope prefix."""
+        ct = CostTracker(pricing={"m": {"input": 0.01, "output": 0.01}})
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="tenant:a")
+        ct.record_usage("m", tokens_in=200, tokens_out=50, scope="tenant:a:wf:build")
+        ct.record_usage("m", tokens_in=300, tokens_out=50, scope="tenant:b")
+
+        records = ct.iter_records(scope="tenant:a")
+        assert len(records) == 2
+        assert all(r.scope.startswith("tenant:a") for r in records)
+
+    def test_iter_records_since_filter(self) -> None:
+        """iter_records filters by timestamp."""
+        ct = CostTracker(pricing={"m": {"input": 0.01, "output": 0.01}})
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="s1")
+        # Backdate the first record
+        ct._records[0] = UsageRecord(
+            model="m",
+            tokens_in=100,
+            tokens_out=50,
+            cost=ct._records[0].cost,
+            timestamp=time.time() - 86400 * 10,
+            scope="s1",
+        )
+        ct.record_usage("m", tokens_in=200, tokens_out=50, scope="s2")
+
+        # Only records from the last day
+        since = time.time() - 86400
+        records = ct.iter_records(since=since)
+        assert len(records) == 1
+        assert records[0].scope == "s2"
+
+    def test_iter_records_combined_filters(self) -> None:
+        """iter_records applies both scope and since filters together."""
+        ct = CostTracker(pricing={"m": {"input": 0.01, "output": 0.01}})
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="tenant:a")
+        ct.record_usage("m", tokens_in=200, tokens_out=50, scope="tenant:b")
+        ct.record_usage("m", tokens_in=300, tokens_out=50, scope="tenant:a")
+
+        # Backdate the first record
+        ct._records[0] = UsageRecord(
+            model="m",
+            tokens_in=100,
+            tokens_out=50,
+            cost=ct._records[0].cost,
+            timestamp=time.time() - 86400 * 10,
+            scope="tenant:a",
+        )
+
+        since = time.time() - 86400
+        records = ct.iter_records(scope="tenant:a", since=since)
+        # Only the 3rd record (tenant:a, recent)
+        assert len(records) == 1
+        assert records[0].tokens_in == 300
+
+    def test_iter_records_returns_list(self) -> None:
+        """iter_records returns a list, not a generator."""
+        ct = CostTracker(pricing={"m": {"input": 0.01, "output": 0.01}})
+        ct.record_usage("m", tokens_in=100, tokens_out=50, scope="s")
+        result = ct.iter_records()
+        assert isinstance(result, list)
+
+    def test_usage_record_public_type(self) -> None:
+        """UsageRecord is a public type and can be constructed."""
+        record = UsageRecord(
+            model="gpt-4",
+            tokens_in=100,
+            tokens_out=50,
+            cost=0.05,
+            timestamp=time.time(),
+            scope="global",
+        )
+        assert record.model == "gpt-4"
+        assert record.tokens_in == 100
