@@ -35,7 +35,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 30 | Strategic User Outcome Improvement Loops | Adaptive Execution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core routing work merged; remaining work is refinement/verification) |
 | 31 | Continuous Learning & Signal Capture | Intelligence/Memory | See `PHASE-29-33-WORKFLOW-PLAN.md` (signal capture + persistence/quality hardening merged in PR `#109`; analytics/tuning follow-ups remain) |
 | 32 | Middleware Chain, MCP Connectors & Circuit Breakers | Extensibility/Integration | See `PHASE-29-33-WORKFLOW-PLAN.md` (H01/H02 merged via PRs `#98` and `#100`; hardening/operational follow-ups remain) |
-| 33 | Skill Packs & Distribution | Ecosystem/Distribution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core implementation merged via PR `#103`; ecosystem hardening follow-ups remain) |
+| 33 | Skill Packs & Distribution | Ecosystem/Distribution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core implementation merged via PR `#103`; any future ecosystem work should be tracked as a new scoped slice) |
 | 35 | Multimodal Async-Governance Convergence | Runtime/Governance | No plan file (core merged in PR `#85`; regression convergence merged in PR `#99`) |
 
 | 36 | Text-Based Tool Call Parsing | Runtime/LLM | `qwen-adoption-phases.md` (merged: PR #133) |
