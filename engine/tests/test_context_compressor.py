@@ -13,7 +13,7 @@ Validates the ContextCompressor class including:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -25,6 +25,7 @@ from agent33.memory.context_compressor import (
     REQUIRED_SECTIONS,
     ContextCompressor,
 )
+from agent33.tools.base import ToolResult
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -546,6 +547,11 @@ class TestConfigIntegration:
         )
         assert s.context_compression_enabled is False
         assert s.context_compression_threshold_percent == 0.50
+        assert s.context_compression_protect_first_n == 3
+        assert s.context_compression_tail_token_budget == 20_000
+        assert s.context_compression_summary_target_ratio == 0.20
+        assert s.context_compression_summary_tokens_ceiling == 12_000
+        assert s.context_compression_summarize_model == "llama3.2"
 
     def test_compression_config_override(self) -> None:
         from agent33.config import Settings
@@ -555,9 +561,19 @@ class TestConfigIntegration:
             api_secret_key="test-key",
             context_compression_enabled=True,
             context_compression_threshold_percent=0.75,
+            context_compression_protect_first_n=5,
+            context_compression_tail_token_budget=30_000,
+            context_compression_summary_target_ratio=0.30,
+            context_compression_summary_tokens_ceiling=8_000,
+            context_compression_summarize_model="gpt-4o-mini",
         )
         assert s.context_compression_enabled is True
         assert s.context_compression_threshold_percent == 0.75
+        assert s.context_compression_protect_first_n == 5
+        assert s.context_compression_tail_token_budget == 30_000
+        assert s.context_compression_summary_target_ratio == 0.30
+        assert s.context_compression_summary_tokens_ceiling == 8_000
+        assert s.context_compression_summarize_model == "gpt-4o-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -593,3 +609,418 @@ class TestToolLoopIntegration:
         loop = ToolLoop(router=router, tool_registry=registry)
         assert loop._context_compressor is None
         assert loop._model_context_window == 128_000
+
+
+# ---------------------------------------------------------------------------
+# Phase 50 wiring integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestToolLoopRunCompression:
+    """Verify that ToolLoop.run() triggers compression when the compressor
+    determines messages exceed the threshold."""
+
+    @pytest.mark.asyncio
+    async def test_run_triggers_compression_when_threshold_exceeded(self) -> None:
+        """When messages exceed the compressor threshold after tool calls,
+        compression fires before the next LLM iteration."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.llm.base import ToolCall, ToolCallFunction
+
+        # LLM returns a tool call on first iteration, then a text response
+        tc = ToolCall(
+            id="call-1",
+            function=ToolCallFunction(name="test_tool", arguments='{"a": 1}'),
+        )
+        call_count = 0
+
+        async def mock_complete(messages, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return LLMResponse(
+                    content="Using tool.",
+                    model="test-model",
+                    prompt_tokens=50,
+                    completion_tokens=20,
+                    tool_calls=[tc],
+                )
+            return LLMResponse(
+                content="Final answer.",
+                model="test-model",
+                prompt_tokens=50,
+                completion_tokens=20,
+            )
+
+        mock_router = AsyncMock()
+        mock_router.complete = AsyncMock(side_effect=mock_complete)
+
+        mock_tool = MagicMock()
+        mock_tool.name = "test_tool"
+        mock_tool.description = "A test tool"
+        mock_tool.parameters_schema = {}
+        mock_registry = MagicMock()
+        mock_registry.list_all.return_value = [mock_tool]
+        mock_registry.get_entry.return_value = None
+        mock_registry.validated_execute = AsyncMock(
+            return_value=ToolResult(success=True, output="result")
+        )
+
+        # Build a compressor and mock its methods
+        compressor = ContextCompressor(threshold_percent=0.01)
+        compressor.needs_compression = lambda msgs, window: True  # type: ignore[assignment]
+        compressor.compress = AsyncMock(  # type: ignore[assignment]
+            side_effect=lambda msgs, model, router: (
+                list(msgs),  # Return messages unchanged
+                type(
+                    "Stats",
+                    (),
+                    {
+                        "original_tokens": 5000,
+                        "compressed_tokens": 500,
+                        "compression_ratio": 0.1,
+                        "messages_removed": 10,
+                        "messages_kept": 3,
+                        "used_iterative_update": False,
+                    },
+                )(),
+            )
+        )
+
+        loop = ToolLoop(
+            router=mock_router,
+            tool_registry=mock_registry,
+            config=ToolLoopConfig(
+                max_iterations=3,
+                enable_double_confirmation=False,
+            ),
+            context_compressor=compressor,
+            model_context_window=1000,
+        )
+
+        messages = [
+            ChatMessage(role="system", content="System prompt"),
+            ChatMessage(role="user", content="x" * 500),
+        ]
+
+        result = await loop.run(messages, model="test-model")
+
+        # Compression should have been called after tool execution
+        compressor.compress.assert_called_once()
+        assert result.termination_reason == "completed"
+
+    @pytest.mark.asyncio
+    async def test_run_does_not_compress_when_below_threshold(self) -> None:
+        """When messages are below threshold, compression does not fire."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        mock_router = AsyncMock()
+        mock_router.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="Done.",
+                model="test-model",
+                prompt_tokens=10,
+                completion_tokens=5,
+            )
+        )
+        mock_registry = MagicMock()
+        mock_registry.list_all.return_value = []
+
+        compressor = ContextCompressor(
+            threshold_percent=0.99,  # Very high threshold -- will not trigger
+            protect_first_n=1,
+            tail_token_budget=100,
+        )
+        compressor.compress = AsyncMock()  # type: ignore[assignment]
+
+        loop = ToolLoop(
+            router=mock_router,
+            tool_registry=mock_registry,
+            config=ToolLoopConfig(
+                max_iterations=1,
+                enable_double_confirmation=False,
+            ),
+            context_compressor=compressor,
+            model_context_window=1_000_000,  # Huge window
+        )
+
+        messages = [
+            ChatMessage(role="system", content="System"),
+            ChatMessage(role="user", content="Short message"),
+        ]
+
+        result = await loop.run(messages, model="test-model")
+
+        compressor.compress.assert_not_called()
+        assert result.termination_reason == "completed"
+
+
+class TestToolLoopStreamCompression:
+    """Verify that ToolLoop.run_stream() triggers compression and emits
+    the context_compressed event."""
+
+    @pytest.mark.asyncio
+    async def test_run_stream_emits_context_compressed_event(self) -> None:
+        """run_stream() should emit a context_compressed event when compression fires."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+
+        # Make the LLM return a tool call first, then a text response, so we get
+        # at least 2 iterations and the compression code path runs between them.
+        from agent33.llm.base import ToolCall, ToolCallFunction
+
+        tc = ToolCall(
+            id="call-1",
+            function=ToolCallFunction(name="test_tool", arguments='{"arg": "val"}'),
+        )
+        call_count = 0
+
+        async def mock_complete(messages, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return LLMResponse(
+                    content="Let me use a tool.",
+                    model="test-model",
+                    prompt_tokens=50,
+                    completion_tokens=20,
+                    tool_calls=[tc],
+                )
+            return LLMResponse(
+                content="All done.",
+                model="test-model",
+                prompt_tokens=50,
+                completion_tokens=20,
+            )
+
+        mock_router = AsyncMock()
+        mock_router.complete = AsyncMock(side_effect=mock_complete)
+        # Ensure stream_complete is not available so it falls back to complete
+        del mock_router.stream_complete
+
+        mock_tool = MagicMock()
+        mock_tool.name = "test_tool"
+        mock_tool.description = "A test tool"
+        mock_tool.parameters_schema = {}
+
+        mock_registry = MagicMock()
+        mock_registry.list_all.return_value = [mock_tool]
+        mock_registry.get_entry.return_value = None
+        mock_registry.validated_execute = AsyncMock(
+            return_value=ToolResult(success=True, output="tool output")
+        )
+
+        compressor = ContextCompressor(threshold_percent=0.01)
+        compressor.needs_compression = lambda msgs, window: True  # type: ignore[assignment]
+        compressor.compress = AsyncMock(  # type: ignore[assignment]
+            side_effect=lambda msgs, model, router: (
+                list(msgs),  # Return same messages (no actual compression for test)
+                type(
+                    "Stats",
+                    (),
+                    {
+                        "original_tokens": 3000,
+                        "compressed_tokens": 300,
+                        "compression_ratio": 0.1,
+                        "messages_removed": 5,
+                        "messages_kept": 3,
+                        "used_iterative_update": False,
+                    },
+                )(),
+            )
+        )
+
+        loop = ToolLoop(
+            router=mock_router,
+            tool_registry=mock_registry,
+            config=ToolLoopConfig(
+                max_iterations=3,
+                enable_double_confirmation=False,
+            ),
+            context_compressor=compressor,
+            model_context_window=1000,
+        )
+
+        messages = [
+            ChatMessage(role="system", content="System"),
+            ChatMessage(role="user", content="Do something"),
+        ]
+
+        events = []
+        async for event in loop.run_stream(messages, model="test-model"):
+            events.append(event)
+
+        event_types = [e.event_type for e in events]
+        assert "context_compressed" in event_types, (
+            f"Expected context_compressed event, got: {event_types}"
+        )
+        # Verify the compressed event data
+        compressed_events = [e for e in events if e.event_type == "context_compressed"]
+        assert compressed_events[0].data["before_tokens"] == 3000
+        assert compressed_events[0].data["after_tokens"] == 300
+
+        # Verify the loop still completes
+        assert "completed" in event_types
+
+
+class TestContextManagerSkipSummarization:
+    """Verify that ContextManager.manage() skips summarization when
+    skip_summarization=True but still performs unwinding."""
+
+    @pytest.mark.asyncio
+    async def test_manage_skips_summarization_when_flag_set(self) -> None:
+        """When skip_summarization=True, manage() should not call summarize_and_compact."""
+        from agent33.agents.context_manager import ContextBudget, ContextManager
+
+        mock_router = AsyncMock()
+        # Create a manager with skip_summarization=True and a small budget
+        # so the messages exceed the summarize_at threshold.
+        budget = ContextBudget(
+            max_context_tokens=1000,
+            reserved_for_completion=100,
+            summarize_threshold=0.10,  # Very low threshold
+        )
+        manager = ContextManager(
+            budget=budget,
+            router=mock_router,
+            skip_summarization=True,
+        )
+
+        # Create messages that exceed the summarization threshold but not the hard limit
+        messages = _make_messages(5, content_size=50)
+
+        # The key test is that summarize_and_compact is NOT called even
+        # when messages exceed the summarization threshold.
+        result = await manager.manage(messages)
+
+        # The router should NOT have been called for summarization
+        mock_router.complete.assert_not_called()
+
+        # Messages should be returned (possibly trimmed by unwind if over limit)
+        assert len(result) > 0
+
+    @pytest.mark.asyncio
+    async def test_manage_still_unwinds_when_over_hard_limit(self) -> None:
+        """Even with skip_summarization=True, hard-limit unwinding still fires."""
+        from agent33.agents.context_manager import ContextBudget, ContextManager
+
+        # Very small budget so messages exceed the hard limit
+        budget = ContextBudget(
+            max_context_tokens=50,
+            reserved_for_completion=10,
+            summarize_threshold=0.10,
+        )
+        manager = ContextManager(
+            budget=budget,
+            skip_summarization=True,
+        )
+
+        messages = _make_messages(10, content_size=200)
+        result = await manager.manage(messages)
+
+        # Messages should be trimmed (unwound)
+        assert len(result) < len(messages)
+
+    @pytest.mark.asyncio
+    async def test_manage_without_skip_still_summarizes(self) -> None:
+        """Default behavior (skip_summarization=False) still summarizes."""
+        from agent33.agents.context_manager import ContextBudget, ContextManager
+
+        mock_router = AsyncMock()
+        mock_router.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="Summary of conversation.",
+                model="test-model",
+                prompt_tokens=50,
+                completion_tokens=20,
+            )
+        )
+
+        budget = ContextBudget(
+            max_context_tokens=1000,
+            reserved_for_completion=100,
+            summarize_threshold=0.01,  # Very low to force summarization
+        )
+        manager = ContextManager(
+            budget=budget,
+            router=mock_router,
+            skip_summarization=False,
+        )
+
+        messages = _make_messages(10, content_size=100)
+        await manager.manage(messages)
+
+        # The router SHOULD have been called for summarization
+        mock_router.complete.assert_called()
+
+
+class TestAgentRuntimeCompressorWiring:
+    """Verify that AgentRuntime accepts and passes compressor to ToolLoop."""
+
+    def test_runtime_stores_compressor(self) -> None:
+        """AgentRuntime.__init__ should store context_compressor."""
+        from agent33.agents.definition import AgentDefinition, AgentRole
+        from agent33.agents.runtime import AgentRuntime
+
+        definition = AgentDefinition(
+            name="test-agent",
+            version="1.0.0",
+            role=AgentRole.WORKER,
+        )
+        mock_router = AsyncMock()
+        compressor = ContextCompressor()
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=mock_router,
+            context_compressor=compressor,
+        )
+        assert runtime._context_compressor is compressor
+
+    def test_runtime_defaults_to_no_compressor(self) -> None:
+        """AgentRuntime without context_compressor should default to None."""
+        from agent33.agents.definition import AgentDefinition, AgentRole
+        from agent33.agents.runtime import AgentRuntime
+
+        definition = AgentDefinition(
+            name="test-agent",
+            version="1.0.0",
+            role=AgentRole.WORKER,
+        )
+        mock_router = AsyncMock()
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=mock_router,
+        )
+        assert runtime._context_compressor is None
+
+
+class TestCompressionCountTracking:
+    """Verify that compression_count on ShortTermMemory can be externally
+    incremented after successful compression (the linkage pattern for callers
+    that hold both ToolLoop results and ShortTermMemory references)."""
+
+    def test_compression_count_increments(self) -> None:
+        from agent33.memory.short_term import ShortTermMemory
+
+        mem = ShortTermMemory()
+        assert mem.compression_count == 0
+
+        # Simulate what an external caller would do after compression
+        mem.compression_count += 1
+        assert mem.compression_count == 1
+
+        mem.compression_count += 1
+        assert mem.compression_count == 2
+
+    def test_compression_count_with_compressor_attached(self) -> None:
+        from agent33.memory.short_term import ShortTermMemory
+
+        compressor = ContextCompressor()
+        mem = ShortTermMemory(compressor=compressor)
+        assert mem.compression_count == 0
+        assert mem.compressor is compressor
+
+        # The count is a simple int field -- direct increment works
+        mem.compression_count += 1
+        assert mem.compression_count == 1

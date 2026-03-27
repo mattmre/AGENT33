@@ -434,6 +434,11 @@ class Settings(BaseSettings):
     # Phase 50: Context compression engine
     context_compression_enabled: bool = False
     context_compression_threshold_percent: float = 0.50
+    context_compression_protect_first_n: int = 3
+    context_compression_tail_token_budget: int = 20_000
+    context_compression_summary_target_ratio: float = 0.20
+    context_compression_summary_tokens_ceiling: int = 12_000
+    context_compression_summarize_model: str = "llama3.2"
 
     # Track 8: Context engine and session catalog
     context_engine_default: str = "builtin"
