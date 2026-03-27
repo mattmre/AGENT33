@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from agent33.agents.tool_loop import ToolLoopConfig
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
+    from agent33.memory.context_compressor import ContextCompressor
     from agent33.tools.base import ToolContext
     from agent33.tools.discovery_runtime import ToolActivationManager
     from agent33.tools.governance import ToolGovernance
@@ -245,6 +246,7 @@ class AgentRuntime:
         domain: str = "",
         hook_registry: Any | None = None,
         context_window_manager: ContextWindowManager | None = None,
+        context_compressor: ContextCompressor | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -279,6 +281,7 @@ class AgentRuntime:
         self._reasoning_protocol = reasoning_protocol
         self._hook_registry = hook_registry
         self._context_window_manager = context_window_manager
+        self._context_compressor = context_compressor
 
     @property
     def definition(self) -> AgentDefinition:
@@ -674,6 +677,7 @@ class AgentRuntime:
                 session_id=self._session_id,
                 context_manager=self._context_manager,
                 autonomy_level=self._definition.autonomy_level,
+                context_compressor=self._context_compressor,
                 redact_secrets=_settings.redact_secrets_enabled,
             )
 
@@ -744,6 +748,7 @@ class AgentRuntime:
             session_id=self._session_id,
             context_manager=self._context_manager,
             autonomy_level=self._definition.autonomy_level,
+            context_compressor=self._context_compressor,
             redact_secrets=_settings.redact_secrets_enabled,
         )
 
@@ -911,6 +916,7 @@ class AgentRuntime:
             session_id=self._session_id,
             context_manager=self._context_manager,
             tenant_id=self._tenant_id,
+            context_compressor=self._context_compressor,
             redact_secrets=_settings.redact_secrets_enabled,
         )
 

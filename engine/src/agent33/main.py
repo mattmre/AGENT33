@@ -1729,6 +1729,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
+    # -- Context compression engine (Phase 50) ---------------------------------
+    context_compressor = None
+    if settings.context_compression_enabled:
+        from agent33.memory.context_compressor import ContextCompressor
+
+        context_compressor = ContextCompressor(
+            threshold_percent=settings.context_compression_threshold_percent,
+            protect_first_n=settings.context_compression_protect_first_n,
+            tail_token_budget=settings.context_compression_tail_token_budget,
+            summary_target_ratio=settings.context_compression_summary_target_ratio,
+            summary_tokens_ceiling=settings.context_compression_summary_tokens_ceiling,
+            summarize_model=settings.context_compression_summarize_model,
+        )
+        logger.info(
+            "context_compressor_initialized",
+            threshold_percent=settings.context_compression_threshold_percent,
+            protect_first_n=settings.context_compression_protect_first_n,
+            tail_token_budget=settings.context_compression_tail_token_budget,
+        )
+    app.state.context_compressor = context_compressor
+
     yield
 
     # -- Shutdown ----------------------------------------------------------
