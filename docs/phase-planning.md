@@ -129,19 +129,19 @@ AGENT-33 is the master 'queen bee' repo that centralizes agentic workflows, orch
 - Build backend explanation generation APIs and artifact metadata tracking for reusable review outputs.
 - Add frontend explanation workspace for operators to generate and browse visual review artifacts.
 - Reuse Phase 25 visualization primitives and Phase 16 trace data for explainability context.
-- Status: Stage 1 scaffold implemented in [#31](https://github.com/mattmre/AGENT33/pull/31), pending merge (see `docs/phases/PHASE-26-VISUAL-EXPLAINER-DECISION-AND-REVIEW-PAGES.md` and `docs/research/phase26-visual-review-readiness-2026-02-17.md`).
+- Status: Complete (reconciled Session 113). The detailed phase file is preserved as historical planning context; any later operator follow-up requires explicit reactivation.
 
 ## Phase 27: Spacebot-Inspired Website Operations and Improvement Cycles
 - Add Spacebot-inspired website functionality for concurrent operations and delegation visibility.
 - Preserve AGENT-33 core values by keeping research intake and improvement workflows as first-class flows.
 - Introduce guided human-style improvement-cycle workflows tied to existing orchestration and governance subsystems.
-- Status: Discovery complete, Stage 1 implementation planned (see `docs/phases/PHASE-27-SPACEBOT-INSPIRED-WEBSITE-OPERATIONS-AND-IMPROVEMENT-CYCLES.md` and `docs/research/phase27-spacebot-website-gap-analysis.md`).
+- Status: Complete (reconciled Session 113). The detailed phase file is preserved as historical planning context; any later operator follow-up requires explicit reactivation.
 
 ## Phase 28: PentAGI Component Security Testing Integration
 - Integrate PentAGI component security testing flows into the AGENT-33 website for local and pre-production repository validation.
 - Add backend run orchestration and normalized findings APIs for component security tests.
 - Capture run evidence and connect results to release readiness gates before production deployment.
-- Status: Planned (see `docs/phases/PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md`).
+- Status: Complete (reconciled to main). The detailed phase file is preserved as historical planning context; any future hardening or expansion should be tracked as a new scoped slice.
 
 ## Phase Template Guidance (Generic)
 Use the generic phase templates in `core/phases/` for structure, and the AGENT-33 phase plans in `docs/phases/` for sequencing:

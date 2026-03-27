@@ -3,6 +3,7 @@
 ## Status: Complete (reconciled Session 113)
 
 Session 113 closed this slice. Later operator work only resumes if this phase is explicitly reactivated.
+Historical note: the original plan sections below are preserved for context. Their staged rollout and unchecked lists are archival, not active backlog.
 
 **Discovery Branch**: `phase27/discovery-spacebot-mapping`  
 **Gap Analysis**: `docs/research/phase27-spacebot-website-gap-analysis.md`  
@@ -57,7 +58,7 @@ Session 113 closed this slice. Later operator work only resumes if this phase is
 
 **Reference**: See `docs/research/phase27-spacebot-website-gap-analysis.md` for detailed stage specifications, API schemas, and risk mitigations.
 
-## Deliverables
+## Historical Planned Deliverables
 
 | # | Deliverable | Target Path | Description | Stage |
 |---|-------------|-------------|-------------|-------|
@@ -72,7 +73,7 @@ Session 113 closed this slice. Later operator work only resumes if this phase is
 | 9 | Operator walkthrough updates | `docs/walkthroughs.md` | How to run website workflows for ingestion, research, and iterative improvement | Stage 3 |
 | 10 | Progress evidence log | `docs/progress/phase-27-spacebot-inspired-website-log.md` | Validation commands, screenshots, and rollout notes | ✅ Discovery (ongoing) |
 
-## Acceptance Criteria
+## Historical Planned Acceptance Criteria
 - [ ] Operators can view concurrent active processes and their status transitions from the website.
 - [ ] Operators can inspect delegation lineage (request -> branch/worker execution -> result).
 - [ ] Website workflows support non-blocking long tasks while preserving responsive UI interaction.
@@ -107,7 +108,7 @@ Session 113 closed this slice. Later operator work only resumes if this phase is
    - ✅ Risk assessment with mitigations
    - ✅ Success metrics defined
 
-### Implementation Phases (Planned)
+### Historical Implementation Plan
 
 **Stage 1: Backend Aggregation** (Week 1)
 1. Implement `operations_hub.py` service:
@@ -148,7 +149,7 @@ Session 113 closed this slice. Later operator work only resumes if this phase is
 5. Validate end-to-end cycle completion
 6. Update operator walkthroughs
 
-## Review Checklist
+## Historical Review Checklist
 
 ### Discovery Phase
 - [x] Capability map reviewed for architectural fit and scope discipline.
