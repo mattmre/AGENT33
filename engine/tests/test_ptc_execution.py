@@ -7,6 +7,8 @@ Covers:
 - Resource limits (timeout, max_calls, stdout truncation)
 - Multi-tool scripts
 - PTCExecuteTool (SchemaAwareTool protocol)
+- Config defaults (ptc_enabled, ptc_timeout_s, etc.)
+- PTCExecuteTool construction and metadata
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from agent33.config import Settings
 from agent33.execution.programmatic_tool_chain import (
     PTCExecutor,
     PTCResult,
@@ -604,3 +607,60 @@ class TestPTCResult:
         r = PTCResult(success=True, stdout="hello")
         with pytest.raises(AttributeError):
             r.stdout = "changed"  # type: ignore[misc]
+
+
+# ===================================================================
+# Config Defaults (Phase 56 wiring)
+# ===================================================================
+
+
+class TestPTCConfigDefaults:
+    """Verify PTC config fields exist with correct defaults."""
+
+    def test_ptc_enabled_default(self) -> None:
+        s = Settings()
+        assert s.ptc_enabled is True
+
+    def test_ptc_timeout_s_default(self) -> None:
+        s = Settings()
+        assert s.ptc_timeout_s == 300
+
+    def test_ptc_max_calls_default(self) -> None:
+        s = Settings()
+        assert s.ptc_max_calls == 50
+
+    def test_ptc_max_stdout_bytes_default(self) -> None:
+        s = Settings()
+        assert s.ptc_max_stdout_bytes == 51200
+
+    def test_ptc_allowed_tools_default_empty(self) -> None:
+        s = Settings()
+        assert s.ptc_allowed_tools == ""
+
+
+# ===================================================================
+# PTCExecuteTool construction metadata (Phase 56 wiring)
+# ===================================================================
+
+
+class TestPTCExecuteToolConstruction:
+    """Verify PTCExecuteTool can be constructed and has correct metadata."""
+
+    def test_construction_with_defaults(self) -> None:
+        registry = ToolRegistry()
+        tool = PTCExecuteTool(tool_registry=registry)
+        assert tool.name == "ptc_execute"
+        assert "code" in tool.parameters_schema["properties"]
+        assert "code" in tool.parameters_schema["required"]
+
+    def test_construction_with_custom_allowed_tools(self) -> None:
+        registry = ToolRegistry()
+        tool = PTCExecuteTool(
+            tool_registry=registry,
+            allowed_tools=["shell", "read_file"],
+            timeout_s=60.0,
+            max_calls=10,
+            max_stdout_bytes=1024,
+        )
+        assert tool.name == "ptc_execute"
+        assert "Python script" in tool.description

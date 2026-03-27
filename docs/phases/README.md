@@ -46,6 +46,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 41 | GroupChat Workflow Action | Orchestration | `qwen-adoption-phases.md` (merged: PR #138) |
 | 42 | Stateful Code Execution (Jupyter) | Runtime/Execution | `qwen-adoption-phases.md` (merged: PR #139) |
 | 43 | Complete MCP Server | Interoperability | `qwen-adoption-phases.md` (merged: PR #140) |
+| 56 | Programmatic Tool Calling (PTC) Execution | Runtime/Execution | `PHASE-49-59-HERMES-ADOPTION-ROADMAP.md` (merged: Session 109 core; Session 115 wiring) |
 
 ## Workflow Plans
 - `PHASE-03-08-WORKFLOW-PLAN.md` (phase sequencing, task mapping, review gates)

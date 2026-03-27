@@ -515,6 +515,13 @@ class Settings(BaseSettings):
     browser_vision_model: str = ""  # model for vision_analyze; empty = auto-detect
     browser_cloud_api_url: str = "https://www.browserbase.com/v1"
 
+    # Programmatic Tool Calling (Phase 56)
+    ptc_enabled: bool = True
+    ptc_timeout_s: int = 300
+    ptc_max_calls: int = 50
+    ptc_max_stdout_bytes: int = 51200  # 50 KB
+    ptc_allowed_tools: str = ""  # comma-separated override; empty = default list
+
     @field_validator("control_plane_backend")
     @classmethod
     def _validate_control_plane_backend(cls, value: str) -> str:
