@@ -424,6 +424,17 @@ class OpenAIProvider:
             prompt_tokens = usage.get("prompt_tokens", 0) if usage_available else 0
             completion_tokens = usage.get("completion_tokens", 0) if usage_available else 0
 
+            # Log Anthropic cache usage when available (mirrors complete())
+            if usage_available and isinstance(usage, dict):
+                cache_read = usage.get("cache_read_input_tokens")
+                cache_creation = usage.get("cache_creation_input_tokens")
+                if cache_read is not None or cache_creation is not None:
+                    logger.info(
+                        "anthropic cache usage: read=%s creation=%s",
+                        cache_read,
+                        cache_creation,
+                    )
+
             content = delta.get("content", "") or ""
             if content or finish_reason is not None or usage_available:
                 yield LLMStreamChunk(

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 import pytest
 
+from agent33.llm.base import ChatMessage
+from agent33.llm.openai import OpenAIProvider
 from agent33.llm.prompt_caching import (
     _apply_cache_marker,
     _ensure_content_blocks,
@@ -334,3 +338,146 @@ class TestPayloadShape:
         ]
         result = apply_anthropic_cache_control(messages, cache_ttl=cache_ttl)
         assert result[0]["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: provider HTTP POST captures cache markers
+# ---------------------------------------------------------------------------
+
+
+def _fake_openai_response(model: str = "claude-sonnet-4") -> httpx.Response:
+    """Build a minimal httpx.Response that mimics an OpenAI chat completion."""
+    body = json.dumps(
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Hello!"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            },
+        }
+    ).encode()
+    return httpx.Response(
+        status_code=200,
+        content=body,
+        headers={"content-type": "application/json"},
+        request=httpx.Request("POST", "http://localhost:9999/chat/completions"),
+    )
+
+
+class TestProviderCacheInjectionEndToEnd:
+    """Verify the OpenAI provider injects (or skips) cache_control markers
+    in the actual HTTP payload depending on the target model."""
+
+    async def test_anthropic_model_injects_cache_markers(self) -> None:
+        """When model is claude-*, the outgoing payload must contain
+        cache_control markers on the serialized messages."""
+        provider = OpenAIProvider(api_key="test-key", base_url="http://localhost:9999")
+
+        captured_payloads: list[dict[str, Any]] = []
+
+        async def _capture_post(
+            url: str,  # noqa: ARG001
+            *,
+            json: dict[str, Any] | None = None,  # noqa: A002
+            headers: dict[str, str] | None = None,  # noqa: ARG001
+            **kwargs: Any,  # noqa: ARG001
+        ) -> httpx.Response:
+            if json is not None:
+                captured_payloads.append(json)
+            return _fake_openai_response("claude-sonnet-4")
+
+        messages = [
+            ChatMessage(role="system", content="You are a helpful assistant."),
+            ChatMessage(role="user", content="Summarise quantum computing."),
+        ]
+
+        with (
+            patch.object(provider._client, "post", side_effect=_capture_post),
+            patch("agent33.llm.openai.settings") as mock_settings,
+        ):
+            mock_settings.prompt_cache_enabled = True
+            resp = await provider.complete(messages, model="claude-sonnet-4")
+
+        assert resp.content == "Hello!"
+        assert len(captured_payloads) == 1
+
+        payload_messages = captured_payloads[0]["messages"]
+
+        # System message should have cache_control in its content blocks
+        sys_msg = payload_messages[0]
+        assert isinstance(sys_msg["content"], list)
+        assert any(
+            block.get("cache_control") == {"type": "ephemeral"}
+            for block in sys_msg["content"]
+            if isinstance(block, dict)
+        )
+
+        # User message should also have cache_control
+        user_msg = payload_messages[1]
+        assert isinstance(user_msg["content"], list)
+        assert any(
+            block.get("cache_control") == {"type": "ephemeral"}
+            for block in user_msg["content"]
+            if isinstance(block, dict)
+        )
+
+        await provider.close()
+
+    async def test_non_anthropic_model_no_cache_markers(self) -> None:
+        """When model is gpt-4o, the outgoing payload must NOT contain
+        any cache_control markers."""
+        provider = OpenAIProvider(api_key="test-key", base_url="http://localhost:9999")
+
+        captured_payloads: list[dict[str, Any]] = []
+
+        async def _capture_post(
+            url: str,  # noqa: ARG001
+            *,
+            json: dict[str, Any] | None = None,  # noqa: A002
+            headers: dict[str, str] | None = None,  # noqa: ARG001
+            **kwargs: Any,  # noqa: ARG001
+        ) -> httpx.Response:
+            if json is not None:
+                captured_payloads.append(json)
+            return _fake_openai_response("gpt-4o")
+
+        messages = [
+            ChatMessage(role="system", content="You are a helpful assistant."),
+            ChatMessage(role="user", content="Summarise quantum computing."),
+        ]
+
+        with (
+            patch.object(provider._client, "post", side_effect=_capture_post),
+            patch("agent33.llm.openai.settings") as mock_settings,
+        ):
+            mock_settings.prompt_cache_enabled = True
+            resp = await provider.complete(messages, model="gpt-4o")
+
+        assert resp.content == "Hello!"
+        assert len(captured_payloads) == 1
+
+        payload_messages = captured_payloads[0]["messages"]
+
+        # No message should have cache_control markers
+        for msg in payload_messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        assert "cache_control" not in block, (
+                            f"Non-Anthropic model should not have cache_control: {block}"
+                        )
+            # Top-level cache_control should not exist either
+            assert "cache_control" not in msg
+
+        await provider.close()
