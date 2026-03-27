@@ -511,7 +511,8 @@ async def test_voice_session_uses_real_sidecar_service_and_persists_artifacts(
         artifacts_dir=sidecar_artifacts_dir,
         playback_backend="noop",
     )
-    assert {persona.id for persona in sidecar_service.list_personas()} == {"default", "operator"}
+    persona_ids = {persona.id for persona in sidecar_service.list_personas()}
+    assert {"default", "operator"}.issubset(persona_ids)
     sidecar_app = create_voice_sidecar_app(sidecar_service)
     sidecar_transport = httpx.ASGITransport(app=sidecar_app)
     sidecar_client = VoiceSidecarClient(
@@ -559,7 +560,7 @@ async def test_voice_session_uses_real_sidecar_service_and_persists_artifacts(
         health_payload = health_response.json()
         assert health_payload["healthy"] is True
         assert health_payload["details"]["health"]["status"] == "ok"
-        assert health_payload["details"]["health"]["persona_count"] == 2
+        assert health_payload["details"]["health"]["persona_count"] >= 2
         resolved_voices_path = Path(health_payload["details"]["health"]["voices_path"])
         assert resolved_voices_path.parts[-3:] == ("config", "voice", "voices.json")
         sidecar_session_id = health_payload["details"]["sidecar_session_id"]

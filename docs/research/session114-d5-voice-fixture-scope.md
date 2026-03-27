@@ -66,6 +66,7 @@ multimodal API talk to it through `VoiceSidecarClient` and
 
 ## Validation Plan
 
-- `$env:PYTHONPATH='D:\\GITHUB\\AGENT33\\worktrees\\session114-p5-voice-sidecar-fixture\\engine\\src'; python -m pytest tests/test_multimodal_api.py -q --no-cov`
+- PowerShell: `$env:PYTHONPATH='engine\\src'; python -m pytest tests/test_multimodal_api.py -q --no-cov`
+- Bash/Zsh: `PYTHONPATH=engine/src python -m pytest tests/test_multimodal_api.py -q --no-cov`
 - `python -m ruff check tests/test_multimodal_api.py`
 - `python -m ruff format --check tests/test_multimodal_api.py`
