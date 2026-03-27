@@ -524,6 +524,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     )
 
+    if settings.ptc_enabled:
+        from agent33.tools.builtin.ptc_execute import PTCExecuteTool
+
+        _ptc_allowed: list[str] | None = None
+        if settings.ptc_allowed_tools.strip():
+            _ptc_allowed = [t.strip() for t in settings.ptc_allowed_tools.split(",") if t.strip()]
+        tool_registry.register(
+            PTCExecuteTool(
+                tool_registry=tool_registry,
+                allowed_tools=_ptc_allowed,
+                timeout_s=float(settings.ptc_timeout_s),
+                max_calls=settings.ptc_max_calls,
+                max_stdout_bytes=settings.ptc_max_stdout_bytes,
+            )
+        )
+        logger.info("ptc_tool_registered")
+
     from agent33.tools.builtin.search import SearchTool
 
     # SearchTool is initialized without a registry here; it will be
