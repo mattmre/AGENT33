@@ -31,6 +31,7 @@ from agent33.api.routes import (
     context,
     cron,
     dashboard,
+    delegation,
     evaluations,
     explanations,
     health,
@@ -436,6 +437,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.model_router = model_router
     logger.info("model_router_initialized")
+
+    # -- Delegation manager (Phase 53) ------------------------------------
+    from agent33.agents.delegation import DelegationManager
+
+    delegation_manager = DelegationManager(
+        registry=agent_registry,
+        router=model_router,
+    )
+    app.state.delegation_manager = delegation_manager
+    logger.info("delegation_manager_initialized")
 
     # -- Tool registry + governance ----------------------------------------
     from agent33.security.approval_tokens import ApprovalTokenManager
@@ -2095,6 +2106,7 @@ app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
 app.include_router(connectors.router)
+app.include_router(delegation.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(execution_routes.router)
 app.include_router(migrations.router)
