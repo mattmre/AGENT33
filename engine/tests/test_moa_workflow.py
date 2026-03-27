@@ -302,13 +302,12 @@ class TestMoaTool:
     def _make_context(self) -> ToolContext:
         return ToolContext(tenant_id="test-tenant")
 
-    def _default_bridge_available(self):
-        def _resolve(name: str) -> object:
-            if name == "__default__":
-                return object()
-            raise KeyError(name)
-
-        return patch("agent33.tools.builtin.moa.get_agent", side_effect=_resolve)
+    def _registered_handler_names(self, *names: str):
+        registered_names = set(names)
+        return patch(
+            "agent33.tools.builtin.moa.has_registered_agent_handler",
+            side_effect=lambda name: name in registered_names,
+        )
 
     def test_name_and_description(self) -> None:
         tool = self._make_tool()
@@ -360,7 +359,7 @@ class TestMoaTool:
         mock_executor.execute.return_value = mock_result
 
         with (
-            self._default_bridge_available(),
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -401,7 +400,7 @@ class TestMoaTool:
             original_init(self, definition, **kwargs)
 
         with (
-            self._default_bridge_available(),
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -449,7 +448,7 @@ class TestMoaTool:
         )
 
         with (
-            self._default_bridge_available(),
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -491,7 +490,7 @@ class TestMoaTool:
             original_init(self, definition, **kwargs)
 
         with (
-            self._default_bridge_available(),
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -530,7 +529,7 @@ class TestMoaTool:
         tool = self._make_tool()
 
         with (
-            self._default_bridge_available(),
+            self._registered_handler_names("__default__"),
             patch.object(
                 WorkflowExecutor,
                 "__init__",
@@ -551,10 +550,7 @@ class TestMoaTool:
         """If no exact agent or default bridge exists, execution should fail early."""
         tool = self._make_tool()
 
-        def _resolve(name: str) -> object:
-            raise KeyError(name)
-
-        with patch("agent33.tools.builtin.moa.get_agent", side_effect=_resolve):
+        with self._registered_handler_names():
             result = await tool.execute({"query": "test"}, self._make_context())
 
         assert not result.success
