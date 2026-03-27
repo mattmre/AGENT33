@@ -7,6 +7,7 @@ from agent33.connectors.boundary import (
 )
 from agent33.connectors.circuit_breaker import (
     CircuitBreaker,
+    CircuitBreakerRegistry,
     CircuitOpenError,
     CircuitState,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "build_connector_boundary_executor",
     "get_policy_pack",
     "CircuitBreaker",
+    "CircuitBreakerRegistry",
     "CircuitBreakerMiddleware",
     "CircuitBreakerSnapshot",
     "CircuitEvent",

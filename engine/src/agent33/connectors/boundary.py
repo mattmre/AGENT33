@@ -37,9 +37,10 @@ Custom packs can be combined with per-instance blocklists via the
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+import structlog
 
 from agent33.config import settings
 from agent33.connectors.circuit_breaker import CircuitBreaker, CircuitOpenError
@@ -55,6 +56,12 @@ from agent33.connectors.middleware import (
 )
 from agent33.connectors.models import ConnectorRequest
 
+if TYPE_CHECKING:
+    from agent33.connectors.circuit_breaker import CircuitBreakerRegistry
+    from agent33.connectors.monitoring import ConnectorMetricsCollector
+
+logger = structlog.get_logger()
+
 
 def _parse_csv(value: str) -> frozenset[str]:
     return frozenset(item.strip() for item in value.split(",") if item.strip())
@@ -66,7 +73,7 @@ def _parse_csv(value: str) -> frozenset[str]:
 # Blocked connectors are matched against ConnectorRequest.connector;
 # blocked operations are matched against ConnectorRequest.operation.
 _POLICY_PACKS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
-    # No restrictions – all calls are allowed.
+    # No restrictions -- all calls are allowed.
     "default": (frozenset(), frozenset()),
     # Block outbound web crawling / fetching tools.
     "strict-web": (
@@ -144,8 +151,24 @@ def build_connector_boundary_executor(
     default_timeout_seconds: float | None = None,
     retry_attempts: int = 1,
     policy_pack: str | None = None,
+    metrics_collector: ConnectorMetricsCollector | None = None,
+    breaker_registry: CircuitBreakerRegistry | None = None,
+    connector_name: str | None = None,
 ) -> ConnectorExecutor | None:
-    """Build the default connector boundary middleware chain."""
+    """Build the default connector boundary middleware chain.
+
+    Parameters
+    ----------
+    metrics_collector:
+        When provided, the :class:`MetricsMiddleware` will push call
+        metrics to this collector for aggregation.
+    breaker_registry:
+        When provided (together with *connector_name*), breakers are
+        shared per connector identity rather than created per executor.
+    connector_name:
+        Logical connector identity used to look up shared breakers in
+        *breaker_registry*.
+    """
     if not settings.connector_boundary_enabled:
         return None
 
@@ -161,27 +184,78 @@ def build_connector_boundary_executor(
     if retry_attempts > 1:
         middlewares.append(RetryMiddleware(max_attempts=retry_attempts))
     if settings.connector_circuit_breaker_enabled:
-        middlewares.append(
-            CircuitBreakerMiddleware(
-                CircuitBreaker(
-                    failure_threshold=settings.connector_circuit_failure_threshold,
-                    recovery_timeout_seconds=settings.connector_circuit_recovery_seconds,
-                    half_open_success_threshold=settings.connector_circuit_half_open_successes,
-                )
-            )
-        )
-    middlewares.append(MetricsMiddleware())
+        breaker_kwargs: dict[str, Any] = {
+            "failure_threshold": settings.connector_circuit_failure_threshold,
+            "recovery_timeout_seconds": settings.connector_circuit_recovery_seconds,
+            "half_open_success_threshold": settings.connector_circuit_half_open_successes,
+            "max_recovery_timeout_seconds": settings.connector_circuit_max_recovery_seconds,
+        }
+        if breaker_registry is not None and connector_name:
+            breaker = breaker_registry.get_or_create(connector_name, **breaker_kwargs)
+        else:
+            breaker = CircuitBreaker(**breaker_kwargs)
+        # Wire metrics collector to circuit state changes
+        if metrics_collector is not None:
+            cname = connector_name or "unknown"
+            coll = metrics_collector
+
+            def _on_state_change(
+                old: Any,
+                new: Any,
+                _cid: str = cname,
+                _coll: ConnectorMetricsCollector = coll,
+            ) -> None:
+                _coll.record_circuit_event(_cid, str(old), str(new))
+
+            breaker.on_state_change = _on_state_change
+        middlewares.append(CircuitBreakerMiddleware(breaker))
+    middlewares.append(MetricsMiddleware(collector=metrics_collector))
+    logger.debug(
+        "connector_boundary_executor_built",
+        middleware_count=len(middlewares),
+        connector_name=connector_name,
+    )
     return ConnectorExecutor(middlewares=middlewares)
 
 
 def map_connector_exception(exc: Exception, connector: str, operation: str) -> RuntimeError:
     """Normalize connector errors for consistent caller-facing failures."""
     if isinstance(exc, PermissionError):
+        logger.warning(
+            "connector_error_mapped",
+            error_type="governance_blocked",
+            connector=connector,
+            operation=operation,
+        )
         return RuntimeError(f"Connector governance blocked {connector}/{operation}: {exc}")
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        logger.warning(
+            "connector_error_mapped",
+            error_type="timeout",
+            connector=connector,
+            operation=operation,
+        )
         return RuntimeError(f"Connector timeout for {connector}/{operation}: {exc}")
     if isinstance(exc, CircuitOpenError):
+        logger.warning(
+            "connector_error_mapped",
+            error_type="circuit_open",
+            connector=connector,
+            operation=operation,
+        )
         return RuntimeError(f"Connector circuit open for {connector}/{operation}: {exc}")
     if isinstance(exc, httpx.HTTPError):
+        logger.warning(
+            "connector_error_mapped",
+            error_type="http_error",
+            connector=connector,
+            operation=operation,
+        )
         return RuntimeError(f"Connector HTTP error for {connector}/{operation}: {exc}")
+    logger.warning(
+        "connector_error_mapped",
+        error_type="general_failure",
+        connector=connector,
+        operation=operation,
+    )
     return RuntimeError(f"Connector failure for {connector}/{operation}: {exc}")

@@ -47,7 +47,7 @@ class TestCircuitBreakerSnapshot:
         assert snap["last_trip_at"] is None
         assert snap["failure_threshold"] == 3
         assert snap["recovery_timeout_seconds"] == 30.0
-        assert snap["half_open_success_threshold"] == 1
+        assert snap["half_open_success_threshold"] == 2
 
     def test_snapshot_after_trip(self) -> None:
         now = 100.0
