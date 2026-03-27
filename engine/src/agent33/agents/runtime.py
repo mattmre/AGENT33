@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from agent33.autonomy.enforcement import RuntimeEnforcer
     from agent33.llm.router import ModelRouter
     from agent33.memory.context_compressor import ContextCompressor
+    from agent33.observability.metrics import CostTracker
     from agent33.tools.base import ToolContext
     from agent33.tools.discovery_runtime import ToolActivationManager
     from agent33.tools.governance import ToolGovernance
@@ -247,6 +248,8 @@ class AgentRuntime:
         hook_registry: Any | None = None,
         context_window_manager: ContextWindowManager | None = None,
         context_compressor: ContextCompressor | None = None,
+        cost_tracker: CostTracker | None = None,
+        metrics_collector: Any | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -282,6 +285,8 @@ class AgentRuntime:
         self._hook_registry = hook_registry
         self._context_window_manager = context_window_manager
         self._context_compressor = context_compressor
+        self._cost_tracker = cost_tracker
+        self._metrics_collector = metrics_collector
 
     @property
     def definition(self) -> AgentDefinition:
@@ -400,6 +405,40 @@ class AgentRuntime:
             raise
         except Exception:
             logger.debug("failed to emit routing metrics", exc_info=True)
+
+    def _record_cost(self, model: str, response: Any) -> None:
+        """Record token cost via CostTracker if available.
+
+        Accepts either an ``LLMResponse`` (from ``invoke``) or a
+        ``ToolLoopResult`` (from ``invoke_iterative``).  Both expose
+        ``prompt_tokens`` / ``completion_tokens`` or ``tokens_used``.
+        """
+        if self._cost_tracker is None:
+            return
+        prompt_tokens = getattr(response, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(response, "completion_tokens", 0) or 0
+
+        # ToolLoopResult doesn't have prompt_tokens / completion_tokens;
+        # fall back to tokens_used as an approximation split 70/30.
+        if prompt_tokens == 0 and completion_tokens == 0:
+            total = getattr(response, "tokens_used", 0) or 0
+            if total > 0:
+                prompt_tokens = int(total * 0.7)
+                completion_tokens = total - prompt_tokens
+
+        if prompt_tokens == 0 and completion_tokens == 0:
+            return
+
+        scope = f"tenant:{self._tenant_id}" if self._tenant_id else "global"
+        try:
+            self._cost_tracker.record_usage(
+                model=model,
+                tokens_in=prompt_tokens,
+                tokens_out=completion_tokens,
+                scope=scope,
+            )
+        except Exception:
+            logger.debug("failed to record cost", exc_info=True)
 
     def _validate_required_inputs(self, inputs: dict[str, Any]) -> None:
         for name, param in self._definition.inputs.items():
@@ -534,6 +573,7 @@ class AgentRuntime:
             completion_status="completed",
         )
         self._emit_routing_metrics()
+        self._record_cost(routed_model, response)
 
         # --- Hook: agent.invoke.post ---
         if self._hook_registry is not None:
@@ -678,6 +718,7 @@ class AgentRuntime:
                 context_manager=self._context_manager,
                 autonomy_level=self._definition.autonomy_level,
                 context_compressor=self._context_compressor,
+                metrics_collector=self._metrics_collector,
                 redact_secrets=_settings.redact_secrets_enabled,
             )
 
@@ -749,6 +790,7 @@ class AgentRuntime:
             context_manager=self._context_manager,
             autonomy_level=self._definition.autonomy_level,
             context_compressor=self._context_compressor,
+            metrics_collector=self._metrics_collector,
             redact_secrets=_settings.redact_secrets_enabled,
         )
 
@@ -780,6 +822,7 @@ class AgentRuntime:
             completion_status="completed",
         )
         self._emit_routing_metrics()
+        self._record_cost(routed_model, loop_result)
 
         # --- Hook: agent.invoke.post (iterative) ---
         if self._hook_registry is not None:
@@ -917,6 +960,7 @@ class AgentRuntime:
             context_manager=self._context_manager,
             tenant_id=self._tenant_id,
             context_compressor=self._context_compressor,
+            metrics_collector=self._metrics_collector,
             redact_secrets=_settings.redact_secrets_enabled,
         )
 
