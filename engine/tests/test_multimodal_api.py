@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import json
+from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -16,6 +19,9 @@ from agent33.multimodal.models import (
     VoiceSessionState,
 )
 from agent33.security.auth import create_access_token
+from agent33.voice.app import create_voice_sidecar_app
+from agent33.voice.client import SidecarVoiceDaemon, VoiceSidecarClient
+from agent33.voice.service import VoiceSidecarService
 
 
 @pytest.fixture(autouse=True)
@@ -492,6 +498,95 @@ def test_voice_session_health_and_stop_flow(writer_client: TestClient) -> None:
     assert health_response.json()["healthy"] is True
     assert stop_response.status_code == 200
     assert stop_response.json()["state"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_voice_session_uses_real_sidecar_service_and_persists_artifacts(
+    tmp_path: Path,
+) -> None:
+    voices_path = Path(__file__).resolve().parents[2] / "config" / "voice" / "voices.json"
+    sidecar_artifacts_dir = tmp_path / "voice-sidecar-artifacts"
+    sidecar_service = VoiceSidecarService(
+        voices_path=voices_path,
+        artifacts_dir=sidecar_artifacts_dir,
+        playback_backend="noop",
+    )
+    assert {persona.id for persona in sidecar_service.list_personas()} == {"default", "operator"}
+    sidecar_app = create_voice_sidecar_app(sidecar_service)
+    sidecar_transport = httpx.ASGITransport(app=sidecar_app)
+    sidecar_client = VoiceSidecarClient(
+        "http://testserver",
+        transport=sidecar_transport,
+    )
+
+    def daemon_factory(**kwargs: object) -> SidecarVoiceDaemon:
+        return SidecarVoiceDaemon(client=sidecar_client, **kwargs)
+
+    _service.configure_voice_runtime(
+        enabled=True,
+        transport="sidecar",
+        url="http://testserver",
+        api_key="",
+        api_secret="",
+        room_prefix="agent33-voice",
+        max_sessions=25,
+        daemon_factory=daemon_factory,
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    token = create_access_token(
+        "multimodal-user",
+        scopes=["multimodal:read", "multimodal:write"],
+        tenant_id="tenant-a",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers=headers,
+    ) as client:
+        created = await client.post("/v1/multimodal/voice/sessions", json={})
+        assert created.status_code == 201
+        created_payload = created.json()
+        assert created_payload["state"] == "active"
+        assert created_payload["transport"] == "sidecar"
+        assert created_payload["daemon_health"] is True
+
+        session_id = created_payload["id"]
+        health_response = await client.get(f"/v1/multimodal/voice/sessions/{session_id}/health")
+        assert health_response.status_code == 200
+        health_payload = health_response.json()
+        assert health_payload["healthy"] is True
+        assert health_payload["details"]["health"]["status"] == "ok"
+        assert health_payload["details"]["health"]["persona_count"] == 2
+        assert health_payload["details"]["health"]["voices_path"].endswith(
+            "config\\voice\\voices.json"
+        )
+        sidecar_session_id = health_payload["details"]["sidecar_session_id"]
+        assert sidecar_session_id
+
+        session_dir = sidecar_artifacts_dir / sidecar_session_id
+        manifest_path = session_dir / "session.json"
+        events_path = session_dir / "events.jsonl"
+        assert manifest_path.is_file()
+        assert events_path.is_file()
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["state"] == "active"
+        assert manifest["room_name"] == created_payload["room_name"]
+        assert manifest["persona_id"] == "default"
+        events_text = events_path.read_text(encoding="utf-8")
+        assert "session.started" in events_text
+
+        stopped = await client.post(f"/v1/multimodal/voice/sessions/{session_id}/stop")
+        assert stopped.status_code == 200
+        assert stopped.json()["state"] == "stopped"
+
+        stopped_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert stopped_manifest["state"] == "stopped"
+        assert stopped_manifest["stopped_at"] is not None
+        assert "session.stopped" in events_path.read_text(encoding="utf-8")
 
 
 def test_voice_session_reads_do_not_mutate_stored_updated_at(writer_client: TestClient) -> None:
