@@ -111,7 +111,7 @@ class TestPricingCatalogLookup:
         """The catalog has a non-empty set of builtin models."""
         catalog = get_default_catalog()
         models = catalog.builtin_models
-        assert len(models) >= 15  # We defined ~20 models
+        assert len(models) >= 25  # 18 original + 11 Phase 49 provider entries
 
 
 class TestEstimateCost:
@@ -219,6 +219,18 @@ class TestPricingCatalogCoverage:
             ("mistral", "codestral-latest"),
             ("ollama", "llama3.2"),
             ("ollama", "nomic-embed-text"),
+            # Phase 49 new providers
+            ("deepseek", "deepseek-chat"),
+            ("deepseek", "deepseek-reasoner"),
+            ("groq", "llama-3.3-70b-versatile"),
+            ("groq", "mixtral-8x7b-32768"),
+            ("xai", "grok-2"),
+            ("xai", "grok-3-mini"),
+            ("cerebras", "llama3.1-70b"),
+            ("cohere", "command-r-plus"),
+            ("cohere", "command-r"),
+            ("perplexity", "sonar-pro"),
+            ("perplexity", "sonar"),
         ],
     )
     def test_model_exists_in_builtin_table(self, provider: str, model: str) -> None:
@@ -228,3 +240,83 @@ class TestPricingCatalogCoverage:
         assert entry is not None, f"Missing builtin pricing for ({provider}, {model})"
         assert entry.input_cost_per_million >= Decimal("0")
         assert entry.output_cost_per_million >= Decimal("0")
+
+
+class TestNewProviderPricing:
+    """Verify exact pricing values for the new Phase 49 provider entries."""
+
+    def test_deepseek_chat_pricing(self) -> None:
+        """DeepSeek Chat: $0.14 input, $0.28 output per million tokens."""
+        result = estimate_cost("deepseek-chat", "deepseek", 1_000_000, 1_000_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.14/1M * 1M = 0.14, output: 0.28/1M * 1M = 0.28, total = 0.42
+        assert result.amount_usd == Decimal("0.420000")
+
+    def test_deepseek_reasoner_pricing(self) -> None:
+        """DeepSeek Reasoner: $0.55 input, $2.19 output per million tokens."""
+        result = estimate_cost("deepseek-reasoner", "deepseek", 10_000, 5_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.55/1M * 10K = 0.0055, output: 2.19/1M * 5K = 0.01095, total = 0.01645
+        assert result.amount_usd == Decimal("0.016450")
+
+    def test_groq_llama_pricing(self) -> None:
+        """Groq LLaMA 3.3 70B: $0.59 input, $0.79 output per million tokens."""
+        result = estimate_cost("llama-3.3-70b-versatile", "groq", 100_000, 50_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.59/1M * 100K = 0.059, output: 0.79/1M * 50K = 0.0395, total = 0.0985
+        assert result.amount_usd == Decimal("0.098500")
+
+    def test_groq_mixtral_pricing(self) -> None:
+        """Groq Mixtral: $0.24 input, $0.24 output per million tokens."""
+        result = estimate_cost("mixtral-8x7b-32768", "groq", 100_000, 100_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.24/1M * 100K = 0.024, output: 0.24/1M * 100K = 0.024, total = 0.048
+        assert result.amount_usd == Decimal("0.048000")
+
+    def test_xai_grok2_pricing(self) -> None:
+        """xAI Grok-2: $2.00 input, $10.00 output per million tokens."""
+        result = estimate_cost("grok-2", "xai", 10_000, 5_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 2/1M * 10K = 0.02, output: 10/1M * 5K = 0.05, total = 0.07
+        assert result.amount_usd == Decimal("0.070000")
+
+    def test_xai_grok3_mini_pricing(self) -> None:
+        """xAI Grok-3 Mini: $0.30 input, $0.50 output per million tokens."""
+        result = estimate_cost("grok-3-mini", "xai", 50_000, 20_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.30/1M * 50K = 0.015, output: 0.50/1M * 20K = 0.01, total = 0.025
+        assert result.amount_usd == Decimal("0.025000")
+
+    def test_cerebras_llama_free_tier(self) -> None:
+        """Cerebras LLaMA 3.1 70B: free tier ($0/$0)."""
+        result = estimate_cost("llama3.1-70b", "cerebras", 500_000, 200_000)
+        assert result.status == CostStatus.ESTIMATED
+        assert result.amount_usd == Decimal("0.000000")
+
+    def test_cohere_command_r_plus_pricing(self) -> None:
+        """Cohere Command R+: $2.50 input, $10.00 output per million tokens."""
+        result = estimate_cost("command-r-plus", "cohere", 20_000, 10_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 2.50/1M * 20K = 0.05, output: 10/1M * 10K = 0.1, total = 0.15
+        assert result.amount_usd == Decimal("0.150000")
+
+    def test_cohere_command_r_pricing(self) -> None:
+        """Cohere Command R: $0.15 input, $0.60 output per million tokens."""
+        result = estimate_cost("command-r", "cohere", 100_000, 50_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 0.15/1M * 100K = 0.015, output: 0.60/1M * 50K = 0.03, total = 0.045
+        assert result.amount_usd == Decimal("0.045000")
+
+    def test_perplexity_sonar_pro_pricing(self) -> None:
+        """Perplexity Sonar Pro: $3.00 input, $15.00 output per million tokens."""
+        result = estimate_cost("sonar-pro", "perplexity", 10_000, 5_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 3/1M * 10K = 0.03, output: 15/1M * 5K = 0.075, total = 0.105
+        assert result.amount_usd == Decimal("0.105000")
+
+    def test_perplexity_sonar_pricing(self) -> None:
+        """Perplexity Sonar: $1.00 input, $1.00 output per million tokens."""
+        result = estimate_cost("sonar", "perplexity", 100_000, 100_000)
+        assert result.status == CostStatus.ESTIMATED
+        # input: 1/1M * 100K = 0.1, output: 1/1M * 100K = 0.1, total = 0.2
+        assert result.amount_usd == Decimal("0.200000")
