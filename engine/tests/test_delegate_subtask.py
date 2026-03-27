@@ -12,13 +12,19 @@ Tests cover:
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from agent33.llm.base import LLMResponse, ToolCall, ToolCallFunction
+from agent33.packs.registry import PackRegistry
+from agent33.skills.injection import SkillInjector
+from agent33.skills.registry import SkillRegistry
+from agent33.skills.slash_commands import parse_slash_command, scan_skill_commands
 from agent33.tools.base import ToolContext, ToolResult
 from agent33.tools.builtin.delegate_prompts import (
     BLOCKED_TOOLS,
@@ -29,7 +35,11 @@ from agent33.tools.builtin.delegate_subtask import (
     MAX_DEPTH,
     DelegateSubtaskTool,
 )
+from agent33.tools.builtin.moa import MoATool
 from agent33.tools.registry import ToolRegistry
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -59,6 +69,15 @@ class _StubTool:
 
     async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         return ToolResult.ok(f"ran {self.name}")
+
+
+class _ProbeTool:
+    def __init__(self) -> None:
+        self.name = "probe_tool"
+        self.description = "A tool that should remain hidden from delegated children"
+
+    async def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        return ToolResult.ok("probe ran")
 
 
 @pytest.fixture()
@@ -423,6 +442,140 @@ class TestFilteredChildRegistry:
         assert instance.allowed_result is not None and instance.allowed_result.success
         assert instance.blocked_result is not None and not instance.blocked_result.success
         assert "not available to delegated children" in instance.blocked_result.error.lower()
+
+    async def test_pack_discovery_slash_command_and_moa_chain(
+        self,
+        mock_router: MagicMock,
+        base_context: ToolContext,
+        tmp_path: Path,
+    ) -> None:
+        packs_dir = tmp_path / "packs"
+        pack_dir = packs_dir / "review-pack"
+        skill_dir = pack_dir / "skills" / "ensemble-review"
+        skill_dir.mkdir(parents=True)
+        (pack_dir / "PACK.yaml").write_text(
+            "\n".join(
+                [
+                    'name: "review-pack"',
+                    'version: "1.0.0"',
+                    'description: "Review capability pack"',
+                    'author: "tester"',
+                    "skills:",
+                    "  - name: ensemble-review",
+                    "    path: skills/ensemble-review",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: ensemble-review
+version: 1.0.0
+description: Review and synthesize pack findings
+allowed_tools:
+  - mixture_of_agents
+---
+
+# Ensemble Review
+
+Use the MoA tool to synthesize the pack findings.
+""",
+            encoding="utf-8",
+        )
+
+        skill_registry = SkillRegistry()
+        pack_registry = PackRegistry(packs_dir=packs_dir, skill_registry=skill_registry)
+        assert pack_registry.discover() == 1
+
+        commands = scan_skill_commands(skill_registry)
+        parsed = parse_slash_command("/ensemble-review compare these answers", commands)
+        assert parsed is not None
+        skill_name, instruction = parsed
+        assert skill_name == "ensemble-review"
+        assert instruction == "compare these answers"
+
+        discovered_skill = skill_registry.get(skill_name)
+        assert discovered_skill is not None
+        assert skill_registry.get("review-pack/ensemble-review") is not None
+        assert discovered_skill.allowed_tools == ["mixture_of_agents"]
+        injector = SkillInjector(skill_registry)
+
+        tool_registry = ToolRegistry()
+        moa_tool = MoATool(
+            default_reference_models=["ref-model"],
+            default_aggregator_model="agg-model",
+        )
+        tool_registry.register(moa_tool)
+        tool_registry.register(_ProbeTool())
+
+        delegate_tool = DelegateSubtaskTool(router=mock_router, tool_registry=tool_registry)
+        skill_context = injector.resolve_tool_context(
+            [skill_name],
+            dataclasses.replace(
+                base_context,
+                command_allowlist=["delegate_subtask", "mixture_of_agents", "probe_tool"],
+            ),
+        )
+        assert skill_context.command_allowlist == ["mixture_of_agents"]
+
+        tool_call = ToolCall(
+            id="call-1",
+            function=ToolCallFunction(
+                name="mixture_of_agents",
+                arguments='{"query":"synthesize the reviewed pack findings"}',
+            ),
+        )
+        mock_router.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="Calling MoA",
+                    model="child-model",
+                    prompt_tokens=12,
+                    completion_tokens=6,
+                    tool_calls=[tool_call],
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(
+                    content="Working through the pack review",
+                    model="child-model",
+                    prompt_tokens=12,
+                    completion_tokens=6,
+                ),
+                LLMResponse(
+                    content='COMPLETED: {"result":"pack review complete"}',
+                    model="child-model",
+                    prompt_tokens=12,
+                    completion_tokens=6,
+                ),
+            ]
+        )
+
+        moa_execute = AsyncMock(return_value=ToolResult.ok("MoA synthesized answer"))
+        with patch.object(moa_tool, "execute", moa_execute):
+            result = await delegate_tool.execute(
+                {
+                    "goal": "Use the capability pack review skill to synthesize the findings",
+                    "context": instruction,
+                    "toolsets": skill_context.command_allowlist + ["delegate_subtask", "clarify"],
+                },
+                base_context,
+            )
+
+        assert result.success
+        assert "pack review complete" in result.output
+        assert result.output.startswith("COMPLETED:")
+        moa_execute.assert_awaited_once()
+
+        first_call_tools = mock_router.complete.call_args_list[0].kwargs["tools"]
+        assert [tool["name"] for tool in first_call_tools] == ["mixture_of_agents"]
+        assert "probe_tool" not in {tool["name"] for tool in first_call_tools}
+        second_call_messages = mock_router.complete.call_args_list[1].args[0]
+        tool_messages = [msg for msg in second_call_messages if msg.role == "tool"]
+        assert len(tool_messages) == 1
+        assert "MoA synthesized answer" in tool_messages[0].content
+        assert tool_registry.get("probe_tool") is not None
+        assert tool_registry.get("mixture_of_agents") is not None
 
 
 # ---------------------------------------------------------------------------
