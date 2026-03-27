@@ -84,6 +84,58 @@ class TestObservationCapture:
         mock_memory.store.assert_called_once()
 
 
+class TestObservationCaptureNATS:
+    """Test NATS publish path in ObservationCapture."""
+
+    @pytest.mark.asyncio
+    async def test_nats_publish_on_record(self) -> None:
+        """Recording a public observation publishes to NATS bus."""
+        mock_nats = AsyncMock()
+        capture = ObservationCapture(nats_bus=mock_nats)
+        obs = Observation(content="event data", event_type="tool_call", agent_name="coder")
+        await capture.record(obs)
+
+        mock_nats.publish.assert_called_once()
+        call_args = mock_nats.publish.call_args
+        assert call_args[0][0] == "agent.observation"
+        payload = call_args[0][1]
+        assert payload["id"] == obs.id
+        assert payload["content"] == "event data"
+        assert payload["agent_name"] == "coder"
+        assert payload["event_type"] == "tool_call"
+
+    @pytest.mark.asyncio
+    async def test_nats_publish_failure_silenced(self) -> None:
+        """NATS publish failure does not propagate; observation is still buffered."""
+        mock_nats = AsyncMock()
+        mock_nats.publish.side_effect = ConnectionError("NATS down")
+        capture = ObservationCapture(nats_bus=mock_nats)
+        obs = Observation(content="should still buffer")
+        obs_id = await capture.record(obs)
+
+        assert obs_id == obs.id
+        assert capture.buffer_size == 1
+
+    @pytest.mark.asyncio
+    async def test_nats_and_ltm_both_fire(self) -> None:
+        """Both LTM store and NATS publish are called for public observations."""
+        mock_memory = AsyncMock()
+        mock_embed = AsyncMock()
+        mock_embed.embed.return_value = [0.1] * 1536
+        mock_nats = AsyncMock()
+
+        capture = ObservationCapture(
+            long_term_memory=mock_memory,
+            embedding_provider=mock_embed,
+            nats_bus=mock_nats,
+        )
+        obs = Observation(content="dual path test")
+        await capture.record(obs)
+
+        mock_memory.store.assert_called_once()
+        mock_nats.publish.assert_called_once()
+
+
 class TestSessionSummarizer:
     """Test SessionSummarizer."""
 
@@ -128,6 +180,89 @@ class TestSessionSummarizer:
         result = await summarizer.summarize([Observation(content="test")])
         assert "summary" in result
         assert result["key_facts"] == []
+
+
+class TestAutoSummarize:
+    """Test SessionSummarizer.auto_summarize() LTM storage path."""
+
+    @pytest.mark.asyncio
+    async def test_auto_summarize_stores_in_ltm(self) -> None:
+        """auto_summarize() should call summarize and then store in LTM."""
+        from agent33.llm.base import LLMResponse
+        from agent33.memory.summarizer import SessionSummarizer
+
+        mock_router = AsyncMock()
+        mock_router.complete.return_value = LLMResponse(
+            content='{"summary": "session recap", "key_facts": ["f1"], "tags": ["t1"]}',
+            model="test",
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+        mock_memory = AsyncMock()
+        mock_embed = AsyncMock()
+        mock_embed.embed.return_value = [0.1] * 1536
+
+        summarizer = SessionSummarizer(
+            router=mock_router,
+            long_term_memory=mock_memory,
+            embedding_provider=mock_embed,
+        )
+        observations = [
+            Observation(content="did stuff", event_type="tool_call", agent_name="coder"),
+        ]
+        result = await summarizer.auto_summarize("sess-1", observations)
+
+        assert result["summary"] == "session recap"
+        mock_embed.embed.assert_called_once_with("session recap")
+        mock_memory.store.assert_called_once()
+        store_kwargs = mock_memory.store.call_args
+        assert "session_summary" in str(store_kwargs)
+
+    @pytest.mark.asyncio
+    async def test_auto_summarize_ltm_failure_graceful(self) -> None:
+        """LTM failure during auto_summarize does not raise; result is returned."""
+        from agent33.llm.base import LLMResponse
+        from agent33.memory.summarizer import SessionSummarizer
+
+        mock_router = AsyncMock()
+        mock_router.complete.return_value = LLMResponse(
+            content='{"summary": "ok", "key_facts": [], "tags": []}',
+            model="test",
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+        mock_memory = AsyncMock()
+        mock_memory.store.side_effect = RuntimeError("LTM unavailable")
+        mock_embed = AsyncMock()
+        mock_embed.embed.return_value = [0.1] * 1536
+
+        summarizer = SessionSummarizer(
+            router=mock_router,
+            long_term_memory=mock_memory,
+            embedding_provider=mock_embed,
+        )
+        result = await summarizer.auto_summarize("sess-2", [Observation(content="test")])
+
+        # Summary result is still returned despite LTM failure
+        assert result["summary"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_auto_summarize_without_ltm(self) -> None:
+        """auto_summarize() without LTM configured returns the summary without storing."""
+        from agent33.llm.base import LLMResponse
+        from agent33.memory.summarizer import SessionSummarizer
+
+        mock_router = AsyncMock()
+        mock_router.complete.return_value = LLMResponse(
+            content='{"summary": "no ltm", "key_facts": ["a"], "tags": ["b"]}',
+            model="test",
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+
+        summarizer = SessionSummarizer(router=mock_router)
+        result = await summarizer.auto_summarize("sess-3", [Observation(content="test")])
+        assert result["summary"] == "no ltm"
 
 
 class TestProgressiveRecall:

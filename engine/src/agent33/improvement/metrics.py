@@ -60,11 +60,14 @@ def default_metrics() -> list[ImprovementMetric]:
     ]
 
 
-def compute_trend(values: list[float]) -> MetricTrend:
+def compute_trend(values: list[float], *, threshold: float = 0.05) -> MetricTrend:
     """Compute trend direction from a list of chronological values.
 
     Uses simple linear comparison of first-half average vs second-half
     average.  If fewer than 2 values, returns STABLE.
+
+    *threshold* is the fractional change required to declare a trend
+    (default 5%).
     """
     if len(values) < 2:
         return MetricTrend.STABLE
@@ -73,10 +76,9 @@ def compute_trend(values: list[float]) -> MetricTrend:
     first_half = sum(values[:mid]) / max(mid, 1)
     second_half = sum(values[mid:]) / max(len(values) - mid, 1)
 
-    # Threshold of 5% change to declare a trend
-    if second_half > first_half * 1.05:
+    if second_half > first_half * (1.0 + threshold):
         return MetricTrend.IMPROVING
-    if second_half < first_half * 0.95:
+    if second_half < first_half * (1.0 - threshold):
         return MetricTrend.DECLINING
     return MetricTrend.STABLE
 

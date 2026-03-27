@@ -386,6 +386,18 @@ class Settings(BaseSettings):
     improvement_learning_auto_intake_min_quality: float = 0.45
     improvement_learning_max_metrics_snapshots: int = 100
 
+    # Quality scoring parameters (Phase 31 signal tuning)
+    improvement_quality_weight_summary: float = 0.25
+    improvement_quality_weight_details: float = 0.20
+    improvement_quality_weight_source: float = 0.10
+    improvement_quality_weight_context: float = 0.10
+    improvement_quality_weight_severity: float = 0.35
+    improvement_quality_high_threshold: float = 0.70
+    improvement_quality_medium_threshold: float = 0.45
+
+    # Trend detection (Phase 31 signal tuning)
+    improvement_metrics_trend_threshold: float = 0.05
+
     # Tuning loop automation (Phase 31)
     improvement_tuning_loop_enabled: bool = False
     improvement_tuning_loop_interval_hours: float = 24.0
@@ -393,6 +405,7 @@ class Settings(BaseSettings):
     improvement_tuning_loop_max_retention_delta_days: int = 30
     improvement_tuning_loop_require_approval: bool = True
     improvement_tuning_loop_dry_run: bool = False
+    improvement_tuning_loop_min_sample_size: int = 10
 
     # Comparative evaluation (AWM Tier 2 group-relative scoring)
     comparative_elo_k_factor: float = 32.0  # K-factor for Elo rating updates

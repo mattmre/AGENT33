@@ -38,6 +38,7 @@ from agent33.improvement.persistence import (
     restore_learning_state,
     should_migrate_file_learning_state_to_db,
 )
+from agent33.improvement.quality import QualityScoringConfig
 from agent33.improvement.repo_ingestion import (
     FeatureCandidateInput,
     RepoHarvestRecord,
@@ -90,6 +91,15 @@ def _build_improvement_service() -> ImprovementService:
             "Unsupported improvement learning persistence backend: "
             f"{settings.improvement_learning_persistence_backend}"
         )
+    quality_cfg = QualityScoringConfig(
+        weight_summary=settings.improvement_quality_weight_summary,
+        weight_details=settings.improvement_quality_weight_details,
+        weight_source=settings.improvement_quality_weight_source,
+        weight_context=settings.improvement_quality_weight_context,
+        weight_severity=settings.improvement_quality_weight_severity,
+        high_threshold=settings.improvement_quality_high_threshold,
+        medium_threshold=settings.improvement_quality_medium_threshold,
+    )
     return ImprovementService(
         learning_store=store,
         persistence_policy=LearningPersistencePolicy(
@@ -100,6 +110,7 @@ def _build_improvement_service() -> ImprovementService:
             auto_intake_min_quality=settings.improvement_learning_auto_intake_min_quality,
         ),
         max_metrics_snapshots=settings.improvement_learning_max_metrics_snapshots,
+        quality_config=quality_cfg,
     )
 
 

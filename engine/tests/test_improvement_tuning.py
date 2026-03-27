@@ -84,6 +84,7 @@ class FakeSettings:
         interval_hours: float = 24.0,
         max_quality_delta: float = 0.15,
         max_retention_delta_days: int = 30,
+        min_sample_size: int = 10,
     ) -> None:
         self.improvement_tuning_loop_enabled = enabled
         self.improvement_tuning_loop_dry_run = dry_run
@@ -91,6 +92,7 @@ class FakeSettings:
         self.improvement_tuning_loop_interval_hours = interval_hours
         self.improvement_tuning_loop_max_quality_delta = max_quality_delta
         self.improvement_tuning_loop_max_retention_delta_days = max_retention_delta_days
+        self.improvement_tuning_loop_min_sample_size = min_sample_size
 
 
 # ---------------------------------------------------------------------------
