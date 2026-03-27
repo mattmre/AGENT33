@@ -24,9 +24,10 @@ class SharedMemoryService:
         Redis connection URL (e.g. ``redis://localhost:6379/0``).
     """
 
-    def __init__(self, redis_url: str) -> None:
+    def __init__(self, redis_url: str, *, redact_enabled: bool = True) -> None:
         self._redis_url = redis_url
         self._redis: Any = None
+        self._redact_enabled = redact_enabled
 
     async def _ensure_redis(self) -> Any:
         """Lazily initialise the async Redis client on first use."""
@@ -52,6 +53,7 @@ class SharedMemoryService:
             redis=self._redis,
             tenant_id=tenant_id,
             namespace=namespace,
+            redact_enabled=self._redact_enabled,
         )
 
     async def get_session_namespace(
@@ -66,6 +68,7 @@ class SharedMemoryService:
             redis=redis,
             tenant_id=tenant_id,
             namespace=f"session/{session_id}/shared",
+            redact_enabled=self._redact_enabled,
         )
 
     async def get_agent_namespace(self, tenant_id: str, agent_id: str) -> SharedMemoryNamespace:
@@ -78,6 +81,7 @@ class SharedMemoryService:
             redis=redis,
             tenant_id=tenant_id,
             namespace=f"agent/{agent_id}",
+            redact_enabled=self._redact_enabled,
         )
 
     async def get_global_namespace(self, tenant_id: str) -> SharedMemoryNamespace:
@@ -90,6 +94,7 @@ class SharedMemoryService:
             redis=redis,
             tenant_id=tenant_id,
             namespace="global",
+            redact_enabled=self._redact_enabled,
         )
 
     # ------------------------------------------------------------------

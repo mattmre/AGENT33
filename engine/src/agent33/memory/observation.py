@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from agent33.security.redaction import redact_secrets
+
 
 @dataclass(frozen=True, slots=True)
 class Observation:
@@ -38,10 +40,13 @@ class ObservationCapture:
         long_term_memory: Any | None = None,
         embedding_provider: Any | None = None,
         nats_bus: Any | None = None,
+        *,
+        redact_enabled: bool = True,
     ) -> None:
         self._memory = long_term_memory
         self._embeddings = embedding_provider
         self._nats_bus = nats_bus
+        self._redact_enabled = redact_enabled
         self._buffer: list[Observation] = []
 
     async def record(self, obs: Observation) -> str:
@@ -52,13 +57,16 @@ class ObservationCapture:
         """
         self._buffer.append(obs)
 
+        # Redact secrets from content before any persistence / publishing.
+        safe_content = redact_secrets(obs.content, enabled=self._redact_enabled)
+
         is_private = bool(set(obs.tags) & _PRIVATE_TAGS)
 
         if self._memory is not None and self._embeddings is not None and not is_private:
             try:
-                embedding = await self._embeddings.embed(obs.content)
+                embedding = await self._embeddings.embed(safe_content)
                 await self._memory.store(
-                    content=obs.content,
+                    content=safe_content,
                     embedding=embedding,
                     metadata={
                         "observation_id": obs.id,
@@ -86,7 +94,7 @@ class ObservationCapture:
                         "session_id": obs.session_id,
                         "agent_name": obs.agent_name,
                         "event_type": obs.event_type,
-                        "content": obs.content,
+                        "content": safe_content,
                         "metadata": obs.metadata,
                         "tags": obs.tags,
                         "timestamp": obs.timestamp.isoformat(),

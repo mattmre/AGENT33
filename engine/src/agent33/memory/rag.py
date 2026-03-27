@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
+from agent33.security.redaction import redact_secrets
+
 if TYPE_CHECKING:
     from agent33.memory.embeddings import EmbeddingProvider
     from agent33.memory.hybrid import HybridSearcher
@@ -94,6 +96,8 @@ class RAGPipeline:
         similarity_threshold: float = 0.3,
         hybrid_searcher: HybridSearcher | None = None,
         query_expander: QueryExpander | None = None,
+        *,
+        redact_enabled: bool = True,
     ) -> None:
         self._embedder = embedding_provider
         self._memory = long_term_memory
@@ -101,6 +105,7 @@ class RAGPipeline:
         self._threshold = similarity_threshold
         self._hybrid = hybrid_searcher
         self._expander = query_expander
+        self._redact_enabled = redact_enabled
 
     async def query(self, text: str) -> RAGResult:
         """Embed *text*, search memory, and return augmented context."""
@@ -256,13 +261,18 @@ class RAGPipeline:
             text = text.replace(delimiter, "")
         return text
 
-    @staticmethod
-    def _format_prompt(question: str, sources: list[RAGSource]) -> str:
-        """Build the augmented prompt with context block."""
+    def _format_prompt(self, question: str, sources: list[RAGSource]) -> str:
+        """Build the augmented prompt with context block.
+
+        Applies secret redaction to retrieved source texts before they
+        enter the augmented prompt (Phase 52 gap-close).
+        """
         clean_question = RAGPipeline._sanitize_for_prompt(question)
         context_parts: list[str] = []
         for i, src in enumerate(sources, 1):
-            context_parts.append(f"[Source {i}] {RAGPipeline._sanitize_for_prompt(src.text)}")
+            sanitized = RAGPipeline._sanitize_for_prompt(src.text)
+            safe_text = redact_secrets(sanitized, enabled=self._redact_enabled)
+            context_parts.append(f"[Source {i}] {safe_text}")
 
         context_block = "\n\n".join(context_parts)
         return (
