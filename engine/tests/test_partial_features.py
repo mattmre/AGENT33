@@ -335,9 +335,9 @@ def test_state_model_tester_detects_deadlock():
 
 
 def test_cost_tracker_record_and_report():
-    from agent33.observability.metrics import CostTracker
+    from agent33.observability.metrics import DEFAULT_MODEL_PRICING, CostTracker
 
-    tracker = CostTracker()
+    tracker = CostTracker(pricing=dict(DEFAULT_MODEL_PRICING))
     cost = tracker.record_usage("gpt-4", tokens_in=1000, tokens_out=500, scope="workflow:build")
 
     assert cost > 0

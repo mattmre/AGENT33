@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import time
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -380,3 +381,299 @@ class TestInsightsRoute:
             assert "sessions" in entry
             assert "tokens" in entry
             assert "cost_usd" in entry
+
+
+# ---------------------------------------------------------------------------
+# Phase 57 wiring tests: CostTracker + PricingCatalog integration
+# ---------------------------------------------------------------------------
+
+
+class TestCostTrackerPricingCatalog:
+    """Verify CostTracker delegates to PricingCatalog when no legacy dict given."""
+
+    def test_catalog_pricing_for_known_model(self) -> None:
+        """CostTracker without pricing dict uses PricingCatalog for gpt-4o."""
+        ct = CostTracker()  # no pricing dict -> catalog path
+        cost = ct.record_usage(
+            "gpt-4o", tokens_in=1000, tokens_out=500, scope="global", provider="openai"
+        )
+        # gpt-4o: $2.50/M input, $10/M output
+        # 1000 input -> $0.0025, 500 output -> $0.005  => $0.0075
+        assert cost > 0
+        assert cost == pytest.approx(0.0075, abs=0.0001)
+
+    def test_catalog_pricing_for_unknown_model_returns_zero(self) -> None:
+        """CostTracker gracefully returns 0 cost for unrecognized models."""
+        ct = CostTracker()
+        cost = ct.record_usage(
+            "totally-unknown-model",
+            tokens_in=5000,
+            tokens_out=2000,
+            scope="global",
+            provider="unknown-provider",
+        )
+        assert cost == 0.0
+
+    def test_catalog_accumulates_across_calls(self) -> None:
+        """Multiple record_usage calls accumulate in the cost report."""
+        ct = CostTracker()
+        ct.record_usage(
+            "gpt-4o", tokens_in=1000, tokens_out=500, scope="global", provider="openai"
+        )
+        ct.record_usage(
+            "gpt-4o", tokens_in=2000, tokens_out=1000, scope="global", provider="openai"
+        )
+
+        report = ct.get_cost()
+        assert report.invocations == 2
+        assert report.input_tokens == 3000
+        assert report.output_tokens == 1500
+        assert report.total_cost > 0
+
+    def test_catalog_cost_produces_nonzero_insights(self) -> None:
+        """InsightsEngine + catalog-backed CostTracker yields nonzero data."""
+        mc = MetricsCollector()
+        ct = CostTracker()  # catalog path
+        ct.record_usage(
+            "gpt-4o", tokens_in=1000, tokens_out=500, scope="global", provider="openai"
+        )
+
+        engine = InsightsEngine(mc, ct)
+        report = engine.generate(days=1)
+
+        assert report.total_tokens == 1500
+        assert report.total_cost_usd > Decimal("0")
+        assert "gpt-4o" in report.model_usage
+        assert report.model_usage["gpt-4o"]["invocations"] == 1
+
+    def test_legacy_pricing_still_works(self) -> None:
+        """Explicit pricing dict takes precedence over catalog."""
+        ct = CostTracker(pricing={"my-model": {"input": 0.05, "output": 0.10}})
+        cost = ct.record_usage("my-model", tokens_in=1000, tokens_out=1000, scope="global")
+        # 1000/1000 * 0.05 + 1000/1000 * 0.10 = 0.15
+        assert cost == pytest.approx(0.15, abs=0.001)
+
+    def test_set_pricing_creates_dict_when_none(self) -> None:
+        """set_pricing on a catalog-backed tracker creates a pricing dict."""
+        ct = CostTracker()
+        assert ct._pricing is None
+
+        ct.set_pricing("custom-model", 0.01, 0.02)
+        assert ct._pricing is not None
+        assert "custom-model" in ct._pricing
+
+        cost = ct.record_usage("custom-model", tokens_in=1000, tokens_out=500, scope="global")
+        # 1000/1000 * 0.01 + 500/1000 * 0.02 = 0.02
+        assert cost == pytest.approx(0.02, abs=0.001)
+
+    def test_custom_catalog_instance(self) -> None:
+        """CostTracker can be given a custom PricingCatalog."""
+        from agent33.llm.pricing import CostSource, PricingCatalog, PricingEntry
+
+        catalog = PricingCatalog()
+        catalog.set_override(
+            "test-provider",
+            "test-model",
+            PricingEntry(
+                input_cost_per_million=Decimal("10"),
+                output_cost_per_million=Decimal("20"),
+                source=CostSource.USER_OVERRIDE,
+            ),
+        )
+        ct = CostTracker(pricing_catalog=catalog)
+        cost = ct.record_usage(
+            "test-model",
+            tokens_in=1_000_000,
+            tokens_out=1_000_000,
+            scope="global",
+            provider="test-provider",
+        )
+        # $10 input + $20 output = $30
+        assert cost == pytest.approx(30.0, abs=0.01)
+
+
+class TestAgentRuntimeCostRecording:
+    """Verify AgentRuntime records cost after LLM calls."""
+
+    @pytest.fixture()
+    def mock_definition(self) -> Any:
+        """Minimal agent definition for testing."""
+        defn = MagicMock()
+        defn.name = "test-agent"
+        defn.role.value = "worker"
+        defn.capabilities = []
+        defn.spec_capabilities = []
+        defn.governance.scope = ""
+        defn.governance.commands = ""
+        defn.governance.network = ""
+        defn.governance.approval_required = []
+        defn.governance.tool_policies = {}
+        defn.autonomy_level.value = "full"
+        defn.ownership.owner = ""
+        defn.ownership.escalation_target = ""
+        defn.dependencies = []
+        defn.inputs = {}
+        defn.outputs = {}
+        defn.constraints.max_tokens = 1024
+        defn.constraints.timeout_seconds = 30
+        defn.constraints.max_retries = 0
+        defn.description = "test agent"
+        defn.agent_id = "AGT-TEST"
+        defn.skills = []
+        return defn
+
+    @pytest.fixture()
+    def mock_router(self) -> Any:
+        """ModelRouter mock that returns a fake LLMResponse."""
+        from agent33.llm.base import LLMResponse
+
+        router = AsyncMock()
+        router.complete = AsyncMock(
+            return_value=LLMResponse(
+                content='{"result": "ok"}',
+                model="gpt-4o",
+                prompt_tokens=500,
+                completion_tokens=200,
+            )
+        )
+        return router
+
+    async def test_invoke_records_cost(self, mock_definition: Any, mock_router: Any) -> None:
+        """AgentRuntime.invoke() calls cost_tracker.record_usage on success."""
+        from agent33.agents.runtime import AgentRuntime
+
+        cost_tracker = CostTracker(pricing={"gpt-4o": {"input": 0.01, "output": 0.02}})
+
+        runtime = AgentRuntime(
+            definition=mock_definition,
+            router=mock_router,
+            model="gpt-4o",
+            cost_tracker=cost_tracker,
+        )
+        await runtime.invoke({})
+
+        assert len(cost_tracker._records) == 1
+        record = cost_tracker._records[0]
+        assert record.model == "gpt-4o"
+        assert record.tokens_in == 500
+        assert record.tokens_out == 200
+        assert record.cost > 0
+
+    async def test_invoke_cost_scope_uses_tenant(
+        self, mock_definition: Any, mock_router: Any
+    ) -> None:
+        """Cost record scope includes tenant_id when set."""
+        from agent33.agents.runtime import AgentRuntime
+
+        cost_tracker = CostTracker(pricing={"gpt-4o": {"input": 0.01, "output": 0.02}})
+
+        runtime = AgentRuntime(
+            definition=mock_definition,
+            router=mock_router,
+            model="gpt-4o",
+            cost_tracker=cost_tracker,
+            tenant_id="acme",
+        )
+        await runtime.invoke({})
+
+        assert cost_tracker._records[0].scope == "tenant:acme"
+
+    async def test_invoke_no_cost_tracker_is_harmless(
+        self, mock_definition: Any, mock_router: Any
+    ) -> None:
+        """AgentRuntime works fine without a cost_tracker (no crash)."""
+        from agent33.agents.runtime import AgentRuntime
+
+        runtime = AgentRuntime(
+            definition=mock_definition,
+            router=mock_router,
+            model="gpt-4o",
+        )
+        result = await runtime.invoke({})
+        assert result.raw_response == '{"result": "ok"}'
+
+
+class TestToolLoopMetricsEmission:
+    """Verify ToolLoop emits tool_execution counters via MetricsCollector."""
+
+    async def test_tool_execution_increments_counter(self) -> None:
+        """Successful tool execution emits tool_execution_<name>_total counter."""
+        from agent33.agents.tool_loop import ToolLoop, ToolLoopConfig
+        from agent33.llm.base import (
+            ChatMessage,
+            LLMResponse,
+            ToolCall,
+            ToolCallFunction,
+        )
+        from agent33.tools.base import ToolResult
+
+        mc = MetricsCollector()
+
+        # Mock router: first call returns a tool call, second returns text
+        router = AsyncMock()
+        router.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    model="test",
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                    tool_calls=[
+                        ToolCall(
+                            id="call_1",
+                            function=ToolCallFunction(
+                                name="web_fetch",
+                                arguments='{"url": "https://example.com"}',
+                            ),
+                        )
+                    ],
+                ),
+                LLMResponse(
+                    content="COMPLETED: done",
+                    model="test",
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                ),
+            ]
+        )
+
+        # Mock tool registry
+        tool_registry = MagicMock()
+        tool_registry.get_tool_descriptions.return_value = []
+        tool_registry.validated_execute = AsyncMock(return_value=ToolResult.ok("fetched content"))
+
+        loop = ToolLoop(
+            router=router,
+            tool_registry=tool_registry,
+            config=ToolLoopConfig(
+                max_iterations=5,
+                enable_double_confirmation=False,
+            ),
+            metrics_collector=mc,
+        )
+
+        messages = [
+            ChatMessage(role="system", content="You are a test agent."),
+            ChatMessage(role="user", content="Fetch a URL"),
+        ]
+        await loop.run(messages, model="test", temperature=0.7)
+
+        # Verify the counter was emitted
+        summary = mc.get_summary()
+        assert "tool_execution_web_fetch_total" in summary
+        assert summary["tool_execution_web_fetch_total"] == 1
+
+    async def test_tool_counter_visible_in_insights_tool_usage(self) -> None:
+        """InsightsEngine picks up tool_execution counters from MetricsCollector."""
+        mc = MetricsCollector()
+        mc.increment("tool_execution_shell_total")
+        mc.increment("tool_execution_shell_total")
+        mc.increment("tool_execution_web_fetch_total")
+
+        engine = InsightsEngine(mc)
+        report = engine.generate(days=1)
+
+        assert "shell" in report.tool_usage
+        assert report.tool_usage["shell"] == 2
+        assert "web_fetch" in report.tool_usage
+        assert report.tool_usage["web_fetch"] == 1

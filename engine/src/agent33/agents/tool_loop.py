@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from agent33.llm.text_tool_parser import TextToolParser
     from agent33.memory.context_compressor import ContextCompressor
     from agent33.memory.observation import ObservationCapture
+    from agent33.observability.metrics import MetricsCollector
     from agent33.tools.base import ToolContext
     from agent33.tools.governance import ToolGovernance
     from agent33.tools.registry import ToolRegistry
@@ -125,6 +126,7 @@ class ToolLoop:
         autonomy_level: AutonomyLevel | None = None,
         context_compressor: ContextCompressor | None = None,
         model_context_window: int = 128_000,
+        metrics_collector: MetricsCollector | None = None,
         *,
         redact_secrets: bool = True,
     ) -> None:
@@ -144,6 +146,7 @@ class ToolLoop:
         self._autonomy_level = autonomy_level
         self._context_compressor = context_compressor
         self._model_context_window = model_context_window
+        self._metrics = metrics_collector
         self._redact_secrets = redact_secrets
 
     # ------------------------------------------------------------------
@@ -1277,6 +1280,10 @@ class ToolLoop:
             state.tool_calls_made += 1
             if tool_name not in state.tools_used:
                 state.tools_used.append(tool_name)
+
+            # --- Emit tool usage counter ---
+            if self._metrics is not None:
+                self._metrics.increment(f"tool_execution_{tool_name}_total")
 
             results.append(result)
 
