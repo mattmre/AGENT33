@@ -2,6 +2,9 @@
 
 Wraps the MoA workflow template as a standard AGENT-33 tool so agents can
 invoke multi-model ensemble reasoning through the normal tool interface.
+
+Phase 58 adds support for multi-round proposer layers, temperature diversity,
+and cost estimation.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from agent33.tools.base import ToolContext, ToolResult
 from agent33.workflows.executor import WorkflowExecutor
 from agent33.workflows.templates.mixture_of_agents import (
     build_moa_workflow,
+    estimate_moa_cost,
     format_moa_result,
 )
 
@@ -33,6 +37,11 @@ class MoATool:
             models.  Defaults to ``default_reference_temperature``.
         aggregator_temperature (float, optional): Temperature for the
             aggregator.  Defaults to ``default_aggregator_temperature``.
+        rounds (int, optional): Number of proposer rounds (default 1).
+        temperature_diversity (bool, optional): Spread temperatures across
+            proposers for response variety (default False).
+        estimate_only (bool, optional): If True, return a cost estimate
+            without executing the workflow (default False).
     """
 
     def __init__(
@@ -55,7 +64,8 @@ class MoATool:
     def description(self) -> str:
         return (
             "Run a Mixture-of-Agents ensemble: query multiple models in "
-            "parallel and synthesize their responses through an aggregator."
+            "parallel and synthesize their responses through an aggregator. "
+            "Supports multi-round proposer layers and temperature diversity."
         )
 
     @property
@@ -78,11 +88,25 @@ class MoATool:
                 },
                 "reference_temperature": {
                     "type": "number",
-                    "description": "Sampling temperature for reference models.",
+                    "description": "Base sampling temperature for reference models.",
                 },
                 "aggregator_temperature": {
                     "type": "number",
                     "description": "Sampling temperature for the aggregator.",
+                },
+                "rounds": {
+                    "type": "integer",
+                    "description": "Number of proposer rounds (1 = single layer).",
+                    "minimum": 1,
+                    "maximum": 5,
+                },
+                "temperature_diversity": {
+                    "type": "boolean",
+                    "description": "Spread temperatures across proposers for variety.",
+                },
+                "estimate_only": {
+                    "type": "boolean",
+                    "description": "Return cost estimate without executing.",
                 },
             },
             "required": ["query"],
@@ -114,13 +138,36 @@ class MoATool:
         agg_temp: float = params.get(
             "aggregator_temperature", self._default_aggregator_temperature
         )
+        rounds: int = params.get("rounds", 1)
+        temp_diversity: bool = params.get("temperature_diversity", False)
+        estimate_only: bool = params.get("estimate_only", False)
 
         logger.info(
             "moa_tool_invoked",
             query_len=len(query),
             reference_models=reference_models,
             aggregator=aggregator,
+            rounds=rounds,
+            temperature_diversity=temp_diversity,
+            estimate_only=estimate_only,
         )
+
+        # Cost estimation mode
+        if estimate_only:
+            try:
+                cost = estimate_moa_cost(
+                    query=query,
+                    reference_models=reference_models,
+                    aggregator_model=aggregator,
+                    rounds=rounds,
+                )
+                return ToolResult.ok(
+                    f"Estimated cost: ${cost.total_usd} USD "
+                    f"({cost.proposer_count} proposers x {cost.rounds} rounds "
+                    f"+ 1 aggregator, status={cost.status.value})"
+                )
+            except Exception as exc:
+                return ToolResult.fail(f"Cost estimation failed: {exc}")
 
         try:
             workflow = build_moa_workflow(
@@ -129,6 +176,8 @@ class MoATool:
                 aggregator_model=aggregator,
                 reference_temperature=ref_temp,
                 aggregator_temperature=agg_temp,
+                rounds=rounds,
+                temperature_diversity=temp_diversity,
             )
         except ValueError as exc:
             return ToolResult.fail(f"Failed to build MoA workflow: {exc}")
