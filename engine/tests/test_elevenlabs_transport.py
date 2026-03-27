@@ -631,6 +631,7 @@ class TestSidecarElevenLabsEndpoints:
         assert artifacts[0]["text"] == "Saved audio"
 
     async def test_synthesize_endpoint_no_api_key(self, tmp_path: Path) -> None:
+        """When ElevenLabs is not configured, the stub TTS provider handles the request."""
         app = self._make_app(tmp_path, api_key="")
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -638,8 +639,10 @@ class TestSidecarElevenLabsEndpoints:
                 "/v1/voice/synthesize",
                 json={"text": "test"},
             )
-        assert response.status_code == 503
-        assert "not configured" in response.json()["detail"]
+        assert response.status_code == 200
+        body = response.json()
+        assert body["provider"] == "stub"
+        assert body["size_bytes"] > 0
 
     async def test_synthesize_endpoint_api_error(self, tmp_path: Path) -> None:
         app = self._make_app(tmp_path)
@@ -665,6 +668,7 @@ class TestSidecarElevenLabsEndpoints:
         assert "Rate limited" in response.json()["detail"]
 
     async def test_voices_endpoint_success(self, tmp_path: Path) -> None:
+        """Voices endpoint returns both stub provider voices and ElevenLabs voices."""
         app = self._make_app(tmp_path)
         mock_voices = [{"voice_id": "v1", "name": "Rachel"}]
 
@@ -682,15 +686,21 @@ class TestSidecarElevenLabsEndpoints:
 
         assert response.status_code == 200
         body = response.json()
-        assert len(body["voices"]) == 1
-        assert body["voices"][0]["name"] == "Rachel"
+        # Stub provider contributes 2 voices + ElevenLabs contributes 1
+        assert len(body["voices"]) == 3
+        voice_names = [v["name"] for v in body["voices"]]
+        assert "Rachel" in voice_names
 
     async def test_voices_endpoint_no_api_key(self, tmp_path: Path) -> None:
+        """Without ElevenLabs, the stub provider voices are still returned."""
         app = self._make_app(tmp_path, api_key="")
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             response = await client.get("/v1/voice/voices")
-        assert response.status_code == 503
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["voices"]) == 2  # stub voices only
+        assert all(v.get("provider") == "stub" for v in body["voices"])
 
     async def test_health_elevenlabs_configured(self, tmp_path: Path) -> None:
         app = self._make_app(tmp_path)
