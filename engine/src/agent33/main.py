@@ -637,6 +637,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         top_k=settings.rag_top_k,
         similarity_threshold=settings.rag_similarity_threshold,
         hybrid_searcher=hybrid_searcher,
+        redact_enabled=settings.redact_secrets_enabled,
     )
     app.state.rag_pipeline = rag_pipeline
     logger.info(
@@ -1249,7 +1250,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from agent33.memory.observation import ObservationCapture
         from agent33.memory.summarizer import SessionSummarizer
 
-        capture = ObservationCapture(nats_bus=nats_bus)
+        capture = ObservationCapture(
+            nats_bus=nats_bus,
+            redact_enabled=settings.redact_secrets_enabled,
+        )
         app.state.observation_capture = capture
         logger.info("observation_capture_initialized")
 

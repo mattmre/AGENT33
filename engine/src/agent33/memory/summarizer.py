@@ -6,6 +6,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent33.security.redaction import redact_secrets
+
 if TYPE_CHECKING:
     from agent33.llm.router import ModelRouter
     from agent33.memory.long_term import LongTermMemory
@@ -34,18 +36,23 @@ class SessionSummarizer:
         long_term_memory: LongTermMemory | None = None,
         embedding_provider: Any | None = None,
         model: str = "llama3.2",
+        *,
+        redact_enabled: bool = True,
     ) -> None:
         self._router = router
         self._memory = long_term_memory
         self._embeddings = embedding_provider
         self._model = model
+        self._redact_enabled = redact_enabled
 
     async def summarize(self, observations: list[Observation]) -> dict[str, Any]:
         """Compress a list of observations into a structured summary."""
         from agent33.llm.base import ChatMessage
 
         obs_text = "\n".join(
-            f"[{o.event_type}] {o.agent_name}: {o.content[:500]}" for o in observations
+            f"[{o.event_type}] {o.agent_name}: "
+            f"{redact_secrets(o.content[:500], enabled=self._redact_enabled)}"
+            for o in observations
         )
         prompt = _SUMMARIZE_PROMPT.format(observations=obs_text)
 
@@ -77,6 +84,15 @@ class SessionSummarizer:
                 "key_facts": [],
                 "tags": [],
             }
+
+        # Redact any secrets that leaked through the LLM summary output.
+        if "summary" in result and isinstance(result["summary"], str):
+            result["summary"] = redact_secrets(result["summary"], enabled=self._redact_enabled)
+        if "key_facts" in result and isinstance(result["key_facts"], list):
+            result["key_facts"] = [
+                redact_secrets(f, enabled=self._redact_enabled) if isinstance(f, str) else f
+                for f in result["key_facts"]
+            ]
 
         return result
 

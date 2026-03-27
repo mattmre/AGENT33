@@ -33,6 +33,15 @@ _PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
     ("aws_key", re.compile(r"\b(AKIA[A-Z0-9]{16})\b")),
     ("stripe_key", re.compile(r"\b(sk_(?:live|test)_[a-zA-Z0-9]{24,})\b")),
     ("digitalocean", re.compile(r"\b(dop_v1_[a-f0-9]{64})\b")),
+    ("anthropic_key", re.compile(r"\b(sk-ant-[a-zA-Z0-9\-_]{20,})\b")),
+    (
+        "jwt_token",
+        re.compile(r"\b(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]+)\b"),
+    ),
+    (
+        "azure_connection",
+        re.compile(r"(DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[^;]+)"),
+    ),
     # --- Structured secret assignments ---
     (
         "env_secret",

@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from agent33.scaling.distributed_lock import RedisDistributedLock
+from agent33.security.redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,13 @@ class SharedMemoryNamespace:
         redis: Any,
         tenant_id: str,
         namespace: str,
+        *,
+        redact_enabled: bool = True,
     ) -> None:
         self._redis: Any = redis
         self._tenant_id = tenant_id
         self._namespace = namespace
+        self._redact_enabled = redact_enabled
 
     # ------------------------------------------------------------------
     # Key helpers
@@ -101,6 +105,9 @@ class SharedMemoryNamespace:
         ttl_seconds:
             Optional Redis TTL.  When ``None`` the key does not expire.
         """
+        # Redact secrets from string values before persistence (Phase 52).
+        safe_value = redact_secrets(value, enabled=self._redact_enabled)
+
         lock = RedisDistributedLock(
             redis=self._redis,
             name=self._lock_name(key),
@@ -117,9 +124,9 @@ class SharedMemoryNamespace:
         try:
             fk = self.full_key(key)
             if ttl_seconds is not None:
-                await self._redis.set(fk, value, ex=ttl_seconds)
+                await self._redis.set(fk, safe_value, ex=ttl_seconds)
             else:
-                await self._redis.set(fk, value)
+                await self._redis.set(fk, safe_value)
             logger.debug(
                 "shared_memory_write tenant=%s ns=%s key=%s ttl=%s",
                 self._tenant_id,
