@@ -1539,6 +1539,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         git_hash=_runtime_version_info.git_short_hash,
     )
 
+    # -- Receipt store, receipt exporter, runtime guard (OpenClaw T10) --------
+    from agent33.ops.runtime_guard import RuntimeGuard as _RuntimeGuard
+    from agent33.provenance.audit_export import ReceiptExporter as _ReceiptExporter
+    from agent33.provenance.receipts import ReceiptStore as _ReceiptStore
+
+    _receipt_store = _ReceiptStore(max_receipts=settings.provenance_max_receipts)
+    _receipt_exporter = _ReceiptExporter(_receipt_store)
+    _runtime_guard = _RuntimeGuard(app.state, start_time=_start_time)
+    app.state.receipt_store = _receipt_store
+    app.state.receipt_exporter = _receipt_exporter
+    app.state.runtime_guard = _runtime_guard
+    logger.info("openclaw_t10_services_initialized")
+
     # -- Benchmark harness (S26) ----------------------------------------------
     from agent33.evaluation.benchmark import BenchmarkHarness
     from agent33.evaluation.benchmark_catalog import DEFAULT_BENCHMARK_CATALOG
