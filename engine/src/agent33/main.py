@@ -1266,6 +1266,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.debug("memory_subsystem_init_skipped", exc_info=True)
 
+    # --- Phase 59: Session trajectory tracker & title generator ---
+    try:
+        from agent33.memory.title_generator import TitleGenerator
+        from agent33.memory.trajectory import SessionTrajectoryTracker
+
+        trajectory_tracker = SessionTrajectoryTracker()
+        app.state.trajectory_tracker = trajectory_tracker
+
+        # TitleGenerator uses heuristic-only until a router is wired.
+        title_gen = TitleGenerator(router=model_router)
+        app.state.title_generator = title_gen
+
+        from agent33.api.routes import sessions as sessions_route_mod
+
+        sessions_route_mod.set_trajectory_tracker(trajectory_tracker)
+        sessions_route_mod.set_title_generator(title_gen)
+
+        logger.info("trajectory_tracker_initialized")
+    except Exception:
+        logger.debug("trajectory_tracker_init_skipped", exc_info=True)
+
     # --- Comparative evaluation (AWM Tier 2 group-relative scoring) ---
     from agent33.evaluation.comparative.service import ComparativeEvaluationService
 
