@@ -124,11 +124,20 @@ class TuningLoopService:
         improvement_service: ImprovementService,
         config_apply_service: ConfigApplyService | None = None,
         settings: Settings | None = None,
+        *,
+        min_sample_size: int | None = None,
     ) -> None:
         self._improvement = improvement_service
         self._config_apply = config_apply_service
         self._settings = settings
         self._history: list[TuningCycleRecord] = []
+        # Resolve min sample size: explicit kwarg > settings > default 10
+        if min_sample_size is not None:
+            self._min_sample_size = min_sample_size
+        elif settings is not None:
+            self._min_sample_size = settings.improvement_tuning_loop_min_sample_size
+        else:
+            self._min_sample_size = 10
 
     # -- public API ----------------------------------------------------------
 
@@ -174,7 +183,7 @@ class TuningLoopService:
         }
 
         # Step 2: Check minimum sample size
-        if sample_size < 10:
+        if sample_size < self._min_sample_size:
             record = TuningCycleRecord(
                 started_at=started_at,
                 completed_at=datetime.now(UTC),
@@ -183,7 +192,7 @@ class TuningLoopService:
                 after_values=before_values,
                 deltas={},
                 sample_size=sample_size,
-                rationale=f"Insufficient sample size ({sample_size} < 10).",
+                rationale=(f"Insufficient sample size ({sample_size} < {self._min_sample_size})."),
             )
             self._store_record(record)
             return record

@@ -35,7 +35,7 @@ from agent33.improvement.persistence import (
     LearningPersistenceState,
     LearningSignalStore,
 )
-from agent33.improvement.quality import enrich_learning_signal
+from agent33.improvement.quality import QualityScoringConfig, enrich_learning_signal
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,7 @@ class ImprovementService:
         *,
         persistence_policy: LearningPersistencePolicy | None = None,
         max_metrics_snapshots: int = 100,
+        quality_config: QualityScoringConfig | None = None,
     ) -> None:
         self._intakes: dict[str, ResearchIntake] = {}
         self._lessons: dict[str, LessonLearned] = {}
@@ -92,6 +93,7 @@ class ImprovementService:
         self._learning_signal_intake_map: dict[str, str] = {}
         self._learning_store = learning_store or InMemoryLearningSignalStore()
         self._persistence_policy = persistence_policy or LearningPersistencePolicy()
+        self._quality_config = quality_config
         self._max_metrics_snapshots = max(1, max_metrics_snapshots)
         if not 0.0 <= self._persistence_policy.auto_intake_min_quality <= 1.0:
             raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
@@ -393,7 +395,7 @@ class ImprovementService:
 
     def record_learning_signal(self, signal: LearningSignal) -> LearningSignal:
         """Record a learning signal."""
-        enrich_learning_signal(signal)
+        enrich_learning_signal(signal, config=self._quality_config)
         signal.first_seen_at = signal.recorded_at
         signal.last_seen_at = signal.recorded_at
         duplicate = self._find_recent_duplicate(signal)
@@ -842,7 +844,7 @@ class ImprovementService:
         for key, value in incoming.context.items():
             if key not in target.context:
                 target.context[key] = value
-        enrich_learning_signal(target)
+        enrich_learning_signal(target, config=self._quality_config)
 
     def _prune_learning_state(self) -> tuple[list[LearningSignal], list[ResearchIntake]]:
         signals = list(self._learning_signals.values())
