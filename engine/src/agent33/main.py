@@ -45,6 +45,7 @@ from agent33.api.routes import (
     mcp_sync,
     memory_search,
     migrations,
+    moa,
     multimodal,
     operations,
     operations_hub,
@@ -2109,6 +2110,7 @@ app.include_router(operations.router)
 app.include_router(workflow_sse.router)
 app.include_router(workflow_templates.router)
 app.include_router(workflow_marketplace.router)
+app.include_router(moa.router)
 app.include_router(workflow_transport.router)
 app.include_router(workflow_ws.router)
 app.include_router(tool_catalog_routes.router)
