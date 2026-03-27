@@ -1,6 +1,9 @@
 # Phase 28: Enterprise Security Scanning Integration
 
-## Status: In Progress
+## Status: Complete (reconciled to main)
+
+The core component security implementation is already present on main. Any future hardening or expansion should be tracked as a new scoped slice rather than leaving this phase open.
+Historical note: the original plan sections below are preserved for context. Their planned paths, staged rollout, and unchecked lists are archival, not active backlog.
 
 ## Overview
 - **Phase**: 28 of 28+
@@ -39,7 +42,7 @@
 - Automatic remediation code generation.
 - Multi-tenant billing/usage accounting.
 
-## Deliverables
+## Historical Planned Deliverables
 
 | # | Deliverable | Target Path | Description |
 |---|-------------|-------------|-------------|
@@ -55,9 +58,9 @@
 | 10 | Frontend tests | `frontend/src/features/security-dashboard/__tests__/` | Dashboard and interaction tests |
 | 11 | Progress/evidence log | `docs/progress/phase-28-pentagi-component-security-log.md` | Validation commands, outputs, issues, and fixes |
 
-Note: target paths above are planned implementation locations to be created during Phase 28 delivery.
+Historical note: target paths above were the proposed implementation locations at planning time and are retained as archival context.
 
-## Acceptance Criteria
+## Historical Planned Acceptance Criteria
 - [ ] Operators can create a component security test run from the AGENT-33 frontend dashboard.
 - [ ] Test runs execute using subprocess-based tools (bandit, gitleaks, semgrep, pip-audit).
 - [ ] Findings are normalized to a consistent severity model and exposed via API + UI.
@@ -82,7 +85,7 @@ Note: target paths above are planned implementation locations to be created duri
 
 Stages 2-4 can proceed in parallel after Stage 1. Stage 5 depends on Stages 2-4 for API endpoints.
 
-## Review Checklist
+## Historical Review Checklist
 - [ ] Security review of tool execution boundaries and subprocess sandboxing.
 - [ ] API contract review for run state transitions and findings schema.
 - [ ] SARIF 2.1.0 schema compliance verification.

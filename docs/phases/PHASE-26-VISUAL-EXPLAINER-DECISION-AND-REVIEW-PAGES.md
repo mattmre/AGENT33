@@ -1,6 +1,9 @@
 # Phase 26: Visual Explainer Decision and Review Pages
 
-## Status: Planned
+## Status: Complete (reconciled Session 113)
+
+Session 113 closed this slice. Later operator work only resumes if this phase is explicitly reactivated.
+Historical note: the original plan sections below are preserved for context. Their planned target paths and unchecked lists are archival, not active backlog.
 
 ## Overview
 - **Phase**: 26 of 26+
@@ -32,7 +35,7 @@
 - External CDN dependency requirements for core rendering.
 - Non-technical marketing page generation.
 
-## Deliverables
+## Historical Planned Deliverables
 
 | # | Deliverable | Target Path | Description |
 |---|-------------|-------------|-------------|
@@ -47,7 +50,7 @@
 | 9 | Operator documentation | `docs/walkthroughs.md` | How to run diff/plan/recap/fact-check visual pages |
 | 10 | Progress evidence log | `docs/progress/phase-26-visual-review-log.md` | Validation runs, screenshots, known issues, fixes |
 
-## Acceptance Criteria
+## Historical Planned Acceptance Criteria
 - [ ] Operators can generate a visual diff review from a branch/ref comparison.
 - [ ] Operators can generate a plan-review page against a provided plan path.
 - [ ] Operators can generate a project recap page from recent repo activity + traces.
@@ -85,7 +88,7 @@
    - Compare outputs for large diffs and long plan docs.
    - Measure latency and operator usefulness.
 
-## Review Checklist
+## Historical Review Checklist
 - [ ] API and metadata schemas reviewed for backward compatibility.
 - [ ] Security review completed for HTML sanitization and artifact access control.
 - [ ] QA review covers diff/plan/recap/fact-check paths end-to-end.
