@@ -499,6 +499,11 @@ class AgentRuntime:
         except Exception:
             logger.debug("failed to persist invoke trajectory", exc_info=True)
 
+    @staticmethod
+    def _chatmessages_to_dicts(messages: list[ChatMessage]) -> list[dict[str, str]]:
+        """Convert ChatMessage list to plain dicts for trajectory saving."""
+        return [{"role": m.role, "content": m.text_content} for m in messages]
+
     async def invoke(self, inputs: dict[str, Any]) -> AgentResult:
         """Run the agent with the given inputs and return a result."""
         system_prompt = _build_system_prompt(self._definition)
@@ -844,12 +849,29 @@ class AgentRuntime:
             redact_secrets=_settings.redact_secrets_enabled,
         )
 
-        loop_result = await loop.run(
-            messages=messages,
-            model=routed_model,
-            temperature=self._temperature,
-            max_tokens=routed_max_tokens,
-        )
+        try:
+            loop_result = await loop.run(
+                messages=messages,
+                model=routed_model,
+                temperature=self._temperature,
+                max_tokens=routed_max_tokens,
+            )
+        except Exception as exc:
+            # Save failed trajectory — messages is mutated in-place by loop.run()
+            # so it may contain partial conversation even on failure.
+            failure_conversation = self._chatmessages_to_dicts(messages)
+            failure_conversation.append(
+                {
+                    "role": "assistant",
+                    "content": f"[invoke_iterative failed] {type(exc).__name__}: {exc}",
+                }
+            )
+            await self._maybe_save_trajectory(
+                conversation=failure_conversation,
+                model=routed_model,
+                completed=False,
+            )
+            raise
 
         result = IterativeAgentResult(
             output=loop_result.output,
@@ -923,6 +945,13 @@ class AgentRuntime:
                 self._trace_emitter.emit_result(self._definition.name, loop_result.raw_response)
             except Exception:
                 logger.debug("failed to emit trace", exc_info=True)
+
+        # Save successful trajectory — messages contains full conversation after loop.run()
+        await self._maybe_save_trajectory(
+            conversation=self._chatmessages_to_dicts(messages),
+            model=loop_result.model or routed_model,
+            completed=True,
+        )
 
         return result
 
@@ -1021,21 +1050,41 @@ class AgentRuntime:
         )
 
         # Stream events from the tool loop
-        async for event in loop.run_stream(
-            messages,
-            model=routed_model,
-            temperature=self._temperature,
-            max_tokens=routed_max_tokens,
-        ):
-            if event.event_type == "completed":
-                completion_data = event.data if isinstance(event.data, dict) else {}
-                self._update_routing_outcome(
-                    actual_model=routed_model,
-                    tokens_used=completion_data.get("total_tokens"),
-                    iterations=event.iteration,
-                    tool_calls_made=completion_data.get("tool_calls_made"),
-                    tools_used=completion_data.get("tools_used"),
-                    termination_reason=completion_data.get("termination_reason"),
-                    completion_status="completed",
+        stream_failed = False
+        try:
+            async for event in loop.run_stream(
+                messages,
+                model=routed_model,
+                temperature=self._temperature,
+                max_tokens=routed_max_tokens,
+            ):
+                if event.event_type == "completed":
+                    completion_data = event.data if isinstance(event.data, dict) else {}
+                    self._update_routing_outcome(
+                        actual_model=routed_model,
+                        tokens_used=completion_data.get("total_tokens"),
+                        iterations=event.iteration,
+                        tool_calls_made=completion_data.get("tool_calls_made"),
+                        tools_used=completion_data.get("tools_used"),
+                        termination_reason=completion_data.get("termination_reason"),
+                        completion_status="completed",
+                    )
+                yield event
+        except Exception:
+            stream_failed = True
+            # Save partial trajectory on stream failure
+            if loop._last_accumulated_messages is not None:
+                await self._maybe_save_trajectory(
+                    conversation=self._chatmessages_to_dicts(loop._last_accumulated_messages),
+                    model=routed_model,
+                    completed=False,
                 )
-            yield event
+            raise
+
+        # Save trajectory after stream completes successfully
+        if not stream_failed and loop._last_accumulated_messages is not None:
+            await self._maybe_save_trajectory(
+                conversation=self._chatmessages_to_dicts(loop._last_accumulated_messages),
+                model=routed_model,
+                completed=True,
+            )
