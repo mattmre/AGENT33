@@ -323,6 +323,21 @@ class AgentRuntime:
         if self._effort_router is None:
             self._routing_decision_metadata = None
             return self._model, max_tokens
+
+        # Derive provider name from ModelRouter prefix mapping so the effort
+        # router can use the per-model pricing catalog instead of a flat rate.
+        provider_name: str | None = None
+        model_for_lookup = self._requested_model or self._model
+        if self._router:
+            try:
+                provider_obj = self._router.route(model_for_lookup)
+                for name, p in self._router.providers.items():
+                    if p is provider_obj:
+                        provider_name = name
+                        break
+            except (ValueError, AttributeError):
+                pass
+
         decision = self._effort_router.resolve(
             requested_model=self._requested_model,
             default_model=self._model,
@@ -333,6 +348,7 @@ class AgentRuntime:
             inputs=inputs,
             iterative=iterative,
             max_iterations=max_iterations,
+            provider=provider_name,
         )
         serialized_inputs = json.dumps(inputs or {}, sort_keys=True, ensure_ascii=False)
         self._routing_decision_metadata = {

@@ -1511,3 +1511,187 @@ class TestPhase49PricingIntegration:
         # Ollama wildcard: $0 for everything
         assert decision.estimated_cost is not None
         assert decision.estimated_cost == 0.0
+
+
+class TestPhase49WiringFixes:
+    """Phase 49 residual wiring: settings propagation and provider resolution."""
+
+    def test_custom_simple_max_chars_propagates_to_effort_router(self) -> None:
+        """heuristic_simple_max_chars from Settings controls fast-path char limit."""
+        # With a very small threshold (10 chars), a 15-char payload skips the
+        # fast-path and goes through the full scoring pipeline.
+        router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_chars=10,
+        )
+        decision = router.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "hello world ok"},  # > 10 chars
+        )
+        # Not fast-path because payload exceeds the 10-char limit
+        assert decision.heuristic_reasons != ("simple_message_fast_path",)
+
+        # With a generous threshold (500 chars), the same payload IS simple
+        router_generous = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_chars=500,
+        )
+        decision_generous = router_generous.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "hello world ok"},
+        )
+        assert decision_generous.heuristic_reasons == ("simple_message_fast_path",)
+        assert decision_generous.effort == AgentEffort.LOW
+        assert decision_generous.heuristic_confidence == 0.85
+
+    def test_custom_simple_max_words_propagates_to_effort_router(self) -> None:
+        """heuristic_simple_max_words from Settings controls fast-path word limit."""
+        # 3-word limit: a 4-word payload skips the fast-path
+        router_tight = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_words=3,
+        )
+        decision_tight = router_tight.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "one two three four"},
+        )
+        assert decision_tight.heuristic_reasons != ("simple_message_fast_path",)
+
+        # 10-word limit: same 4-word payload IS simple
+        router_loose = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=True,
+            heuristic_simple_max_words=10,
+        )
+        decision_loose = router_loose.resolve(
+            requested_model=None,
+            default_model="fallback",
+            max_tokens=100,
+            inputs={"task": "one two three four"},
+        )
+        assert decision_loose.heuristic_reasons == ("simple_message_fast_path",)
+
+    async def test_runtime_resolves_provider_from_model_router(self) -> None:
+        """AgentRuntime._resolve_execution_parameters derives provider for pricing."""
+        definition = _make_definition(max_tokens=1000)
+
+        # Build a mock model_router that maps "gpt-4.1" to the "openai" provider
+        mock_provider = MagicMock()
+        model_router = MagicMock()
+        model_router.route.return_value = mock_provider
+        model_router.providers = {"openai": mock_provider}
+        model_router.complete = AsyncMock(
+            return_value=_text_response(model="gpt-4.1"),
+        )
+
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.HIGH,
+            high_token_multiplier=1.0,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            model="gpt-4.1",
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+        )
+
+        result = await runtime.invoke({"task": "price check"})
+
+        # The routing decision should have an estimated cost derived from the
+        # pricing catalog (not None, and not a flat rate).
+        assert result.routing_decision is not None
+        assert result.routing_decision["estimated_cost"] is not None
+        # gpt-4.1: input=$2/M, output=$8/M; budget=1000 tokens
+        # Cost = (2/1M * 1000) + (8/1M * 1000) = 0.01
+        assert result.routing_decision["estimated_cost"] == pytest.approx(0.01, abs=1e-6)
+
+    async def test_runtime_handles_unregistered_provider_gracefully(self) -> None:
+        """When model_router.route() raises ValueError, provider is None."""
+        definition = _make_definition(max_tokens=500)
+
+        model_router = MagicMock()
+        model_router.route.side_effect = ValueError("No provider found")
+        model_router.providers = {}
+        model_router.complete = AsyncMock(
+            return_value=_text_response(model="mystery-model"),
+        )
+
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.MEDIUM,
+            medium_token_multiplier=1.0,
+            cost_per_1k_tokens=0.1,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            model="mystery-model",
+            effort=AgentEffort.MEDIUM,
+            effort_router=effort_router,
+        )
+
+        result = await runtime.invoke({"task": "fallback"})
+
+        # Provider resolution failed -> falls back to flat rate
+        assert result.routing_decision is not None
+        assert result.routing_decision["estimated_cost"] is not None
+        # Legacy flat rate: (500/1000) * 0.1 = 0.05
+        assert result.routing_decision["estimated_cost"] == pytest.approx(0.05, abs=1e-6)
+
+    async def test_runtime_provider_identity_resolution(self) -> None:
+        """Provider name resolved by identity comparison against router.providers."""
+        definition = _make_definition(max_tokens=1000)
+
+        # Create distinct provider objects
+        ollama_provider = MagicMock()
+        openai_provider = MagicMock()
+
+        model_router = MagicMock()
+        # route("gpt-4.1") returns the openai_provider object
+        model_router.route.return_value = openai_provider
+        model_router.providers = {
+            "ollama": ollama_provider,
+            "openai": openai_provider,
+        }
+        model_router.complete = AsyncMock(
+            return_value=_text_response(model="gpt-4.1"),
+        )
+
+        effort_router = AgentEffortRouter(
+            enabled=True,
+            heuristic_enabled=False,
+            default_effort=AgentEffort.HIGH,
+            high_token_multiplier=1.0,
+        )
+
+        runtime = AgentRuntime(
+            definition=definition,
+            router=model_router,
+            model="gpt-4.1",
+            effort=AgentEffort.HIGH,
+            effort_router=effort_router,
+        )
+
+        result = await runtime.invoke({"task": "identity check"})
+
+        # The cost should be from the "openai" pricing entry for gpt-4.1,
+        # not from ollama ($0).
+        assert result.routing_decision is not None
+        cost = result.routing_decision["estimated_cost"]
+        assert cost is not None
+        assert cost > 0.0  # openai/gpt-4.1 is not free

@@ -169,6 +169,8 @@ _effort_router = AgentEffortRouter(
         settings.agent_effort_heuristic_many_input_fields_threshold
     ),
     heuristic_high_iteration_threshold=settings.agent_effort_heuristic_high_iteration_threshold,
+    heuristic_simple_max_chars=settings.heuristic_simple_max_chars,
+    heuristic_simple_max_words=settings.heuristic_simple_max_words,
 )
 _metrics = MetricsCollector()
 _effort_exporter: EffortTelemetryExporter = NoopEffortTelemetryExporter()

@@ -210,6 +210,89 @@ _BUILTIN_PRICING: dict[tuple[str, str], PricingEntry] = {
         source_url="",
         fetched_at=_FETCHED,
     ),
+    # -- DeepSeek ----------------------------------------------------------
+    ("deepseek", "deepseek-chat"): PricingEntry(
+        input_cost_per_million=Decimal("0.14"),
+        output_cost_per_million=Decimal("0.28"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://api-docs.deepseek.com/quick_start/pricing",
+        fetched_at=_FETCHED,
+    ),
+    ("deepseek", "deepseek-reasoner"): PricingEntry(
+        input_cost_per_million=Decimal("0.55"),
+        output_cost_per_million=Decimal("2.19"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://api-docs.deepseek.com/quick_start/pricing",
+        fetched_at=_FETCHED,
+    ),
+    # -- Groq --------------------------------------------------------------
+    ("groq", "llama-3.3-70b-versatile"): PricingEntry(
+        input_cost_per_million=Decimal("0.59"),
+        output_cost_per_million=Decimal("0.79"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://groq.com/pricing/",
+        fetched_at=_FETCHED,
+    ),
+    ("groq", "mixtral-8x7b-32768"): PricingEntry(
+        input_cost_per_million=Decimal("0.24"),
+        output_cost_per_million=Decimal("0.24"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://groq.com/pricing/",
+        fetched_at=_FETCHED,
+    ),
+    # -- xAI ---------------------------------------------------------------
+    ("xai", "grok-2"): PricingEntry(
+        input_cost_per_million=Decimal("2.00"),
+        output_cost_per_million=Decimal("10.00"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://docs.x.ai/docs/models",
+        fetched_at=_FETCHED,
+    ),
+    ("xai", "grok-3-mini"): PricingEntry(
+        input_cost_per_million=Decimal("0.30"),
+        output_cost_per_million=Decimal("0.50"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://docs.x.ai/docs/models",
+        fetched_at=_FETCHED,
+    ),
+    # -- Cerebras ----------------------------------------------------------
+    ("cerebras", "llama3.1-70b"): PricingEntry(
+        input_cost_per_million=Decimal("0.00"),
+        output_cost_per_million=Decimal("0.00"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://cerebras.ai/pricing",
+        fetched_at=_FETCHED,
+    ),
+    # -- Cohere ------------------------------------------------------------
+    ("cohere", "command-r-plus"): PricingEntry(
+        input_cost_per_million=Decimal("2.50"),
+        output_cost_per_million=Decimal("10.00"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://cohere.com/pricing",
+        fetched_at=_FETCHED,
+    ),
+    ("cohere", "command-r"): PricingEntry(
+        input_cost_per_million=Decimal("0.15"),
+        output_cost_per_million=Decimal("0.60"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://cohere.com/pricing",
+        fetched_at=_FETCHED,
+    ),
+    # -- Perplexity --------------------------------------------------------
+    ("perplexity", "sonar-pro"): PricingEntry(
+        input_cost_per_million=Decimal("3.00"),
+        output_cost_per_million=Decimal("15.00"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://docs.perplexity.ai/guides/pricing",
+        fetched_at=_FETCHED,
+    ),
+    ("perplexity", "sonar"): PricingEntry(
+        input_cost_per_million=Decimal("1.00"),
+        output_cost_per_million=Decimal("1.00"),
+        source=CostSource.OFFICIAL_DOCS,
+        source_url="https://docs.perplexity.ai/guides/pricing",
+        fetched_at=_FETCHED,
+    ),
 }
 
 # Wildcard patterns: provider prefix -> PricingEntry (matched when no exact
