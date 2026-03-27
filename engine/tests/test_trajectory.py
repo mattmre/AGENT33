@@ -394,7 +394,46 @@ class TestRuntimeInvokeTrajectory:
         assert completed is False
         assert output_dir == str(tmp_path)
         assert conversation[-1]["role"] == "assistant"
-        assert "failed after 1 attempts" in conversation[-1]["content"]
+        assert (
+            "RuntimeError: Agent 'trajectory-agent' failed after 1 attempts"
+            in conversation[-1]["content"]
+        )
+
+    async def test_invoke_saves_trajectory_on_post_llm_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from agent33 import config as config_module
+        from agent33.agents import runtime as runtime_module
+
+        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
+        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+
+        save_mock = AsyncMock()
+        monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
+        monkeypatch.setattr(
+            runtime_module,
+            "_parse_output",
+            MagicMock(side_effect=ValueError("parse boom")),
+        )
+
+        runtime = AgentRuntime(
+            definition=_mock_runtime_definition(),
+            router=_mock_runtime_router(),
+        )
+
+        with pytest.raises(ValueError, match="parse boom"):
+            await runtime.invoke({"query": "hello"})
+
+        save_mock.assert_awaited_once()
+        args, _kwargs = save_mock.await_args
+        conversation, model, completed, output_dir = args[:4]
+        assert model == "test-model"
+        assert completed is False
+        assert output_dir == str(tmp_path)
+        assert conversation[-2] == {"role": "assistant", "content": '{"result": "ok"}'}
+        assert "ValueError: parse boom" in conversation[-1]["content"]
 
     async def test_invoke_trajectory_save_is_fail_open(
         self,

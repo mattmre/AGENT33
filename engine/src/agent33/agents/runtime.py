@@ -661,10 +661,14 @@ class AgentRuntime:
             return result
         except Exception as exc:
             failure_conversation = list(base_conversation)
-            failure_content = (
-                response.content if response is not None else f"[invoke failed] {exc}"
+            if response is not None:
+                failure_conversation.append({"role": "assistant", "content": response.content})
+            failure_conversation.append(
+                {
+                    "role": "assistant",
+                    "content": f"[invoke failed] {type(exc).__name__}: {exc}",
+                }
             )
-            failure_conversation.append({"role": "assistant", "content": failure_content})
             await self._maybe_save_trajectory(
                 conversation=failure_conversation,
                 model=response.model if response is not None else routed_model,
