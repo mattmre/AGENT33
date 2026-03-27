@@ -295,13 +295,24 @@ class CostReport:
 
 
 @dataclass
-class _UsageRecord:
+class UsageRecord:
+    """A single recorded usage event.
+
+    Previously named ``_UsageRecord``; promoted to public so that
+    :meth:`CostTracker.iter_records` can expose a typed iterable.
+    """
+
     model: str
     tokens_in: int
     tokens_out: int
     cost: float
     timestamp: float
     scope: str  # e.g. "workflow:my-wf" or "user:alice"
+
+
+# Keep a private alias so that any in-repo references to the old name
+# (e.g. backdated-record construction in tests) still work.
+_UsageRecord = UsageRecord
 
 
 class CostTracker:
@@ -319,14 +330,18 @@ class CostTracker:
     catalog lookups when available.
     """
 
+    DEFAULT_MAX_RECORDS: int = 100_000
+
     def __init__(
         self,
         pricing: dict[str, dict[str, float]] | None = None,
         pricing_catalog: PricingCatalog | None = None,
+        max_records: int = DEFAULT_MAX_RECORDS,
     ) -> None:
         self._pricing = pricing  # None means "use catalog"
         self._pricing_catalog = pricing_catalog
-        self._records: list[_UsageRecord] = []
+        self._records: list[UsageRecord] = []
+        self._max_records = max(1, max_records)
 
     def set_pricing(self, model: str, input_per_1k: float, output_per_1k: float) -> None:
         """Set or update pricing for a model (legacy path)."""
@@ -366,7 +381,7 @@ class CostTracker:
         """
         cost = self._compute_cost(model, tokens_in, tokens_out, provider)
         self._records.append(
-            _UsageRecord(
+            UsageRecord(
                 model=model,
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
@@ -375,7 +390,38 @@ class CostTracker:
                 scope=scope,
             )
         )
+        # FIFO eviction: discard oldest records when the list exceeds the cap.
+        overflow = len(self._records) - self._max_records
+        if overflow > 0:
+            del self._records[:overflow]
         return cost
+
+    def iter_records(
+        self,
+        scope: str | None = None,
+        since: float | None = None,
+    ) -> list[UsageRecord]:
+        """Return a filtered snapshot of usage records.
+
+        Parameters
+        ----------
+        scope:
+            If provided, only records whose ``scope`` equals *scope* or
+            starts with ``scope + ":"`` are included.
+        since:
+            If provided, only records with ``timestamp >= since`` are included.
+
+        Returns
+        -------
+        list[UsageRecord]
+            Matching records in chronological order (oldest first).
+        """
+        result: list[UsageRecord] = self._records
+        if scope is not None:
+            result = [r for r in result if r.scope == scope or r.scope.startswith(scope + ":")]
+        if since is not None:
+            result = [r for r in result if r.timestamp >= since]
+        return result
 
     def _compute_cost(self, model: str, tokens_in: int, tokens_out: int, provider: str) -> float:
         """Resolve dollar cost via legacy dict or PricingCatalog."""

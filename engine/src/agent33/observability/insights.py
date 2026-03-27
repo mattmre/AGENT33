@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent33.observability.metrics import CostTracker, MetricsCollector
+    from agent33.observability.metrics import CostTracker, MetricsCollector, UsageRecord
 
 
 @dataclass
@@ -199,23 +199,24 @@ class InsightsEngine:
     ) -> list[dict[str, Any]]:
         """Build per-day session/token histograms from CostTracker records.
 
-        Iterates over the internal ``_records`` list in the CostTracker,
-        bucketing by calendar date (UTC).
+        Uses the public :meth:`CostTracker.iter_records` API instead of
+        accessing the private ``_records`` list directly.
         """
         if self._cost_tracker is None:
             return []
 
         scope_prefix = f"tenant:{tenant_id}" if tenant_id else None
+        records: list[UsageRecord] = self._cost_tracker.iter_records(
+            scope=scope_prefix,
+            since=cutoff,
+        )
+
         daily: dict[str, dict[str, Any]] = defaultdict(
             lambda: {"sessions": 0, "tokens": 0, "cost_usd": 0.0}
         )
 
-        for record in self._cost_tracker._records:
-            if record.timestamp < cutoff or record.timestamp > now:
-                continue
-            if scope_prefix is not None and not (
-                record.scope == scope_prefix or record.scope.startswith(scope_prefix + ":")
-            ):
+        for record in records:
+            if record.timestamp > now:
                 continue
             date_str = datetime.fromtimestamp(record.timestamp, tz=UTC).strftime("%Y-%m-%d")
             daily[date_str]["sessions"] += 1
