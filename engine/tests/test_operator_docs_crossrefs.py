@@ -20,6 +20,8 @@ _OPERATOR_DOCS: dict[str, Path] = {
     "scaling": _OPERATORS_DIR / "horizontal-scaling-architecture.md",
     "slo": _OPERATORS_DIR / "service-level-objectives.md",
     "voice": _OPERATORS_DIR / "voice-daemon-runbook.md",
+    "verification": _OPERATORS_DIR / "operator-verification-runbook.md",
+    "process_registry": _OPERATORS_DIR / "process-registry-runbook.md",
 }
 
 # Regex to extract markdown links: [text](target)
@@ -89,6 +91,12 @@ class TestOperatorDocLinksResolve:
     def test_voice_links_resolve(self) -> None:
         self._check_links(_OPERATOR_DOCS["voice"])
 
+    def test_verification_links_resolve(self) -> None:
+        self._check_links(_OPERATOR_DOCS["verification"])
+
+    def test_process_registry_links_resolve(self) -> None:
+        self._check_links(_OPERATOR_DOCS["process_registry"])
+
     @staticmethod
     def _check_links(doc_path: Path) -> None:
         content = doc_path.read_text(encoding="utf-8")
@@ -127,6 +135,12 @@ class TestOperatorDocAnchors:
     def test_slo_anchors(self) -> None:
         self._check_anchors(_OPERATOR_DOCS["slo"])
 
+    def test_verification_anchors(self) -> None:
+        self._check_anchors(_OPERATOR_DOCS["verification"])
+
+    def test_process_registry_anchors(self) -> None:
+        self._check_anchors(_OPERATOR_DOCS["process_registry"])
+
     @staticmethod
     def _check_anchors(doc_path: Path) -> None:
         content = doc_path.read_text(encoding="utf-8")
@@ -164,9 +178,21 @@ class TestCriticalCrossReferences:
         content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
         assert "incident-response-playbooks.md" in content
 
+    def test_runbook_links_to_verification_runbook(self) -> None:
+        content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
+        assert "operator-verification-runbook.md" in content
+
     def test_incident_playbooks_links_to_runbook(self) -> None:
         content = _OPERATOR_DOCS["incident"].read_text(encoding="utf-8")
         assert "production-deployment-runbook.md" in content
+
+    def test_incident_links_to_verification_runbook(self) -> None:
+        content = _OPERATOR_DOCS["incident"].read_text(encoding="utf-8")
+        assert "operator-verification-runbook.md" in content
+
+    def test_incident_links_to_process_registry_runbook(self) -> None:
+        content = _OPERATOR_DOCS["incident"].read_text(encoding="utf-8")
+        assert "process-registry-runbook.md" in content
 
     def test_runbook_links_to_scaling_architecture(self) -> None:
         content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
@@ -211,6 +237,30 @@ class TestCriticalCrossReferences:
     def test_runbook_links_to_slo(self) -> None:
         content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
         assert "service-level-objectives.md" in content
+
+    def test_verification_links_to_runbook(self) -> None:
+        content = _OPERATOR_DOCS["verification"].read_text(encoding="utf-8")
+        assert "production-deployment-runbook.md" in content
+
+    def test_verification_links_to_incident(self) -> None:
+        content = _OPERATOR_DOCS["verification"].read_text(encoding="utf-8")
+        assert "incident-response-playbooks.md" in content
+
+    def test_verification_links_to_process_registry(self) -> None:
+        content = _OPERATOR_DOCS["verification"].read_text(encoding="utf-8")
+        assert "process-registry-runbook.md" in content
+
+    def test_process_registry_links_to_runbook(self) -> None:
+        content = _OPERATOR_DOCS["process_registry"].read_text(encoding="utf-8")
+        assert "production-deployment-runbook.md" in content
+
+    def test_process_registry_links_to_incident(self) -> None:
+        content = _OPERATOR_DOCS["process_registry"].read_text(encoding="utf-8")
+        assert "incident-response-playbooks.md" in content
+
+    def test_process_registry_links_to_verification(self) -> None:
+        content = _OPERATOR_DOCS["process_registry"].read_text(encoding="utf-8")
+        assert "operator-verification-runbook.md" in content
 
 
 # ---- Test: monitoring README references operator docs ----

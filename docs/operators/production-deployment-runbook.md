@@ -19,6 +19,10 @@ For broader production incident handling after deployment, use:
 
 - [`incident-response-playbooks.md`](incident-response-playbooks.md)
 
+For authenticated operator verification after rollout, use:
+
+- [`operator-verification-runbook.md`](operator-verification-runbook.md)
+
 For the replica-safety contract and the ordered pre-work required before
 multi-instance rollout, use:
 
