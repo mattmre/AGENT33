@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from pydantic import BaseModel, Field
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
@@ -32,8 +33,6 @@ def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     match = _FRONTMATTER_RE.match(content)
     if not match:
         raise ValueError("No YAML frontmatter found (expected --- delimiters)")
-
-    import yaml
 
     try:
         metadata = yaml.safe_load(match.group(1))
@@ -66,7 +65,11 @@ class IngestionTaskStatus(StrEnum):
 class IngestionTaskArtifact(BaseModel):
     """Minimal, auditable artifact for repo-ingestion and remediation work."""
 
-    task_id: str = Field(default_factory=_new_task_id, min_length=1)
+    task_id: str = Field(
+        default_factory=_new_task_id,
+        min_length=1,
+        pattern=r"^ING-[A-Za-z0-9-]+$",
+    )
     kind: IngestionTaskKind = IngestionTaskKind.INGESTION
     title: str = Field(min_length=1)
     owner: str = Field(min_length=1)
@@ -101,8 +104,6 @@ class IngestionTaskArtifact(BaseModel):
 
     def to_markdown(self) -> str:
         """Serialize the artifact to a markdown file with YAML frontmatter."""
-        import yaml
-
         frontmatter = yaml.safe_dump(
             self.to_frontmatter(),
             sort_keys=False,
@@ -132,7 +133,7 @@ class IngestionTaskArtifact(BaseModel):
 
     def suggested_filename(self) -> str:
         """Return a stable markdown filename for the artifact."""
-        return f"{self.task_id.lower()}-{_slugify(self.target)}.md"
+        return f"{_slugify(self.task_id)}-{_slugify(self.target)}.md"
 
 
 def build_repo_ingestion_task_artifact(
@@ -155,15 +156,22 @@ def build_repo_ingestion_task_artifact(
             f"Analyze {record.full_name} from query '{record.source_query}' and record "
             "the adoption decision without duplicating the session planning files."
         ),
-        acceptance_criteria=acceptance_criteria
-        or [
-            "Primary source evidence is captured in docs/research.",
-            "Adoption recommendations and explicit non-goals are recorded.",
-            "The artifact links back to task_plan.md, findings.md, and progress.md.",
-        ],
+        acceptance_criteria=(
+            acceptance_criteria
+            if acceptance_criteria is not None
+            else [
+                "Primary source evidence is captured in docs/research.",
+                "Adoption recommendations and explicit non-goals are recorded.",
+                "The artifact links back to task_plan.md, findings.md, and progress.md.",
+            ]
+        ),
         evidence=[record.url],
-        planning_refs=planning_refs or ["task_plan.md", "findings.md", "progress.md"],
-        research_refs=research_refs or [],
+        planning_refs=(
+            planning_refs
+            if planning_refs is not None
+            else ["task_plan.md", "findings.md", "progress.md"]
+        ),
+        research_refs=research_refs if research_refs is not None else [],
         body=(
             "## Source Context\n"
             f"- Query: `{record.source_query}`\n"

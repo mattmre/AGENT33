@@ -76,12 +76,44 @@ def test_build_repo_ingestion_task_artifact_sets_minimal_defaults() -> None:
     assert len(artifact.acceptance_criteria) == 3
 
 
+def test_build_repo_ingestion_task_artifact_preserves_explicit_empty_lists() -> None:
+    record = RepoHarvestRecord(
+        rank=2,
+        full_name="org/project",
+        url="https://github.com/org/project",
+        stars=100,
+        source_query="agent runtime",
+    )
+
+    artifact = build_repo_ingestion_task_artifact(
+        record,
+        owner="codex",
+        planning_refs=[],
+        research_refs=[],
+        acceptance_criteria=[],
+    )
+
+    assert artifact.acceptance_criteria == []
+    assert artifact.planning_refs == []
+    assert artifact.research_refs == []
+
+
 def test_ingestion_task_artifact_rejects_blank_required_fields() -> None:
     with pytest.raises(ValidationError):
         IngestionTaskArtifact(
             task_id="ING-blankowner",
             title="Valid title",
             owner="",
+            target="example/repo",
+        )
+
+
+def test_ingestion_task_artifact_rejects_unsafe_task_ids() -> None:
+    with pytest.raises(ValidationError):
+        IngestionTaskArtifact(
+            task_id="../escape",
+            title="Unsafe",
+            owner="codex",
             target="example/repo",
         )
 
