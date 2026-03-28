@@ -105,8 +105,8 @@ def _clamp_severity(current: str, recommended: str) -> tuple[str, str]:
 class ConfigApplyService:
     """Optional service for applying tuning changes to live config."""
 
-    def apply(self, field: str, value: Any) -> None:  # noqa: ANN401
-        """Apply a single config change.  Default is a no-op."""
+    def apply(self, request: Any, settings_instance: Any | None = None) -> Any:  # noqa: ANN401
+        """Apply config changes. Default is a no-op."""
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +178,8 @@ class TuningLoopService:
         before_values: dict[str, Any] = {
             "auto_intake_min_quality": policy.auto_intake_min_quality,
             "retention_days": policy.retention_days,
-            "auto_intake_max_items": policy.max_generated_intakes,
-            "auto_intake_min_severity": "medium",
+            "auto_intake_max_items": policy.auto_intake_max_items,
+            "auto_intake_min_severity": policy.auto_intake_min_severity.value,
         }
 
         # Step 2: Check minimum sample size
@@ -215,7 +215,7 @@ class TuningLoopService:
         new_retention = int(new_retention)
         delta_retention = int(delta_retention)
 
-        current_max_items = policy.max_generated_intakes if policy.max_generated_intakes else 3
+        current_max_items = policy.auto_intake_max_items
         new_max_items, delta_max_items = _clamp_delta(
             "auto_intake_max_items",
             current_max_items,
@@ -225,7 +225,7 @@ class TuningLoopService:
         new_max_items = int(new_max_items)
         delta_max_items = int(delta_max_items)
 
-        current_severity = "medium"
+        current_severity = policy.auto_intake_min_severity.value
         new_severity, delta_severity = _clamp_severity(
             current_severity,
             calibration.recommended_auto_intake_min_severity,
@@ -369,6 +369,8 @@ class TuningLoopService:
 
     def _apply_changes(self, after_values: dict[str, Any]) -> None:
         """Push changes to the ImprovementService policy and optional config."""
+        from agent33.config_apply import ConfigApplyRequest
+        from agent33.improvement.models import LearningSignalSeverity
         from agent33.improvement.service import LearningPersistencePolicy
 
         policy = self._improvement._persistence_policy
@@ -376,18 +378,46 @@ class TuningLoopService:
             dedupe_window_minutes=policy.dedupe_window_minutes,
             retention_days=after_values.get("retention_days", policy.retention_days),
             max_signals=policy.max_signals,
-            max_generated_intakes=after_values.get(
-                "auto_intake_max_items", policy.max_generated_intakes
-            ),
+            max_generated_intakes=policy.max_generated_intakes,
             auto_intake_min_quality=after_values.get(
                 "auto_intake_min_quality", policy.auto_intake_min_quality
+            ),
+            auto_intake_min_severity=LearningSignalSeverity(
+                after_values.get(
+                    "auto_intake_min_severity",
+                    policy.auto_intake_min_severity.value,
+                )
+            ),
+            auto_intake_max_items=after_values.get(
+                "auto_intake_max_items",
+                policy.auto_intake_max_items,
             ),
         )
         self._improvement.update_policy(new_policy)
 
         if self._config_apply is not None:
-            for field, value in after_values.items():
-                self._config_apply.apply(field, value)
+            config_changes = {
+                "improvement_learning_auto_intake_min_quality": after_values.get(
+                    "auto_intake_min_quality",
+                    policy.auto_intake_min_quality,
+                ),
+                "improvement_learning_retention_days": after_values.get(
+                    "retention_days",
+                    policy.retention_days,
+                ),
+                "improvement_learning_auto_intake_min_severity": after_values.get(
+                    "auto_intake_min_severity",
+                    policy.auto_intake_min_severity.value,
+                ),
+                "improvement_learning_auto_intake_max_items": after_values.get(
+                    "auto_intake_max_items",
+                    policy.auto_intake_max_items,
+                ),
+            }
+            self._config_apply.apply(
+                ConfigApplyRequest(changes=config_changes),
+                settings_instance=self._settings,
+            )
 
         logger.info(
             "tuning_cycle_applied",

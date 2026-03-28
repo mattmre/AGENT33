@@ -108,6 +108,10 @@ def _build_improvement_service() -> ImprovementService:
             max_signals=settings.improvement_learning_max_signals,
             max_generated_intakes=settings.improvement_learning_max_generated_intakes,
             auto_intake_min_quality=settings.improvement_learning_auto_intake_min_quality,
+            auto_intake_min_severity=LearningSignalSeverity(
+                settings.improvement_learning_auto_intake_min_severity
+            ),
+            auto_intake_max_items=settings.improvement_learning_auto_intake_max_items,
         ),
         max_metrics_snapshots=settings.improvement_learning_max_metrics_snapshots,
         quality_config=quality_cfg,
@@ -764,12 +768,7 @@ def get_learning_summary(
 
     generated_intakes = []
     if generate_intakes and settings.improvement_learning_auto_intake_enabled:
-        min_severity = LearningSignalSeverity(
-            settings.improvement_learning_auto_intake_min_severity
-        )
         generated_intakes = _service.generate_intakes_from_learning_signals(
-            min_severity=min_severity,
-            max_items=settings.improvement_learning_auto_intake_max_items,
             tenant_id=resolved_tenant_id,
         )
 
@@ -813,7 +812,7 @@ def get_learning_calibration(
     """Calibrate retention and auto-intake thresholds from recent learning signals."""
     _ensure_learning_enabled()
     effective_target = (
-        settings.improvement_learning_auto_intake_max_items
+        _service._persistence_policy.auto_intake_max_items
         if target_auto_intakes_per_window is None
         else target_auto_intakes_per_window
     )
