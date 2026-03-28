@@ -27,6 +27,7 @@ from agent33.backup.manifest import (
     VerifyCheck,
     VerifyResult,
 )
+from agent33.state_paths import RuntimeStatePaths
 
 if TYPE_CHECKING:
     from agent33.config import Settings
@@ -57,10 +58,12 @@ class BackupService:
         settings: Settings,
         app_root: Path,
         workspace_dir: Path | None = None,
+        state_paths: RuntimeStatePaths | None = None,
     ) -> None:
-        self._backup_dir = backup_dir
+        self._state_paths = state_paths or RuntimeStatePaths.from_app_root(app_root)
+        self._backup_dir = self._state_paths.ensure_approved(backup_dir)
         self._settings = settings
-        self._app_root = app_root
+        self._app_root = app_root.resolve()
         self._workspace_dir = workspace_dir
         self._backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -575,10 +578,7 @@ class BackupService:
         stripped = raw_path.strip()
         if not stripped:
             return None
-        path = Path(stripped)
-        if not path.is_absolute():
-            path = self._app_root / path
-        return path
+        return self._state_paths.resolve(stripped)
 
     @staticmethod
     def _optional_path(path: Path | None) -> Path | None:
@@ -598,7 +598,7 @@ class BackupService:
         base_dir = self._settings.operator_session_base_dir.strip()
         if base_dir:
             return self._resolve_setting_path(base_dir)
-        return Path.home() / ".agent33" / "sessions"
+        return self._state_paths.default_user_state_dir("sessions")
 
     def _source_contains_backup_dir(self, source: Path) -> bool:
         return self._backup_dir.resolve().is_relative_to(source.resolve())

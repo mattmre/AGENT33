@@ -56,6 +56,31 @@ def _settings(root: Path) -> Settings:
     )
 
 
+def test_inventory_allows_absolute_external_config_sources(tmp_path: Path) -> None:
+    _seed_tree(tmp_path)
+    external_defs = tmp_path / "external-agent-definitions"
+    external_defs.mkdir()
+    (external_defs / "beta.yaml").write_text("name: beta\n", encoding="utf-8")
+
+    settings = _settings(tmp_path).model_copy(
+        update={"agent_definitions_dir": str(external_defs.resolve())}
+    )
+    service = BackupService(
+        backup_dir=tmp_path / "backups",
+        settings=settings,
+        app_root=tmp_path,
+        workspace_dir=None,
+    )
+
+    inventory = service.inventory(mode=BackupMode.CONFIG_ONLY)
+    asset = next(
+        asset for asset in inventory.assets if asset.relative_path == "config/agent-definitions"
+    )
+
+    assert asset.included is True
+    assert Path(asset.source_path) == external_defs.resolve()
+
+
 @pytest.mark.asyncio()
 async def test_create_backup_round_trip_and_list(tmp_path: Path) -> None:
     _seed_tree(tmp_path)

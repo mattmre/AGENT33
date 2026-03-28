@@ -371,6 +371,7 @@ class TestWorkflowHistory:
 
         assert len(history) >= 1
         entry = history[0]  # Most recent
+        assert entry["run_id"] == exec_resp.json()["run_id"]
         assert entry["workflow_name"] == test_workflow
         assert entry["trigger_type"] == "manual"
         assert "status" in entry
@@ -395,6 +396,8 @@ class TestWorkflowHistory:
         # Count manual trigger entries
         manual_entries = [e for e in history if e["trigger_type"] == "manual"]
         assert len(manual_entries) >= 3
+        assert all(entry["run_id"] for entry in manual_entries)
+        assert len({entry["run_id"] for entry in manual_entries}) == len(manual_entries)
 
     def test_history_ordered_by_timestamp_descending(
         self, executor_client: TestClient, test_workflow: str

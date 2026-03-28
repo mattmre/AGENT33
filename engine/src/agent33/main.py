@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -112,6 +113,7 @@ from agent33.memory.long_term import LongTermMemory
 from agent33.messaging.bus import NATSMessageBus
 from agent33.observability.http_metrics import HTTPMetricsMiddleware
 from agent33.security.middleware import AuthMiddleware
+from agent33.state_paths import RuntimeStatePaths
 
 logger = structlog.get_logger()
 
@@ -132,6 +134,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Record startup time for uptime calculation
     _start_time = time.time()
+    app_root = Path.cwd().resolve()
+    state_paths = RuntimeStatePaths.from_app_root(app_root)
+    app.state.runtime_state_paths = state_paths
 
     # Warn about insecure defaults
     secret_warnings = settings.check_production_secrets()
@@ -166,12 +171,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.orchestration_state_store_path.strip():
         from agent33.services.orchestration_state import OrchestrationStateStore
 
-        orchestration_state_store = OrchestrationStateStore(
+        orchestration_state_path = state_paths.resolve_approved(
             settings.orchestration_state_store_path
         )
+        orchestration_state_store = OrchestrationStateStore(str(orchestration_state_path))
         logger.info(
             "orchestration_state_store_enabled",
-            path=settings.orchestration_state_store_path,
+            path=str(orchestration_state_path),
         )
     app.state.orchestration_state_store = orchestration_state_store
 
@@ -247,8 +253,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     # -- Agent registry ----------------------------------------------------
-    from pathlib import Path
-
     from agent33.agents.registry import AgentRegistry
 
     agent_registry = AgentRegistry()
@@ -551,30 +555,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from agent33.processes.service import ProcessManagerService
 
+    process_manager_log_dir = state_paths.resolve_approved(settings.process_manager_log_dir)
     process_manager_service = ProcessManagerService(
-        workspace_root=Path.cwd(),
-        log_dir=Path(settings.process_manager_log_dir),
+        workspace_root=app_root,
+        log_dir=process_manager_log_dir,
         state_store=orchestration_state_store,
         max_processes=settings.process_manager_max_processes,
     )
     app.state.process_manager_service = process_manager_service
     logger.info(
         "process_manager_service_initialized",
-        workspace_root=str(Path.cwd().resolve()),
-        log_dir=str(Path(settings.process_manager_log_dir).resolve()),
+        workspace_root=str(app_root),
+        log_dir=str(process_manager_log_dir),
         max_processes=settings.process_manager_max_processes,
     )
 
+    backup_dir = state_paths.resolve_approved(settings.backup_dir)
     backup_service = BackupService(
-        backup_dir=Path(settings.backup_dir),
+        backup_dir=backup_dir,
         settings=settings,
-        app_root=Path.cwd(),
+        app_root=app_root,
         workspace_dir=None,
+        state_paths=state_paths,
     )
     app.state.backup_service = backup_service
     logger.info(
         "backup_service_initialized",
-        backup_dir=str(Path(settings.backup_dir).resolve()),
+        backup_dir=str(backup_dir),
     )
 
     # -- Component security persistence (AEP-B01) ----------------------------
@@ -873,14 +880,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
         project_hooks = (
-            Path(settings.script_hooks_project_dir)
+            state_paths.resolve(settings.script_hooks_project_dir)
             if settings.script_hooks_project_dir.strip()
-            else resolve_project_hooks_dir(Path.cwd())
+            else resolve_project_hooks_dir(app_root)
         )
         user_hooks = (
-            Path(settings.script_hooks_user_dir)
+            state_paths.resolve(settings.script_hooks_user_dir)
             if settings.script_hooks_user_dir.strip()
-            else Path.home() / ".agent33" / "hooks"
+            else state_paths.default_user_state_dir("hooks")
         )
         script_hook_discovery = ScriptHookDiscovery(
             hook_registry=hook_registry,
@@ -900,9 +907,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from agent33.sessions.storage import FileSessionStorage
 
         base_dir = (
-            Path(settings.operator_session_base_dir)
+            state_paths.resolve_approved(settings.operator_session_base_dir)
             if settings.operator_session_base_dir.strip()
-            else Path.home() / ".agent33" / "sessions"
+            else state_paths.default_user_state_dir("sessions")
         )
         session_storage = FileSessionStorage(
             base_dir=base_dir,
@@ -1037,7 +1044,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     status_line_service = StatusLineService(
         app_state=app.state,
-        workspace_root=Path.cwd(),
+        workspace_root=app_root,
         voice_probe=voice_sidecar_probe,
     )
     app.state.status_line_service = status_line_service
@@ -1170,7 +1177,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     from agent33.services.orchestration_state import OrchestrationStateStore
 
-    plugin_state_store = OrchestrationStateStore(settings.plugin_state_store_path)
+    plugin_state_store = OrchestrationStateStore(
+        str(state_paths.resolve_approved(settings.plugin_state_store_path))
+    )
     plugin_event_store = PluginEventStore(plugin_state_store)
     plugin_config_store = PluginConfigStore(plugin_state_store)
     _plugin_allowlist = (
