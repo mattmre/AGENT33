@@ -23,9 +23,10 @@ Use the authenticated checks in this order:
 1. `GET /v1/operator/status`
 2. `GET /v1/operator/doctor`
 3. `GET /v1/processes?limit=50`
-4. `GET /v1/backups/inventory`
+4. `GET /v1/backups`
 5. If a backup exists, `POST /v1/backups/{backup_id}/verify`
 6. If restore safety must be inspected, `POST /v1/backups/{backup_id}/restore-plan`
+7. If you are planning a fresh backup, `GET /v1/backups/inventory`
 
 This order keeps the first pass read-only and short.
 
@@ -71,24 +72,24 @@ If any process needs deeper inspection or recovery, continue in
 
 ## Backup Verification Check
 
-1. Inspect the current backup inventory.
-
-```bash
-curl "http://127.0.0.1:8000/v1/backups/inventory" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-2. List existing archives.
+1. List existing archives.
 
 ```bash
 curl "http://127.0.0.1:8000/v1/backups" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-3. Verify one archive.
+2. Verify one archive.
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/backups/$BACKUP_ID/verify" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+3. Inspect the inventory for a potential new backup.
+
+```bash
+curl "http://127.0.0.1:8000/v1/backups/inventory" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
