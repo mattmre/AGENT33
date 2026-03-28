@@ -27,3 +27,11 @@ When incorporating testing repos (e.g., `Snowflake-Labs/agent-world-model`):
 ### 3. Deep Swarm Research
 - Use multiple agents to analyze multiple new repos and research papers.
 - Absorb knowledge and functionality to enhance our own ecosystem.
+
+### 4. Durable Ingestion Tracking
+- When a repo-ingestion or remediation effort needs durable tracking, create or update a
+  frontmatter-backed artifact from `docs/research/templates/INGESTION_TASK_TEMPLATE.md`.
+- Keep the artifact minimal: stable `task_id`, `owner`, `status`, `acceptance_criteria`,
+  and `evidence`, plus links back to `task_plan.md`, `findings.md`, and `progress.md`.
+- Do not turn the artifact into a second queue or a ticket system; the root planning files
+  remain the source of truth for session sequencing.
