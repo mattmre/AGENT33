@@ -100,6 +100,10 @@ improvement_learning_auto_intake_min_quality=0.6
 
 Use the `GET /v1/improvements/learning/calibration` endpoint to get
 data-driven threshold recommendations based on recent signal activity.
+When the tuning loop is enabled, the active runtime policy becomes the source
+of truth for `auto_intake_min_severity`, `auto_intake_max_items`, and
+`auto_intake_min_quality`; calibration snapshots compare against that live
+policy rather than only the boot-time environment values.
 
 ### 5. Corruption Handling
 
@@ -173,5 +177,5 @@ The response includes:
 - `rationale` — human-readable explanation of the recommendations
 
 Run calibration periodically (e.g., weekly) and compare recommendations against
-current settings.  Adjust environment variables when recommendations diverge
-significantly from active configuration.
+the active runtime policy.  Adjust environment variables when recommendations
+diverge significantly from active configuration.

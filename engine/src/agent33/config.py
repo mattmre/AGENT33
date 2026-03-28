@@ -653,6 +653,25 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("improvement_learning_auto_intake_max_items")
+    @classmethod
+    def _validate_learning_auto_intake_max_items(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("improvement_learning_auto_intake_max_items must be at least 1")
+        return value
+
+    @field_validator("improvement_learning_auto_intake_min_severity")
+    @classmethod
+    def _validate_learning_auto_intake_severity(cls, value: str) -> str:
+        allowed = {"low", "medium", "high", "critical"}
+        normalized = value.strip().lower()
+        if normalized not in allowed:
+            raise ValueError(
+                "improvement_learning_auto_intake_min_severity must be one of: "
+                "low, medium, high, critical"
+            )
+        return normalized
+
     @model_validator(mode="after")
     def _validate_jwt_secret_not_default(self) -> Settings:
         """AEP-A01: Reject the default JWT secret in non-dev/test environments."""

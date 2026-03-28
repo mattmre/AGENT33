@@ -319,8 +319,9 @@ class TestTuningLoopService:
         applied_changes: dict[str, Any] = {}
 
         class TrackingApply(ConfigApplyService):
-            def apply(self, field: str, value: Any) -> None:  # noqa: ANN401
-                applied_changes[field] = value
+            def apply(self, request: Any, settings_instance: Any | None = None) -> None:  # noqa: ANN401
+                del settings_instance
+                applied_changes.update(request.changes)
 
         fake = FakeSettings(dry_run=False, require_approval=False)
         tuning = TuningLoopService(
@@ -330,8 +331,53 @@ class TestTuningLoopService:
         )
         record = tuning.run_cycle()
         if record.outcome == TuningCycleOutcome.APPLIED:
-            # At least one field should have been applied
-            assert len(applied_changes) > 0
+            assert applied_changes == {
+                "improvement_learning_auto_intake_min_quality": record.after_values[
+                    "auto_intake_min_quality"
+                ],
+                "improvement_learning_retention_days": record.after_values["retention_days"],
+                "improvement_learning_auto_intake_min_severity": record.after_values[
+                    "auto_intake_min_severity"
+                ],
+                "improvement_learning_auto_intake_max_items": record.after_values[
+                    "auto_intake_max_items"
+                ],
+            }
+
+    def test_config_apply_service_updates_live_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real config apply integration updates the runtime settings singleton."""
+        from agent33.config_apply import ConfigApplyService as RuntimeConfigApplyService
+
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_quality", 0.45)
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 1)
+
+        service = ImprovementService(
+            persistence_policy=LearningPersistencePolicy(
+                retention_days=180,
+                max_generated_intakes=3,
+                auto_intake_min_quality=0.45,
+                auto_intake_min_severity=LearningSignalSeverity.HIGH,
+                auto_intake_max_items=1,
+            )
+        )
+        _seed_signals(service, count=15, quality=0.95, severity=LearningSignalSeverity.MEDIUM)
+
+        tuning = TuningLoopService(
+            service,
+            config_apply_service=RuntimeConfigApplyService(settings_cls=type(settings)),
+            settings=settings,
+        )
+        record = tuning.run_cycle()
+
+        assert record.outcome == TuningCycleOutcome.APPLIED
+        assert settings.improvement_learning_auto_intake_min_severity == "medium"
+        assert settings.improvement_learning_auto_intake_max_items == 3
+        assert settings.improvement_learning_auto_intake_min_quality == pytest.approx(
+            service._persistence_policy.auto_intake_min_quality
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -346,16 +392,25 @@ class TestUpdatePolicy:
             retention_days=90,
             max_generated_intakes=5,
             auto_intake_min_quality=0.6,
+            auto_intake_min_severity=LearningSignalSeverity.MEDIUM,
+            auto_intake_max_items=4,
         )
         svc.update_policy(new_policy)
         assert svc._persistence_policy.retention_days == 90
         assert svc._persistence_policy.max_generated_intakes == 5
         assert svc._persistence_policy.auto_intake_min_quality == 0.6
+        assert svc._persistence_policy.auto_intake_min_severity == LearningSignalSeverity.MEDIUM
+        assert svc._persistence_policy.auto_intake_max_items == 4
 
     def test_update_policy_rejects_invalid_quality(self) -> None:
         svc = ImprovementService()
         with pytest.raises(ValueError, match="auto_intake_min_quality"):
             svc.update_policy(LearningPersistencePolicy(auto_intake_min_quality=1.5))
+
+    def test_update_policy_rejects_invalid_auto_intake_max_items(self) -> None:
+        svc = ImprovementService()
+        with pytest.raises(ValueError, match="auto_intake_max_items"):
+            svc.update_policy(LearningPersistencePolicy(auto_intake_max_items=0))
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +472,7 @@ def _seed_signals_via_api(
     client: TestClient,
     headers: dict[str, str],
     count: int = 15,
+    severity: str = "high",
 ) -> None:
     """Seed learning signals via the API so tuning has enough sample."""
     for i in range(count):
@@ -424,11 +480,17 @@ def _seed_signals_via_api(
             "/v1/improvements/learning/signals",
             json={
                 "signal_type": "feedback",
-                "severity": "high",
-                "summary": f"API signal {i}",
-                "details": f"Details {i}",
+                "severity": severity,
+                "summary": (
+                    f"Detailed recurring signal from the release pipeline with evidence bundle {i}"
+                ),
+                "details": (
+                    "Observed across canary and stable lanes with reproducible "
+                    f"steps for sample {i}"
+                ),
                 "source": "test-api",
                 "tenant_id": "default",
+                "context": {"pipeline": "release", "sample": str(i)},
             },
             headers=headers,
         )
@@ -529,3 +591,36 @@ class TestTuningRoutes:
         monkeypatch.setattr(settings, "improvement_learning_enabled", False)
         resp = client.post("/v1/improvements/tuning/run", headers=auth_headers)
         assert resp.status_code == 404
+
+    def test_tuning_run_updates_summary_generation_thresholds(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Summary generation uses the live tuned policy, not stale route settings."""
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_enabled", True)
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_min_severity", "high")
+        monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 1)
+
+        from agent33.api.routes.improvements import _reset_service
+
+        _reset_service()
+
+        _seed_signals_via_api(
+            client,
+            auth_headers,
+            count=15,
+            severity="medium",
+        )
+        run_resp = client.post("/v1/improvements/tuning/run", headers=auth_headers)
+        assert run_resp.status_code == 200
+        assert run_resp.json()["outcome"] == "applied"
+
+        summary_resp = client.get(
+            "/v1/improvements/learning/summary",
+            params={"generate_intakes": "true"},
+            headers=auth_headers,
+        )
+        assert summary_resp.status_code == 200
+        assert len(summary_resp.json()["generated_intakes"]) == 3

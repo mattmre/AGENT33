@@ -104,6 +104,33 @@ def test_settings_reject_invalid_learning_quality_threshold() -> None:
         Settings(improvement_learning_auto_intake_min_quality=1.1)
 
 
+def test_settings_reject_invalid_learning_auto_intake_min_severity() -> None:
+    from agent33.config import Settings
+
+    with pytest.raises(
+        ValidationError,
+        match="improvement_learning_auto_intake_min_severity must be one of",
+    ):
+        Settings(improvement_learning_auto_intake_min_severity="urgent")
+
+
+def test_settings_normalize_learning_auto_intake_min_severity() -> None:
+    from agent33.config import Settings
+
+    configured = Settings(improvement_learning_auto_intake_min_severity=" HIGH ")
+    assert configured.improvement_learning_auto_intake_min_severity == "high"
+
+
+def test_settings_reject_invalid_learning_auto_intake_max_items() -> None:
+    from agent33.config import Settings
+
+    with pytest.raises(
+        ValidationError,
+        match="improvement_learning_auto_intake_max_items must be at least 1",
+    ):
+        Settings(improvement_learning_auto_intake_max_items=0)
+
+
 def test_service_roundtrip_and_summary_counts(service: ImprovementService):
     service.record_learning_signal(
         LearningSignal(
@@ -741,7 +768,11 @@ def test_calibration_report_recommends_thresholds_from_windowed_sample() -> None
 
 def test_calibrate_zero_signals_returns_conservative_defaults() -> None:
     """When no signals exist in the window, conservative defaults are returned."""
-    policy = LearningPersistencePolicy(auto_intake_min_quality=0.6)
+    policy = LearningPersistencePolicy(
+        auto_intake_min_quality=0.6,
+        auto_intake_min_severity=LearningSignalSeverity.MEDIUM,
+        auto_intake_max_items=5,
+    )
     service = ImprovementService(persistence_policy=policy)
 
     report = service.calibrate_learning_thresholds(
@@ -763,6 +794,8 @@ def test_calibrate_zero_signals_returns_conservative_defaults() -> None:
     ]
     # Policy snapshot uses None for unconfigured values
     assert report.policy_snapshot["auto_intake_min_quality"] == 0.6
+    assert report.policy_snapshot["auto_intake_min_severity"] == "medium"
+    assert report.policy_snapshot["auto_intake_max_items"] == 5
     assert report.policy_snapshot["max_signals"] is None
     assert report.policy_snapshot["retention_days"] is None
 
@@ -1194,7 +1227,9 @@ def test_calibration_route_returns_report(client: TestClient, monkeypatch: pytes
     monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 2)
     now = datetime.now(UTC)
 
-    from agent33.api.routes.improvements import get_improvement_service
+    from agent33.api.routes.improvements import _reset_service, get_improvement_service
+
+    _reset_service()
 
     service = get_improvement_service()
     service.record_learning_signal(
@@ -1234,6 +1269,35 @@ def test_calibration_route_returns_report(client: TestClient, monkeypatch: pytes
     assert payload["sample_signals"] == 2
     assert payload["recommended_auto_intake_max_items"] == 2
     assert 0.0 <= payload["recommended_auto_intake_min_quality"] <= 1.0
+
+
+def test_calibration_route_prefers_live_policy_over_stale_settings(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "improvement_learning_enabled", True)
+    monkeypatch.setattr(settings, "improvement_learning_auto_intake_max_items", 1)
+
+    from agent33.api.routes.improvements import get_improvement_service
+
+    service = get_improvement_service()
+    service.update_policy(
+        LearningPersistencePolicy(
+            dedupe_window_minutes=service._persistence_policy.dedupe_window_minutes,
+            retention_days=service._persistence_policy.retention_days,
+            max_signals=service._persistence_policy.max_signals,
+            max_generated_intakes=service._persistence_policy.max_generated_intakes,
+            auto_intake_min_quality=service._persistence_policy.auto_intake_min_quality,
+            auto_intake_min_severity=LearningSignalSeverity.MEDIUM,
+            auto_intake_max_items=4,
+        )
+    )
+
+    response = client.get("/v1/improvements/learning/calibration")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["target_auto_intakes_per_window"] == 4
+    assert payload["policy_snapshot"]["auto_intake_max_items"] == 4
+    assert payload["policy_snapshot"]["auto_intake_min_severity"] == "medium"
 
 
 def test_calibration_route_rejects_invalid_window_days(

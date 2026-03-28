@@ -72,10 +72,26 @@ class LearningPersistencePolicy:
     max_signals: int | None = None
     max_generated_intakes: int | None = None
     auto_intake_min_quality: float = 0.0
+    auto_intake_min_severity: LearningSignalSeverity = LearningSignalSeverity.HIGH
+    auto_intake_max_items: int = 3
 
 
 class ImprovementService:
     """In-memory service for continuous improvement operations."""
+
+    @staticmethod
+    def _normalize_auto_intake_min_severity(
+        severity: LearningSignalSeverity | str,
+    ) -> LearningSignalSeverity:
+        if isinstance(severity, str):
+            try:
+                return LearningSignalSeverity(severity)
+            except ValueError as exc:
+                raise ValueError(
+                    "auto_intake_min_severity must be one of: "
+                    f"{', '.join(item.value for item in LearningSignalSeverity)}"
+                ) from exc
+        return severity
 
     def __init__(
         self,
@@ -93,10 +109,17 @@ class ImprovementService:
         self._learning_signal_intake_map: dict[str, str] = {}
         self._learning_store = learning_store or InMemoryLearningSignalStore()
         self._persistence_policy = persistence_policy or LearningPersistencePolicy()
+        self._persistence_policy.auto_intake_min_severity = (
+            self._normalize_auto_intake_min_severity(
+                self._persistence_policy.auto_intake_min_severity
+            )
+        )
         self._quality_config = quality_config
         self._max_metrics_snapshots = max(1, max_metrics_snapshots)
         if not 0.0 <= self._persistence_policy.auto_intake_min_quality <= 1.0:
             raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
+        if self._persistence_policy.auto_intake_max_items < 1:
+            raise ValueError("auto_intake_max_items must be at least 1")
         self._persisted_metrics_snapshots: list[MetricsSnapshot] = []
         self._load_learning_state()
         self._metrics_tracker = MetricsTracker()
@@ -113,9 +136,20 @@ class ImprovementService:
         Used by the tuning loop to adjust thresholds without reconstructing
         the service.
         """
+        min_severity = self._normalize_auto_intake_min_severity(policy.auto_intake_min_severity)
         if not 0.0 <= policy.auto_intake_min_quality <= 1.0:
             raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
-        self._persistence_policy = policy
+        if policy.auto_intake_max_items < 1:
+            raise ValueError("auto_intake_max_items must be at least 1")
+        self._persistence_policy = LearningPersistencePolicy(
+            dedupe_window_minutes=policy.dedupe_window_minutes,
+            retention_days=policy.retention_days,
+            max_signals=policy.max_signals,
+            max_generated_intakes=policy.max_generated_intakes,
+            auto_intake_min_quality=policy.auto_intake_min_quality,
+            auto_intake_min_severity=min_severity,
+            auto_intake_max_items=policy.auto_intake_max_items,
+        )
         logger.info(
             "persistence_policy_updated",
             extra={
@@ -123,8 +157,15 @@ class ImprovementService:
                 "max_signals": policy.max_signals,
                 "max_generated_intakes": policy.max_generated_intakes,
                 "auto_intake_min_quality": policy.auto_intake_min_quality,
+                "auto_intake_min_severity": min_severity.value,
+                "auto_intake_max_items": policy.auto_intake_max_items,
             },
         )
+
+    @property
+    def persistence_policy(self) -> LearningPersistencePolicy:
+        """Return the current live learning policy."""
+        return self._persistence_policy
 
     # ----- Read-only accessors (for analytics) --------------------------------
 
@@ -695,9 +736,12 @@ class ImprovementService:
                 "auto_intake_min_quality": round(
                     self._persistence_policy.auto_intake_min_quality, 3
                 ),
+                "auto_intake_min_severity": (
+                    self._persistence_policy.auto_intake_min_severity.value
+                ),
+                "auto_intake_max_items": self._persistence_policy.auto_intake_max_items,
                 "max_signals": self._persistence_policy.max_signals,
                 "retention_days": self._persistence_policy.retention_days,
-                "auto_intake_max_items": self._persistence_policy.max_generated_intakes,
             },
             rationale=rationale,
         )
@@ -705,14 +749,18 @@ class ImprovementService:
     def generate_intakes_from_learning_signals(
         self,
         *,
-        min_severity: LearningSignalSeverity = LearningSignalSeverity.HIGH,
-        max_items: int = 3,
+        min_severity: LearningSignalSeverity | None = None,
+        max_items: int | None = None,
         tenant_id: str | None = None,
     ) -> list[ResearchIntake]:
         """Generate research intakes from qualifying signals.
 
         Uses an internal idempotency map so each signal produces at most one intake.
         """
+        if min_severity is None:
+            min_severity = self._persistence_policy.auto_intake_min_severity
+        if max_items is None:
+            max_items = self._persistence_policy.auto_intake_max_items
         if max_items <= 0:
             return []
 
