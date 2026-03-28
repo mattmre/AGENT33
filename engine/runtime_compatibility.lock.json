@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "openai-chat-completions",
+      "description": "Official OpenAI OpenAPI spec used for the OpenAI-compatible chat completions contract.",
+      "url": "https://raw.githubusercontent.com/openai/openai-openapi/manual_spec/openapi.yaml",
+      "sha256": "6a6c681b182002de4ad335fa80214158f2d8f383a418f865c87876c3ed67cad9",
+      "required_substrings": [
+        "/chat/completions",
+        "tool_calls",
+        "tools:"
+      ]
+    },
+    {
+      "id": "ollama-chat-api",
+      "description": "Official Ollama API documentation used for the native /api/chat contract.",
+      "url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md",
+      "sha256": "72eee79ce6e53114811af2aa6a33e3e09220d3197cce108a6e70f34536a26c4a",
+      "required_substrings": [
+        "/api/chat",
+        "tool_calls",
+        "stream"
+      ]
+    }
+  ]
+}

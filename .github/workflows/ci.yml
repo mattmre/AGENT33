@@ -93,6 +93,9 @@ jobs:
       - name: Runtime import boundaries
         run: python scripts/check_import_boundaries.py
 
+      - name: Runtime compatibility lock
+        run: python scripts/check_runtime_compatibility.py
+
       - name: Ruff check
         run: ruff check src/ tests/
 
