@@ -1,6 +1,9 @@
 # Tracker Index
 
-- Cycle: AEP-20260227-1 (current)
+- Cycle: AEP-20260328-1 (current)
+- Path: `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-03-28/tracker-2026-03-28.md`
+- Status: 0 closed, 0 in-progress, 3 scheduled
+- Cycle: AEP-20260227-1 (completed)
 - Path: `docs/ARCH AGENTIC ENGINEERING AND PLANNING/cycles/2026-02-27/tracker-2026-02-27.md`
 - Status: 29/29 closed, 0 in-progress, 0 open
 - Cycle: AEP-20260222-1 (legacy — ALL 20 CLOSED, Session 49)
