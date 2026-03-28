@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 
@@ -47,6 +48,7 @@ CORE_RUNTIME_PREFIXES = (
     "agent33.llm",
     "agent33.memory",
     "agent33.security",
+    "agent33.skills",
     "agent33.tools",
     "agent33.workflows",
 )
@@ -97,8 +99,9 @@ def collect_allowlisted_importers() -> set[str]:
 class _ImportCollector(ast.NodeVisitor):
     """Collect absolute import targets from a Python module."""
 
-    def __init__(self, module_name: str) -> None:
+    def __init__(self, module_name: str, package_context: str) -> None:
         self.module_name = module_name
+        self.package_context = package_context
         self.imports: list[tuple[str, int]] = []
 
     def visit_If(self, node: ast.If) -> None:  # noqa: N802
@@ -113,9 +116,10 @@ class _ImportCollector(ast.NodeVisitor):
             self.imports.append((alias.name, node.lineno))
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
-        resolved = _resolve_from_import(self.module_name, node)
-        if resolved is not None:
-            self.imports.append((resolved, node.lineno))
+        self.imports.extend(
+            (resolved, node.lineno)
+            for resolved in _resolve_from_import_targets(self.package_context, node)
+        )
 
 
 def _is_type_checking_guard(node: ast.AST) -> bool:
@@ -129,15 +133,21 @@ def _is_type_checking_guard(node: ast.AST) -> bool:
     )
 
 
-def _resolve_from_import(module_name: str, node: ast.ImportFrom) -> str | None:
+def _resolve_from_import_targets(package_context: str, node: ast.ImportFrom) -> list[str]:
     module = node.module or ""
     if node.level == 0:
-        return module or None
-    relative_name = "." * node.level + module
-    try:
-        return importlib.util.resolve_name(relative_name, module_name)
-    except ImportError:
-        return None
+        base_name = module or None
+    else:
+        relative_name = "." * node.level + module
+        try:
+            base_name = importlib.util.resolve_name(relative_name, package_context)
+        except ImportError:
+            return []
+    if base_name is None:
+        return []
+    if any(alias.name == "*" for alias in node.names):
+        return [base_name]
+    return [f"{base_name}.{alias.name}" for alias in node.names]
 
 
 def _module_name_for_path(package_root: Path, file_path: Path) -> str:
@@ -148,25 +158,24 @@ def _module_name_for_path(package_root: Path, file_path: Path) -> str:
     return ".".join((package_root.name, *parts))
 
 
-def iter_python_modules(package_root: Path) -> list[tuple[str, Path]]:
-    """Return module names and file paths under the package root."""
-    modules: list[tuple[str, Path]] = []
+def iter_python_modules(package_root: Path) -> Iterator[tuple[str, Path]]:
+    """Yield module names and file paths under the package root."""
     for file_path in sorted(package_root.rglob("*.py")):
         module_name = _module_name_for_path(package_root, file_path)
-        modules.append((module_name, file_path))
-    return modules
+        yield module_name, file_path
 
 
-def collect_module_imports(package_root: Path) -> list[tuple[str, str, Path, int]]:
-    """Collect all absolute imports inside the runtime package."""
-    imports: list[tuple[str, str, Path, int]] = []
+def collect_module_imports(package_root: Path) -> Iterator[tuple[str, str, Path, int]]:
+    """Yield all absolute imports inside the runtime package."""
     for module_name, file_path in iter_python_modules(package_root):
         tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-        collector = _ImportCollector(module_name)
+        package_context = (
+            module_name if file_path.stem == "__init__" else module_name.rsplit(".", 1)[0]
+        )
+        collector = _ImportCollector(module_name, package_context)
         collector.visit(tree)
         for imported, line in collector.imports:
-            imports.append((module_name, imported, file_path, line))
-    return imports
+            yield module_name, imported, file_path, line
 
 
 def evaluate_runtime_boundaries(package_root: Path) -> list[BoundaryViolation]:

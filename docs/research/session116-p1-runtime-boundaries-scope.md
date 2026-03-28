@@ -2,7 +2,7 @@
 
 Date: 2026-03-28
 Slice: `P1 / Cluster 0.1`
-Worktree: `D:\GITHUB\AGENT33\worktrees\session116-p1-boundaries`
+Worktree: `worktrees/session116-p1-boundaries`
 
 ## Objective
 
