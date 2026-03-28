@@ -114,6 +114,23 @@ def test_settings_reject_invalid_learning_auto_intake_min_severity() -> None:
         Settings(improvement_learning_auto_intake_min_severity="urgent")
 
 
+def test_settings_normalize_learning_auto_intake_min_severity() -> None:
+    from agent33.config import Settings
+
+    configured = Settings(improvement_learning_auto_intake_min_severity=" HIGH ")
+    assert configured.improvement_learning_auto_intake_min_severity == "high"
+
+
+def test_settings_reject_invalid_learning_auto_intake_max_items() -> None:
+    from agent33.config import Settings
+
+    with pytest.raises(
+        ValidationError,
+        match="improvement_learning_auto_intake_max_items must be at least 1",
+    ):
+        Settings(improvement_learning_auto_intake_max_items=0)
+
+
 def test_service_roundtrip_and_summary_counts(service: ImprovementService):
     service.record_learning_signal(
         LearningSignal(

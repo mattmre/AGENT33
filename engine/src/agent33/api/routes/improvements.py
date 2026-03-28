@@ -812,7 +812,7 @@ def get_learning_calibration(
     """Calibrate retention and auto-intake thresholds from recent learning signals."""
     _ensure_learning_enabled()
     effective_target = (
-        _service._persistence_policy.auto_intake_max_items
+        _service.persistence_policy.auto_intake_max_items
         if target_auto_intakes_per_window is None
         else target_auto_intakes_per_window
     )

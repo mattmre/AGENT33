@@ -603,7 +603,6 @@ class Settings(BaseSettings):
         "improvement_learning_retention_days",
         "improvement_learning_max_signals",
         "improvement_learning_max_generated_intakes",
-        "improvement_learning_auto_intake_max_items",
         "voice_daemon_max_sessions",
         "process_manager_max_processes",
     )
@@ -654,16 +653,24 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("improvement_learning_auto_intake_max_items")
+    @classmethod
+    def _validate_learning_auto_intake_max_items(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("improvement_learning_auto_intake_max_items must be at least 1")
+        return value
+
     @field_validator("improvement_learning_auto_intake_min_severity")
     @classmethod
     def _validate_learning_auto_intake_severity(cls, value: str) -> str:
         allowed = {"low", "medium", "high", "critical"}
-        if value not in allowed:
+        normalized = value.strip().lower()
+        if normalized not in allowed:
             raise ValueError(
                 "improvement_learning_auto_intake_min_severity must be one of: "
                 "low, medium, high, critical"
             )
-        return value
+        return normalized
 
     @model_validator(mode="after")
     def _validate_jwt_secret_not_default(self) -> Settings:

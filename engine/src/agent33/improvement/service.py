@@ -79,6 +79,20 @@ class LearningPersistencePolicy:
 class ImprovementService:
     """In-memory service for continuous improvement operations."""
 
+    @staticmethod
+    def _normalize_auto_intake_min_severity(
+        severity: LearningSignalSeverity | str,
+    ) -> LearningSignalSeverity:
+        if isinstance(severity, str):
+            try:
+                return LearningSignalSeverity(severity)
+            except ValueError as exc:
+                raise ValueError(
+                    "auto_intake_min_severity must be one of: "
+                    f"{', '.join(item.value for item in LearningSignalSeverity)}"
+                ) from exc
+        return severity
+
     def __init__(
         self,
         learning_store: LearningSignalStore | None = None,
@@ -95,16 +109,11 @@ class ImprovementService:
         self._learning_signal_intake_map: dict[str, str] = {}
         self._learning_store = learning_store or InMemoryLearningSignalStore()
         self._persistence_policy = persistence_policy or LearningPersistencePolicy()
-        min_severity = self._persistence_policy.auto_intake_min_severity
-        if isinstance(min_severity, str):
-            try:
-                min_severity = LearningSignalSeverity(min_severity)
-            except ValueError as exc:
-                raise ValueError(
-                    "auto_intake_min_severity must be one of: "
-                    f"{', '.join(severity.value for severity in LearningSignalSeverity)}"
-                ) from exc
-            self._persistence_policy.auto_intake_min_severity = min_severity
+        self._persistence_policy.auto_intake_min_severity = (
+            self._normalize_auto_intake_min_severity(
+                self._persistence_policy.auto_intake_min_severity
+            )
+        )
         self._quality_config = quality_config
         self._max_metrics_snapshots = max(1, max_metrics_snapshots)
         if not 0.0 <= self._persistence_policy.auto_intake_min_quality <= 1.0:
@@ -127,15 +136,7 @@ class ImprovementService:
         Used by the tuning loop to adjust thresholds without reconstructing
         the service.
         """
-        min_severity = policy.auto_intake_min_severity
-        if isinstance(min_severity, str):
-            try:
-                min_severity = LearningSignalSeverity(min_severity)
-            except ValueError as exc:
-                raise ValueError(
-                    "auto_intake_min_severity must be one of: "
-                    f"{', '.join(severity.value for severity in LearningSignalSeverity)}"
-                ) from exc
+        min_severity = self._normalize_auto_intake_min_severity(policy.auto_intake_min_severity)
         if not 0.0 <= policy.auto_intake_min_quality <= 1.0:
             raise ValueError("auto_intake_min_quality must be between 0.0 and 1.0")
         if policy.auto_intake_max_items < 1:
@@ -160,6 +161,11 @@ class ImprovementService:
                 "auto_intake_max_items": policy.auto_intake_max_items,
             },
         )
+
+    @property
+    def persistence_policy(self) -> LearningPersistencePolicy:
+        """Return the current live learning policy."""
+        return self._persistence_policy
 
     # ----- Read-only accessors (for analytics) --------------------------------
 
