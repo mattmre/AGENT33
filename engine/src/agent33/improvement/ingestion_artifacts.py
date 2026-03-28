@@ -12,6 +12,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
+_DEFAULT_PLANNING_REFS = ["task_plan.md", "findings.md", "progress.md"]
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -162,14 +163,15 @@ def build_repo_ingestion_task_artifact(
             else [
                 "Primary source evidence is captured in docs/research.",
                 "Adoption recommendations and explicit non-goals are recorded.",
-                "The artifact links back to task_plan.md, findings.md, and progress.md.",
+                (
+                    "The artifact links back to the repository-root planning files "
+                    "task_plan.md, findings.md, and progress.md."
+                ),
             ]
         ),
         evidence=[record.url],
         planning_refs=(
-            planning_refs
-            if planning_refs is not None
-            else ["task_plan.md", "findings.md", "progress.md"]
+            planning_refs if planning_refs is not None else list(_DEFAULT_PLANNING_REFS)
         ),
         research_refs=research_refs if research_refs is not None else [],
         body=(

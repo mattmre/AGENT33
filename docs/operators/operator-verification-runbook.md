@@ -16,6 +16,22 @@ Use this runbook with:
 This runbook does not define new dashboards, new automation, or destructive
 restore execution.
 
+## Required Scopes
+
+Use a read-only verification token with:
+
+- `operator:read`
+- `processes:read`
+
+Use a separate elevated reset token with:
+
+- `operator:write`
+- `admin`
+
+Keep the first verification pass on the read-only token. Only use the elevated
+token if you have already captured `status` and `doctor` and a bounded reset is
+actually justified.
+
 ## Canonical Verification Order
 
 Use the authenticated checks in this order:
@@ -36,7 +52,7 @@ This order keeps the first pass read-only and short.
 
 ```bash
 curl "http://127.0.0.1:8000/v1/operator/status" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 Use it to confirm:
@@ -49,7 +65,7 @@ Use it to confirm:
 
 ```bash
 curl "http://127.0.0.1:8000/v1/operator/doctor" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 Use it to confirm:
@@ -64,7 +80,7 @@ Use the canonical process inventory command from the dedicated process runbook:
 
 ```bash
 curl "http://127.0.0.1:8000/v1/processes?limit=50" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 If any process needs deeper inspection or recovery, continue in
@@ -76,21 +92,21 @@ If any process needs deeper inspection or recovery, continue in
 
 ```bash
 curl "http://127.0.0.1:8000/v1/backups" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 2. Verify one archive.
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/backups/$BACKUP_ID/verify" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 3. Inspect the inventory for a potential new backup.
 
 ```bash
 curl "http://127.0.0.1:8000/v1/backups/inventory" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 4. If you need a read-only safety check before later restore work, generate a
@@ -98,7 +114,7 @@ curl "http://127.0.0.1:8000/v1/backups/inventory" \
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/backups/$BACKUP_ID/restore-plan" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $READ_TOKEN"
 ```
 
 Use restore preview only to inspect conflicts and planned actions. This slice
@@ -112,7 +128,7 @@ Registry-only reset:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/operator/reset" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $RESET_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"targets":["registries"]}'
 ```
@@ -121,7 +137,7 @@ Cache-only reset:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/operator/reset" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $RESET_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"targets":["caches"]}'
 ```

@@ -41,6 +41,7 @@ _PROCESS_REFERENCED_PATHS = [
 
 _VERIFICATION_SECTIONS = {
     "## Purpose",
+    "## Required Scopes",
     "## Canonical Verification Order",
     "## Operator Control Plane Check",
     "## Process Registry Check",
@@ -60,6 +61,12 @@ _VERIFICATION_STRINGS = {
     "process-registry-runbook.md",
     "operator.py",
     "backups.py",
+    "operator:read",
+    "processes:read",
+    "operator:write",
+    "admin",
+    "$READ_TOKEN",
+    "$RESET_TOKEN",
 }
 _VERIFICATION_REFERENCED_PATHS = [
     _REPO_ROOT / "docs" / "operators" / "production-deployment-runbook.md",

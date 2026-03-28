@@ -10,10 +10,11 @@ summary: >
 acceptance_criteria:
   - Capture the primary source evidence in docs/research.
   - Record the adoption decision and explicit non-goals.
-  - Keep links back to the root planning files instead of duplicating the queue.
+  - Keep repository-root-relative links back to the root planning files instead of duplicating the queue.
 evidence:
   - docs/research/example-source-note.md
 planning_refs:
+  # repository-root-relative paths; resolve these from the repository root.
   - task_plan.md
   - findings.md
   - progress.md
@@ -30,6 +31,7 @@ Summarize the ingestion or remediation decision in one short paragraph.
 ## Notes
 
 - Add progress notes only if they materially change the ingestion outcome.
+- Resolve `planning_refs` from the repository root.
 - Keep the artifact small; the detailed queue and session log stay in the root planning files.
 
 ## Deferred Follow-ups
