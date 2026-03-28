@@ -9,6 +9,8 @@ already shipped in this repo.
 Use this document with:
 
 - [`production-deployment-runbook.md`](production-deployment-runbook.md)
+- [`operator-verification-runbook.md`](operator-verification-runbook.md)
+- [`process-registry-runbook.md`](process-registry-runbook.md)
 - [`../../deploy/k8s/overlays/production/README.md`](../../deploy/k8s/overlays/production/README.md)
 - [`../../deploy/monitoring/README.md`](../../deploy/monitoring/README.md)
 - [`../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml`](../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml)
