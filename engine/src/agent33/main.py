@@ -880,12 +880,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
         project_hooks = (
-            state_paths.resolve_approved(settings.script_hooks_project_dir)
+            state_paths.resolve(settings.script_hooks_project_dir)
             if settings.script_hooks_project_dir.strip()
             else resolve_project_hooks_dir(app_root)
         )
         user_hooks = (
-            state_paths.resolve_approved(settings.script_hooks_user_dir)
+            state_paths.resolve(settings.script_hooks_user_dir)
             if settings.script_hooks_user_dir.strip()
             else state_paths.default_user_state_dir("hooks")
         )

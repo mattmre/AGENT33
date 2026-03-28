@@ -710,17 +710,23 @@ class TestServiceGetProcess:
         with pytest.raises(ProcessNotFoundError):
             svc.get_process("nonexistent-xyz-999")
 
+    def test_workflow_no_matching_entry_raises(self) -> None:
+        """Well-formed workflow ID with no matching history raises."""
+        svc = OperationsHubService()
+        with pytest.raises(ProcessNotFoundError):
+            svc.get_process("workflow:phantom:9999999999")
+
     def test_workflow_bad_format_raises_not_found(self) -> None:
         """Malformed workflow: prefix raises ProcessNotFoundError."""
         svc = OperationsHubService()
         with pytest.raises(ProcessNotFoundError):
             svc.get_process("workflow:missing-timestamp")
 
-    def test_workflow_no_matching_entry_raises(self) -> None:
-        """Well-formed workflow ID with no matching history raises."""
+    def test_workflow_non_numeric_legacy_suffix_raises_not_found(self) -> None:
+        """Malformed legacy workflow IDs should fail closed."""
         svc = OperationsHubService()
         with pytest.raises(ProcessNotFoundError):
-            svc.get_process("workflow:phantom:9999999999")
+            svc.get_process("workflow:bad:timestamp")
 
 
 class TestServiceControlProcess:

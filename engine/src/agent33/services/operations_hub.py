@@ -352,7 +352,12 @@ class OperationsHubService:
         workflow_ref = process_id.split(":", 1)[1]
         legacy_parts = process_id.split(":", 2)
         legacy_workflow_name = legacy_parts[1] if len(legacy_parts) == 3 else ""
-        legacy_target_ts = int(legacy_parts[2]) if len(legacy_parts) == 3 else None
+        legacy_target_ts = None
+        if len(legacy_parts) == 3:
+            try:
+                legacy_target_ts = int(legacy_parts[2])
+            except ValueError:
+                raise ProcessNotFoundError(process_id) from None
 
         for entry in get_execution_history():
             record = normalize_execution_record(entry)

@@ -578,7 +578,7 @@ class BackupService:
         stripped = raw_path.strip()
         if not stripped:
             return None
-        return self._state_paths.resolve_approved(stripped)
+        return self._state_paths.resolve(stripped)
 
     @staticmethod
     def _optional_path(path: Path | None) -> Path | None:
