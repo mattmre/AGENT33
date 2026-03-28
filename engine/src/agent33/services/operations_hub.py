@@ -15,6 +15,7 @@ from agent33.autonomy.service import BudgetNotFoundError
 from agent33.improvement.models import IntakeStatus
 from agent33.observability.trace_collector import TraceNotFoundError
 from agent33.observability.trace_models import TraceStatus
+from agent33.workflows.history import normalize_execution_record
 
 logger = logging.getLogger(__name__)
 
@@ -270,23 +271,23 @@ class OperationsHubService:
         history = list(get_execution_history())
         processes: list[dict[str, Any]] = []
         for entry in reversed(history):
-            timestamp = float(entry.get("timestamp", 0))
-            started_at = datetime.fromtimestamp(timestamp, UTC)
+            record = normalize_execution_record(entry)
+            started_at = datetime.fromtimestamp(record.timestamp, UTC)
             if started_at < since:
                 continue
-            workflow_name = entry.get("workflow_name", "")
             processes.append(
                 {
-                    "id": f"workflow:{workflow_name}:{int(timestamp)}",
+                    "id": f"workflow:{record.run_id}",
                     "type": "workflow",
-                    "status": str(entry.get("status", "unknown")),
+                    "status": record.status,
                     "started_at": started_at.isoformat(),
-                    "name": workflow_name or "workflow",
+                    "name": record.workflow_name or "workflow",
                     "metadata": {
-                        "trigger_type": entry.get("trigger_type"),
-                        "duration_ms": entry.get("duration_ms"),
-                        "error": entry.get("error"),
-                        "job_id": entry.get("job_id"),
+                        "run_id": record.run_id,
+                        "trigger_type": record.trigger_type,
+                        "duration_ms": record.duration_ms,
+                        "error": record.error,
+                        "job_id": record.job_id,
                     },
                     "_started_at": started_at,
                 }
@@ -345,27 +346,35 @@ class OperationsHubService:
         }
 
     def _workflow_detail(self, process_id: str) -> dict[str, Any]:
-        parts = process_id.split(":", 2)
-        if len(parts) != 3:
+        if not process_id.startswith("workflow:"):
             raise ProcessNotFoundError(process_id)
-        workflow_name = parts[1]
-        target_ts = int(parts[2])
+
+        workflow_ref = process_id.split(":", 1)[1]
+        legacy_parts = process_id.split(":", 2)
+        legacy_workflow_name = legacy_parts[1] if len(legacy_parts) == 3 else ""
+        legacy_target_ts = int(legacy_parts[2]) if len(legacy_parts) == 3 else None
 
         for entry in get_execution_history():
-            timestamp = int(float(entry.get("timestamp", 0)))
-            if entry.get("workflow_name") == workflow_name and timestamp == target_ts:
-                started_at = datetime.fromtimestamp(timestamp, UTC)
+            record = normalize_execution_record(entry)
+            timestamp = int(record.timestamp)
+            if record.run_id == workflow_ref or (
+                legacy_target_ts is not None
+                and record.workflow_name == legacy_workflow_name
+                and timestamp == legacy_target_ts
+            ):
+                started_at = datetime.fromtimestamp(record.timestamp, UTC)
                 return {
-                    "id": process_id,
+                    "id": f"workflow:{record.run_id}",
                     "type": "workflow",
-                    "status": str(entry.get("status", "unknown")),
+                    "status": record.status,
                     "started_at": started_at.isoformat(),
-                    "name": workflow_name or "workflow",
+                    "name": record.workflow_name or "workflow",
                     "metadata": {
-                        "trigger_type": entry.get("trigger_type"),
-                        "duration_ms": entry.get("duration_ms"),
-                        "error": entry.get("error"),
-                        "job_id": entry.get("job_id"),
+                        "run_id": record.run_id,
+                        "trigger_type": record.trigger_type,
+                        "duration_ms": record.duration_ms,
+                        "error": record.error,
+                        "job_id": record.job_id,
                     },
                 }
         raise ProcessNotFoundError(process_id)

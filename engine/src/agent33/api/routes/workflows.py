@@ -17,6 +17,7 @@ from agent33.security.permissions import check_permission, require_scope
 from agent33.workflows.dag_layout import compute_dag_layout
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
+from agent33.workflows.history import WorkflowExecutionRecord, normalize_execution_record
 
 logger = structlog.get_logger()
 
@@ -213,11 +214,11 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
     tenant_id, scopes = get_request_tenant_context(req)
 
     # Find the execution history entry for this run
-    entry = next(
+    matched = next(
         (
-            e
+            (e, normalize_execution_record(e))
             for e in _execution_history
-            if e.get("run_id") == run_id
+            if normalize_execution_record(e).run_id == run_id
             and execution_history_entry_visible(
                 e,
                 requester_tenant_id=tenant_id,
@@ -226,10 +227,11 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
         ),
         None,
     )
-    if entry is None:
+    if matched is None:
         raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+    entry, record = matched
 
-    workflow_name = entry["workflow_name"]
+    workflow_name = record.workflow_name
     workflow = _registry.get(workflow_name)
     if workflow is None:
         raise HTTPException(
@@ -239,7 +241,7 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
 
     # Build run_state from step_statuses recorded in history
     run_state: dict[str, dict[str, Any]] = {}
-    step_statuses = entry.get("step_statuses") or {}
+    step_statuses = record.step_statuses or {}
     for step_id, status in step_statuses.items():
         run_state[step_id] = {"status": status}
 
@@ -367,9 +369,9 @@ async def get_workflow_history(name: str, req: Request) -> list[WorkflowHistoryE
     """Get execution history for a specific workflow."""
     tenant_id, scopes = get_request_tenant_context(req)
     history = [
-        WorkflowHistoryEntry(**entry)
+        WorkflowHistoryEntry(**normalize_execution_record(entry).model_dump(mode="json"))
         for entry in _execution_history
-        if entry["workflow_name"] == name
+        if normalize_execution_record(entry).workflow_name == name
         and execution_history_entry_visible(
             entry,
             requester_tenant_id=tenant_id,
@@ -505,18 +507,18 @@ async def _execute_single(
             )
         # Record failure in history
         _execution_history.append(
-            {
-                "run_id": run_id,
-                "workflow_name": name,
-                "trigger_type": trigger_type,
-                "status": "failed",
-                "duration_ms": duration_ms,
-                "timestamp": start_ts,
-                "error": str(exc),
-                "job_id": job_id,
-                "step_statuses": None,
-                "tenant_id": tenant_id,
-            }
+            WorkflowExecutionRecord(
+                run_id=run_id,
+                workflow_name=name,
+                trigger_type=trigger_type,
+                status="failed",
+                duration_ms=duration_ms,
+                timestamp=start_ts,
+                error=str(exc),
+                job_id=job_id,
+                step_statuses=None,
+                tenant_id=tenant_id,
+            ).model_dump(mode="json")
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -525,18 +527,18 @@ async def _execute_single(
 
     # Record success in history
     _execution_history.append(
-        {
-            "run_id": run_id,
-            "workflow_name": name,
-            "trigger_type": trigger_type,
-            "status": result.status.value,
-            "duration_ms": result.duration_ms,
-            "timestamp": start_ts,
-            "error": error,
-            "job_id": job_id,
-            "step_statuses": step_statuses,
-            "tenant_id": tenant_id,
-        }
+        WorkflowExecutionRecord(
+            run_id=run_id,
+            workflow_name=name,
+            trigger_type=trigger_type,
+            status=result.status.value,
+            duration_ms=result.duration_ms,
+            timestamp=start_ts,
+            error=error,
+            job_id=job_id,
+            step_statuses=step_statuses,
+            tenant_id=tenant_id,
+        ).model_dump(mode="json")
     )
 
     logger.info(
@@ -634,7 +636,7 @@ async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None)
 
 async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
     """Return ``True`` when *run_id* is already present in tracked workflow state."""
-    if any(entry.get("run_id") == run_id for entry in _execution_history):
+    if any(normalize_execution_record(entry).run_id == run_id for entry in _execution_history):
         return True
     return ws_manager is not None and await ws_manager.has_run(run_id)
 

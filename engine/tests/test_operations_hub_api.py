@@ -118,6 +118,7 @@ def seeded_state() -> dict[str, str]:
     history = get_execution_history()
     history.append(
         {
+            "run_id": "wf-recent-run",
             "workflow_name": "wf-recent",
             "trigger_type": "manual",
             "status": "completed",
@@ -145,6 +146,8 @@ def seeded_state() -> dict[str, str]:
         "active_budget_id": active_budget.budget_id,
         "draft_budget_id": draft_budget.budget_id,
         "intake_id": intake.intake_id,
+        "workflow_run_id": "wf-recent-run",
+        "legacy_workflow_timestamp": str(int(now_ts - (30 * 3600))),
     }
 
 
@@ -414,6 +417,8 @@ def test_get_process_returns_workflow_detail(
     payload = response.json()
     assert payload["type"] == "workflow"
     assert payload["id"] == wf_id
+    assert payload["metadata"]["run_id"]
+    assert payload["id"] == f"workflow:{payload['metadata']['run_id']}"
     assert "trigger_type" in payload["metadata"]
     assert "duration_ms" in payload["metadata"]
 
@@ -481,9 +486,32 @@ def test_workflow_process_shape_in_hub(
     workflows = [p for p in response.json()["processes"] if p["type"] == "workflow"]
     assert workflows
     proc = workflows[0]
-    assert proc["id"].startswith("workflow:")
+    assert proc["id"] == f"workflow:{proc['metadata']['run_id']}"
+    assert proc["metadata"]["run_id"]
     assert "trigger_type" in proc["metadata"]
     assert "duration_ms" in proc["metadata"]
+
+
+def test_legacy_workflow_history_entry_gets_compatibility_run_id(
+    read_client: TestClient, seeded_state: dict[str, str]
+) -> None:
+    response = read_client.get("/v1/operations/hub?include=workflows&since=1970-01-01T00:00:00Z")
+    assert response.status_code == 200
+
+    legacy = next(proc for proc in response.json()["processes"] if proc["name"] == "wf-old")
+    assert legacy["metadata"]["run_id"].startswith("legacy-wf-old-")
+    assert legacy["id"] == f"workflow:{legacy['metadata']['run_id']}"
+
+
+def test_legacy_workflow_process_id_still_resolves(
+    seeded_state: dict[str, str],
+) -> None:
+    svc = OperationsHubService()
+
+    result = svc.get_process(f"workflow:wf-old:{seeded_state['legacy_workflow_timestamp']}")
+
+    assert result["type"] == "workflow"
+    assert result["metadata"]["run_id"].startswith("legacy-wf-old-")
 
 
 # =========================================================================

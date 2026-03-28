@@ -6,10 +6,12 @@ import dataclasses
 import json
 import logging
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent33.agents.trajectory import save_trajectory
 from agent33.llm.base import ChatMessage, LLMResponse
+from agent33.state_paths import RuntimeStatePaths
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable
@@ -489,11 +491,14 @@ class AgentRuntime:
             return
 
         try:
+            trajectory_output_dir = RuntimeStatePaths.from_app_root(Path.cwd()).resolve_approved(
+                _settings.trajectory_output_dir
+            )
             await save_trajectory(
                 conversation,
                 model,
                 completed,
-                _settings.trajectory_output_dir,
+                str(trajectory_output_dir),
                 redaction_enabled=_settings.redact_secrets_enabled,
             )
         except Exception:
