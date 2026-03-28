@@ -12,7 +12,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
-_DEFAULT_PLANNING_REFS = ["task_plan.md", "findings.md", "progress.md"]
+_DEFAULT_PLANNING_REFS = ("task_plan.md", "findings.md", "progress.md")
 
 if TYPE_CHECKING:
     from pathlib import Path
