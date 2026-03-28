@@ -6,14 +6,19 @@ import argparse
 import hashlib
 import json
 import sys
+import time
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 
 import yaml
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
 LOCKFILE_PATH = ENGINE_ROOT / "runtime_compatibility.lock.json"
+_FETCH_ATTEMPTS = 3
+_FETCH_TIMEOUT_SECONDS = 30
+_FETCH_BACKOFF_BASE_SECONDS = 1.0
 
 
 def _normalize_text(raw_bytes: bytes) -> str:
@@ -29,8 +34,24 @@ def _load_lockfile(path: Path) -> dict[str, Any]:
 
 
 def _fetch_source(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=30) as response:
-        return _normalize_text(response.read())
+    last_exc: Exception | None = None
+    for attempt in range(_FETCH_ATTEMPTS):
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "agent33-runtime-compat/1.0"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=_FETCH_TIMEOUT_SECONDS) as response:
+                return _normalize_text(response.read())
+        except (HTTPError, URLError) as exc:
+            last_exc = exc
+            if attempt == _FETCH_ATTEMPTS - 1:
+                break
+            time.sleep(_FETCH_BACKOFF_BASE_SECONDS * (2**attempt))
+    raise RuntimeError(
+        f"Failed to fetch compatibility source '{url}' after {_FETCH_ATTEMPTS} attempts: "
+        f"{last_exc}"
+    ) from last_exc
 
 
 def _snapshot_path(source: dict[str, Any]) -> Path:
