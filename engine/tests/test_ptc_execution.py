@@ -158,7 +158,20 @@ class TestASTValidation:
     def test_blocked_open_call(self) -> None:
         code = 'f = open("/etc/passwd")'
         violations = validate_code_ast(code)
-        assert any("open()" in v for v in violations)
+        assert any("open" in v for v in violations)
+
+    def test_blocked_open_name_alias(self) -> None:
+        """Assigning open to an alias must be blocked at the name level.
+
+        Without 'open' in _BLOCKED_NAMES, ``reader = open`` would pass AST
+        validation because visit_Call only fires on direct ``open(...)``
+        calls, not on bare name references.  File access should go through
+        the file_ops tool.
+        """
+        code = "reader = open"
+        violations = validate_code_ast(code)
+        assert len(violations) >= 1
+        assert any("open" in v for v in violations)
 
     def test_syntax_error_raises(self) -> None:
         with pytest.raises(SyntaxError):

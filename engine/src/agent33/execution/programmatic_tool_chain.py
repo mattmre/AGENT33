@@ -70,6 +70,9 @@ _ALLOWED_IMPORTS: frozenset[str] = frozenset(
 )
 
 # Built-in functions / names that must not be called or accessed.
+# "open" is blocked because file access should go through the file_ops tool,
+# not the built-in open().  Blocking the *name* (not just the call) prevents
+# aliasing bypasses such as ``f = open; f("/etc/passwd")``.
 _BLOCKED_NAMES: frozenset[str] = frozenset(
     {
         "exec",
@@ -81,6 +84,7 @@ _BLOCKED_NAMES: frozenset[str] = frozenset(
         "breakpoint",
         "exit",
         "quit",
+        "open",
     }
 )
 
@@ -169,7 +173,7 @@ class _ASTValidator(ast.NodeVisitor):
             )
         self.generic_visit(node)
 
-    # -- open() is blocked ------------------------------------------------
+    # -- open() is blocked (defence-in-depth; visit_Name also catches it) --
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name) and node.func.id == "open":
