@@ -214,22 +214,22 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
     tenant_id, scopes = get_request_tenant_context(req)
 
     # Find the execution history entry for this run
-    matched = next(
-        (
-            (e, normalize_execution_record(e))
-            for e in _execution_history
-            if normalize_execution_record(e).run_id == run_id
-            and execution_history_entry_visible(
-                e,
-                requester_tenant_id=tenant_id,
-                requester_scopes=scopes,
-            )
-        ),
-        None,
-    )
+    matched: tuple[dict[str, Any], WorkflowExecutionRecord] | None = None
+    for entry in _execution_history:
+        record = normalize_execution_record(entry)
+        if record.run_id != run_id:
+            continue
+        if not execution_history_entry_visible(
+            entry,
+            requester_tenant_id=tenant_id,
+            requester_scopes=scopes,
+        ):
+            continue
+        matched = (entry, record)
+        break
     if matched is None:
         raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
-    entry, record = matched
+    _entry, record = matched
 
     workflow_name = record.workflow_name
     workflow = _registry.get(workflow_name)
@@ -368,16 +368,18 @@ async def schedule_workflow(
 async def get_workflow_history(name: str, req: Request) -> list[WorkflowHistoryEntry]:
     """Get execution history for a specific workflow."""
     tenant_id, scopes = get_request_tenant_context(req)
-    history = [
-        WorkflowHistoryEntry(**normalize_execution_record(entry).model_dump(mode="json"))
-        for entry in _execution_history
-        if normalize_execution_record(entry).workflow_name == name
-        and execution_history_entry_visible(
+    history: list[WorkflowHistoryEntry] = []
+    for entry in _execution_history:
+        record = normalize_execution_record(entry)
+        if record.workflow_name != name:
+            continue
+        if not execution_history_entry_visible(
             entry,
             requester_tenant_id=tenant_id,
             requester_scopes=scopes,
-        )
-    ]
+        ):
+            continue
+        history.append(WorkflowHistoryEntry(**record.model_dump(mode="json")))
 
     # Return most recent first
     return sorted(history, key=lambda x: x.timestamp, reverse=True)
@@ -636,8 +638,9 @@ async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None)
 
 async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
     """Return ``True`` when *run_id* is already present in tracked workflow state."""
-    if any(normalize_execution_record(entry).run_id == run_id for entry in _execution_history):
-        return True
+    for entry in _execution_history:
+        if normalize_execution_record(entry).run_id == run_id:
+            return True
     return ws_manager is not None and await ws_manager.has_run(run_id)
 
 

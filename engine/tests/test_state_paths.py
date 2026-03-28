@@ -45,3 +45,10 @@ def test_reject_path_outside_approved_roots(tmp_path: Path) -> None:
 
     with pytest.raises(StatePathError):
         state_paths.resolve_approved(outside_root / "escape.json")
+
+
+def test_default_user_state_dir_rejects_traversal(tmp_path: Path) -> None:
+    state_paths = RuntimeStatePaths.from_app_root(tmp_path, home_dir=tmp_path / "home")
+
+    with pytest.raises(StatePathError):
+        state_paths.default_user_state_dir("../escape")

@@ -330,17 +330,33 @@ def _mock_runtime_router(
     return router
 
 
+def _configure_runtime_trajectory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    enabled: bool,
+) -> tuple[object, object, str]:
+    from agent33 import config as config_module
+    from agent33.agents import runtime as runtime_module
+
+    expected_output_dir = str((tmp_path / "trajectories").resolve())
+    monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", enabled)
+    monkeypatch.setattr(config_module.settings, "trajectory_output_dir", "trajectories")
+    monkeypatch.setattr(runtime_module.Path, "cwd", lambda: tmp_path)
+    return config_module, runtime_module, expected_output_dir
+
+
 class TestRuntimeInvokeTrajectory:
     async def test_invoke_saves_successful_trajectory(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
@@ -358,7 +374,7 @@ class TestRuntimeInvokeTrajectory:
         conversation, model, completed, output_dir = args[:4]
         assert model == "test-model"
         assert completed is True
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         assert conversation[0]["role"] == "system"
         assert conversation[1]["role"] == "user"
         assert '"query": "hello"' in conversation[1]["content"]
@@ -370,11 +386,11 @@ class TestRuntimeInvokeTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
@@ -392,7 +408,7 @@ class TestRuntimeInvokeTrajectory:
         conversation, model, completed, output_dir = args[:4]
         assert model == "llama3.2"
         assert completed is False
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         assert conversation[-1]["role"] == "assistant"
         assert (
             "RuntimeError: Agent 'trajectory-agent' failed after 1 attempts"
@@ -404,11 +420,11 @@ class TestRuntimeInvokeTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
@@ -431,7 +447,7 @@ class TestRuntimeInvokeTrajectory:
         conversation, model, completed, output_dir = args[:4]
         assert model == "test-model"
         assert completed is False
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         assert conversation[-2] == {"role": "assistant", "content": '{"result": "ok"}'}
         assert "ValueError: parse boom" in conversation[-1]["content"]
 
@@ -440,11 +456,11 @@ class TestRuntimeInvokeTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        _config_module, runtime_module, _expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         monkeypatch.setattr(
             runtime_module,
             "save_trajectory",
@@ -503,11 +519,11 @@ class TestIterativeTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
 
         save_mock = AsyncMock()
@@ -528,11 +544,11 @@ class TestIterativeTrajectory:
         assert result.output == {"result": "ok"}
         assert result.iterations == 3
         save_mock.assert_awaited_once()
-        args, kwargs = save_mock.await_args
+        args, _kwargs = save_mock.await_args
         conversation, model, completed, output_dir = args[:4]
         assert model == "test-model"
         assert completed is True
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         # Conversation should have at least system + user messages
         assert conversation[0]["role"] == "system"
         assert conversation[1]["role"] == "user"
@@ -543,11 +559,11 @@ class TestIterativeTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
 
         save_mock = AsyncMock()
@@ -569,7 +585,7 @@ class TestIterativeTrajectory:
         args, _kwargs = save_mock.await_args
         conversation, model, completed, output_dir = args[:4]
         assert completed is False
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         # Last message should be the synthetic error turn
         assert conversation[-1]["role"] == "assistant"
         assert "RuntimeError: tool loop exploded" in conversation[-1]["content"]
@@ -580,11 +596,11 @@ class TestIterativeTrajectory:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Trajectory save errors must not affect the returned result."""
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        config_module, runtime_module, _expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
         monkeypatch.setattr(
             runtime_module,
@@ -614,11 +630,11 @@ class TestIterativeTrajectory:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When trajectory capture is disabled, save_trajectory must not be called."""
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", False)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
+        _config_module, runtime_module, _expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=False,
+        )
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
@@ -684,12 +700,13 @@ class TestStreamingTrajectory:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
+        config_module, runtime_module, expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         from agent33.llm.base import ChatMessage
 
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
         monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
 
         save_mock = AsyncMock()
@@ -740,10 +757,10 @@ class TestStreamingTrajectory:
 
         assert any(e.event_type == "completed" for e in collected_events)
         save_mock.assert_awaited_once()
-        args, kwargs = save_mock.await_args
+        args, _kwargs = save_mock.await_args
         conversation, model, completed, output_dir = args[:4]
         assert completed is True
-        assert output_dir == str(tmp_path)
+        assert output_dir == expected_output_dir
         # Verify conversation content matches fake_accumulated
         assert conversation[0]["role"] == "system"
         assert conversation[-1]["role"] == "assistant"
@@ -755,12 +772,13 @@ class TestStreamingTrajectory:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Trajectory save errors must not affect the stream output."""
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
+        config_module, runtime_module, _expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=True,
+        )
         from agent33.llm.base import ChatMessage
 
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", True)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
         monkeypatch.setattr(config_module.settings, "redact_secrets_enabled", True)
         monkeypatch.setattr(
             runtime_module,
@@ -818,12 +836,12 @@ class TestStreamingTrajectory:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When trajectory capture is disabled, save_trajectory must not be called."""
-        from agent33 import config as config_module
-        from agent33.agents import runtime as runtime_module
+        _config_module, runtime_module, _expected_output_dir = _configure_runtime_trajectory(
+            monkeypatch,
+            tmp_path,
+            enabled=False,
+        )
         from agent33.llm.base import ChatMessage
-
-        monkeypatch.setattr(config_module.settings, "trajectory_capture_enabled", False)
-        monkeypatch.setattr(config_module.settings, "trajectory_output_dir", str(tmp_path))
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)

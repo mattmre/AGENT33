@@ -81,4 +81,9 @@ class RuntimeStatePaths:
 
     def default_user_state_dir(self, name: str) -> Path:
         """Return a directory under the canonical user-local state root."""
-        return (self.user_state_dir / name).resolve()
+        resolved = (self.user_state_dir / name).resolve()
+        if not resolved.is_relative_to(self.user_state_dir):
+            raise StatePathError(
+                f"User state path '{resolved}' escapes user_state_dir '{self.user_state_dir}'"
+            )
+        return resolved
