@@ -23,9 +23,18 @@ Run this to verify that the pinned upstream sources have not drifted:
 python scripts/check_runtime_compatibility.py
 ```
 
-The command fetches the official sources, verifies a few required markers are
-still present, computes their content hashes, and fails if they differ from the
-checked-in lock file.
+The default check is offline and PR-safe. It validates that the checked-in
+contract snapshots under `engine/runtime_compatibility_snapshots/` still match
+the checked-in lock file.
+
+## Upstream drift command
+
+Run this when you want to compare the extracted contract snapshots against the
+live official upstream sources:
+
+```powershell
+python scripts/check_runtime_compatibility.py --check-upstream
+```
 
 ## Refresh command
 
@@ -43,8 +52,8 @@ Use the refresh flow together with the focused provider tests:
 
 ## CI coverage
 
-- PR CI runs the compatibility check from `.github/workflows/ci.yml`
-- scheduled drift detection runs from `.github/workflows/runtime-compatibility.yml`
+- PR CI runs the offline snapshot check from `.github/workflows/ci.yml`
+- scheduled drift detection runs the live upstream check from `.github/workflows/runtime-compatibility.yml`
 
 ## Review rule
 

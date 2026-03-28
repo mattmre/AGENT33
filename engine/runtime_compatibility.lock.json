@@ -5,18 +5,25 @@
       "id": "openai-chat-completions",
       "description": "Official OpenAI OpenAPI spec used for the OpenAI-compatible chat completions contract.",
       "url": "https://raw.githubusercontent.com/openai/openai-openapi/manual_spec/openapi.yaml",
-      "sha256": "6a6c681b182002de4ad335fa80214158f2d8f383a418f865c87876c3ed67cad9",
+      "extractor": "openai_path_operation",
+      "path": "/chat/completions",
+      "method": "post",
+      "snapshot": "runtime_compatibility_snapshots/openai-chat-completions.json",
+      "sha256": "3366089f1b084f8ae7f97385e6c9b3fd49294f0eb6934b21f1bb84a568398677",
       "required_substrings": [
-        "/chat/completions",
-        "tool_calls",
-        "tools:"
+        "\"operationId\": \"createChatCompletion\"",
+        "CreateChatCompletionRequest",
+        "CreateChatCompletionStreamResponse"
       ]
     },
     {
       "id": "ollama-chat-api",
       "description": "Official Ollama API documentation used for the native /api/chat contract.",
       "url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md",
-      "sha256": "72eee79ce6e53114811af2aa6a33e3e09220d3197cce108a6e70f34536a26c4a",
+      "extractor": "markdown_section",
+      "heading": "## Generate a chat completion",
+      "snapshot": "runtime_compatibility_snapshots/ollama-chat-api.md",
+      "sha256": "cf03eae2317f2b50a52ccc97eab3ba02d0812023d7ca65c9799efb01e875e374",
       "required_substrings": [
         "/api/chat",
         "tool_calls",
