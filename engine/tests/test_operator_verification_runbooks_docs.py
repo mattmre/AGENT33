@@ -25,7 +25,7 @@ _PROCESS_STRINGS = {
     "/v1/processes/cleanup",
     "processes:read",
     "processes:manage",
-    "tools:execute",
+    "tool governance",
     "status_filter=interrupted",
     "interrupted",
     "processes.py",

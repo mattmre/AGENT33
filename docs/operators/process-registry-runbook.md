@@ -31,9 +31,11 @@ The current managed-process surface is:
 Required scopes:
 
 - `processes:read` for list, detail, and log access
-- `processes:manage` for start, stdin write, terminate, and cleanup
-- `tools:execute` is also required when starting a new process because start
-  reuses shell-tool governance preflight
+- `processes:manage` for start, stdin write, terminate, and cleanup at the API
+  layer
+- if tool governance is enabled in the current deployment, process start can
+  also be blocked unless `tools:execute` is present because start reuses the
+  shell-tool governance preflight
 
 Observed statuses are:
 
