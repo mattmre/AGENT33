@@ -11,13 +11,14 @@ import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ChatInterface } from "./features/chat/ChatInterface";
 import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel";
 import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDashboardPanel";
+import { SessionAnalyticsDashboard } from "./features/session-analytics/SessionAnalyticsDashboard";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
-type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "tools" | "advanced";
+type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "analytics" | "tools" | "advanced";
 
 interface ActivityItem {
   id: string;
@@ -34,6 +35,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "setup", label: "🔌 Integrations" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
+  { id: "analytics", label: "Analytics" },
   { id: "tools", label: "Tools" },
   { id: "advanced", label: "⚙️ Advanced Settings" }
 ];
@@ -196,6 +198,13 @@ export default function App(): JSX.Element {
         {activeTab === "outcomes" && (
           <div className="consumer-outcomes-layout">
             <OutcomesDashboardPanel token={token} apiKey={apiKey} onResult={onResult} />
+          </div>
+        )}
+
+        {/* Session Analytics -> Usage insights, model costs, daily activity */}
+        {activeTab === "analytics" && (
+          <div className="consumer-analytics-layout">
+            <SessionAnalyticsDashboard token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
 
