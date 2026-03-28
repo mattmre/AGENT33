@@ -19,6 +19,15 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _assert_repo_root_relative_refs_exist(refs: list[str]) -> None:
+    repo_root = _repo_root()
+    for ref in refs:
+        relative_ref = Path(ref)
+        assert not relative_ref.is_absolute(), ref
+        assert ".." not in relative_ref.parts, ref
+        assert (repo_root / relative_ref).exists(), ref
+
+
 def test_ingestion_task_artifact_round_trips_markdown() -> None:
     artifact = IngestionTaskArtifact(
         task_id="ING-abc123def456",
@@ -73,6 +82,7 @@ def test_build_repo_ingestion_task_artifact_sets_minimal_defaults() -> None:
     assert artifact.target == "org/project"
     assert artifact.evidence == ["https://github.com/org/project"]
     assert artifact.planning_refs == ["task_plan.md", "findings.md", "progress.md"]
+    _assert_repo_root_relative_refs_exist(artifact.planning_refs)
     assert len(artifact.acceptance_criteria) == 3
 
 
@@ -131,6 +141,7 @@ def test_ingestion_template_documents_required_fields() -> None:
         "planning_refs:",
     ):
         assert field in template
+    assert "repository-root-relative paths" in template
     assert "task_plan.md" in template
     assert "findings.md" in template
     assert "progress.md" in template
@@ -147,4 +158,5 @@ def test_example_ingestion_task_is_parseable_and_linked_to_planning_files() -> N
     assert "task_plan.md" in artifact.planning_refs
     assert "findings.md" in artifact.planning_refs
     assert "progress.md" in artifact.planning_refs
+    _assert_repo_root_relative_refs_exist(artifact.planning_refs)
     assert "docs/research/codex-autorunner-adaptive-ingestion-2026-03-28.md" in artifact.evidence

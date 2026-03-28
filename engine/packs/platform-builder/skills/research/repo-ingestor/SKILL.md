@@ -30,8 +30,10 @@ When incorporating testing repos (e.g., `Snowflake-Labs/agent-world-model`):
 
 ### 4. Durable Ingestion Tracking
 - When a repo-ingestion or remediation effort needs durable tracking, create or update a
-  frontmatter-backed artifact from `docs/research/templates/INGESTION_TASK_TEMPLATE.md`.
+  frontmatter-backed artifact from the repository-root-relative template
+  `docs/research/templates/INGESTION_TASK_TEMPLATE.md`.
 - Keep the artifact minimal: stable `task_id`, `owner`, `status`, `acceptance_criteria`,
-  and `evidence`, plus links back to `task_plan.md`, `findings.md`, and `progress.md`.
+  and `evidence`, plus repository-root-relative links back to `task_plan.md`,
+  `findings.md`, and `progress.md`.
 - Do not turn the artifact into a second queue or a ticket system; the root planning files
   remain the source of truth for session sequencing.

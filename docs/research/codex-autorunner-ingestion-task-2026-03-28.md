@@ -11,7 +11,7 @@ summary: >
 acceptance_criteria:
   - Publish the repo analysis and the recommended adoption boundary.
   - Convert approved contract work into roadmap-backed slices with scoped PRs.
-  - Keep the ingestion artifact linked to task_plan.md, findings.md, and progress.md.
+  - Keep the ingestion artifact linked to repository-root planning files task_plan.md, findings.md, and progress.md.
 evidence:
   - docs/research/codex-autorunner-adaptive-ingestion-2026-03-28.md
   - docs/research/session116-p1-runtime-boundaries-scope.md
@@ -20,6 +20,7 @@ evidence:
   - docs/research/session116-p4-operator-runbooks-scope.md
   - docs/research/session116-p5-ingestion-artifacts-scope.md
 planning_refs:
+  # repository-root-relative paths; resolve these from the repository root.
   - task_plan.md
   - findings.md
   - progress.md
@@ -41,7 +42,8 @@ adopted the contract-focused parts of the analysis through Cluster 0 slices
 - Boundary enforcement, state-root authority, compatibility drift detection, and
   operator runbooks were already landed before this artifact closed.
 - This file exists to keep the repo-ingestion decision durable without duplicating
-  the full execution queue that remains in the root planning files.
+  the full execution queue that remains in the root planning files, which are
+  referenced here using repository-root-relative paths.
 
 ## Deferred Follow-ups
 
