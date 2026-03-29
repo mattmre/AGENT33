@@ -1273,6 +1273,12 @@ class TestEffortConfigValidation:
                 agent_effort_heuristic_large_payload_chars=1000,
             )
 
+    def test_pricing_catalog_overrides_requires_json_array(self) -> None:
+        with pytest.raises(
+            ValidationError, match="pricing_catalog_overrides must be a JSON array"
+        ):
+            Settings(pricing_catalog_overrides='{"provider":"openai"}')
+
 
 class TestPhase49FastPathPreFilter:
     """Phase 49: fast-path pre-filter for short simple messages."""
@@ -1455,6 +1461,10 @@ class TestPhase49PricingIntegration:
         # So: (2/1M * 1000) + (8/1M * 1000) = 0.002 + 0.008 = 0.01
         assert decision.estimated_cost is not None
         assert decision.estimated_cost == pytest.approx(0.01, abs=1e-6)
+        assert decision.estimated_cost_status == "estimated"
+        assert decision.estimated_cost_source == "official_docs_snapshot"
+        assert decision.estimated_cost_source_url == "https://openai.com/api/pricing/"
+        assert decision.estimated_cost_fetched_at is not None
 
     def test_resolve_without_provider_uses_legacy_flat_rate(self) -> None:
         """Without provider param, legacy cost_per_1k_tokens is used."""
@@ -1473,6 +1483,9 @@ class TestPhase49PricingIntegration:
         # Legacy: (1000/1000) * 0.25 = 0.25
         assert decision.estimated_cost is not None
         assert decision.estimated_cost == pytest.approx(0.25, abs=1e-6)
+        assert decision.estimated_cost_source == "legacy_flat_rate"
+        assert decision.estimated_cost_status == "estimated"
+        assert decision.estimated_cost_source_url is None
 
     def test_resolve_with_unknown_provider_model_falls_back_to_flat_rate(self) -> None:
         """Unknown provider+model with flat rate falls back to flat rate."""
@@ -1493,6 +1506,7 @@ class TestPhase49PricingIntegration:
         # (2000/1000) * 0.1 = 0.2
         assert decision.estimated_cost is not None
         assert decision.estimated_cost == pytest.approx(0.2, abs=1e-6)
+        assert decision.estimated_cost_source == "legacy_flat_rate"
 
     def test_resolve_ollama_model_is_free(self) -> None:
         """Ollama models should estimate at $0 via the pricing catalog."""
@@ -1511,6 +1525,7 @@ class TestPhase49PricingIntegration:
         # Ollama wildcard: $0 for everything
         assert decision.estimated_cost is not None
         assert decision.estimated_cost == 0.0
+        assert decision.estimated_cost_source == "official_docs_snapshot"
 
 
 class TestPhase49WiringFixes:
@@ -1617,6 +1632,13 @@ class TestPhase49WiringFixes:
         # gpt-4.1: input=$2/M, output=$8/M; budget=1000 tokens
         # Cost = (2/1M * 1000) + (8/1M * 1000) = 0.01
         assert result.routing_decision["estimated_cost"] == pytest.approx(0.01, abs=1e-6)
+        assert result.routing_decision["estimated_cost_source"] == "official_docs_snapshot"
+        assert result.routing_decision["estimated_cost_status"] == "estimated"
+        assert (
+            result.routing_decision["estimated_cost_source_url"]
+            == "https://openai.com/api/pricing/"
+        )
+        assert result.routing_decision["estimated_cost_fetched_at"] is not None
 
     async def test_runtime_handles_unregistered_provider_gracefully(self) -> None:
         """When model_router.route() raises ValueError, provider is None."""
@@ -1652,6 +1674,7 @@ class TestPhase49WiringFixes:
         assert result.routing_decision["estimated_cost"] is not None
         # Legacy flat rate: (500/1000) * 0.1 = 0.05
         assert result.routing_decision["estimated_cost"] == pytest.approx(0.05, abs=1e-6)
+        assert result.routing_decision["estimated_cost_source"] == "legacy_flat_rate"
 
     async def test_runtime_provider_identity_resolution(self) -> None:
         """Provider name resolved by identity comparison against router.providers."""
@@ -1695,3 +1718,4 @@ class TestPhase49WiringFixes:
         cost = result.routing_decision["estimated_cost"]
         assert cost is not None
         assert cost > 0.0  # openai/gpt-4.1 is not free
+        assert result.routing_decision["estimated_cost_source"] == "official_docs_snapshot"

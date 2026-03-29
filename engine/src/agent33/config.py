@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from pydantic import SecretStr, field_validator, model_validator
@@ -215,6 +216,8 @@ class Settings(BaseSettings):
     # Phase 49: fast-path pre-filter thresholds for simple messages
     heuristic_simple_max_chars: int = 160
     heuristic_simple_max_words: int = 28
+    pricing_catalog_overrides: str = ""
+    """Optional JSON array of pricing override entries applied at startup."""
     # Rolling-window metrics (P3.6)
     metrics_rolling_window_seconds: int = 300  # 5-minute rolling window for observations
 
@@ -624,6 +627,19 @@ class Settings(BaseSettings):
     def _validate_phase30_heuristic_thresholds(cls, value: int) -> int:
         if value < 0:
             raise ValueError("agent effort heuristic settings must be non-negative")
+        return value
+
+    @field_validator("pricing_catalog_overrides")
+    @classmethod
+    def _validate_pricing_catalog_overrides(cls, value: str) -> str:
+        if not value.strip():
+            return value
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("pricing_catalog_overrides must be valid JSON") from exc
+        if not isinstance(parsed, list):
+            raise ValueError("pricing_catalog_overrides must be a JSON array")
         return value
 
     @model_validator(mode="after")

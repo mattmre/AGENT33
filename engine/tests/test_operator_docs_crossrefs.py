@@ -20,6 +20,7 @@ _OPERATOR_DOCS: dict[str, Path] = {
     "scaling": _OPERATORS_DIR / "horizontal-scaling-architecture.md",
     "slo": _OPERATORS_DIR / "service-level-objectives.md",
     "connector_boundary": _OPERATORS_DIR / "connector-boundary-runbook.md",
+    "pricing_effort": _OPERATORS_DIR / "pricing-and-effort-runbook.md",
     "voice": _OPERATORS_DIR / "voice-daemon-runbook.md",
     "verification": _OPERATORS_DIR / "operator-verification-runbook.md",
     "process_registry": _OPERATORS_DIR / "process-registry-runbook.md",
@@ -89,6 +90,9 @@ class TestOperatorDocLinksResolve:
     def test_slo_links_resolve(self) -> None:
         self._check_links(_OPERATOR_DOCS["slo"])
 
+    def test_pricing_effort_links_resolve(self) -> None:
+        self._check_links(_OPERATOR_DOCS["pricing_effort"])
+
     def test_voice_links_resolve(self) -> None:
         self._check_links(_OPERATOR_DOCS["voice"])
 
@@ -138,6 +142,9 @@ class TestOperatorDocAnchors:
 
     def test_connector_boundary_anchors(self) -> None:
         self._check_anchors(_OPERATOR_DOCS["connector_boundary"])
+
+    def test_pricing_effort_anchors(self) -> None:
+        self._check_anchors(_OPERATOR_DOCS["pricing_effort"])
 
     def test_verification_anchors(self) -> None:
         self._check_anchors(_OPERATOR_DOCS["verification"])
@@ -213,6 +220,14 @@ class TestCriticalCrossReferences:
     def test_slo_links_to_alert_rules(self) -> None:
         content = _OPERATOR_DOCS["slo"].read_text(encoding="utf-8")
         assert "agent33-alerts.rules.yaml" in content
+
+    def test_slo_links_to_pricing_effort_runbook(self) -> None:
+        content = _OPERATOR_DOCS["slo"].read_text(encoding="utf-8")
+        assert "pricing-and-effort-runbook.md" in content
+
+    def test_pricing_effort_runbook_links_to_slo(self) -> None:
+        content = _OPERATOR_DOCS["pricing_effort"].read_text(encoding="utf-8")
+        assert "service-level-objectives.md" in content
 
     def test_incident_links_to_alert_rules(self) -> None:
         content = _OPERATOR_DOCS["incident"].read_text(encoding="utf-8")

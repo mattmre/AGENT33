@@ -349,7 +349,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     dashboard.set_alert_manager(alert_manager)
 
     # -- Session analytics (Phase 57) -----------------------------------------
+    from agent33.llm.pricing import apply_pricing_overrides_json
     from agent33.observability.metrics import CostTracker
+
+    applied_pricing_overrides = apply_pricing_overrides_json(settings.pricing_catalog_overrides)
+    if applied_pricing_overrides:
+        logger.info("pricing_catalog_overrides_applied count=%d", applied_pricing_overrides)
 
     cost_tracker = CostTracker()  # uses PricingCatalog by default (no legacy pricing dict)
     app.state.cost_tracker = cost_tracker

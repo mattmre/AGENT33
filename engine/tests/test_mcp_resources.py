@@ -137,6 +137,7 @@ class TestMCPResourceContract:
             "agent33://tool-catalog",
             "agent33://proxy-servers",
             "agent33://policy-pack",
+            "agent33://pricing-catalog",
             "agent33://schema-index",
         ]
 
@@ -237,6 +238,84 @@ class TestMCPResourceContract:
         assert payload["tool_schema_index"]["count"] == 1
         assert payload["tool_schema_index"]["items"][0]["name"] == "shell"
 
+    async def test_pricing_catalog_resource_serializes_pricing_and_heuristic_contract(
+        self, monkeypatch
+    ) -> None:
+        from agent33.mcp_server.resources import handle_read_resource
+
+        monkeypatch.setattr("agent33.config.settings.agent_effort_routing_enabled", True)
+        monkeypatch.setattr("agent33.config.settings.agent_effort_default", "medium")
+        monkeypatch.setattr("agent33.config.settings.heuristic_simple_max_chars", 144)
+        monkeypatch.setattr("agent33.config.settings.heuristic_simple_max_words", 21)
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_low_score_threshold", 1
+        )
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_high_score_threshold", 4
+        )
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_medium_payload_chars", 750
+        )
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_large_payload_chars", 1800
+        )
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_many_input_fields_threshold",
+            8,
+        )
+        monkeypatch.setattr(
+            "agent33.config.settings.agent_effort_heuristic_high_iteration_threshold", 12
+        )
+        monkeypatch.setattr("agent33.config.settings.agent_effort_low_model", "gpt-4.1-mini")
+        monkeypatch.setattr("agent33.config.settings.agent_effort_medium_model", "")
+        monkeypatch.setattr("agent33.config.settings.agent_effort_high_model", "gpt-4.1")
+        monkeypatch.setattr("agent33.config.settings.agent_effort_low_token_multiplier", 0.5)
+        monkeypatch.setattr("agent33.config.settings.agent_effort_medium_token_multiplier", 1.0)
+        monkeypatch.setattr("agent33.config.settings.agent_effort_high_token_multiplier", 1.5)
+        monkeypatch.setattr("agent33.config.settings.agent_effort_cost_per_1k_tokens", 0.25)
+
+        payload = json.loads(
+            await handle_read_resource(_make_bridge(), "agent33://pricing-catalog")
+        )
+
+        assert payload["entry_count"] >= 25
+        assert payload["override_count"] == 0
+        assert payload["catalog_snapshot_fetched_at"] is not None
+        assert payload["cost_estimation_policy"] == {
+            "prefers_per_model_catalog_when_provider_resolves": True,
+            "flat_rate_fallback_cost_per_1k_tokens": 0.25,
+            "unknown_model_behavior": (
+                "estimated_cost is omitted when neither the catalog nor the flat-rate fallback "
+                "can produce a value"
+            ),
+        }
+        assert payload["heuristic_policy"] == {
+            "enabled": True,
+            "default_effort": "medium",
+            "simple_message_fast_path": {"max_chars": 144, "max_words": 21},
+            "score_thresholds": {"low": 1, "high": 4},
+            "payload_thresholds": {"medium_chars": 750, "large_chars": 1800},
+            "many_input_fields_threshold": 8,
+            "high_iteration_threshold": 12,
+            "model_overrides": {
+                "low": "gpt-4.1-mini",
+                "medium": None,
+                "high": "gpt-4.1",
+            },
+            "token_multipliers": {"low": 0.5, "medium": 1.0, "high": 1.5},
+        }
+
+        gpt41 = next(
+            entry
+            for entry in payload["entries"]
+            if entry["provider"] == "openai" and entry["model"] == "gpt-4.1"
+        )
+        assert gpt41["input_cost_per_million"] == "2"
+        assert gpt41["output_cost_per_million"] == "8"
+        assert gpt41["source"] == "official_docs_snapshot"
+        assert gpt41["source_url"] == "https://openai.com/api/pricing/"
+        assert gpt41["fetched_at"] is not None
+
     async def test_agent_template_uses_agent_identifier(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource
 
@@ -297,6 +376,7 @@ class TestResourceRegistration:
             "agent33://tool-catalog",
             "agent33://proxy-servers",
             "agent33://policy-pack",
+            "agent33://pricing-catalog",
             "agent33://schema-index",
         ]
         assert [str(template.uriTemplate) for template in templates] == [

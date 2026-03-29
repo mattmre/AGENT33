@@ -10,6 +10,7 @@ Use this document with:
 
 - [`production-deployment-runbook.md`](production-deployment-runbook.md)
 - [`connector-boundary-runbook.md`](connector-boundary-runbook.md)
+- [`pricing-and-effort-runbook.md`](pricing-and-effort-runbook.md)
 - [`incident-response-playbooks.md`](incident-response-playbooks.md)
 - [`../../deploy/monitoring/README.md`](../../deploy/monitoring/README.md)
 - [`../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml`](../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml)

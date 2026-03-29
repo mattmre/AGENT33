@@ -12,6 +12,7 @@ Phase 49 — Hermes Adoption Roadmap.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -380,6 +381,12 @@ class PricingCatalog:
 
         return None
 
+    def list_effective_entries(self) -> list[tuple[str, str, PricingEntry]]:
+        """Return the effective catalog entries after applying overrides."""
+        merged = dict(_BUILTIN_PRICING)
+        merged.update(self._overrides)
+        return [(provider, model, entry) for (provider, model), entry in sorted(merged.items())]
+
     @property
     def builtin_models(self) -> list[tuple[str, str]]:
         """Return list of (provider, model) keys in the builtin table."""
@@ -393,6 +400,63 @@ _default_catalog = PricingCatalog()
 def get_default_catalog() -> PricingCatalog:
     """Return the module-level default pricing catalog."""
     return _default_catalog
+
+
+def apply_pricing_overrides_json(
+    raw: str,
+    *,
+    catalog: PricingCatalog | None = None,
+) -> int:
+    """Apply startup pricing overrides from a JSON array."""
+    if not raw.strip():
+        return 0
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("pricing_catalog_overrides must be valid JSON") from exc
+
+    if not isinstance(data, list):
+        raise ValueError("pricing_catalog_overrides must be a JSON array")
+
+    target_catalog = catalog or _default_catalog
+    applied = 0
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"pricing_catalog_overrides[{index}] must be an object")
+
+        provider = str(item.get("provider", "")).strip().lower()
+        model = str(item.get("model", "")).strip().lower()
+        if not provider or not model:
+            raise ValueError(
+                f"pricing_catalog_overrides[{index}] must include non-empty provider and model"
+            )
+
+        fetched_at_raw = str(item.get("fetched_at", "")).strip()
+        fetched_at = (
+            datetime.fromisoformat(fetched_at_raw.replace("Z", "+00:00"))
+            if fetched_at_raw
+            else None
+        )
+        target_catalog.set_override(
+            provider,
+            model,
+            PricingEntry(
+                input_cost_per_million=Decimal(str(item["input_cost_per_million"])),
+                output_cost_per_million=Decimal(str(item["output_cost_per_million"])),
+                cache_read_cost_per_million=Decimal(
+                    str(item.get("cache_read_cost_per_million", "0"))
+                ),
+                cache_write_cost_per_million=Decimal(
+                    str(item.get("cache_write_cost_per_million", "0"))
+                ),
+                source=CostSource.USER_OVERRIDE,
+                source_url=str(item.get("source_url", "")).strip(),
+                fetched_at=fetched_at,
+            ),
+        )
+        applied += 1
+    return applied
 
 
 def estimate_cost(

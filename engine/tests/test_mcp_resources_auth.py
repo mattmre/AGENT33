@@ -40,6 +40,10 @@ class TestMCPAuthMappings:
         assert (
             get_required_scope_for_resource("agent33://policy-pack") == "component-security:read"
         )
+        assert (
+            get_required_scope_for_resource("agent33://pricing-catalog")
+            == "component-security:read"
+        )
         assert get_required_scope_for_resource("agent33://agents/AGT-001") == "agents:read"
         assert get_required_scope_for_resource("agent33://workflows/release") == "workflows:read"
 
@@ -66,6 +70,13 @@ class TestMCPAuthEnforcement:
         from agent33.mcp_server.auth import enforce_resource_scope
 
         enforce_resource_scope(_make_server("component-security:read"), "agent33://policy-pack")
+
+    def test_enforce_resource_scope_allows_component_security_pricing_catalog(self) -> None:
+        from agent33.mcp_server.auth import enforce_resource_scope
+
+        enforce_resource_scope(
+            _make_server("component-security:read"), "agent33://pricing-catalog"
+        )
 
     def test_unknown_tool_defaults_to_deny(self) -> None:
         from agent33.mcp_server.auth import enforce_tool_scope
@@ -176,7 +187,7 @@ class TestResourceReadHandlerAuth:
         server = _MockMCPServer()
 
         def _before_list(identifier: str) -> None:
-            if identifier == "agent33://policy-pack":
+            if identifier in {"agent33://policy-pack", "agent33://pricing-catalog"}:
                 raise PermissionError("blocked")
 
         with (
@@ -202,3 +213,4 @@ class TestResourceReadHandlerAuth:
 
         resources = await server.handlers["list_resources"]()
         assert all(str(resource.uri) != "agent33://policy-pack" for resource in resources)
+        assert all(str(resource.uri) != "agent33://pricing-catalog" for resource in resources)

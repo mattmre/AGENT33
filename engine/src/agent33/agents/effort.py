@@ -79,6 +79,10 @@ class EffortRoutingDecision:
     token_multiplier: float
     estimated_token_budget: int
     estimated_cost: float | None
+    estimated_cost_status: str | None = None
+    estimated_cost_source: str | None = None
+    estimated_cost_source_url: str | None = None
+    estimated_cost_fetched_at: str | None = None
     tenant_id: str | None = None
     domain: str | None = None
     policy_key: str | None = None
@@ -99,6 +103,17 @@ class EffortHeuristicDecision:
     low_threshold: int
     high_threshold: int
     reasons: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class EffortCostEstimate:
+    """Resolved cost estimate plus provenance metadata."""
+
+    amount: float
+    status: str
+    source: str
+    source_url: str | None
+    fetched_at: str | None
 
 
 class AgentEffortRouter:
@@ -392,27 +407,42 @@ class AgentEffortRouter:
         model: str,
         provider: str | None,
         token_budget: int,
-    ) -> float | None:
+    ) -> EffortCostEstimate | None:
         """Compute estimated cost, preferring pricing catalog over flat rate.
 
         If a ``provider`` is given, tries the per-model pricing catalog first.
         Falls back to the legacy ``cost_per_1k_tokens`` flat rate.
         """
         if provider:
-            from agent33.llm.pricing import CostStatus, estimate_cost
+            from agent33.llm.pricing import CostStatus, estimate_cost, get_default_catalog
 
+            catalog = get_default_catalog()
             result = estimate_cost(
                 model=model,
                 provider=provider,
                 input_tokens=token_budget,
                 output_tokens=token_budget,
+                catalog=catalog,
             )
-            if result.status != CostStatus.UNKNOWN:
-                return float(result.amount_usd)
+            entry = catalog.lookup(provider, model)
+            if result.status != CostStatus.UNKNOWN and entry is not None:
+                return EffortCostEstimate(
+                    amount=float(result.amount_usd),
+                    status=result.status.value,
+                    source=entry.source.value,
+                    source_url=entry.source_url or None,
+                    fetched_at=entry.fetched_at.isoformat() if entry.fetched_at else None,
+                )
 
         # Legacy flat-rate fallback
         if self._cost_per_1k_tokens > 0:
-            return round((token_budget / 1000.0) * self._cost_per_1k_tokens, 6)
+            return EffortCostEstimate(
+                amount=round((token_budget / 1000.0) * self._cost_per_1k_tokens, 6),
+                status="estimated",
+                source="legacy_flat_rate",
+                source_url=None,
+                fetched_at=None,
+            )
         return None
 
     def resolve(
@@ -474,6 +504,7 @@ class AgentEffortRouter:
 
         if not self._enabled:
             effective_model = requested_model or default_model
+            cost_estimate = self._estimate_cost_for_tokens(effective_model, provider, max_tokens)
             return EffortRoutingDecision(
                 effort=resolved_effort,
                 effort_source=effort_source,
@@ -481,8 +512,14 @@ class AgentEffortRouter:
                 max_tokens=max_tokens,
                 token_multiplier=1.0,
                 estimated_token_budget=max_tokens,
-                estimated_cost=self._estimate_cost_for_tokens(
-                    effective_model, provider, max_tokens
+                estimated_cost=cost_estimate.amount if cost_estimate is not None else None,
+                estimated_cost_status=cost_estimate.status if cost_estimate is not None else None,
+                estimated_cost_source=cost_estimate.source if cost_estimate is not None else None,
+                estimated_cost_source_url=(
+                    cost_estimate.source_url if cost_estimate is not None else None
+                ),
+                estimated_cost_fetched_at=(
+                    cost_estimate.fetched_at if cost_estimate is not None else None
                 ),
                 tenant_id=normalized_tenant or None,
                 domain=normalized_domain or None,
@@ -507,9 +544,7 @@ class AgentEffortRouter:
         selected_model = requested_model or self._models[resolved_effort] or default_model
         multiplier = self._token_multipliers[resolved_effort]
         routed_max_tokens = max(1, int(max_tokens * multiplier))
-        estimated_cost = self._estimate_cost_for_tokens(
-            selected_model, provider, routed_max_tokens
-        )
+        cost_estimate = self._estimate_cost_for_tokens(selected_model, provider, routed_max_tokens)
         return EffortRoutingDecision(
             effort=resolved_effort,
             effort_source=effort_source,
@@ -517,7 +552,15 @@ class AgentEffortRouter:
             max_tokens=routed_max_tokens,
             token_multiplier=multiplier,
             estimated_token_budget=routed_max_tokens,
-            estimated_cost=estimated_cost,
+            estimated_cost=cost_estimate.amount if cost_estimate is not None else None,
+            estimated_cost_status=cost_estimate.status if cost_estimate is not None else None,
+            estimated_cost_source=cost_estimate.source if cost_estimate is not None else None,
+            estimated_cost_source_url=(
+                cost_estimate.source_url if cost_estimate is not None else None
+            ),
+            estimated_cost_fetched_at=(
+                cost_estimate.fetched_at if cost_estimate is not None else None
+            ),
             tenant_id=normalized_tenant or None,
             domain=normalized_domain or None,
             policy_key=policy_key,

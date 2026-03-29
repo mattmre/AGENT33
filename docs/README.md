@@ -16,14 +16,15 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 8. [Connector Boundary Runbook](operators/connector-boundary-runbook.md)
 9. [Horizontal Scaling Architecture](operators/horizontal-scaling-architecture.md)
 10. [Incident Response Playbooks](operators/incident-response-playbooks.md)
-11. [Service Level Objectives](operators/service-level-objectives.md)
-12. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
-13. [Use Cases](use-cases.md)
-14. [Functionality and Workflows](functionality-and-workflows.md)
-15. [API Surface](api-surface.md)
-16. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
-17. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
-18. [Phase 22 PR Checkpoints](prs/README.md)
+11. [Pricing And Effort Runbook](operators/pricing-and-effort-runbook.md)
+12. [Service Level Objectives](operators/service-level-objectives.md)
+13. [Phase 22 Surface Validation](validation/phase22-phase25-27-surface-validation.md)
+14. [Use Cases](use-cases.md)
+15. [Functionality and Workflows](functionality-and-workflows.md)
+16. [API Surface](api-surface.md)
+17. [PR Review (2026-02-15)](pr-review-2026-02-15.md)
+18. [Phase 22 Progress Log](progress/phase-22-ui-log.md)
+19. [Phase 22 PR Checkpoints](prs/README.md)
 
 ## Runtime Snapshot
 
@@ -46,6 +47,7 @@ This `docs/` directory is the canonical documentation set for AGENT-33.
 | `operators/operator-verification-runbook.md` | Canonical authenticated verification order for operator status, doctor, process inventory, and backup safety checks |
 | `operators/process-registry-runbook.md` | Current `/v1/processes` contract, restart-to-`interrupted` recovery path, and bounded cleanup guidance |
 | `operators/connector-boundary-runbook.md` | Connector middleware order, breaker cooldown policy, retry semantics, and `/v1/connectors` inspection workflow |
+| `operators/pricing-and-effort-runbook.md` | Auditable pricing-catalog provenance, live effort-router thresholds, and fast-path verification steps |
 | `operators/horizontal-scaling-architecture.md` | Current replica-safety contract, state-boundary map, blocking globals, and `P1.2` migration sequence for multi-replica rollout |
 | `operators/incident-response-playbooks.md` | First incident-response playbooks for API outages, degraded dependencies, evaluation regressions, and webhook backlog incidents |
 | `operators/service-level-objectives.md` | Current internal SLO baseline, error-budget policy, guardrail mapping, and deferred-objective inventory |

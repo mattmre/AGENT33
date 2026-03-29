@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from agent33.config import settings
 from agent33.connectors import boundary as connector_boundary
+from agent33.llm.pricing import get_default_catalog
 from agent33.tools.schema import get_tool_schema
 
 if TYPE_CHECKING:
@@ -51,6 +52,12 @@ STATIC_RESOURCES: list[dict[str, str]] = [
         "uri": "agent33://policy-pack",
         "name": "Policy Pack",
         "description": "Configured and effective connector-boundary policy data.",
+        "mimeType": "application/json",
+    },
+    {
+        "uri": "agent33://pricing-catalog",
+        "name": "Pricing Catalog",
+        "description": "Auditable per-model pricing provenance and live effort-routing settings.",
         "mimeType": "application/json",
     },
     {
@@ -107,6 +114,8 @@ async def handle_read_resource(bridge: MCPServiceBridge, uri: str) -> str:
         payload = _read_proxy_servers(bridge)
     elif uri == "agent33://policy-pack":
         payload = _read_policy_pack()
+    elif uri == "agent33://pricing-catalog":
+        payload = _read_pricing_catalog()
     elif uri == "agent33://schema-index":
         payload = _read_schema_index(bridge)
     elif uri.startswith("agent33://agents/"):
@@ -271,6 +280,78 @@ def _read_policy_pack() -> dict[str, Any]:
             "blocked_operations": sorted(
                 pack_blocked_operations.union(configured_blocked_operations)
             ),
+        },
+    }
+
+
+def _read_pricing_catalog() -> dict[str, Any]:
+    catalog = get_default_catalog()
+    entries: list[dict[str, Any]] = []
+    snapshot_dates: list[str] = []
+    override_count = 0
+
+    for provider, model, entry in catalog.list_effective_entries():
+        fetched_at = entry.fetched_at.isoformat() if entry.fetched_at is not None else None
+        if fetched_at is not None:
+            snapshot_dates.append(fetched_at)
+        if entry.source.value == "user_override":
+            override_count += 1
+        entries.append(
+            {
+                "provider": provider,
+                "model": model,
+                "input_cost_per_million": str(entry.input_cost_per_million),
+                "output_cost_per_million": str(entry.output_cost_per_million),
+                "cache_read_cost_per_million": str(entry.cache_read_cost_per_million),
+                "cache_write_cost_per_million": str(entry.cache_write_cost_per_million),
+                "source": entry.source.value,
+                "source_url": entry.source_url,
+                "fetched_at": fetched_at,
+            }
+        )
+
+    return {
+        "entry_count": len(entries),
+        "override_count": override_count,
+        "catalog_snapshot_fetched_at": max(snapshot_dates) if snapshot_dates else None,
+        "entries": entries,
+        "cost_estimation_policy": {
+            "prefers_per_model_catalog_when_provider_resolves": True,
+            "flat_rate_fallback_cost_per_1k_tokens": settings.agent_effort_cost_per_1k_tokens,
+            "unknown_model_behavior": (
+                "estimated_cost is omitted when neither the catalog nor the flat-rate fallback "
+                "can produce a value"
+            ),
+        },
+        "heuristic_policy": {
+            "enabled": settings.agent_effort_routing_enabled,
+            "default_effort": settings.agent_effort_default,
+            "simple_message_fast_path": {
+                "max_chars": settings.heuristic_simple_max_chars,
+                "max_words": settings.heuristic_simple_max_words,
+            },
+            "score_thresholds": {
+                "low": settings.agent_effort_heuristic_low_score_threshold,
+                "high": settings.agent_effort_heuristic_high_score_threshold,
+            },
+            "payload_thresholds": {
+                "medium_chars": settings.agent_effort_heuristic_medium_payload_chars,
+                "large_chars": settings.agent_effort_heuristic_large_payload_chars,
+            },
+            "many_input_fields_threshold": (
+                settings.agent_effort_heuristic_many_input_fields_threshold
+            ),
+            "high_iteration_threshold": settings.agent_effort_heuristic_high_iteration_threshold,
+            "model_overrides": {
+                "low": settings.agent_effort_low_model or None,
+                "medium": settings.agent_effort_medium_model or None,
+                "high": settings.agent_effort_high_model or None,
+            },
+            "token_multipliers": {
+                "low": settings.agent_effort_low_token_multiplier,
+                "medium": settings.agent_effort_medium_token_multiplier,
+                "high": settings.agent_effort_high_token_multiplier,
+            },
         },
     }
 
