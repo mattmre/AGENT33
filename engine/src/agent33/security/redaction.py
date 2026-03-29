@@ -57,6 +57,20 @@ _PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
             r'"\s*:\s*"([^"]+)"'
         ),
     ),
+    (
+        "cli_secret_flag",
+        re.compile(
+            r"(?i)"
+            r"((?:--?|/)(?:api[-_]?key|secret|token|password|credential)(?:\s+|=))"
+            r"(?:"
+            r'"([^"]+)"'
+            r"|"
+            r"'([^']+)'"
+            r"|"
+            r"([^\s]+)"
+            r")"
+        ),
+    ),
     # --- Auth headers ---
     (
         "auth_header",
@@ -124,6 +138,14 @@ def redact_secrets(text: str, *, enabled: bool = True) -> str:
                 return full.replace(val, _mask_token(val))
 
             result = pattern.sub(_json_replacer, result)
+        elif name == "cli_secret_flag":
+            # Preserve the flag and quoting, redact only the value.
+            def _cli_replacer(m: re.Match[str]) -> str:
+                value = m.group(2) or m.group(3) or m.group(4) or ""
+                quote = '"' if m.group(2) is not None else "'" if m.group(3) is not None else ""
+                return f"{m.group(1)}{quote}{_mask_token(value)}{quote}"
+
+            result = pattern.sub(_cli_replacer, result)
         elif name == "auth_header":
             # Preserve "Authorization: Bearer ", mask the token.
             result = pattern.sub(lambda m: m.group(1) + "***", result)

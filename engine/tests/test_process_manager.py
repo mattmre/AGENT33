@@ -67,6 +67,32 @@ async def test_process_lifecycle_and_log_tail(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio()
+async def test_process_command_log_and_state_are_redacted(tmp_path: Path) -> None:
+    state_store = OrchestrationStateStore(str(tmp_path / "state.json"))
+    service = ProcessManagerService(
+        workspace_root=tmp_path,
+        log_dir=tmp_path / "logs",
+        state_store=state_store,
+        max_processes=4,
+    )
+    secret = "sk-ant-" + "a" * 30
+    try:
+        record = await service.start(_python_command(f'print("token={secret}", flush=True)'))
+        status, log_tail = await _wait_for_terminal(service, record.process_id)
+        assert status == ManagedProcessStatus.COMPLETED
+        assert secret not in record.command
+        stored = service.get_process(record.process_id)
+        assert secret not in stored.command
+        assert secret not in log_tail
+
+        payload = state_store.read_namespace("managed_processes")
+        persisted = payload["records"][0]
+        assert secret not in persisted["command"]
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio()
 async def test_process_write_stdin_and_cleanup(tmp_path: Path) -> None:
     service = ProcessManagerService(
         workspace_root=tmp_path,

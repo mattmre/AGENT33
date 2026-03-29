@@ -99,12 +99,14 @@ async def test_processes_auth_enforced(async_client: httpx.AsyncClient) -> None:
 @pytest.mark.asyncio()
 async def test_start_list_get_log_and_cleanup(async_client: httpx.AsyncClient) -> None:
     headers = _auth_headers(scopes=["processes:read", "processes:manage", "tools:execute"])
+    secret = "sk-ant-" + "a" * 30
     start = await async_client.post(
         "/v1/processes",
-        json={"command": _python_command('print("api-alpha", flush=True)')},
+        json={"command": _python_command(f'print("api-alpha {secret}", flush=True)')},
         headers=headers,
     )
     assert start.status_code == 200
+    assert secret not in start.json()["command"]
     process_id = start.json()["process_id"]
 
     deadline = time.monotonic() + 5.0
@@ -116,14 +118,17 @@ async def test_start_list_get_log_and_cleanup(async_client: httpx.AsyncClient) -
             break
         await asyncio.sleep(0.05)
     assert current["status"] == "completed"
+    assert secret not in current["command"]
 
     listing = await async_client.get("/v1/processes", headers=headers)
     assert listing.status_code == 200
     assert listing.json()["count"] >= 1
+    assert all(secret not in process["command"] for process in listing.json()["processes"])
 
     log_resp = await async_client.get(f"/v1/processes/{process_id}/log", headers=headers)
     assert log_resp.status_code == 200
     assert "api-alpha" in log_resp.json()["content"]
+    assert secret not in log_resp.json()["content"]
 
     cleanup = await async_client.post(
         "/v1/processes/cleanup",
