@@ -1,13 +1,13 @@
 # Next Session Briefing
 
-Last updated: 2026-03-29 (post-Session-116 P14 merge)
+Last updated: 2026-03-29 (post-Session-116 wrap merge)
 
 ## Current State
 
 - **Branch posture**: root checkout is intentionally dirty and may lag `origin/main`; do not implement from it directly
 - **Open PRs**: 0
-- **Latest merged PR**: #353
-- **Latest commit on main**: `e734513`
+- **Latest merged PR**: #354
+- **Latest commit on main**: `8f7ecba`
 - **Canonical roadmap**: `docs/phases/ROADMAP-REBASE-2026-03-26.md`
 - **Latest committed session log on clean `main`**: `docs/sessions/session-116-2026-03-29.md`
 
