@@ -219,6 +219,17 @@ def _read_policy_pack() -> dict[str, Any]:
     configured_blocked_operations = _parse_csv_set(
         settings.connector_governance_blocked_operations
     )
+    logical_middleware_order = [
+        "governance",
+        "timeout",
+        "retry",
+        "circuit_breaker",
+        "metrics",
+    ]
+    active_middleware_order = ["governance", "timeout"]
+    if settings.connector_circuit_breaker_enabled:
+        active_middleware_order.append("circuit_breaker")
+    active_middleware_order.append("metrics")
 
     return {
         "connector_boundary_enabled": settings.connector_boundary_enabled,
@@ -231,6 +242,27 @@ def _read_policy_pack() -> dict[str, Any]:
         "pack_defaults": {
             "blocked_connectors": sorted(pack_blocked_connectors),
             "blocked_operations": sorted(pack_blocked_operations),
+        },
+        "logical_middleware_order": logical_middleware_order,
+        "active_middleware_order": active_middleware_order,
+        "retry_policy": {
+            "default_retry_attempts": 1,
+            "enabled_when_retry_attempts_gt_one": True,
+            "default_behavior": "no automatic retry unless a caller opts into retry_attempts > 1",
+            "non_retryable_failures": [
+                "governance_denied",
+                "circuit_open",
+            ],
+            "middleware_position": logical_middleware_order.index("retry"),
+        },
+        "circuit_breaker_policy": {
+            "enabled": settings.connector_circuit_breaker_enabled,
+            "failure_threshold": settings.connector_circuit_failure_threshold,
+            "recovery_timeout_seconds": settings.connector_circuit_recovery_seconds,
+            "half_open_success_threshold": settings.connector_circuit_half_open_successes,
+            "max_recovery_timeout_seconds": settings.connector_circuit_max_recovery_seconds,
+            "recovery_backoff": "progressive_exponential_capped",
+            "middleware_position": logical_middleware_order.index("circuit_breaker"),
         },
         "effective_policy": {
             "blocked_connectors": sorted(

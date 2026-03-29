@@ -32,7 +32,10 @@ class CircuitBreakerSnapshot(BaseModel):
     last_trip_at: float | None = None
     failure_threshold: int = 3
     recovery_timeout_seconds: float = 30.0
-    half_open_success_threshold: int = 1
+    half_open_success_threshold: int = 2
+    max_recovery_timeout_seconds: float = 300.0
+    effective_recovery_timeout_seconds: float = 30.0
+    cooldown_remaining_seconds: float = 0.0
 
 
 class ConnectorMetricsSummary(BaseModel):

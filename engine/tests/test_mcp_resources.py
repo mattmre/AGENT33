@@ -176,6 +176,13 @@ class TestMCPResourceContract:
 
         monkeypatch.setattr("agent33.config.settings.connector_boundary_enabled", True)
         monkeypatch.setattr("agent33.config.settings.connector_policy_pack", "mcp-readonly")
+        monkeypatch.setattr("agent33.config.settings.connector_circuit_breaker_enabled", True)
+        monkeypatch.setattr("agent33.config.settings.connector_circuit_failure_threshold", 5)
+        monkeypatch.setattr("agent33.config.settings.connector_circuit_recovery_seconds", 45.0)
+        monkeypatch.setattr("agent33.config.settings.connector_circuit_half_open_successes", 2)
+        monkeypatch.setattr(
+            "agent33.config.settings.connector_circuit_max_recovery_seconds", 180.0
+        )
         monkeypatch.setattr(
             "agent33.config.settings.connector_governance_blocked_connectors",
             "tool:web_fetch",
@@ -190,6 +197,36 @@ class TestMCPResourceContract:
         assert "tools/call" in payload["effective_policy"]["blocked_operations"]
         assert "resources/read" in payload["effective_policy"]["blocked_operations"]
         assert "tool:web_fetch" in payload["effective_policy"]["blocked_connectors"]
+        assert payload["logical_middleware_order"] == [
+            "governance",
+            "timeout",
+            "retry",
+            "circuit_breaker",
+            "metrics",
+        ]
+        assert payload["active_middleware_order"] == [
+            "governance",
+            "timeout",
+            "circuit_breaker",
+            "metrics",
+        ]
+        assert payload["retry_policy"]["default_retry_attempts"] == 1
+        assert payload["retry_policy"]["enabled_when_retry_attempts_gt_one"] is True
+        assert payload["retry_policy"]["default_behavior"].startswith("no automatic retry")
+        assert payload["retry_policy"]["middleware_position"] == 2
+        assert payload["retry_policy"]["non_retryable_failures"] == [
+            "governance_denied",
+            "circuit_open",
+        ]
+        assert payload["circuit_breaker_policy"] == {
+            "enabled": True,
+            "failure_threshold": 5,
+            "recovery_timeout_seconds": 45.0,
+            "half_open_success_threshold": 2,
+            "max_recovery_timeout_seconds": 180.0,
+            "recovery_backoff": "progressive_exponential_capped",
+            "middleware_position": 3,
+        }
 
     async def test_schema_index_contains_agent_workflow_and_tool_schema_data(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource

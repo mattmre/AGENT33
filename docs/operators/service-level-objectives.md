@@ -9,6 +9,7 @@ on `main`.
 Use this document with:
 
 - [`production-deployment-runbook.md`](production-deployment-runbook.md)
+- [`connector-boundary-runbook.md`](connector-boundary-runbook.md)
 - [`incident-response-playbooks.md`](incident-response-playbooks.md)
 - [`../../deploy/monitoring/README.md`](../../deploy/monitoring/README.md)
 - [`../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml`](../../deploy/monitoring/prometheus/agent33-alerts.rules.yaml)
@@ -180,6 +181,9 @@ Definition:
 
 The `execute_messaging_boundary_call()` function emits connector metrics for
 each health check and message send operation through the boundary middleware.
+Use [`connector-boundary-runbook.md`](connector-boundary-runbook.md) when
+`/v1/connectors` shows an open circuit and you need to interpret
+`effective_recovery_timeout_seconds` or `cooldown_remaining_seconds`.
 
 Alert: `Agent33ConnectorUnhealthy` fires when the 5-minute health check failure
 rate exceeds 5% for 5 consecutive minutes.
