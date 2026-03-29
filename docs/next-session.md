@@ -65,7 +65,7 @@ slices.
 - **Context compression replaces, not duplicates, summarization behavior**
 - **Dual pricing path**: `CostTracker` uses `PricingCatalog` in production, dict fallback in tests
 - **Fail-open pattern**: observability features log and continue instead of failing the main operation
-- **event_sink callback pattern**: optional `Callable[[Any], Awaitable[None]]` for streaming relay
+- **event_sink callback pattern**: keep the async relay pattern, but finish the Loop 3 hardening from `Callable[[Any], Awaitable[None]]` to `Callable[[ToolLoopEvent], Awaitable[None]]`
 
 ## Environmental Notes
 

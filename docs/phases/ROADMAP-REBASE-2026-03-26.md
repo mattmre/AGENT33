@@ -25,7 +25,7 @@ Already shipped on `main`:
 - `A5` Phase 50 via PR `#316`
 - `A6` Phase 51 via PR `#288`
 - `A7` Phase 57 via PRs `#287`, `#318`, and `#339`
-- Cluster B (`B1`-`B5`) via PRs `#320`, `#282`, `#321`, `#323`, `#322`, `#319`, `#327`, and `#336`
+- Cluster B (`B1`-`B5`) via PRs `#320`, `#321`, `#323`, `#322`, `#319`, `#327`, and `#336`
 - Cluster C `C1` Phase 35 via PR `#324`
 
 Queue items that looked unfinished from the dirty root checkout but are already merged:
