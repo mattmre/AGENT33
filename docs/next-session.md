@@ -8,9 +8,8 @@ Last updated: 2026-03-29 (post-Session-116 queue reconciliation audit)
 - **Open PRs**: 0
 - **Latest merged PR**: #351
 - **Latest commit on main**: `3fa40bc`
-- **Cumulative PRs merged**: 351
 - **Canonical roadmap**: `docs/phases/ROADMAP-REBASE-2026-03-26.md`
-- **Latest committed session log**: `docs/sessions/session-115-2026-03-27.md`
+- **Latest committed session log on clean `main`**: `docs/sessions/session-111-2026-03-26.md`
 
 ## What Main Already Includes
 
@@ -53,12 +52,11 @@ slices.
 ## Key References
 
 - Canonical roadmap: `docs/phases/ROADMAP-REBASE-2026-03-26.md`
+- Queue reconciliation audit: `docs/research/session116-p13-queue-reconciliation-audit.md`
 - Queue reconciliation memo: `docs/research/session116-p13-queue-reconciliation-scope.md`
 - SkillsBench blocker report: `docs/research/session114-d7-skillsbench-readiness-report.md`
-- ARCH-AEP Loop 3 report: `docs/research/session115-s10-arch-aep-loop3.md`
-- Session 113 log: `docs/sessions/session-113-2026-03-26.md`
-- Session 114 log: `docs/sessions/session-114-2026-03-27.md`
-- Session 115 log: `docs/sessions/session-115-2026-03-27.md`
+- Active execution queue: `task_plan.md`
+- Active execution log: `progress.md`
 
 ## Architectural Decisions Still In Force
 

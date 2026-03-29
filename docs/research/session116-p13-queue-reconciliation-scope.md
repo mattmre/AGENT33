@@ -13,7 +13,7 @@ Reconcile the canonical roadmap and `docs/next-session.md` against the actual me
   - `A5` Phase 50 via `#316`
   - `A6` Phase 51 via `#288`
   - `A7` Phase 57 via `#287`, `#318`, and `#339`
-  - Cluster B via `#320`, `#282`, `#323`, `#322`, `#319`, `#327`, and `#336`
+  - Cluster B via `#320`, `#282`, `#321`, `#323`, `#322`, `#319`, `#327`, and `#336`
   - `C1` Phase 35 via `#324`
 - The real remaining queue is now follow-up work: evaluation, integration hardening, ARCH-AEP
   medium findings, and status reconciliation for parked phase docs.
