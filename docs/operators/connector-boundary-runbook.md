@@ -15,19 +15,25 @@ Use this document with:
 ## Middleware Order
 
 The default connector boundary executor is built in
-`engine/src/agent33/connectors/boundary.py` with this order:
+`engine/src/agent33/connectors/boundary.py` with this logical order:
 
 1. governance
 2. timeout
 3. retry
+   Active only when a caller explicitly uses `retry_attempts > 1`.
 4. circuit breaker
+   Active only when `CONNECTOR_CIRCUIT_BREAKER_ENABLED=true`.
 5. metrics
+
+In other words, the call path is:
+
+`governance -> timeout -> [retry if enabled] -> [circuit breaker if enabled] -> metrics`
 
 This order is intentional:
 
 - governance denies before any outbound work
-- timeout and retry wrap the downstream call path
-- the circuit breaker records terminal failures and blocks open circuits
+- timeout and retry, when enabled, wrap the downstream call path
+- the circuit breaker, when enabled, records terminal failures and blocks open circuits
 - metrics record the final success/failure outcome and latency
 
 ## Current Breaker Policy

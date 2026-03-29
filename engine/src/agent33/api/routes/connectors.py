@@ -32,23 +32,24 @@ def _build_circuit_snapshot(breaker: Any) -> CircuitBreakerSnapshot:
     if hasattr(breaker, "snapshot"):
         return CircuitBreakerSnapshot(**breaker.snapshot())
 
+    recovery_timeout = getattr(breaker, "recovery_timeout_seconds", 30.0)
     effective_timeout = getattr(
         breaker,
         "effective_recovery_timeout",
-        getattr(breaker, "recovery_timeout_seconds", 30.0),
+        recovery_timeout,
     )
     return CircuitBreakerSnapshot(
-        state=breaker.state.value,
-        consecutive_failures=breaker.consecutive_failures,
+        state=getattr(getattr(breaker, "state", None), "value", "unknown"),
+        consecutive_failures=getattr(breaker, "consecutive_failures", 0),
         total_trips=getattr(breaker, "total_trips", 0),
         last_trip_at=getattr(breaker, "last_trip_at", None),
-        failure_threshold=breaker.failure_threshold,
-        recovery_timeout_seconds=breaker.recovery_timeout_seconds,
-        half_open_success_threshold=breaker.half_open_success_threshold,
+        failure_threshold=getattr(breaker, "failure_threshold", 3),
+        recovery_timeout_seconds=recovery_timeout,
+        half_open_success_threshold=getattr(breaker, "half_open_success_threshold", 2),
         max_recovery_timeout_seconds=getattr(
             breaker,
             "max_recovery_timeout_seconds",
-            breaker.recovery_timeout_seconds,
+            recovery_timeout,
         ),
         effective_recovery_timeout_seconds=effective_timeout,
         cooldown_remaining_seconds=max(

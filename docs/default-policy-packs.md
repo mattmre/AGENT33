@@ -21,16 +21,21 @@ So explicit blocklists still work exactly as before.
 
 ## Middleware order
 
-The shipped connector boundary executes in this order:
+The shipped connector boundary follows this logical order when each middleware
+is enabled:
 
 1. governance
 2. timeout
 3. retry
+   Active only when a caller explicitly uses `retry_attempts > 1`.
 4. circuit breaker
+   Active only when `CONNECTOR_CIRCUIT_BREAKER_ENABLED=true`.
 5. metrics
 
-This is the same order surfaced through the `agent33://policy-pack` MCP
-resource for operator inspection.
+The `agent33://policy-pack` MCP resource publishes both:
+
+- `logical_middleware_order` for the canonical ordering contract
+- `active_middleware_order` for the current settings-driven chain shape
 
 ## Retry policy
 
@@ -66,7 +71,7 @@ The MCP resource `agent33://policy-pack` is the stable inspection surface for:
 
 - configured policy pack
 - configured and effective governance blocklists
-- middleware order
+- logical and active middleware order
 - retry policy
 - circuit breaker policy
 

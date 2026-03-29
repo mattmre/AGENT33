@@ -197,16 +197,23 @@ class TestMCPResourceContract:
         assert "tools/call" in payload["effective_policy"]["blocked_operations"]
         assert "resources/read" in payload["effective_policy"]["blocked_operations"]
         assert "tool:web_fetch" in payload["effective_policy"]["blocked_connectors"]
-        assert payload["middleware_order"] == [
+        assert payload["logical_middleware_order"] == [
             "governance",
             "timeout",
             "retry",
             "circuit_breaker",
             "metrics",
         ]
+        assert payload["active_middleware_order"] == [
+            "governance",
+            "timeout",
+            "circuit_breaker",
+            "metrics",
+        ]
         assert payload["retry_policy"]["default_retry_attempts"] == 1
         assert payload["retry_policy"]["enabled_when_retry_attempts_gt_one"] is True
         assert payload["retry_policy"]["default_behavior"].startswith("no automatic retry")
+        assert payload["retry_policy"]["middleware_position"] == 2
         assert payload["retry_policy"]["non_retryable_failures"] == [
             "governance_denied",
             "circuit_open",
@@ -218,6 +225,7 @@ class TestMCPResourceContract:
             "half_open_success_threshold": 2,
             "max_recovery_timeout_seconds": 180.0,
             "recovery_backoff": "progressive_exponential_capped",
+            "middleware_position": 3,
         }
 
     async def test_schema_index_contains_agent_workflow_and_tool_schema_data(self) -> None:
