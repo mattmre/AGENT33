@@ -33,10 +33,10 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 | 28 | Enterprise Security Scanning Integration | Security/Product Safety | `PHASE-28-PENTAGI-COMPONENT-SECURITY-TESTING-INTEGRATION.md` |
 | 29 | Reasoning Protocol & ISC | Intelligence/Runtime | See `PHASE-29-33-WORKFLOW-PLAN.md` (merged: PR #55, #57) |
 | 30 | Strategic User Outcome Improvement Loops | Adaptive Execution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core routing work merged; remaining work is refinement/verification) |
-| 31 | Continuous Learning & Signal Capture | Intelligence/Memory | See `PHASE-29-33-WORKFLOW-PLAN.md` (signal capture + persistence/quality hardening merged in PR `#109`; analytics/tuning follow-ups remain) |
-| 32 | Middleware Chain, MCP Connectors & Circuit Breakers | Extensibility/Integration | See `PHASE-29-33-WORKFLOW-PLAN.md` (H01/H02 merged via PRs `#98` and `#100`; hardening/operational follow-ups remain) |
+| 31 | Continuous Learning & Signal Capture | Intelligence/Memory | See `PHASE-29-33-WORKFLOW-PLAN.md` (signal capture + persistence/quality hardening merged in PR `#109`; tuning/runtime coherence follow-up merged in PR `#348`) |
+| 32 | Middleware Chain, MCP Connectors & Circuit Breakers | Extensibility/Integration | See `PHASE-29-33-WORKFLOW-PLAN.md` (H01/H02 merged via PRs `#98` and `#100`; residual contract-hardening follow-up merged in PR `#349`) |
 | 33 | Skill Packs & Distribution | Ecosystem/Distribution | See `PHASE-29-33-WORKFLOW-PLAN.md` (core implementation merged via PR `#103`; any future ecosystem work should be tracked as a new scoped slice) |
-| 35 | Multimodal Async-Governance Convergence | Runtime/Governance | No plan file (core merged in PR `#85`; regression convergence merged in PR `#99`) |
+| 35 | Multimodal Async-Governance Convergence | Runtime/Governance | No plan file (core merged in PR `#85`; regression convergence merged in PR `#99`; voice sidecar finalization merged in PR `#324`) |
 
 | 36 | Text-Based Tool Call Parsing | Runtime/LLM | `qwen-adoption-phases.md` (merged: PR #133) |
 | 37 | Multimodal Content Blocks | Runtime/LLM | `qwen-adoption-phases.md` (merged: PR #135) |
@@ -53,6 +53,7 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 - `PHASE-11-20-WORKFLOW-PLAN.md` (extended sequencing and task mapping)
 - `PHASE-21-24-WORKFLOW-PLAN.md` (post-core product/access sequencing)
 - `PHASE-29-33-WORKFLOW-PLAN.md` (agent intelligence + extensibility sequencing)
+- `ROADMAP-REBASE-2026-03-26.md` (merged-baseline checkpoint and current remaining priority queue)
 - `qwen-adoption-phases.md` (Qwen-Agent competitive adaptation — Phases 36-43)
 
 ## Notes
