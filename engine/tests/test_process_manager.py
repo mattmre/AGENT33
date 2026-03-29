@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import agent33.processes.service as process_service_module
 from agent33.processes.models import ManagedProcessStatus
 from agent33.processes.service import (
     ManagedProcessNotFoundError,
@@ -64,6 +65,60 @@ async def test_process_lifecycle_and_log_tail(tmp_path: Path) -> None:
         assert listing[0].process_id == record.process_id
     finally:
         await service.shutdown()
+
+
+@pytest.mark.asyncio()
+async def test_process_command_log_and_state_are_redacted(tmp_path: Path) -> None:
+    state_store = OrchestrationStateStore(str(tmp_path / "state.json"))
+    service = ProcessManagerService(
+        workspace_root=tmp_path,
+        log_dir=tmp_path / "logs",
+        state_store=state_store,
+        max_processes=4,
+    )
+    secret = "sk-ant-" + "a" * 30
+    try:
+        record = await service.start(_python_command(f'print("token={secret}", flush=True)'))
+        status, log_tail = await _wait_for_terminal(service, record.process_id)
+        assert status == ManagedProcessStatus.COMPLETED
+        assert secret not in record.command
+        stored = service.get_process(record.process_id)
+        assert secret not in stored.command
+        assert secret not in log_tail
+
+        payload = state_store.read_namespace("managed_processes")
+        persisted = payload["records"][0]
+        assert secret not in persisted["command"]
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio()
+async def test_command_not_found_error_uses_redacted_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = ProcessManagerService(
+        workspace_root=tmp_path,
+        log_dir=tmp_path / "logs",
+        max_processes=4,
+    )
+
+    async def _boom(*args: object, **kwargs: object) -> object:
+        raise FileNotFoundError("missing")
+
+    if sys.platform == "win32":
+        monkeypatch.setattr(process_service_module.asyncio, "create_subprocess_shell", _boom)
+    else:
+        monkeypatch.setattr(process_service_module.asyncio, "create_subprocess_exec", _boom)
+
+    command = "runner --password=example-placeholder-value-12345"
+    with pytest.raises(ProcessValidationError, match="Command not found: ") as excinfo:
+        await service.start(command)
+
+    message = str(excinfo.value)
+    assert "example-placeholder-value-12345" not in message
+    assert "runner --password=" in message
+    assert "..." in message or "***" in message
 
 
 @pytest.mark.asyncio()

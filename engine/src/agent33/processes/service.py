@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError
 
 from agent33.processes.models import ManagedProcessRecord, ManagedProcessStatus
+from agent33.security.redaction import redact_secrets
 
 if TYPE_CHECKING:
     from agent33.services.orchestration_state import OrchestrationStateStore
@@ -49,6 +50,21 @@ class _RuntimeProcessHandle:
 
 def _new_process_id() -> str:
     return f"PROC-{uuid.uuid4().hex[:12]}"
+
+
+def _redact_process_text(value: str) -> str:
+    """Apply Phase 52 secret redaction to process-visible text."""
+    return redact_secrets(value, enabled=True)
+
+
+def _sanitize_process_record(record: ManagedProcessRecord) -> ManagedProcessRecord:
+    """Return a copy safe for persistence and operator-facing reads."""
+    return record.model_copy(
+        update={
+            "command": _redact_process_text(record.command),
+            "last_error": _redact_process_text(record.last_error),
+        }
+    )
 
 
 class ProcessManagerService:
@@ -133,13 +149,15 @@ class ProcessManagerService:
         except ValueError as exc:
             raise ProcessValidationError(f"Invalid command syntax: {exc}") from exc
         except FileNotFoundError as exc:
-            raise ProcessValidationError(f"Command not found: {normalized_command}") from exc
+            redacted_command = _redact_process_text(normalized_command)
+            raise ProcessValidationError(f"Command not found: {redacted_command}") from exc
         except OSError as exc:
-            raise ProcessValidationError(f"Failed to start command: {exc}") from exc
+            message = _redact_process_text(f"Failed to start command: {exc}")
+            raise ProcessValidationError(message) from exc
 
         record = ManagedProcessRecord(
             process_id=process_id,
-            command=normalized_command,
+            command=_redact_process_text(normalized_command),
             status=ManagedProcessStatus.RUNNING,
             pid=proc.pid,
             agent_id=agent_id,
@@ -185,7 +203,7 @@ class ProcessManagerService:
         records.sort(key=lambda item: item.started_at, reverse=True)
         start = max(0, offset)
         end = start + max(1, limit)
-        return [record.model_copy(deep=True) for record in records[start:end]]
+        return [_sanitize_process_record(record) for record in records[start:end]]
 
     def count_processes(
         self,
@@ -212,7 +230,7 @@ class ProcessManagerService:
             raise ManagedProcessNotFoundError(process_id)
         if tenant_id and record.tenant_id != tenant_id:
             raise ManagedProcessNotFoundError(process_id)
-        return record.model_copy(deep=True)
+        return _sanitize_process_record(record)
 
     def read_log(self, process_id: str, *, tenant_id: str = "", tail: int = 200) -> str:
         """Return the last *tail* log lines for a visible process."""
@@ -220,7 +238,7 @@ class ProcessManagerService:
         log_path = Path(record.log_path)
         if not log_path.exists():
             return ""
-        content = log_path.read_text(encoding="utf-8", errors="replace")
+        content = _redact_process_text(log_path.read_text(encoding="utf-8", errors="replace"))
         lines = content.splitlines()
         capped_tail = max(1, min(tail, 2000))
         return "\n".join(lines[-capped_tail:])
@@ -374,8 +392,9 @@ class ProcessManagerService:
         lock = self._log_locks.setdefault(process_id, asyncio.Lock())
         async with lock:
             log_path = self._log_path(process_id)
+            safe_text = _redact_process_text(text)
             with log_path.open("a", encoding="utf-8") as handle:
-                handle.write(text)
+                handle.write(safe_text)
             self._truncate_log_if_needed(log_path)
 
     def _truncate_log_if_needed(self, log_path: Path) -> None:
@@ -421,7 +440,12 @@ class ProcessManagerService:
             return
         self._state_store.write_namespace(
             self._NAMESPACE,
-            {"records": [record.model_dump(mode="json") for record in self._records.values()]},
+            {
+                "records": [
+                    _sanitize_process_record(record).model_dump(mode="json")
+                    for record in self._records.values()
+                ]
+            },
         )
 
     def _load_state(self) -> None:
@@ -432,13 +456,19 @@ class ProcessManagerService:
         if not isinstance(records_payload, list):
             return
         loaded: dict[str, ManagedProcessRecord] = {}
+        changed = False
         for item in records_payload:
             try:
                 record = ManagedProcessRecord.model_validate(item)
             except ValidationError:
                 continue
-            loaded[record.process_id] = record
+            sanitized = _sanitize_process_record(record)
+            if sanitized.command != record.command or sanitized.last_error != record.last_error:
+                changed = True
+            loaded[record.process_id] = sanitized
         self._records = loaded
+        if changed:
+            self._persist_state()
 
     def _recover_interrupted(self) -> None:
         changed = False

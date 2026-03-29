@@ -188,6 +188,26 @@ class TestStructuredSecretPatterns:
         result = redact_secrets(text)
         assert "tok_abcdef1234567890xyz" not in result
 
+    def test_cli_secret_flag_space_delimited(self) -> None:
+        token = "sk-ant-" + "a" * 30
+        text = f"python worker.py --api-key {token}"
+        result = redact_secrets(text)
+        assert token not in result
+        assert "--api-key " in result
+
+    def test_cli_secret_flag_equals_delimited(self) -> None:
+        password = "example" + "-placeholder-" + "value-12345"
+        text = f"python worker.py --password={password}"
+        result = redact_secrets(text)
+        assert password not in result
+        assert "--password=" in result
+
+    def test_cli_secret_flag_preserves_quotes(self) -> None:
+        text = 'python worker.py --token "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
+        result = redact_secrets(text)
+        assert "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in result
+        assert '--token "' in result
+
     def test_auth_header_bearer(self) -> None:
         text = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"
         result = redact_secrets(text)
@@ -438,6 +458,10 @@ class TestFalsePositiveResistance:
     def test_short_sk_prefix_not_matched(self) -> None:
         # "sk-" followed by < 20 chars should not match OpenAI pattern
         text = "sk-short"
+        assert redact_secrets(text) == text
+
+    def test_non_secret_cli_flag_unchanged(self) -> None:
+        text = "python worker.py --tokenizer qwen"
         assert redact_secrets(text) == text
 
     def test_normal_json_field_unchanged(self) -> None:

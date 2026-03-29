@@ -28,6 +28,8 @@ _PROCESS_STRINGS = {
     "tool governance",
     "status_filter=interrupted",
     "interrupted",
+    "redacted command",
+    "prefix...suffix",
     "processes.py",
     "service.py",
 }

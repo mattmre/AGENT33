@@ -45,6 +45,13 @@ Observed statuses are:
 - `terminated`
 - `interrupted`
 
+Phase 52 contract note:
+
+- process `command`, `last_error`, and `/log` content are redacted before
+  persistence and again on readback
+- expect masked values such as `***` or `prefix...suffix` instead of raw tokens
+  when a command line or subprocess output contains secrets
+
 ## Canonical Inventory Command
 
 Use this as the first authenticated process-registry check:
@@ -109,7 +116,7 @@ Then follow this checklist:
 
 1. Capture each interrupted `process_id`.
 2. Inspect `/v1/processes/{process_id}` and `/log` to confirm the last known
-   command and failure context.
+   redacted command and failure context.
 3. Decide whether the command should be re-run from its owning workflow/session
    instead of assuming the platform can resume it in place.
 4. Clean up stale interrupted records only after the owning workflow or operator
