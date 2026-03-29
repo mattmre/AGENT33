@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from agent33.agents.definition import AgentCapability, AgentDefinition, AgentRole
 from agent33.agents.registry import AgentRegistry
+from agent33.llm.pricing import CostSource, PricingCatalog, PricingEntry
 from agent33.mcp_server.bridge import MCPServiceBridge
 from agent33.mcp_server.proxy_child import ChildServerHandle, ChildServerState, ProxyToolDefinition
 from agent33.mcp_server.proxy_manager import ProxyManager
@@ -315,6 +318,38 @@ class TestMCPResourceContract:
         assert gpt41["source"] == "official_docs_snapshot"
         assert gpt41["source_url"] == "https://openai.com/api/pricing/"
         assert gpt41["fetched_at"] is not None
+
+    async def test_pricing_catalog_resource_uses_datetime_order_for_snapshot(self) -> None:
+        from agent33.mcp_server.resources import handle_read_resource
+
+        catalog = PricingCatalog()
+        catalog.set_override(
+            "openai",
+            "gpt-4.1",
+            PricingEntry(
+                input_cost_per_million=Decimal("9"),
+                output_cost_per_million=Decimal("19"),
+                source=CostSource.USER_OVERRIDE,
+                fetched_at=datetime.fromisoformat("2026-03-29T08:00:00+02:00"),
+            ),
+        )
+        catalog.set_override(
+            "openai",
+            "gpt-4.1-mini",
+            PricingEntry(
+                input_cost_per_million=Decimal("1"),
+                output_cost_per_million=Decimal("2"),
+                source=CostSource.USER_OVERRIDE,
+                fetched_at=datetime.fromisoformat("2026-03-29T07:30:00+00:00"),
+            ),
+        )
+
+        with patch("agent33.mcp_server.resources.get_default_catalog", return_value=catalog):
+            payload = json.loads(
+                await handle_read_resource(_make_bridge(), "agent33://pricing-catalog")
+            )
+
+        assert payload["catalog_snapshot_fetched_at"] == "2026-03-29T07:30:00+00:00"
 
     async def test_agent_template_uses_agent_identifier(self) -> None:
         from agent33.mcp_server.resources import handle_read_resource

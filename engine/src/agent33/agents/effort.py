@@ -445,6 +445,25 @@ class AgentEffortRouter:
             )
         return None
 
+    @staticmethod
+    def _serialize_cost_estimate(cost_estimate: EffortCostEstimate | None) -> dict[str, Any]:
+        """Normalize cost metadata for EffortRoutingDecision construction."""
+        if cost_estimate is None:
+            return {
+                "estimated_cost": None,
+                "estimated_cost_status": None,
+                "estimated_cost_source": None,
+                "estimated_cost_source_url": None,
+                "estimated_cost_fetched_at": None,
+            }
+        return {
+            "estimated_cost": cost_estimate.amount,
+            "estimated_cost_status": cost_estimate.status,
+            "estimated_cost_source": cost_estimate.source,
+            "estimated_cost_source_url": cost_estimate.source_url,
+            "estimated_cost_fetched_at": cost_estimate.fetched_at,
+        }
+
     def resolve(
         self,
         *,
@@ -512,15 +531,7 @@ class AgentEffortRouter:
                 max_tokens=max_tokens,
                 token_multiplier=1.0,
                 estimated_token_budget=max_tokens,
-                estimated_cost=cost_estimate.amount if cost_estimate is not None else None,
-                estimated_cost_status=cost_estimate.status if cost_estimate is not None else None,
-                estimated_cost_source=cost_estimate.source if cost_estimate is not None else None,
-                estimated_cost_source_url=(
-                    cost_estimate.source_url if cost_estimate is not None else None
-                ),
-                estimated_cost_fetched_at=(
-                    cost_estimate.fetched_at if cost_estimate is not None else None
-                ),
+                **self._serialize_cost_estimate(cost_estimate),
                 tenant_id=normalized_tenant or None,
                 domain=normalized_domain or None,
                 policy_key=policy_key,
@@ -552,15 +563,7 @@ class AgentEffortRouter:
             max_tokens=routed_max_tokens,
             token_multiplier=multiplier,
             estimated_token_budget=routed_max_tokens,
-            estimated_cost=cost_estimate.amount if cost_estimate is not None else None,
-            estimated_cost_status=cost_estimate.status if cost_estimate is not None else None,
-            estimated_cost_source=cost_estimate.source if cost_estimate is not None else None,
-            estimated_cost_source_url=(
-                cost_estimate.source_url if cost_estimate is not None else None
-            ),
-            estimated_cost_fetched_at=(
-                cost_estimate.fetched_at if cost_estimate is not None else None
-            ),
+            **self._serialize_cost_estimate(cost_estimate),
             tenant_id=normalized_tenant or None,
             domain=normalized_domain or None,
             policy_key=policy_key,

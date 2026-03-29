@@ -431,6 +431,12 @@ def apply_pricing_overrides_json(
             raise ValueError(
                 f"pricing_catalog_overrides[{index}] must include non-empty provider and model"
             )
+        if "input_cost_per_million" not in item or "output_cost_per_million" not in item:
+            raise ValueError(
+                "pricing_catalog_overrides"
+                f"[{index}] must include 'input_cost_per_million' and "
+                "'output_cost_per_million'"
+            )
 
         fetched_at_raw = str(item.get("fetched_at", "")).strip()
         fetched_at = (

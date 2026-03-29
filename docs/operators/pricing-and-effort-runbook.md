@@ -84,10 +84,10 @@ economics baseline.
 2. Confirm `catalog_snapshot_fetched_at` is populated and the resource returns
    the expected `entry_count`.
 3. Spot-check the active models you care about. Known examples include:
-   - `openai / gpt-4.1`
-   - `openai / gpt-4.1-mini`
-   - `openai / gpt-4o`
-   - `ollama / llama3.2`
+   - `openai/gpt-4.1`
+   - `openai/gpt-4.1-mini`
+   - `openai/gpt-4o`
+   - `ollama/llama3.2`
 4. Verify each checked row has a non-empty `source_url` unless the provider is
    intentionally local and free (`ollama`, `local`, or `airllm`).
 5. Confirm the live `heuristic_policy.simple_message_fast_path` values match the

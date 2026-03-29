@@ -167,6 +167,17 @@ class TestPricingCatalogLookup:
         with pytest.raises(ValueError, match="pricing_catalog_overrides must be a JSON array"):
             apply_pricing_overrides_json('{"provider":"openai"}', catalog=PricingCatalog())
 
+    def test_apply_pricing_overrides_json_requires_cost_fields(self) -> None:
+        """Missing required cost fields raise a clear validation error."""
+        with pytest.raises(
+            ValueError,
+            match="must include 'input_cost_per_million' and 'output_cost_per_million'",
+        ):
+            apply_pricing_overrides_json(
+                '[{"provider":"openai","model":"gpt-4.1"}]',
+                catalog=PricingCatalog(),
+            )
+
 
 class TestEstimateCost:
     """Verify end-to-end cost estimation arithmetic."""

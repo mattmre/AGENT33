@@ -287,13 +287,15 @@ def _read_policy_pack() -> dict[str, Any]:
 def _read_pricing_catalog() -> dict[str, Any]:
     catalog = get_default_catalog()
     entries: list[dict[str, Any]] = []
-    snapshot_dates: list[str] = []
+    latest_snapshot = None
     override_count = 0
 
     for provider, model, entry in catalog.list_effective_entries():
         fetched_at = entry.fetched_at.isoformat() if entry.fetched_at is not None else None
-        if fetched_at is not None:
-            snapshot_dates.append(fetched_at)
+        if entry.fetched_at is not None and (
+            latest_snapshot is None or entry.fetched_at > latest_snapshot
+        ):
+            latest_snapshot = entry.fetched_at
         if entry.source.value == "user_override":
             override_count += 1
         entries.append(
@@ -313,7 +315,9 @@ def _read_pricing_catalog() -> dict[str, Any]:
     return {
         "entry_count": len(entries),
         "override_count": override_count,
-        "catalog_snapshot_fetched_at": max(snapshot_dates) if snapshot_dates else None,
+        "catalog_snapshot_fetched_at": (
+            latest_snapshot.isoformat() if latest_snapshot is not None else None
+        ),
         "entries": entries,
         "cost_estimation_policy": {
             "prefers_per_model_catalog_when_provider_resolves": True,
