@@ -149,7 +149,8 @@ class ProcessManagerService:
         except ValueError as exc:
             raise ProcessValidationError(f"Invalid command syntax: {exc}") from exc
         except FileNotFoundError as exc:
-            raise ProcessValidationError("Command not found") from exc
+            redacted_command = _redact_process_text(normalized_command)
+            raise ProcessValidationError(f"Command not found: {redacted_command}") from exc
         except OSError as exc:
             message = _redact_process_text(f"Failed to start command: {exc}")
             raise ProcessValidationError(message) from exc

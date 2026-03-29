@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import agent33.processes.service as process_service_module
 from agent33.processes.models import ManagedProcessStatus
 from agent33.processes.service import (
     ManagedProcessNotFoundError,
@@ -90,6 +91,34 @@ async def test_process_command_log_and_state_are_redacted(tmp_path: Path) -> Non
         assert secret not in persisted["command"]
     finally:
         await service.shutdown()
+
+
+@pytest.mark.asyncio()
+async def test_command_not_found_error_uses_redacted_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = ProcessManagerService(
+        workspace_root=tmp_path,
+        log_dir=tmp_path / "logs",
+        max_processes=4,
+    )
+
+    async def _boom(*args: object, **kwargs: object) -> object:
+        raise FileNotFoundError("missing")
+
+    if sys.platform == "win32":
+        monkeypatch.setattr(process_service_module.asyncio, "create_subprocess_shell", _boom)
+    else:
+        monkeypatch.setattr(process_service_module.asyncio, "create_subprocess_exec", _boom)
+
+    command = "runner --password=example-placeholder-value-12345"
+    with pytest.raises(ProcessValidationError, match="Command not found: ") as excinfo:
+        await service.start(command)
+
+    message = str(excinfo.value)
+    assert "example-placeholder-value-12345" not in message
+    assert "runner --password=" in message
+    assert "..." in message or "***" in message
 
 
 @pytest.mark.asyncio()
