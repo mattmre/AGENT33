@@ -1,15 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-03-29 (post-Session-116 queue reconciliation audit)
+Last updated: 2026-03-29 (post-Session-116 P14 merge)
 
 ## Current State
 
 - **Branch posture**: root checkout is intentionally dirty and may lag `origin/main`; do not implement from it directly
 - **Open PRs**: 0
-- **Latest merged PR**: #351
-- **Latest commit on main**: `3fa40bc`
+- **Latest merged PR**: #353
+- **Latest commit on main**: `e734513`
 - **Canonical roadmap**: `docs/phases/ROADMAP-REBASE-2026-03-26.md`
-- **Latest committed session log on clean `main`**: `docs/sessions/session-111-2026-03-26.md`
+- **Latest committed session log on clean `main`**: `docs/sessions/session-116-2026-03-29.md`
 
 ## What Main Already Includes
 
@@ -32,21 +32,17 @@ slices.
    - Blockers remain in `docs/research/session114-d7-skillsbench-readiness-report.md`
    - This is an environment/readiness problem, not an unmerged-code problem
 
-2. **Integration hardening**
-   - Add delegation + skills + MoA end-to-end coverage
-   - Add a PTC through-lifespan integration test
-
-3. **ARCH-AEP Loop 3 medium findings**
+2. **ARCH-AEP Loop 3 medium findings**
    - `_sessions` process-global mutable dict in browser surfaces
    - `_last_accumulated_messages` coupling between tool loop and runtime
    - `ToolContext.event_sink` should be typed to `ToolLoopEvent`
 
-4. **Phase status reconciliation**
+3. **Phase status reconciliation**
    - Reconcile or explicitly park the stale phase-status surfaces for `26`, `27`, `28`, and `33`
 
 ### Optional follow-up only if requested
 
-5. **Audit the older `.claude/worktrees/*` history tree**
+4. **Audit the older `.claude/worktrees/*` history tree**
    - Treat this as a separate hygiene pass
 
 ## Key References
@@ -54,6 +50,8 @@ slices.
 - Canonical roadmap: `docs/phases/ROADMAP-REBASE-2026-03-26.md`
 - Queue reconciliation audit: `docs/research/session116-p13-queue-reconciliation-audit.md`
 - Queue reconciliation memo: `docs/research/session116-p13-queue-reconciliation-scope.md`
+- P14 scope note: `docs/research/session116-p14-integration-hardening-scope.md`
+- Session 116 log: `docs/sessions/session-116-2026-03-29.md`
 - SkillsBench blocker report: `docs/research/session114-d7-skillsbench-readiness-report.md`
 - Active execution queue: `task_plan.md`
 - Active execution log: `progress.md`
@@ -66,6 +64,7 @@ slices.
 - **Dual pricing path**: `CostTracker` uses `PricingCatalog` in production, dict fallback in tests
 - **Fail-open pattern**: observability features log and continue instead of failing the main operation
 - **event_sink callback pattern**: keep the async relay pattern, but finish the Loop 3 hardening from `Callable[[Any], Awaitable[None]]` to `Callable[[ToolLoopEvent], Awaitable[None]]`
+- **Integration hardening P14 is complete**: the live lifespan path now has direct regression coverage for builtin tool-registry wiring, including `ptc_execute`
 
 ## Environmental Notes
 
