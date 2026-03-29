@@ -63,6 +63,28 @@ class TestCircuitBreakerSnapshot:
         assert snap["total_trips"] == 1
         assert snap["last_trip_at"] == 100.0
 
+    def test_snapshot_exposes_effective_and_remaining_cooldown(self) -> None:
+        now = 100.0
+
+        def _clock() -> float:
+            return now
+
+        breaker = CircuitBreaker(
+            failure_threshold=1,
+            recovery_timeout_seconds=10.0,
+            max_recovery_timeout_seconds=80.0,
+            clock=_clock,
+        )
+
+        breaker.before_call()
+        breaker.record_failure()
+        now = 104.0
+
+        snap = breaker.snapshot()
+        assert snap["max_recovery_timeout_seconds"] == 80.0
+        assert snap["effective_recovery_timeout_seconds"] == 10.0
+        assert snap["cooldown_remaining_seconds"] == pytest.approx(6.0, abs=0.01)
+
     def test_total_trips_increments_across_multiple_trips(self) -> None:
         now = 100.0
 
@@ -430,6 +452,9 @@ class TestConnectorRoutes:
         for c in data["connectors"]:
             assert c["circuit"] is not None
             assert c["connector_type"] == "mcp_proxy"
+            assert "max_recovery_timeout_seconds" in c["circuit"]
+            assert "effective_recovery_timeout_seconds" in c["circuit"]
+            assert "cooldown_remaining_seconds" in c["circuit"]
         # Health summary
         assert data["health"]["total"] == 2
         assert data["health"]["healthy"] == 1
@@ -491,6 +516,10 @@ class TestConnectorRoutes:
         assert data["connector_type"] == "mcp_proxy"
         assert data["circuit"] is not None
         assert data["circuit"]["state"] == "closed"
+        assert data["circuit"]["half_open_success_threshold"] == 2
+        assert data["circuit"]["max_recovery_timeout_seconds"] == 300.0
+        assert data["circuit"]["effective_recovery_timeout_seconds"] == 30.0
+        assert data["circuit"]["cooldown_remaining_seconds"] == 0.0
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_install_connector_services")
@@ -699,10 +728,14 @@ class TestPydanticModels:
             failure_threshold=5,
             recovery_timeout_seconds=60.0,
             half_open_success_threshold=2,
+            max_recovery_timeout_seconds=300.0,
+            effective_recovery_timeout_seconds=120.0,
+            cooldown_remaining_seconds=45.0,
         )
         d = snap.model_dump()
         assert d["state"] == "open"
         assert d["total_trips"] == 3
+        assert d["effective_recovery_timeout_seconds"] == 120.0
         rebuilt = CircuitBreakerSnapshot.model_validate(d)
         assert rebuilt == snap
 

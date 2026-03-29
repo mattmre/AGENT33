@@ -232,6 +232,30 @@ def _read_policy_pack() -> dict[str, Any]:
             "blocked_connectors": sorted(pack_blocked_connectors),
             "blocked_operations": sorted(pack_blocked_operations),
         },
+        "middleware_order": [
+            "governance",
+            "timeout",
+            "retry",
+            "circuit_breaker",
+            "metrics",
+        ],
+        "retry_policy": {
+            "default_retry_attempts": 1,
+            "enabled_when_retry_attempts_gt_one": True,
+            "default_behavior": "no automatic retry unless a caller opts into retry_attempts > 1",
+            "non_retryable_failures": [
+                "governance_denied",
+                "circuit_open",
+            ],
+        },
+        "circuit_breaker_policy": {
+            "enabled": settings.connector_circuit_breaker_enabled,
+            "failure_threshold": settings.connector_circuit_failure_threshold,
+            "recovery_timeout_seconds": settings.connector_circuit_recovery_seconds,
+            "half_open_success_threshold": settings.connector_circuit_half_open_successes,
+            "max_recovery_timeout_seconds": settings.connector_circuit_max_recovery_seconds,
+            "recovery_backoff": "progressive_exponential_capped",
+        },
         "effective_policy": {
             "blocked_connectors": sorted(
                 pack_blocked_connectors.union(configured_blocked_connectors)

@@ -131,6 +131,11 @@ class CircuitBreaker:
 
     def snapshot(self) -> dict[str, Any]:
         """Return a serializable dict of the breaker's current state."""
+        effective_timeout = self.effective_recovery_timeout
+        cooldown_remaining = 0.0
+        if self.state == CircuitState.OPEN and self.opened_at is not None:
+            elapsed = self.clock() - self.opened_at
+            cooldown_remaining = max(0.0, effective_timeout - elapsed)
         return {
             "state": self.state.value,
             "consecutive_failures": self.consecutive_failures,
@@ -139,6 +144,9 @@ class CircuitBreaker:
             "failure_threshold": self.failure_threshold,
             "recovery_timeout_seconds": self.recovery_timeout_seconds,
             "half_open_success_threshold": self.half_open_success_threshold,
+            "max_recovery_timeout_seconds": self.max_recovery_timeout_seconds,
+            "effective_recovery_timeout_seconds": effective_timeout,
+            "cooldown_remaining_seconds": cooldown_remaining,
         }
 
 

@@ -23,6 +23,11 @@ For authenticated operator verification after rollout, use:
 
 - [`operator-verification-runbook.md`](operator-verification-runbook.md)
 
+For connector fleet inspection, breaker cooldown interpretation, and retry
+semantics, use:
+
+- [`connector-boundary-runbook.md`](connector-boundary-runbook.md)
+
 For the replica-safety contract and the ordered pre-work required before
 multi-instance rollout, use:
 
@@ -170,7 +175,16 @@ curl http://127.0.0.1:8000/v1/operator/status \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+5. Authenticated connector fleet summary:
+
+```bash
+curl http://127.0.0.1:8000/v1/connectors \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 `/v1/operator/status` requires `operator:read` or `admin`.
+`/v1/connectors` follows the same authenticated operator path documented in
+[`connector-boundary-runbook.md`](connector-boundary-runbook.md).
 
 Expected current checks:
 
@@ -179,6 +193,7 @@ Expected current checks:
 - `/health` includes dependency-aware service states plus `voice_sidecar`,
   `status_line`, and connector fleet summary when configured
 - `/v1/operator/status` exposes the richer authenticated operator inventory
+- `/v1/connectors` exposes per-connector circuit policy and cooldown state
 
 ## Monitoring Checks
 

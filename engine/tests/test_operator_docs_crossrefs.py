@@ -19,6 +19,7 @@ _OPERATOR_DOCS: dict[str, Path] = {
     "incident": _OPERATORS_DIR / "incident-response-playbooks.md",
     "scaling": _OPERATORS_DIR / "horizontal-scaling-architecture.md",
     "slo": _OPERATORS_DIR / "service-level-objectives.md",
+    "connector_boundary": _OPERATORS_DIR / "connector-boundary-runbook.md",
     "voice": _OPERATORS_DIR / "voice-daemon-runbook.md",
     "verification": _OPERATORS_DIR / "operator-verification-runbook.md",
     "process_registry": _OPERATORS_DIR / "process-registry-runbook.md",
@@ -135,6 +136,9 @@ class TestOperatorDocAnchors:
     def test_slo_anchors(self) -> None:
         self._check_anchors(_OPERATOR_DOCS["slo"])
 
+    def test_connector_boundary_anchors(self) -> None:
+        self._check_anchors(_OPERATOR_DOCS["connector_boundary"])
+
     def test_verification_anchors(self) -> None:
         self._check_anchors(_OPERATOR_DOCS["verification"])
 
@@ -237,6 +241,22 @@ class TestCriticalCrossReferences:
     def test_runbook_links_to_slo(self) -> None:
         content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
         assert "service-level-objectives.md" in content
+
+    def test_runbook_links_to_connector_boundary(self) -> None:
+        content = _OPERATOR_DOCS["runbook"].read_text(encoding="utf-8")
+        assert "connector-boundary-runbook.md" in content
+
+    def test_connector_boundary_links_to_runbook(self) -> None:
+        content = _OPERATOR_DOCS["connector_boundary"].read_text(encoding="utf-8")
+        assert "production-deployment-runbook.md" in content
+
+    def test_connector_boundary_links_to_slo(self) -> None:
+        content = _OPERATOR_DOCS["connector_boundary"].read_text(encoding="utf-8")
+        assert "service-level-objectives.md" in content
+
+    def test_connector_boundary_links_to_incident(self) -> None:
+        content = _OPERATOR_DOCS["connector_boundary"].read_text(encoding="utf-8")
+        assert "incident-response-playbooks.md" in content
 
     def test_verification_links_to_runbook(self) -> None:
         content = _OPERATOR_DOCS["verification"].read_text(encoding="utf-8")

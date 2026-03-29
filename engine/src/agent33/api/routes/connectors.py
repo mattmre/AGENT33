@@ -27,6 +27,43 @@ def _get_connector_metrics(request: Request) -> Any:
     return getattr(request.app.state, "connector_metrics", None)
 
 
+def _build_circuit_snapshot(breaker: Any) -> CircuitBreakerSnapshot:
+    """Return a normalized circuit-breaker snapshot for API responses."""
+    if hasattr(breaker, "snapshot"):
+        return CircuitBreakerSnapshot(**breaker.snapshot())
+
+    effective_timeout = getattr(
+        breaker,
+        "effective_recovery_timeout",
+        getattr(breaker, "recovery_timeout_seconds", 30.0),
+    )
+    return CircuitBreakerSnapshot(
+        state=breaker.state.value,
+        consecutive_failures=breaker.consecutive_failures,
+        total_trips=getattr(breaker, "total_trips", 0),
+        last_trip_at=getattr(breaker, "last_trip_at", None),
+        failure_threshold=breaker.failure_threshold,
+        recovery_timeout_seconds=breaker.recovery_timeout_seconds,
+        half_open_success_threshold=breaker.half_open_success_threshold,
+        max_recovery_timeout_seconds=getattr(
+            breaker,
+            "max_recovery_timeout_seconds",
+            breaker.recovery_timeout_seconds,
+        ),
+        effective_recovery_timeout_seconds=effective_timeout,
+        cooldown_remaining_seconds=max(
+            0.0,
+            float(
+                getattr(
+                    breaker,
+                    "cooldown_remaining_seconds",
+                    0.0,
+                )
+            ),
+        ),
+    )
+
+
 def _build_proxy_statuses(proxy_manager: Any) -> list[ConnectorStatus]:
     """Build ConnectorStatus entries from the MCP proxy fleet."""
     statuses: list[ConnectorStatus] = []
@@ -37,18 +74,7 @@ def _build_proxy_statuses(proxy_manager: Any) -> list[ConnectorStatus]:
         server_handle = proxy_manager.get_server(summary["id"])
         if server_handle is not None and hasattr(server_handle, "circuit_breaker"):
             cb = server_handle.circuit_breaker
-            if hasattr(cb, "snapshot"):
-                circuit_snap = CircuitBreakerSnapshot(**cb.snapshot())
-            else:
-                circuit_snap = CircuitBreakerSnapshot(
-                    state=cb.state.value,
-                    consecutive_failures=cb.consecutive_failures,
-                    total_trips=getattr(cb, "total_trips", 0),
-                    last_trip_at=getattr(cb, "last_trip_at", None),
-                    failure_threshold=cb.failure_threshold,
-                    recovery_timeout_seconds=cb.recovery_timeout_seconds,
-                    half_open_success_threshold=cb.half_open_success_threshold,
-                )
+            circuit_snap = _build_circuit_snapshot(cb)
         statuses.append(
             ConnectorStatus(
                 connector_id=summary["id"],
@@ -171,8 +197,7 @@ async def get_connector(request: Request, connector_id: str) -> dict[str, Any]:
             circuit_snap = None
             if hasattr(handle, "circuit_breaker"):
                 cb = handle.circuit_breaker
-                if hasattr(cb, "snapshot"):
-                    circuit_snap = CircuitBreakerSnapshot(**cb.snapshot())
+                circuit_snap = _build_circuit_snapshot(cb)
             metrics = None
             if connector_metrics is not None:
                 raw = connector_metrics.get_connector_metrics(connector_id)
