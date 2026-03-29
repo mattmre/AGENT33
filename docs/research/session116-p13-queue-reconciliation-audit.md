@@ -1,6 +1,6 @@
 # Session 116 P13 Queue Reconciliation Audit
 
-**Date**: 2026-03-29  
+**Date**: 2026-03-29
 **Purpose**: reconcile the stale roadmap/queue docs against the actual merged state on `main`
 
 ## Summary
