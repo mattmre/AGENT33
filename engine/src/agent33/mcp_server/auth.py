@@ -30,6 +30,7 @@ RESOURCE_SCOPES: dict[str, str] = {
     "agent33://agent-registry": "agents:read",
     "agent33://tool-catalog": "agents:read",
     "agent33://policy-pack": "component-security:read",
+    "agent33://pricing-catalog": "component-security:read",
     "agent33://schema-index": "agents:read",
     "agent33://agents/": "agents:read",
     "agent33://tools/": "agents:read",

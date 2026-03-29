@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,7 @@ from agent33.llm.pricing import (
     CostStatus,
     PricingCatalog,
     PricingEntry,
+    apply_pricing_overrides_json,
     estimate_cost,
     get_default_catalog,
 )
@@ -112,6 +114,69 @@ class TestPricingCatalogLookup:
         catalog = get_default_catalog()
         models = catalog.builtin_models
         assert len(models) >= 25  # 18 original + 11 Phase 49 provider entries
+
+    def test_effective_entries_include_user_override_and_builtin_entries(self) -> None:
+        """Effective entry listing applies overrides without dropping builtin rows."""
+        catalog = PricingCatalog()
+        catalog.set_override(
+            "custom",
+            "my-model",
+            PricingEntry(
+                input_cost_per_million=Decimal("1"),
+                output_cost_per_million=Decimal("2"),
+                source=CostSource.USER_OVERRIDE,
+            ),
+        )
+
+        entries = catalog.list_effective_entries()
+
+        assert ("custom", "my-model", catalog.lookup("custom", "my-model")) in entries
+        assert any(provider == "openai" and model == "gpt-4.1" for provider, model, _ in entries)
+
+    def test_apply_pricing_overrides_json_registers_user_override(self) -> None:
+        """Startup pricing overrides can be applied without code edits."""
+        catalog = PricingCatalog()
+
+        applied = apply_pricing_overrides_json(
+            """
+            [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_cost_per_million": "9",
+                "output_cost_per_million": "19",
+                "source_url": "https://example.test/pricing",
+                "fetched_at": "2026-03-29T00:00:00+00:00"
+              }
+            ]
+            """,
+            catalog=catalog,
+        )
+
+        assert applied == 1
+        entry = catalog.lookup("openai", "gpt-4.1")
+        assert entry is not None
+        assert entry.input_cost_per_million == Decimal("9")
+        assert entry.output_cost_per_million == Decimal("19")
+        assert entry.source == CostSource.USER_OVERRIDE
+        assert entry.source_url == "https://example.test/pricing"
+        assert entry.fetched_at == datetime(2026, 3, 29, tzinfo=UTC)
+
+    def test_apply_pricing_overrides_json_requires_array(self) -> None:
+        """Invalid override payloads fail fast during startup validation."""
+        with pytest.raises(ValueError, match="pricing_catalog_overrides must be a JSON array"):
+            apply_pricing_overrides_json('{"provider":"openai"}', catalog=PricingCatalog())
+
+    def test_apply_pricing_overrides_json_requires_cost_fields(self) -> None:
+        """Missing required cost fields raise a clear validation error."""
+        with pytest.raises(
+            ValueError,
+            match="must include 'input_cost_per_million' and 'output_cost_per_million'",
+        ):
+            apply_pricing_overrides_json(
+                '[{"provider":"openai","model":"gpt-4.1"}]',
+                catalog=PricingCatalog(),
+            )
 
 
 class TestEstimateCost:
