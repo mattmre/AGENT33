@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from agent33.tools.registry import ToolRegistry
+
 
 def _make_mock_ltm():
     """Create a mock LongTermMemory instance."""
@@ -190,6 +192,39 @@ class TestLifespanState:
         assert hasattr(app.state, "mcp_transport")
         assert hasattr(app.state, "proxy_manager")
         assert hasattr(app.state, "approval_token_manager")
+
+    def test_state_has_tool_registry(self, patched_app):
+        """Startup should populate the live shared tool registry."""
+        app, _, _ = patched_app
+        assert isinstance(app.state.tool_registry, ToolRegistry)
+
+    def test_builtin_tools_are_registered_with_live_runtime_dependencies(self, patched_app):
+        """Builtin tools should be registered against the startup runtime objects."""
+        from agent33.config import settings
+        from agent33.tools.builtin.browser import BrowserTool
+        from agent33.tools.builtin.delegate_subtask import DelegateSubtaskTool
+        from agent33.tools.builtin.ptc_execute import PTCExecuteTool
+
+        app, _, _ = patched_app
+        registry = app.state.tool_registry
+
+        assert registry.get("apply_patch") is not None
+
+        delegate_tool = registry.get("delegate_subtask")
+        assert isinstance(delegate_tool, DelegateSubtaskTool)
+        assert delegate_tool._router is app.state.model_router
+        assert delegate_tool._tool_registry is registry
+
+        browser_tool = registry.get("browser")
+        assert isinstance(browser_tool, BrowserTool)
+        assert browser_tool._router is app.state.model_router
+
+        assert registry.get("web_search") is not None
+
+        if settings.ptc_enabled:
+            ptc_tool = registry.get("ptc_execute")
+            assert isinstance(ptc_tool, PTCExecuteTool)
+            assert ptc_tool._executor._tool_registry is registry
 
 
 class TestEmbeddingSubsystem:
