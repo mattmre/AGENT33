@@ -61,6 +61,26 @@ def patched_app():
         yield app, client, mock_ltm
 
 
+@pytest.fixture
+def ptc_patched_app():
+    """Like patched_app but with ptc_enabled=True so PTC is registered during lifespan."""
+    from agent33.config import settings
+    from agent33.main import app
+
+    mock_ltm = _make_mock_ltm()
+    mock_nats = _make_mock_nats_bus()
+    mock_redis_mod = _make_mock_redis_module()
+
+    with (
+        patch("agent33.main.LongTermMemory", return_value=mock_ltm),
+        patch("agent33.main.NATSMessageBus", return_value=mock_nats),
+        patch.dict(sys.modules, {"redis": MagicMock(), "redis.asyncio": mock_redis_mod}),
+        patch.object(settings, "ptc_enabled", True),
+        TestClient(app, raise_server_exceptions=False) as client,
+    ):
+        yield app, client, mock_ltm
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -230,22 +250,19 @@ class TestLifespanState:
 class TestPTCExecution:
     """Verify PTC tool wired through lifespan can actually execute code."""
 
-    def test_ptc_execute_tool_runs_safe_expression_via_lifespan(self, patched_app):
+    def test_ptc_execute_tool_runs_safe_expression_via_lifespan(self, ptc_patched_app):
         """PTCExecuteTool wired through lifespan should execute safe code.
 
         This goes beyond registration: it calls execute() with a real Python
         expression and asserts the subprocess produced the expected output.
+        The fixture forces ptc_enabled=True so the test never skips in CI.
         """
         import asyncio
 
-        from agent33.config import settings
         from agent33.tools.base import ToolContext
         from agent33.tools.builtin.ptc_execute import PTCExecuteTool
 
-        app, _, _ = patched_app
-
-        if not settings.ptc_enabled:
-            pytest.skip("ptc_enabled is False")
+        app, _, _ = ptc_patched_app
 
         ptc_tool = app.state.tool_registry.get("ptc_execute")
         assert isinstance(ptc_tool, PTCExecuteTool)
