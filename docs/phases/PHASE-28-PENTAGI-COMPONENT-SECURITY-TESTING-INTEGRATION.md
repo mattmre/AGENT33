@@ -93,6 +93,26 @@ Stages 2-4 can proceed in parallel after Stage 1. Stage 5 depends on Stages 2-4 
 - [ ] UX review for operator clarity (run controls, severity visibility, remediation path).
 - [ ] Release workflow review for safe default gating behavior.
 
+## Reconciliation Note (2026-04-02)
+
+**Status determination**: Complete. The full component security scanning stack (backend service, SARIF converter, MCP scanner, LLM security scanner, API routes, release gate, frontend dashboard) is present on main, with subsequent hardening and persistence fixes.
+
+**Delivered PRs** (chronological):
+- PR #33 -- Stage 1 component security backend (2026-02-17)
+- PR #35 -- Stage 2 profiles and release gate wiring (2026-02-17)
+- PR #39 -- Frontend component-security workspace and run/finding UX (2026-02-17)
+- PR #52 -- Enterprise security scanning integration (2026-02-22)
+- PR #127 -- SQLite persistence, findings dedup, and 90-day retention (2026-03-05)
+- PR #146 -- LLM security adapters (2026-03-06)
+- PR #227 -- Persist component security runs across restarts (2026-03-17)
+- PR #231 -- Stop full store refresh on list runs (perf fix) (2026-03-18)
+- PR #296 -- Wire SecurityScanStore into lifespan with shutdown cleanup (2026-03-26)
+- PR #330 -- Phase status reconciliation marking Complete (2026-03-27)
+
+**Remaining work**: None. This phase is considered complete. Any future security scanning expansion (e.g., additional MCP scanner providers, advanced remediation) would be tracked as a new scoped slice.
+
+**Evidence**: `docs/research/session117-p2-phase-reconciliation.md`
+
 ## References
 - SARIF 2.1.0 specification: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 - Claude Code Security: Anthropic first-party AI vulnerability scanner

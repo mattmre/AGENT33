@@ -95,6 +95,23 @@ Historical note: the original plan sections below are preserved for context. The
 - [ ] UX review confirms readability and operator navigation quality.
 - [ ] Documentation includes concrete command/UI examples and recovery steps.
 
+## Reconciliation Note (2026-04-02)
+
+**Status determination**: Complete. All planned backend and frontend work has shipped.
+
+**Delivered PRs** (chronological):
+- PR #31 -- Stage 1 explanation API scaffolding (2026-02-17)
+- PR #34 -- Stage 2 deterministic fact-check and claims (2026-02-17)
+- PR #38 -- Visual diff/plan/recap page generation endpoints and template pack (2026-02-17)
+- PR #129 -- Explanation domain operations and HTML preview (2026-03-05)
+- PR #168 -- Improvement-cycle wizard UI and workflow template wiring (Phase 26/27 Stage 3) (2026-03-10)
+- PR #330 -- Phase status reconciliation marking Complete (2026-03-27)
+- PR #338 -- 38 backend tests for operations hub service and routes, closing the P26/27 test coverage gap (2026-03-27)
+
+**Remaining work**: None. This phase is considered complete. Any future visual explainer enhancements would be tracked as a new scoped slice.
+
+**Evidence**: `docs/research/session117-p2-phase-reconciliation.md`
+
 ## References
 - Phase 25 spec: `docs/phases/PHASE-25-VISUAL-EXPLAINER-INTEGRATION.md`
 - Visual explainer integration research: `docs/research/visual-explainer-integration-analysis-2026-02-17.md`
