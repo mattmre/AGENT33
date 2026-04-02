@@ -409,24 +409,19 @@ class TestMoAWorkflowIntegration:
         assert "{{" not in resolved_prompt
         assert "}}" not in resolved_prompt
 
-    def test_moa_step_ids_contain_hyphens_which_jinja2_cannot_resolve(self) -> None:
-        """Document that the current MoA template generates step IDs with
-        hyphens (e.g. ``ref-llama3``) that Jinja2 parses as subtraction.
+    def test_moa_step_ids_use_underscores_so_jinja2_resolves_correctly(self) -> None:
+        """MoA step IDs use underscores (not hyphens) so Jinja2 resolves
+        aggregator prompt references without raising UndefinedError.
 
-        When the ``ExpressionEvaluator`` tries to render
-        ``{{ ref-llama3.result | default('(no response)') }}``, Jinja2
-        interprets ``ref-llama3`` as ``ref`` minus ``llama3``, causing an
-        ``UndefinedError`` because Jinja2 evaluates the subtraction operands
-        before the ``default()`` filter can intercept.
+        Previously, ``_sanitize_step_id`` produced hyphenated IDs like
+        ``ref-llama3``.  Jinja2 parses hyphens as subtraction operators, so
+        ``{{ ref-llama3.result }}`` would raise ``UndefinedError`` before
+        the ``default()`` filter could intercept.
 
-        This is a latent issue: the MoA template produces Jinja2 expressions
-        that reference hyphenated step IDs, but Jinja2 treats hyphens as the
-        subtraction operator. A fix would be to change ``_sanitize_step_id``
-        or ``_make_unique_ids`` to use underscores, or to use bracket
-        notation in the template expressions.
+        After the fix, ``_sanitize_step_id`` produces ``ref_llama3``, which
+        Jinja2 correctly treats as an identifier, and the expression evaluator
+        resolves the reference to the actual result value.
         """
-        from jinja2.exceptions import UndefinedError as Jinja2UndefinedError
-
         from agent33.workflows.expressions import ExpressionEvaluator
 
         evaluator = ExpressionEvaluator()
@@ -437,17 +432,19 @@ class TestMoAWorkflowIntegration:
             aggregator_model="gpt4o",
         )
 
-        agg_step = next(s for s in workflow.steps if s.id == "moa-aggregator")
+        agg_step = next(s for s in workflow.steps if s.id == "moa_aggregator")
         raw_prompt: str = agg_step.inputs["prompt"]
 
-        # State with hyphenated key (as the executor would create)
-        state = {"ref-llama3": {"result": "actual response from llama3"}}
+        # Step ID must use underscores (Jinja2-safe identifier)
+        assert "ref_llama3" in raw_prompt, "Step ID should use underscores not hyphens"
+        assert "ref-llama3" not in raw_prompt, "Hyphenated ID would break Jinja2 resolution"
 
-        # Jinja2 raises UndefinedError because it parses `ref-llama3` as
-        # `ref` (undefined) minus `llama3` (undefined), and undefined
-        # arithmetic triggers an error before the default() filter runs.
-        with pytest.raises(Jinja2UndefinedError):
-            evaluator.evaluate(raw_prompt, state)
+        # Evaluator resolves the underscore-based reference without error
+        state = {"ref_llama3": {"result": "actual response from llama3"}}
+        resolved_prompt = evaluator.evaluate(raw_prompt, state)
+
+        assert "actual response from llama3" in resolved_prompt
+        assert "{{" not in resolved_prompt
 
     def test_agent_resolver_maps_models_to_workflow_agents(self) -> None:
         """When an agent_resolver is provided, build_moa_workflow uses it to
@@ -482,7 +479,7 @@ class TestMoAWorkflowIntegration:
             assert step.agent is not None
             assert step.agent.startswith("__bridge_")
 
-        agg = next(s for s in workflow.steps if s.id == "moa-aggregator")
+        agg = next(s for s in workflow.steps if s.id == "moa_aggregator")
         assert agg.agent == "__bridge_gpt4o__"
 
     def test_moa_multi_round_creates_intermediate_dependencies(self) -> None:
@@ -504,9 +501,9 @@ class TestMoAWorkflowIntegration:
         # 2 rounds x 2 models + 1 aggregator = 5 steps
         assert len(workflow.steps) == 5
 
-        r1_steps = [s for s in workflow.steps if s.id.startswith("r1-")]
-        r2_steps = [s for s in workflow.steps if s.id.startswith("r2-")]
-        agg_step = next(s for s in workflow.steps if s.id == "moa-aggregator")
+        r1_steps = [s for s in workflow.steps if s.id.startswith("r1_")]
+        r2_steps = [s for s in workflow.steps if s.id.startswith("r2_")]
+        agg_step = next(s for s in workflow.steps if s.id == "moa_aggregator")
 
         assert len(r1_steps) == 2
         assert len(r2_steps) == 2

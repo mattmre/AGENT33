@@ -56,7 +56,7 @@ class StepRetry(BaseModel):
 class WorkflowStep(BaseModel):
     """A single step within a workflow."""
 
-    id: str = Field(..., pattern=r"^[a-z][a-z0-9-]*$")
+    id: str = Field(..., pattern=r"^[a-z][a-z0-9_-]*$")
     name: str | None = None
     action: StepAction
     agent: str | None = None

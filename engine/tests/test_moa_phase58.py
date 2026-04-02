@@ -65,8 +65,8 @@ class TestMultiRoundWorkflow:
     def test_first_round_steps_have_no_dependencies(self) -> None:
         """Round 1 proposers must be independent (no depends_on)."""
         wf = build_moa_workflow("q", ["a", "b"], "agg", rounds=2)
-        # Round 1 step IDs start with "r1-"
-        r1_steps = [s for s in wf.steps if s.id.startswith("r1-")]
+        # Round 1 step IDs start with "r1_"
+        r1_steps = [s for s in wf.steps if s.id.startswith("r1_")]
         assert len(r1_steps) == 2
         for step in r1_steps:
             assert step.depends_on == [], f"Round 1 step {step.id} should have no deps"
@@ -74,8 +74,8 @@ class TestMultiRoundWorkflow:
     def test_second_round_depends_on_first_round(self) -> None:
         """Round 2 proposers must depend on all round 1 steps."""
         wf = build_moa_workflow("q", ["a", "b"], "agg", rounds=2)
-        r1_ids = {s.id for s in wf.steps if s.id.startswith("r1-")}
-        r2_steps = [s for s in wf.steps if s.id.startswith("r2-")]
+        r1_ids = {s.id for s in wf.steps if s.id.startswith("r1_")}
+        r2_steps = [s for s in wf.steps if s.id.startswith("r2_")]
         assert len(r2_steps) == 2
         for step in r2_steps:
             assert set(step.depends_on) == r1_ids
@@ -83,38 +83,38 @@ class TestMultiRoundWorkflow:
     def test_aggregator_depends_on_final_round_only(self) -> None:
         """The aggregator must depend only on the last round's steps."""
         wf = build_moa_workflow("q", ["a", "b"], "agg", rounds=3)
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
-        # Round 3 IDs start with "r3-"
-        r3_ids = {s.id for s in wf.steps if s.id.startswith("r3-")}
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
+        # Round 3 IDs start with "r3_"
+        r3_ids = {s.id for s in wf.steps if s.id.startswith("r3_")}
         assert set(agg.depends_on) == r3_ids
         # Must NOT include round 1 or 2 IDs
-        r1_ids = {s.id for s in wf.steps if s.id.startswith("r1-")}
+        r1_ids = {s.id for s in wf.steps if s.id.startswith("r1_")}
         assert r1_ids.isdisjoint(set(agg.depends_on))
 
     def test_intermediate_rounds_have_system_prompt(self) -> None:
         """Round 2+ steps must carry the intermediate system prompt."""
         wf = build_moa_workflow("q", ["a"], "agg", rounds=2)
-        r2_step = next(s for s in wf.steps if s.id.startswith("r2-"))
+        r2_step = next(s for s in wf.steps if s.id.startswith("r2_"))
         assert r2_step.inputs["system_prompt"] == MOA_INTERMEDIATE_SYSTEM_PROMPT
 
     def test_first_round_has_no_system_prompt(self) -> None:
         """Round 1 steps should NOT have a system prompt (raw query only)."""
         wf = build_moa_workflow("q", ["a"], "agg", rounds=2)
-        r1_step = next(s for s in wf.steps if s.id.startswith("r1-"))
+        r1_step = next(s for s in wf.steps if s.id.startswith("r1_"))
         assert "system_prompt" not in r1_step.inputs
 
     def test_intermediate_prompt_references_prior_round(self) -> None:
         """Round 2 prompts must include Jinja2 refs to round 1 step IDs."""
         wf = build_moa_workflow("q", ["a", "b"], "agg", rounds=2)
-        r1_ids = [s.id for s in wf.steps if s.id.startswith("r1-")]
-        r2_step = next(s for s in wf.steps if s.id.startswith("r2-"))
+        r1_ids = [s.id for s in wf.steps if s.id.startswith("r1_")]
+        r2_step = next(s for s in wf.steps if s.id.startswith("r2_"))
         prompt: str = r2_step.inputs["prompt"]
         for r1_id in r1_ids:
             assert r1_id in prompt, f"Round 2 prompt must reference {r1_id}"
 
     def test_all_step_ids_valid(self) -> None:
         """Multi-round step IDs must all match the valid pattern."""
-        pattern = re.compile(r"^[a-z][a-z0-9-]*$")
+        pattern = re.compile(r"^[a-z][a-z0-9_-]*$")
         wf = build_moa_workflow("q", ["GPT-4o", "Claude-3.5"], "gpt-4o", rounds=3)
         for step in wf.steps:
             assert pattern.match(step.id), f"Invalid step ID: {step.id}"
@@ -127,7 +127,7 @@ class TestMultiRoundWorkflow:
         # 3 models x 2 rounds + 1 aggregator = 7
         assert len(order) == 7
         # Aggregator must be last
-        assert order[-1] == "moa-aggregator"
+        assert order[-1] == "moa_aggregator"
 
     def test_dag_parallel_groups_multi_round(self) -> None:
         """Multi-round DAG should have 1 group per round + aggregator."""
@@ -141,7 +141,7 @@ class TestMultiRoundWorkflow:
         assert len(groups[1]) == 2
         assert len(groups[2]) == 2
         # Aggregator
-        assert groups[3] == ["moa-aggregator"]
+        assert groups[3] == ["moa_aggregator"]
 
     def test_rounds_zero_raises(self) -> None:
         """rounds=0 must raise ValueError."""
@@ -156,17 +156,17 @@ class TestMultiRoundWorkflow:
     def test_single_round_backward_compatible(self) -> None:
         """rounds=1 (default) should produce the same structure as before."""
         wf = build_moa_workflow("q", ["m1", "m2"], "agg", rounds=1)
-        # All non-aggregator steps use "ref-" prefix (not "r1-")
-        ref_steps = [s for s in wf.steps if s.id != "moa-aggregator"]
+        # All non-aggregator steps use "ref-" prefix (not "r1_")
+        ref_steps = [s for s in wf.steps if s.id != "moa_aggregator"]
         for step in ref_steps:
-            assert step.id.startswith("ref-"), f"Single-round uses 'ref-' prefix: {step.id}"
+            assert step.id.startswith("ref_"), f"Single-round uses .ref_. prefix: {step.id}"
 
     def test_multi_round_uses_round_prefix(self) -> None:
         """rounds>1 should use 'r<N>-' prefixes for step IDs."""
         wf = build_moa_workflow("q", ["m1"], "agg", rounds=2)
-        non_agg = [s for s in wf.steps if s.id != "moa-aggregator"]
-        assert any(s.id.startswith("r1-") for s in non_agg)
-        assert any(s.id.startswith("r2-") for s in non_agg)
+        non_agg = [s for s in wf.steps if s.id != "moa_aggregator"]
+        assert any(s.id.startswith("r1_") for s in non_agg)
+        assert any(s.id.startswith("r2_") for s in non_agg)
 
     def test_all_steps_use_invoke_agent(self) -> None:
         """All steps (including intermediate rounds) must use invoke-agent."""
@@ -232,7 +232,7 @@ class TestTemperatureDiversity:
             temperature_diversity=True,
             temperature_spread=0.3,
         )
-        ref_steps = [s for s in wf.steps if s.id != "moa-aggregator"]
+        ref_steps = [s for s in wf.steps if s.id != "moa_aggregator"]
         temps = [s.inputs["temperature"] for s in ref_steps]
         # All should be different (3 models with nonzero spread)
         assert len(set(temps)) == 3
@@ -248,7 +248,7 @@ class TestTemperatureDiversity:
             reference_temperature=0.6,
             temperature_diversity=False,
         )
-        ref_steps = [s for s in wf.steps if s.id != "moa-aggregator"]
+        ref_steps = [s for s in wf.steps if s.id != "moa_aggregator"]
         temps = [s.inputs["temperature"] for s in ref_steps]
         assert all(t == 0.6 for t in temps)
 
@@ -262,7 +262,7 @@ class TestTemperatureDiversity:
             temperature_diversity=True,
             temperature_spread=0.3,
         )
-        ref = next(s for s in wf.steps if s.id != "moa-aggregator")
+        ref = next(s for s in wf.steps if s.id != "moa_aggregator")
         # Single model -> diversity has no effect -> base temperature used
         assert ref.inputs["temperature"] == 0.6
 
@@ -277,8 +277,8 @@ class TestTemperatureDiversity:
             temperature_diversity=True,
             temperature_spread=0.2,
         )
-        r1_steps = [s for s in wf.steps if s.id.startswith("r1-")]
-        r2_steps = [s for s in wf.steps if s.id.startswith("r2-")]
+        r1_steps = [s for s in wf.steps if s.id.startswith("r1_")]
+        r2_steps = [s for s in wf.steps if s.id.startswith("r2_")]
         # Both rounds should have the same temperature spread
         r1_temps = [s.inputs["temperature"] for s in r1_steps]
         r2_temps = [s.inputs["temperature"] for s in r2_steps]
@@ -528,7 +528,7 @@ class TestMoaToolPhase58:
 
         mock_result = WorkflowResult(
             outputs={"result": "answer"},
-            steps_executed=["r1-m1", "r1-m2", "r2-m1", "r2-m2", "moa-aggregator"],
+            steps_executed=["r1_m1", "r1_m2", "r2_m1", "r2_m2", "moa_aggregator"],
             step_results=[],
             duration_ms=50.0,
             status=WorkflowStatus.SUCCESS,
@@ -542,6 +542,10 @@ class TestMoaToolPhase58:
             original_init(self_, definition, **kwargs)
 
         with (
+            patch(
+                "agent33.tools.builtin.moa.has_registered_agent_handler",
+                side_effect=lambda name: name == "__default__",
+            ),
             patch.object(WorkflowExecutor, "__init__", capture_init),
             patch.object(WorkflowExecutor, "execute", return_value=mock_result),
         ):

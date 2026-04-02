@@ -117,20 +117,25 @@ def compute_diverse_temperatures(
 def _sanitize_step_id(raw: str) -> str:
     """Convert an arbitrary model name into a valid WorkflowStep id.
 
-    Step IDs must match ``^[a-z][a-z0-9-]*$``.  This helper lower-cases the
-    name, replaces non-alphanumeric characters with hyphens, collapses
-    consecutive hyphens, and ensures the result starts with a letter.
+    Step IDs must match ``^[a-z][a-z0-9_-]*$``.  This helper lower-cases the
+    name, replaces non-alphanumeric characters with underscores (not hyphens),
+    collapses consecutive underscores, and ensures the result starts with a letter.
+
+    Underscores are used instead of hyphens because Jinja2 parses hyphens as
+    subtraction operators, which would cause ``UndefinedError`` when the
+    expression evaluator resolves aggregator prompt references like
+    ``{{ ref_llama3.result }}``.
     """
     lowered = raw.lower().strip()
-    # Replace any character that is not a-z or 0-9 with a hyphen
-    sanitized = re.sub(r"[^a-z0-9]", "-", lowered)
-    # Collapse consecutive hyphens
-    sanitized = re.sub(r"-+", "-", sanitized)
-    # Strip leading/trailing hyphens
-    sanitized = sanitized.strip("-")
+    # Replace any character that is not a-z or 0-9 with an underscore
+    sanitized = re.sub(r"[^a-z0-9]", "_", lowered)
+    # Collapse consecutive underscores
+    sanitized = re.sub(r"_+", "_", sanitized)
+    # Strip leading/trailing underscores
+    sanitized = sanitized.strip("_")
     # Ensure it starts with a letter
     if not sanitized or not sanitized[0].isalpha():
-        sanitized = f"m-{sanitized}" if sanitized else "model"
+        sanitized = f"m_{sanitized}" if sanitized else "model"
     return sanitized
 
 
@@ -146,9 +151,9 @@ def _make_unique_ids(
     seen: dict[str, int] = {}
     pairs: list[tuple[str, str]] = []
     for model in models:
-        base = f"{prefix}-{_sanitize_step_id(model)}"
+        base = f"{prefix}_{_sanitize_step_id(model)}"
         count = seen.get(base, 0)
-        step_id = f"{base}-{count}" if count > 0 else base
+        step_id = f"{base}_{count}" if count > 0 else base
         seen[base] = count + 1
         pairs.append((step_id, model))
     return pairs
@@ -462,7 +467,7 @@ def build_moa_workflow(
 
     # -- Aggregator step (depends on the final round of reference steps) --
     aggregator_step = WorkflowStep(
-        id="moa-aggregator",
+        id="moa_aggregator",
         name=f"MoA Aggregator: {aggregator_model}",
         action=StepAction.INVOKE_AGENT,
         agent=agent_resolver(aggregator_model) if agent_resolver else aggregator_model,
