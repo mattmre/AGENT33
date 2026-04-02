@@ -23,11 +23,20 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: remaining-roadmap sequential execution
-- Current slice: `S11 - Phase 47 capability pack expansion and workflow weaving`
-- Current phase: `research`
-- Resume artifact: `docs/phases/PHASE-44-48-EVOKORE-INTEGRATION-ROADMAP.md` (`Phase 47` section)
-- Next write required after any progress: update this pointer and append the exact command/test status to `progress.md`
+- Active queue owner: none (Session 117 complete; only SkillsBench live eval remains, blocked on provider)
+- Current slice: none active
+- Resume artifact: `docs/next-session.md`
+
+## Session 117 Queue (2026-04-02)
+
+| Order | Task | Type | Status | PR |
+| --- | --- | --- | --- | --- |
+| P1 | AEP-L3-M01-M04 type hardening | code | `completed` | #357 |
+| P2 | Phase 26/27/28/33 status reconciliation | docs | `completed` | #358 |
+| P3 | Cross-feature integration tests + MoA bug fix | code+test | `completed` | #359 |
+| P4 | Session 117 wrap | docs | `completed` | #360 (planned) |
+
+Session 117 is complete. All three immediate priorities from Session 116 are closed.
 
 ## Constraints
 
