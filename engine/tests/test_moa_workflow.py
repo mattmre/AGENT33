@@ -46,7 +46,7 @@ class TestBuildMoaWorkflow:
         """All reference steps must be independent (no depends_on)."""
         models = ["model-a", "model-b"]
         wf = build_moa_workflow("test query", models, "aggregator-model")
-        ref_steps = [s for s in wf.steps if s.id != "moa-aggregator"]
+        ref_steps = [s for s in wf.steps if s.id != "moa_aggregator"]
         for step in ref_steps:
             assert step.depends_on == [], f"Step {step.id} should have no dependencies"
 
@@ -54,23 +54,23 @@ class TestBuildMoaWorkflow:
         """The aggregator step must depend on every reference step."""
         models = ["alpha", "beta", "gamma"]
         wf = build_moa_workflow("test", models, "synth")
-        ref_ids = {s.id for s in wf.steps if s.id != "moa-aggregator"}
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        ref_ids = {s.id for s in wf.steps if s.id != "moa_aggregator"}
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert set(agg.depends_on) == ref_ids
 
     def test_aggregator_has_system_prompt(self) -> None:
         """The aggregator step must carry the MoA system prompt."""
         wf = build_moa_workflow("Hello", ["model-a"], "model-b")
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert agg.inputs["system_prompt"] == MOA_AGGREGATOR_SYSTEM_PROMPT
 
     def test_aggregator_prompt_references_all_ref_steps(self) -> None:
         """The aggregator user prompt must include Jinja2 refs for each ref step."""
         models = ["model-a", "model-b"]
         wf = build_moa_workflow("question", models, "agg")
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         prompt: str = agg.inputs["prompt"]
-        ref_ids = [s.id for s in wf.steps if s.id != "moa-aggregator"]
+        ref_ids = [s.id for s in wf.steps if s.id != "moa_aggregator"]
         for ref_id in ref_ids:
             assert ref_id in prompt, f"Aggregator prompt must reference {ref_id}"
 
@@ -88,16 +88,16 @@ class TestBuildMoaWorkflow:
     def test_temperatures_propagate_to_steps(self) -> None:
         """Custom temperatures must appear in step inputs."""
         wf = build_moa_workflow("q", ["m1"], "agg", 0.9, 0.1)
-        ref = next(s for s in wf.steps if s.id != "moa-aggregator")
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        ref = next(s for s in wf.steps if s.id != "moa_aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert ref.inputs["temperature"] == 0.9
         assert agg.inputs["temperature"] == 0.1
 
     def test_step_ids_are_valid(self) -> None:
-        """All step IDs must match the WorkflowStep pattern ^[a-z][a-z0-9-]*$."""
+        """All step IDs must match the WorkflowStep pattern ^[a-z][a-z0-9_-]*$."""
         import re
 
-        pattern = re.compile(r"^[a-z][a-z0-9-]*$")
+        pattern = re.compile(r"^[a-z][a-z0-9_-]*$")
         wf = build_moa_workflow("q", ["GPT-4o", "Claude-3.5", "Llama-3.2"], "gpt-4o")
         for step in wf.steps:
             assert pattern.match(step.id), f"Invalid step ID: {step.id}"
@@ -130,8 +130,8 @@ class TestBuildMoaWorkflow:
     def test_model_name_in_step_inputs(self) -> None:
         """Each step must carry its model name in inputs for downstream routing."""
         wf = build_moa_workflow("q", ["llama3.2"], "gpt-4o")
-        ref = next(s for s in wf.steps if s.id != "moa-aggregator")
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        ref = next(s for s in wf.steps if s.id != "moa_aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert ref.inputs["agent_name"] == "llama3.2"
         assert ref.inputs["model"] == "llama3.2"
         assert agg.inputs["agent_name"] == "gpt-4o"
@@ -162,14 +162,14 @@ class TestMoaDagStructure:
         # First group: all 3 reference steps (independent)
         assert len(groups[0]) == 3
         # Second group: aggregator only
-        assert groups[1] == ["moa-aggregator"]
+        assert groups[1] == ["moa_aggregator"]
 
     def test_topological_order_aggregator_last(self) -> None:
         """The aggregator must always come last in topological order."""
         wf = build_moa_workflow("q", ["x", "y"], "z")
         dag = DAGBuilder(wf.steps).build()
         order = dag.topological_order()
-        assert order[-1] == "moa-aggregator"
+        assert order[-1] == "moa_aggregator"
 
 
 # ---------------------------------------------------------------------------
@@ -184,18 +184,18 @@ class TestSanitizeStepId:
         assert _sanitize_step_id("llama3") == "llama3"
 
     def test_dots_replaced(self) -> None:
-        assert _sanitize_step_id("gpt-4o.2024") == "gpt-4o-2024"
+        assert _sanitize_step_id("gpt-4o.2024") == "gpt_4o_2024"
 
     def test_uppercase_lowered(self) -> None:
-        assert _sanitize_step_id("GPT-4o") == "gpt-4o"
+        assert _sanitize_step_id("GPT-4o") == "gpt_4o"
 
     def test_special_chars(self) -> None:
         result = _sanitize_step_id("model/v2@latest")
-        assert result == "model-v2-latest"
+        assert result == "model_v2_latest"
 
     def test_numeric_start_prefixed(self) -> None:
         result = _sanitize_step_id("3.5-turbo")
-        assert result.startswith("m-")
+        assert result.startswith("m_")
 
     def test_empty_string(self) -> None:
         result = _sanitize_step_id("")
@@ -216,9 +216,9 @@ class TestMakeUniqueIds:
         assert len(ids) == 3
         assert len(set(ids)) == 3  # all unique
         # First one has no suffix, subsequent ones do
-        assert ids[0] == "ref-same"
-        assert ids[1] == "ref-same-1"
-        assert ids[2] == "ref-same-2"
+        assert ids[0] == "ref_same"
+        assert ids[1] == "ref_same_1"
+        assert ids[2] == "ref_same_2"
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ class TestMoaTool:
 
         mock_result = WorkflowResult(
             outputs={"result": "Synthesized answer"},
-            steps_executed=["ref-m1", "ref-m2", "moa-aggregator"],
+            steps_executed=["ref_m1", "ref_m2", "moa_aggregator"],
             step_results=[],
             duration_ms=100.0,
             status=WorkflowStatus.SUCCESS,
@@ -382,7 +382,7 @@ class TestMoaTool:
 
         mock_result = WorkflowResult(
             outputs={"result": "Synthesized answer"},
-            steps_executed=["ref-m1", "moa-aggregator"],
+            steps_executed=["ref_m1", "moa_aggregator"],
             step_results=[],
             duration_ms=100.0,
             status=WorkflowStatus.SUCCESS,
@@ -418,8 +418,8 @@ class TestMoaTool:
         assert result.output == "Synthesized answer"
         assert len(captured_definitions) == 1
         wf = captured_definitions[0]
-        ref = next(s for s in wf.steps if s.id != "moa-aggregator")
-        agg = next(s for s in wf.steps if s.id == "moa-aggregator")
+        ref = next(s for s in wf.steps if s.id != "moa_aggregator")
+        agg = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert ref.agent == "__default__"
         assert agg.agent == "__default__"
         assert ref.inputs["agent_name"] == "m1"
@@ -435,10 +435,10 @@ class TestMoaTool:
 
         mock_result = WorkflowResult(
             outputs={},
-            steps_executed=["ref-m1"],
+            steps_executed=["ref_m1"],
             step_results=[
                 StepResult(
-                    step_id="ref-m1",
+                    step_id="ref_m1",
                     status="failed",
                     error="model unavailable",
                 )
@@ -471,7 +471,7 @@ class TestMoaTool:
 
         mock_result = WorkflowResult(
             outputs={"result": "answer"},
-            steps_executed=["ref-custom1", "ref-custom2", "moa-aggregator"],
+            steps_executed=["ref_custom1", "ref_custom2", "moa_aggregator"],
             step_results=[],
             duration_ms=50.0,
             status=WorkflowStatus.SUCCESS,
@@ -519,7 +519,7 @@ class TestMoaTool:
         # Should have 2 ref steps + 1 aggregator = 3
         assert len(wf.steps) == 3
         ref_step = wf.steps[0]
-        agg_step = next(s for s in wf.steps if s.id == "moa-aggregator")
+        agg_step = next(s for s in wf.steps if s.id == "moa_aggregator")
         assert ref_step.inputs["temperature"] == 0.9
         assert agg_step.inputs["temperature"] == 0.1
         assert agg_step.inputs["model"] == "custom-agg"
