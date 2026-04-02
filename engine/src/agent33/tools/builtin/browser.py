@@ -74,6 +74,13 @@ class BrowserSession:
     last_used: float = field(default_factory=time.monotonic)
 
 
+# Process-global session registry.  Accessed by module-level helpers
+# (_get_session, _close_session, _cleanup_stale_sessions) and by
+# BrowserTool._list_sessions.  This is safe in single-process deployments;
+# in multi-process deployments (e.g. gunicorn pre-fork) each worker holds
+# its own independent copy.  Moving to a BrowserTool instance variable
+# would require threading the dict through every helper — deferred until
+# BrowserTool is refactored to own its session lifecycle end-to-end.
 _sessions: dict[str, BrowserSession] = {}
 
 
