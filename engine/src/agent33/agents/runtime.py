@@ -1082,18 +1082,20 @@ class AgentRuntime:
         except Exception:
             stream_failed = True
             # Save partial trajectory on stream failure
-            if loop._last_accumulated_messages is not None:
+            _partial = loop.last_messages()
+            if _partial is not None:
                 await self._maybe_save_trajectory(
-                    conversation=self._chatmessages_to_dicts(loop._last_accumulated_messages),
+                    conversation=self._chatmessages_to_dicts(_partial),
                     model=routed_model,
                     completed=False,
                 )
             raise
 
         # Save trajectory after stream completes successfully
-        if not stream_failed and loop._last_accumulated_messages is not None:
+        _final = loop.last_messages()
+        if not stream_failed and _final is not None:
             await self._maybe_save_trajectory(
-                conversation=self._chatmessages_to_dicts(loop._last_accumulated_messages),
+                conversation=self._chatmessages_to_dicts(_final),
                 model=routed_model,
                 completed=True,
             )

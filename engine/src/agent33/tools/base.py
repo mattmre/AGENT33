@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from agent33.agents.events import ToolLoopEvent
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ToolContext:
@@ -23,7 +25,7 @@ class ToolContext:
     requested_by: str = ""
     tenant_id: str = ""
     session_id: str = ""
-    event_sink: Callable[[Any], Awaitable[None]] | None = None
+    event_sink: Callable[[ToolLoopEvent], Awaitable[None]] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

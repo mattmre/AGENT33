@@ -227,6 +227,35 @@ class TestLifespanState:
             assert ptc_tool._executor._tool_registry is registry
 
 
+class TestPTCExecution:
+    """Verify PTC tool wired through lifespan can actually execute code."""
+
+    def test_ptc_execute_tool_runs_safe_expression_via_lifespan(self, patched_app):
+        """PTCExecuteTool wired through lifespan should execute safe code.
+
+        This goes beyond registration: it calls execute() with a real Python
+        expression and asserts the subprocess produced the expected output.
+        """
+        import asyncio
+
+        from agent33.config import settings
+        from agent33.tools.base import ToolContext
+        from agent33.tools.builtin.ptc_execute import PTCExecuteTool
+
+        app, _, _ = patched_app
+
+        if not settings.ptc_enabled:
+            pytest.skip("ptc_enabled is False")
+
+        ptc_tool = app.state.tool_registry.get("ptc_execute")
+        assert isinstance(ptc_tool, PTCExecuteTool)
+
+        ctx = ToolContext(tenant_id="test-tenant")
+        result = asyncio.run(ptc_tool.execute({"code": "print(1 + 1)"}, ctx))
+        assert result.success is True
+        assert "2" in result.output
+
+
 class TestEmbeddingSubsystem:
     """Verify embedding provider, cache, and RAG wiring."""
 

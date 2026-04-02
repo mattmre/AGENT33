@@ -156,6 +156,10 @@ class ToolLoop:
         self._last_accumulated_messages: list[ChatMessage] | None = None
         self._last_relay_results: list[ToolResult] = []
 
+    def last_messages(self) -> list[ChatMessage] | None:
+        """Return the final message list from the most recent tool-loop run."""
+        return self._last_accumulated_messages
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
