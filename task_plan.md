@@ -23,9 +23,29 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: none (Session 117 complete; only SkillsBench live eval remains, blocked on provider)
+- Active queue owner: none (Session 118 complete; only SkillsBench live eval remains, blocked on provider)
 - Current slice: none active
 - Resume artifact: `docs/next-session.md`
+
+## Session 118 Queue (2026-04-03)
+
+| Order | Task | Type | Status | Notes |
+| --- | --- | --- | --- | --- |
+| P0 | Session kickoff + task plan | docs | `completed` | Root assessment, task list created |
+| P1 | llama.cpp local inference wiring | code | `completed` | PR `#362`, merged as `c3da953` |
+| P2 | Session wrap | docs | `completed` | This PR |
+
+### Sequential Execution Rules
+
+- P1 executed from a fresh worktree on `origin/main`
+- P2 (this PR) is the final docs-only wrap
+
+### Session 118 Merge State
+
+- PR `#362` merged as squash commit `c3da953` on `origin/main`
+- Cumulative PRs merged: 362
+- Latest commit on `main`: `c3da953`
+- Queue: all items complete
 
 ## Session 117 Queue (2026-04-02)
 

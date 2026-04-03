@@ -1,5 +1,17 @@
 # Progress Log
 
+## 2026-04-03
+
+- Session 118 wrap: llama.cpp local inference provider wiring.
+- PR #362 merged (`c3da953`): wire llama.cpp as selectable local inference provider.
+  - `local_orchestration_base_url` config field (default: `http://host.docker.internal:8033/v1`)
+  - llamacpp provider wired in lifespan `ModelRouter` and agents-route singleton when `LOCAL_ORCHESTRATION_ENGINE=llama.cpp`
+  - `_llamacpp_enabled()` / `_default_agent_model()` helpers in agents route
+  - Updated `.env.example` with all `LOCAL_ORCHESTRATION_*` env vars
+  - 8 targeted unit tests
+- Cumulative PRs on `main`: 362.
+- Remaining: SkillsBench live evaluation (blocked on live provider). With PR #362, the code path is now ready — set `LOCAL_ORCHESTRATION_ENGINE=llama.cpp` and point `LOCAL_ORCHESTRATION_BASE_URL` at a running llama.cpp server to enable local evaluation.
+
 ## 2026-04-02
 
 - Session 117 wrap: AEP-L3 medium fixes, phase reconciliation, cross-feature integration tests.
