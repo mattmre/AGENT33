@@ -391,6 +391,10 @@ class TestRuntimeInvokeTrajectory:
             tmp_path,
             enabled=True,
         )
+        # Pin the default model so the assertion is deterministic regardless of
+        # environment variables (e.g. OLLAMA_DEFAULT_MODEL in CI).
+        monkeypatch.setattr(config_module.settings, "ollama_default_model", "llama3.2")
+        monkeypatch.setattr(config_module.settings, "local_orchestration_engine", "")
 
         save_mock = AsyncMock()
         monkeypatch.setattr(runtime_module, "save_trajectory", save_mock)
