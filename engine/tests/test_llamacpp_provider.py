@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent33.agents.runtime import AgentRuntime, _resolve_default_model
 from agent33.api.routes.agents import _default_agent_model, _llamacpp_enabled
 from agent33.config import settings
 from agent33.llm.openai import OpenAIProvider
@@ -75,3 +76,85 @@ class TestModelRouterRegistration:
             assert _llamacpp_enabled() is True
             router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
             assert router._default_provider == "llamacpp"
+
+
+class TestResolveDefaultModel:
+    """Verify _resolve_default_model() used by AgentRuntime.__init__."""
+
+    def test_returns_local_model_when_llamacpp_engine(self) -> None:
+        with (
+            patch.object(settings, "local_orchestration_engine", "llama.cpp"),
+            patch.object(settings, "local_orchestration_model", "my-local-gguf"),
+        ):
+            assert _resolve_default_model() == "my-local-gguf"
+
+    def test_returns_ollama_model_when_engine_is_ollama(self) -> None:
+        with (
+            patch.object(settings, "local_orchestration_engine", "ollama"),
+            patch.object(settings, "ollama_default_model", "mistral-nemo"),
+        ):
+            assert _resolve_default_model() == "mistral-nemo"
+
+    def test_runtime_uses_resolved_default_when_model_is_none(self) -> None:
+        """AgentRuntime should use _resolve_default_model() -- not 'llama3.2'."""
+        from agent33.agents.definition import (
+            AgentCapability,
+            AgentConstraints,
+            AgentDefinition,
+            AgentParameter,
+            AgentRole,
+        )
+
+        definition = AgentDefinition(
+            name="test-agent",
+            version="1.0.0",
+            role=AgentRole.IMPLEMENTER,
+            description="test",
+            capabilities=[AgentCapability.CODE_EXECUTION],
+            inputs={
+                "task": AgentParameter(type="string", description="t", required=True),
+            },
+            outputs={
+                "result": AgentParameter(type="string", description="r"),
+            },
+            constraints=AgentConstraints(),
+        )
+        mock_router = MagicMock(spec=ModelRouter)
+
+        with (
+            patch.object(settings, "local_orchestration_engine", "llama.cpp"),
+            patch.object(settings, "local_orchestration_model", "custom-gguf-model"),
+        ):
+            runtime = AgentRuntime(definition=definition, router=mock_router, model=None)
+
+        assert runtime._model == "custom-gguf-model"
+
+    def test_runtime_respects_explicit_model(self) -> None:
+        """When model is explicitly provided, _resolve_default_model() is not used."""
+        from agent33.agents.definition import (
+            AgentCapability,
+            AgentConstraints,
+            AgentDefinition,
+            AgentParameter,
+            AgentRole,
+        )
+
+        definition = AgentDefinition(
+            name="test-agent",
+            version="1.0.0",
+            role=AgentRole.IMPLEMENTER,
+            description="test",
+            capabilities=[AgentCapability.CODE_EXECUTION],
+            inputs={
+                "task": AgentParameter(type="string", description="t", required=True),
+            },
+            outputs={
+                "result": AgentParameter(type="string", description="r"),
+            },
+            constraints=AgentConstraints(),
+        )
+        mock_router = MagicMock(spec=ModelRouter)
+
+        runtime = AgentRuntime(definition=definition, router=mock_router, model="explicit-model")
+
+        assert runtime._model == "explicit-model"

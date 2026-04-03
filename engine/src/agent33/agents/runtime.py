@@ -34,6 +34,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _resolve_default_model() -> str:
+    """Return the configured default model, respecting the local orchestration engine.
+
+    When ``LOCAL_ORCHESTRATION_ENGINE`` is set to ``llama.cpp`` / ``llamacpp``,
+    the default comes from ``local_orchestration_model``; otherwise it falls
+    back to ``ollama_default_model``.  This avoids hard-coding ``"llama3.2"``
+    in the runtime constructor.
+    """
+    from agent33.config import settings as _settings
+
+    if _settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp"):
+        return _settings.local_orchestration_model
+    return _settings.ollama_default_model
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class AgentResult:
     """Result of invoking an agent."""
@@ -257,7 +272,7 @@ class AgentRuntime:
         self._definition = definition
         self._router = router
         self._requested_model = model
-        self._model = model or "llama3.2"
+        self._model = model or _resolve_default_model()
         self._temperature = temperature
         self._effort = effort
         self._effort_router = effort_router
