@@ -1,5 +1,20 @@
 # Progress Log
 
+## 2026-04-02
+
+- Session 117 wrap: AEP-L3 medium fixes, phase reconciliation, cross-feature integration tests.
+- PR #357 merged (`2b101b7`): AEP-L3-M01-M04 type hardening.
+  - `ToolContext.event_sink` typed from `Any` to `ToolLoopEvent` using a `TYPE_CHECKING` guard (M1)
+  - `ToolLoop.last_messages()` public accessor added; 4 direct `_last_accumulated_messages` accesses in `runtime.py` replaced (M2)
+  - `browser._sessions` module-level scope documented with inline rationale comment; instance-scope move deferred (M3)
+  - PTC integration test now always runs via `ptc_patched_app` fixture instead of skipping in CI (M4)
+- PR #358 merged (`81c7671`): Phase 26/27/28/33 status reconciliation with PR evidence trail.
+- PR #359 merged (`465790b`): 12 cross-feature integration tests (delegation+skills, MoA, SkillInjector L0/L1/L2) + MoA Jinja2 hyphen bug fix.
+  - `_sanitize_step_id` changed from hyphens to underscores; `WorkflowStep.id` pattern updated to `^[a-z][a-z0-9_-]*$`
+- PR #360 merged (`400e362`): session-117 wrap docs.
+- Cumulative PRs on `main`: 360.
+- Remaining: SkillsBench live evaluation (blocked on live provider; code ready since PR #335).
+
 ## 2026-03-13
 
 - Re-audited repo-only worktrees and local branches for `D:\GITHUB\AGENT33`.
