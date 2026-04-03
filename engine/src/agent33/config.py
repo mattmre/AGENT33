@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     local_orchestration_model: str = "qwen3-coder-next"
     local_orchestration_format: str = "gguf_q4_k_m"
     local_orchestration_engine: str = "llama.cpp"
+    local_orchestration_base_url: str = "http://host.docker.internal:8033/v1"
 
     # PostgreSQL
     database_url: str = "postgresql+asyncpg://agent33:agent33@postgres:5432/agent33"

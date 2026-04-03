@@ -436,7 +436,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         default_image=settings.execution_default_docker_image,
     )
 
-    model_router = ModelRouter()
+    _llamacpp_active = settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
+    model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_active else "ollama")
 
     # Register LLM providers on the shared model router
     from agent33.llm.ollama import OllamaProvider
@@ -448,6 +449,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             default_model=settings.ollama_default_model,
         ),
     )
+
+    if _llamacpp_active:
+        from agent33.llm.openai import OpenAIProvider as _OpenAICompatProvider
+
+        model_router.register(
+            "llamacpp",
+            _OpenAICompatProvider(
+                api_key="local",
+                base_url=settings.local_orchestration_base_url,
+                default_model=settings.local_orchestration_model,
+            ),
+        )
+        logger.info(
+            "llamacpp_provider_registered",
+            base_url=settings.local_orchestration_base_url,
+            model=settings.local_orchestration_model,
+        )
+
     if settings.openai_api_key.get_secret_value():
         from agent33.llm.openai import OpenAIProvider
 

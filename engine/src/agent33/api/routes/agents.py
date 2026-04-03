@@ -42,7 +42,20 @@ logger = logging.getLogger(__name__)
 
 # -- singletons ----------------------------------------------------------
 
-_model_router = ModelRouter()
+
+def _llamacpp_enabled() -> bool:
+    """Return True when the local orchestration engine is llama.cpp."""
+    return settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
+
+
+def _default_agent_model() -> str:
+    """Return the default model name for agent invocations."""
+    if _llamacpp_enabled():
+        return settings.local_orchestration_model
+    return settings.ollama_default_model
+
+
+_model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
 _model_router.register(
     "ollama",
     OllamaProvider(
@@ -50,6 +63,18 @@ _model_router.register(
         default_model=settings.ollama_default_model,
     ),
 )
+
+if _llamacpp_enabled():
+    from agent33.llm.openai import OpenAIProvider as _LlamaCppProvider
+
+    _model_router.register(
+        "llamacpp",
+        _LlamaCppProvider(
+            api_key="local",
+            base_url=settings.local_orchestration_base_url,
+            default_model=settings.local_orchestration_model,
+        ),
+    )
 
 if settings.openai_api_key.get_secret_value():
     from agent33.llm.openai import OpenAIProvider
@@ -534,7 +559,7 @@ async def invoke_agent(
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
-        model=body.model,
+        model=body.model or _default_agent_model(),
         temperature=body.temperature,
         session_id=_resolve_runtime_session_id(request),
         invocation_mode="invoke",
@@ -671,7 +696,7 @@ async def invoke_agent_iterative(
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
-        model=body.model,
+        model=body.model or _default_agent_model(),
         temperature=body.temperature,
         session_id=session_id,
         invocation_mode="iterative",
@@ -792,7 +817,7 @@ async def invoke_agent_iterative_stream(
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
-        model=body.model,
+        model=body.model or _default_agent_model(),
         temperature=body.temperature,
         observation_capture=observation_capture,
         session_id=session_id,
