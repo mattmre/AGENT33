@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
+import string
 from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
@@ -700,24 +702,47 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_jwt_secret_not_default(self) -> Settings:
-        """AEP-A01: Reject the default JWT secret in non-dev/test environments."""
+        """AEP-A01: Reject the default JWT secret in non-dev/test environments.
+
+        In ``lite`` mode (or when ``environment`` is ``development``/``test``),
+        auto-generate a secure random JWT secret if the caller left the default
+        placeholder in place.  A prominent WARNING is emitted so operators are
+        never silently using an ephemeral secret in a context where they would
+        expect persistence.
+
+        In ``standard`` / ``enterprise`` mode with a non-safe environment, the
+        original ``SystemExit`` behaviour is preserved.
+        """
         _safe_envs = {"development", "test"}
-        if (
-            self.jwt_secret.get_secret_value() == "change-me-in-production"
-            and self.environment not in _safe_envs
-        ):
-            _logger.critical(
-                "FATAL: jwt_secret is using the insecure default value "
-                "in environment=%s. Set the JWT_SECRET environment variable "
-                "to a strong random value before starting the application.",
+        _dev_modes = {"lite"}
+
+        if self.jwt_secret.get_secret_value() != "change-me-in-production":
+            # Caller supplied an explicit secret — nothing to do.
+            return self
+
+        if self.environment in _safe_envs or self.agent33_mode in _dev_modes:
+            # Auto-generate a random secret and warn loudly.
+            alphabet = string.ascii_letters + string.digits
+            generated = "".join(secrets.choice(alphabet) for _ in range(64))
+            object.__setattr__(self, "jwt_secret", SecretStr(generated))
+            _logger.warning(
+                "WARNING: Auto-generated JWT_SECRET for %s/%s mode. DO NOT use in production.",
                 self.environment,
+                self.agent33_mode,
             )
-            raise SystemExit(
-                "Refusing to start: jwt_secret must be changed from the default "
-                f"in environment={self.environment!r}. "
-                "Set JWT_SECRET to a cryptographically random value."
-            )
-        return self
+            return self
+
+        _logger.critical(
+            "FATAL: jwt_secret is using the insecure default value "
+            "in environment=%s. Set the JWT_SECRET environment variable "
+            "to a strong random value before starting the application.",
+            self.environment,
+        )
+        raise SystemExit(
+            "Refusing to start: jwt_secret must be changed from the default "
+            f"in environment={self.environment!r}. "
+            "Set JWT_SECRET to a cryptographically random value."
+        )
 
     @model_validator(mode="after")
     def _warn_default_database_credentials(self) -> Settings:

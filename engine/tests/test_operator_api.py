@@ -426,9 +426,12 @@ class TestOperatorDoctor:
         sec_checks = [c for c in data["checks"] if c["id"] == "DOC-09"]
         assert len(sec_checks) == 1
         sec = sec_checks[0]
-        # Default test settings use "change-me-in-production"
+        # In dev/test mode, jwt_secret is auto-generated (P62), so DOC-09 warns about
+        # database credentials and/or API secret key, but NOT the JWT secret.
         assert sec["status"] == "warning"
-        assert "JWT secret" in sec["message"]
+        assert "JWT secret" not in sec["message"]
+        # Database URL and/or API secret key should still be flagged
+        assert sec["message"] != ""
         assert sec["remediation"] is not None
 
     def test_overall_reflects_worst_status(self, operator_read_client: TestClient) -> None:
