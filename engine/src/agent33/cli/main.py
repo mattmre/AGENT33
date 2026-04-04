@@ -11,6 +11,7 @@ from typing import Any
 import typer
 
 from agent33.cli.bootstrap import _bootstrap_generate
+from agent33.cli.packs import packs_app
 from agent33.cli.skills import skills_app
 from agent33.cli.tools import tools_app
 from agent33.env.cli import app as env_app
@@ -23,6 +24,7 @@ app = typer.Typer(
 app.add_typer(env_app, name="env")
 app.add_typer(tools_app)
 app.add_typer(skills_app)
+app.add_typer(packs_app, name="packs")
 
 
 @app.command()

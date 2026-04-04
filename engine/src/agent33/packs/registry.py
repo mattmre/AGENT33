@@ -64,6 +64,7 @@ class PackRegistry:
         self._skill_registry = skill_registry
         self._installed: dict[str, InstalledPack] = {}
         self._enabled: dict[str, set[str]] = {}  # tenant_id -> set of enabled pack names
+        self._session_enabled: dict[str, set[str]] = {}  # session_id -> set of pack names
         self._marketplace = marketplace
         self._trust_policy = trust_policy or PackTrustPolicy()
         self._trust_policy_manager = trust_policy_manager
@@ -154,6 +155,8 @@ class PackRegistry:
             pack_dependencies=manifest.dependencies.packs,
             engine_min_version=manifest.dependencies.engine.get("min_version", ""),
             compatibility=manifest.compatibility,
+            prompt_addenda=manifest.prompt_addenda,
+            tool_config=manifest.tool_config,
             installed_at=datetime.now(UTC),
             source="local",
             checksum=compute_pack_checksum(pack_dir),
@@ -347,6 +350,10 @@ class PackRegistry:
         for tenant_set in self._enabled.values():
             tenant_set.discard(name)
 
+        # Remove from all session enablement sets
+        for session_set in self._session_enabled.values():
+            session_set.discard(name)
+
         logger.info("pack_uninstalled", name=name, version=pack.version)
         return True
 
@@ -497,6 +504,101 @@ class PackRegistry:
                     self.enable(pack_name, tenant_id)
                 else:
                     self.disable(pack_name, tenant_id)
+
+    # ------------------------------------------------------------------
+    # Session-Scoped Enable/Disable (P-PACK v1)
+    # ------------------------------------------------------------------
+
+    def enable_for_session(self, pack_name: str, session_id: str) -> None:
+        """Enable a pack for a specific session only (not global/tenant).
+
+        Raises:
+            ValueError: If the pack is not installed.
+        """
+        if pack_name not in self._installed:
+            raise ValueError(f"Pack '{pack_name}' is not installed")
+
+        if session_id not in self._session_enabled:
+            self._session_enabled[session_id] = set()
+        self._session_enabled[session_id].add(pack_name)
+        logger.info("pack_enabled_for_session", name=pack_name, session_id=session_id)
+
+    def disable_for_session(self, pack_name: str, session_id: str) -> None:
+        """Disable a session-scoped pack.
+
+        Raises:
+            ValueError: If the pack is not installed.
+        """
+        if pack_name not in self._installed:
+            raise ValueError(f"Pack '{pack_name}' is not installed")
+
+        if session_id in self._session_enabled:
+            self._session_enabled[session_id].discard(pack_name)
+        logger.info("pack_disabled_for_session", name=pack_name, session_id=session_id)
+
+    def get_session_packs(self, session_id: str) -> list[InstalledPack]:
+        """Get packs enabled for a specific session."""
+        names = self._session_enabled.get(session_id, set())
+        return [self._installed[n] for n in sorted(names) if n in self._installed]
+
+    def get_session_prompt_addenda(self, session_id: str) -> list[str]:
+        """Collect all prompt addenda from packs enabled for a session.
+
+        Returns a flat list of prompt addenda strings from all active
+        session-scoped packs, in deterministic (sorted by pack name) order.
+        """
+        addenda: list[str] = []
+        for pack in self.get_session_packs(session_id):
+            addenda.extend(pack.prompt_addenda)
+        return addenda
+
+    def get_session_tool_config(self, session_id: str) -> dict[str, dict[str, object]]:
+        """Merge tool_config from all session-scoped packs.
+
+        Later packs (alphabetically) override earlier ones for the same tool
+        key.  Returns a merged dict of tool_name -> config.
+        """
+        merged: dict[str, dict[str, object]] = {}
+        for pack in self.get_session_packs(session_id):
+            for tool_name, config in pack.tool_config.items():
+                if tool_name not in merged:
+                    merged[tool_name] = {}
+                merged[tool_name].update(config)
+        return merged
+
+    # ------------------------------------------------------------------
+    # Dry-Run Simulation (P-PACK v1)
+    # ------------------------------------------------------------------
+
+    def dry_run(
+        self,
+        pack_name: str,
+        agent_name: str = "",
+        session_id: str = "",
+    ) -> dict[str, object]:
+        """Return what would change if this pack were applied.
+
+        Does NOT modify any state.
+
+        Raises:
+            ValueError: If the pack is not installed.
+        """
+        if pack_name not in self._installed:
+            raise ValueError(f"Pack '{pack_name}' is not installed")
+
+        pack = self._installed[pack_name]
+        return {
+            "pack_name": pack_name,
+            "version": pack.version,
+            "prompt_addenda_count": len(pack.prompt_addenda),
+            "prompt_addenda_preview": [p[:100] for p in pack.prompt_addenda],
+            "tool_config_tools": list(pack.tool_config.keys()),
+            "tool_config": pack.tool_config,
+            "skills_to_load": [s.name for s in pack.skills],
+            "would_apply_to_agent": agent_name or "(all agents)",
+            "would_apply_to_session": session_id or "(all sessions in tenant)",
+            "injection_scan": "clean",  # validated at load time by manifest validator
+        }
 
     # ------------------------------------------------------------------
     # Query

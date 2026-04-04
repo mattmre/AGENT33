@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path  # noqa: TC003 -- Pydantic needs Path at runtime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -109,6 +110,10 @@ class InstalledPack(BaseModel):
 
     # Compatibility
     compatibility: PackCompatibility = Field(default_factory=PackCompatibility)
+
+    # Improvement pack sections (P-PACK v1)
+    prompt_addenda: list[str] = Field(default_factory=list)
+    tool_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # Installation metadata
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
