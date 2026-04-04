@@ -35,6 +35,7 @@ dependencies = [
     "websockets>=13,<17",
     "numpy>=1.24,<3",
     "psutil>=5.9",
+    "aiosqlite>=0.19",
 ]
 
 [project.optional-dependencies]

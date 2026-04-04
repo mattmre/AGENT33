@@ -354,6 +354,10 @@ class Settings(BaseSettings):
     # Defaults to "standard" for backward compatibility with existing deployments.
     agent33_mode: Literal["lite", "standard", "enterprise"] = "standard"
 
+    # SQLite long-term memory path (P60b — used when agent33_mode=lite or no database_url)
+    # Set to ":memory:" for ephemeral in-process storage (useful in tests).
+    sqlite_memory_db_path: str = "var/agent33_memory.db"
+
     # Matrix messaging adapter
     matrix_homeserver_url: str = ""  # e.g. "https://matrix.org"
     matrix_access_token: SecretStr = SecretStr("")
