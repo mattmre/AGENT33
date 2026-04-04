@@ -330,6 +330,88 @@ async def check_all_compliance(request: Request) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Dry-run simulation (P-PACK v1)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{name}/dry-run", dependencies=[require_scope("agents:read")])
+async def dry_run_pack(
+    name: str,
+    request: Request,
+    agent: str = Query(default="", description="Target agent name"),
+    session: str = Query(default="", description="Target session ID"),
+) -> dict[str, Any]:
+    """Preview what would change if this pack were applied.
+
+    Returns a simulation of prompt addenda, tool config, and skills that
+    would be loaded -- without modifying any state.
+    """
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    try:
+        result = registry.dry_run(name, agent_name=agent, session_id=session)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped enable/disable (P-PACK v1)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{name}/enable-session", dependencies=[require_scope("agents:write")])
+async def enable_pack_for_session(
+    name: str,
+    request: Request,
+    session_id: str = Query(..., min_length=1, description="Session ID"),
+) -> dict[str, Any]:
+    """Enable a pack for a specific session (session-scoped, not tenant-wide)."""
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    try:
+        registry.enable_for_session(name, session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "pack_name": name,
+        "session_id": session_id,
+        "action": "enabled_for_session",
+    }
+
+
+@router.post("/{name}/disable-session", dependencies=[require_scope("agents:write")])
+async def disable_pack_for_session(
+    name: str,
+    request: Request,
+    session_id: str = Query(..., min_length=1, description="Session ID"),
+) -> dict[str, Any]:
+    """Disable a pack for a specific session."""
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    try:
+        registry.disable_for_session(name, session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "pack_name": name,
+        "session_id": session_id,
+        "action": "disabled_for_session",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Single-pack detail (catch-all /{name} — must come after fixed paths above)
 # ---------------------------------------------------------------------------
 

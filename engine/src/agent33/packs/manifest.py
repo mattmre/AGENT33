@@ -2,6 +2,10 @@
 
 A Skill Pack is a directory containing a PACK.yaml manifest and one or
 more skill definitions.  The manifest is the pack's identity document.
+
+Since P-PACK v1, manifests may also contain *improvement pack* sections:
+``prompt_addenda`` (text appended to agent system prompts) and
+``tool_config`` (per-tool parameter defaults / policy overrides).
 """
 
 from __future__ import annotations
@@ -100,6 +104,16 @@ class PackManifest(BaseModel):
     # Governance
     governance: PackGovernance = Field(default_factory=PackGovernance)
 
+    # --- Improvement pack sections (P-PACK v1) ---
+    prompt_addenda: list[str] = Field(
+        default_factory=list,
+        description="Text sections to append to agent system prompt when the pack is active.",
+    )
+    tool_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Per-tool parameter defaults and policy overrides.",
+    )
+
     @field_validator("name")
     @classmethod
     def _validate_name(cls, value: str) -> str:
@@ -134,6 +148,23 @@ class PackManifest(BaseModel):
             if skill.name in seen:
                 raise ValueError(f"Duplicate skill name '{skill.name}' in pack '{self.name}'")
             seen.add(skill.name)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_prompt_addenda_safe(self) -> PackManifest:
+        """Reject packs whose prompt_addenda contain injection patterns."""
+        if not self.prompt_addenda:
+            return self
+
+        from agent33.security.injection import scan_inputs_recursive
+
+        result = scan_inputs_recursive(self.prompt_addenda)
+        if not result.is_safe:
+            threats = ", ".join(result.threats)
+            raise ValueError(
+                f"Prompt addenda in pack '{self.name}' failed injection scan: {threats}. "
+                f"Review and sanitize the addenda before loading."
+            )
         return self
 
 
