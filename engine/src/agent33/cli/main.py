@@ -357,5 +357,30 @@ def start(
     raise typer.Exit(code=result.returncode)
 
 
+@app.command()
+def wizard(
+    env_path: Path = typer.Option(  # noqa: B008
+        Path(".env.local"),  # noqa: B008
+        "--env",
+        "-e",
+        help="Path where the wizard writes generated .env variables.",
+    ),
+) -> None:
+    """Interactive first-run setup wizard.
+
+    Guides you through environment detection, LLM provider selection,
+    a test invocation, and template selection in about 5 minutes.
+
+    Examples::
+
+        agent33 wizard
+        agent33 wizard --env /path/to/.env.local
+    """
+    from agent33.cli.wizard import FirstRunWizard, TerminalWizardIO
+
+    result = FirstRunWizard(io=TerminalWizardIO(), env_path=env_path).run()
+    raise typer.Exit(code=0 if result.completed else 1)
+
+
 if __name__ == "__main__":
     app()
