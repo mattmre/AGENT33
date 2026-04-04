@@ -258,5 +258,22 @@ def status(
         raise typer.Exit(code=1) from exc
 
 
+@app.command()
+def diagnose(
+    fix: bool = typer.Option(False, "--fix", help="Auto-remediate safe issues."),
+) -> None:
+    """Run diagnostic checks on all AGENT-33 subsystems.
+
+    Checks Python version, environment config, disk space, port availability,
+    Ollama, LLM provider, database, and Redis connectivity.
+
+    Use --fix to auto-remediate issues where safe to do so.
+    """
+    from agent33.cli.diagnose import diagnose as _run_diagnose
+
+    exit_code = _run_diagnose(fix=fix)
+    raise typer.Exit(code=exit_code)
+
+
 if __name__ == "__main__":
     app()
