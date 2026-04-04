@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+
+    from agent33.outcomes.service import OutcomesService
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -34,6 +37,7 @@ from agent33.observability.effort_telemetry import (
     NoopEffortTelemetryExporter,
 )
 from agent33.observability.metrics import MetricsCollector
+from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import _get_token_payload, require_scope
 
@@ -270,6 +274,44 @@ def get_registry(request: Request) -> AgentRegistry:
     if registry is None:
         registry = AgentRegistry()
     return registry
+
+
+def _get_outcomes_service(request: Request) -> OutcomesService | None:
+    """Return the outcomes service from app.state, or None if unavailable."""
+    return getattr(request.app.state, "outcomes_service", None)
+
+
+def _record_outcome_safe(
+    outcomes_svc: OutcomesService | None,
+    *,
+    tenant_id: str,
+    domain: str,
+    event_type: str,
+    metric_type: OutcomeMetricType,
+    value: float,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Record an outcome event without blocking the response on failure.
+
+    This is intentionally fire-and-forget.  If the service is unavailable
+    or the recording raises, we log a warning and move on so the agent
+    invocation response is never degraded.
+    """
+    if outcomes_svc is None:
+        return
+    try:
+        outcomes_svc.record_event(
+            tenant_id=tenant_id,
+            event=OutcomeEventCreate(
+                domain=domain,
+                event_type=event_type,
+                metric_type=metric_type,
+                value=value,
+                metadata=metadata or {},
+            ),
+        )
+    except Exception:
+        logger.warning("outcome_recording_failed", exc_info=True)
 
 
 # -- request / response models -------------------------------------------
@@ -636,17 +678,71 @@ async def invoke_agent(
         metrics_collector=metrics_collector,
     )
 
+    outcomes_svc = _get_outcomes_service(request)
+    invoke_start = time.monotonic()
+
     try:
         result = await runtime.invoke(body.inputs)
     except ValueError as exc:
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=tenant_id,
+            domain=name,
+            event_type="invoke",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=0.0,
+            metadata={"error": str(exc), "termination": "validation_error"},
+        )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=tenant_id,
+            domain=name,
+            event_type="invoke",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=0.0,
+            metadata={"error": str(exc), "termination": "runtime_error"},
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=tenant_id,
+            domain=name,
+            event_type="invoke",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=0.0,
+            metadata={"error": str(exc), "termination": "error"},
+        )
         # Handle HookAbortError without hard import dependency
         if type(exc).__name__ == "HookAbortError":
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         raise
+
+    latency_ms = (time.monotonic() - invoke_start) * 1000
+    _record_outcome_safe(
+        outcomes_svc,
+        tenant_id=tenant_id,
+        domain=name,
+        event_type="invoke",
+        metric_type=OutcomeMetricType.SUCCESS_RATE,
+        value=1.0,
+        metadata={
+            "model": result.model,
+            "tokens": result.tokens_used,
+            "termination": "success",
+        },
+    )
+    _record_outcome_safe(
+        outcomes_svc,
+        tenant_id=tenant_id,
+        domain=name,
+        event_type="invoke",
+        metric_type=OutcomeMetricType.LATENCY_MS,
+        value=latency_ms,
+        metadata={"agent": name, "model": result.model},
+    )
 
     return InvokeResponse(
         agent=name,
@@ -780,6 +876,10 @@ async def invoke_agent_iterative(
         metrics_collector=metrics_collector_iter,
     )
 
+    outcomes_svc = _get_outcomes_service(request)
+    iter_tenant_id = token_payload.tenant_id or ""
+    iter_start = time.monotonic()
+
     try:
         result = await runtime.invoke_iterative(
             body.inputs,
@@ -787,9 +887,68 @@ async def invoke_agent_iterative(
             autonomy_level=body.autonomy_level,
         )
     except ValueError as exc:
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=iter_tenant_id,
+            domain=name,
+            event_type="invoke_iterative",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=0.0,
+            metadata={"error": str(exc), "termination": "validation_error"},
+        )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=iter_tenant_id,
+            domain=name,
+            event_type="invoke_iterative",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=0.0,
+            metadata={"error": str(exc), "termination": "runtime_error"},
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    iter_latency_ms = (time.monotonic() - iter_start) * 1000
+    _record_outcome_safe(
+        outcomes_svc,
+        tenant_id=iter_tenant_id,
+        domain=name,
+        event_type="invoke_iterative",
+        metric_type=OutcomeMetricType.SUCCESS_RATE,
+        value=1.0,
+        metadata={
+            "model": result.model,
+            "tokens": result.tokens_used,
+            "iterations": result.iterations,
+            "tool_calls_made": result.tool_calls_made,
+            "termination": result.termination_reason,
+        },
+    )
+    _record_outcome_safe(
+        outcomes_svc,
+        tenant_id=iter_tenant_id,
+        domain=name,
+        event_type="invoke_iterative",
+        metric_type=OutcomeMetricType.LATENCY_MS,
+        value=iter_latency_ms,
+        metadata={"agent": name, "model": result.model},
+    )
+    # Record termination reason as a failure classification when non-successful
+    if result.termination_reason not in ("complete", "success", "natural"):
+        _record_outcome_safe(
+            outcomes_svc,
+            tenant_id=iter_tenant_id,
+            domain=name,
+            event_type="invoke_iterative",
+            metric_type=OutcomeMetricType.FAILURE_CLASS,
+            value=1.0,
+            metadata={
+                "failure_class": result.termination_reason,
+                "iterations": result.iterations,
+                "tool_calls_made": result.tool_calls_made,
+            },
+        )
 
     return InvokeIterativeResponse(
         agent=name,

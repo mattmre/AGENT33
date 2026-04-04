@@ -1,20 +1,31 @@
 """FastAPI routes for outcome metrics events and dashboards."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from fastapi import APIRouter, Request
 
-from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
+from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType  # noqa: TC001
 from agent33.outcomes.service import OutcomesService
 from agent33.security.permissions import require_scope
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
+
+# Module-level fallback; replaced by lifespan via set_outcomes_service().
 _service = OutcomesService()
 
 
-def get_outcomes_service() -> OutcomesService:
-    """Return singleton outcomes service."""
-    return _service
+def set_outcomes_service(service: OutcomesService) -> None:
+    """Swap the module-level outcomes service (called from lifespan)."""
+    global _service
+    _service = service
+
+
+def get_outcomes_service(request: Request) -> OutcomesService:
+    """Return the outcomes service from app.state, falling back to module-level."""
+    svc: OutcomesService | None = getattr(request.app.state, "outcomes_service", None)
+    return svc if svc is not None else _service
 
 
 def _tenant_id(request: Request) -> str:
@@ -26,7 +37,8 @@ def _tenant_id(request: Request) -> str:
 
 @router.post("/events", status_code=201, dependencies=[require_scope("outcomes:write")])
 async def record_event(body: OutcomeEventCreate, request: Request) -> dict[str, Any]:
-    event = _service.record_event(tenant_id=_tenant_id(request), event=body)
+    service = get_outcomes_service(request)
+    event = service.record_event(tenant_id=_tenant_id(request), event=body)
     return event.model_dump(mode="json")
 
 
@@ -38,7 +50,8 @@ async def list_events(
     metric_type: OutcomeMetricType | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    events = _service.list_events(
+    service = get_outcomes_service(request)
+    events = service.list_events(
         tenant_id=_tenant_id(request),
         domain=domain,
         event_type=event_type,
@@ -55,7 +68,8 @@ async def get_trend(
     domain: str | None = None,
     window: int = 20,
 ) -> dict[str, Any]:
-    trend = _service.compute_trend(
+    service = get_outcomes_service(request)
+    trend = service.compute_trend(
         tenant_id=_tenant_id(request),
         metric_type=metric_type,
         domain=domain,
@@ -71,7 +85,8 @@ async def get_dashboard(
     window: int = 20,
     recent_limit: int = 10,
 ) -> dict[str, Any]:
-    dashboard = _service.get_dashboard(
+    service = get_outcomes_service(request)
+    dashboard = service.get_dashboard(
         tenant_id=_tenant_id(request),
         domain=domain,
         window=window,
