@@ -340,7 +340,7 @@ async def dry_run_pack(
     request: Request,
     agent: str = Query(default="", description="Target agent name"),
     session: str = Query(default="", description="Target session ID"),
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Preview what would change if this pack were applied.
 
     Returns a simulation of prompt addenda, tool config, and skills that
