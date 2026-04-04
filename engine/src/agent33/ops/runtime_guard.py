@@ -69,7 +69,7 @@ _DEFAULT_INVARIANTS: list[tuple[str, str, bool]] = [
 def _get_memory_rss_mb() -> float:
     """Return resident set size in MB, or 0.0 if unavailable."""
     try:
-        import psutil  # type: ignore[import-untyped]
+        import psutil
 
         proc = psutil.Process(os.getpid())
         return float(proc.memory_info().rss) / (1024 * 1024)
