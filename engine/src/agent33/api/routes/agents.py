@@ -307,6 +307,14 @@ class InvokeIterativeRequest(BaseModel):
     max_tool_calls_per_iteration: int = 5
     enable_double_confirmation: bool = True
     loop_detection_threshold: int = 3
+    autonomy_level: int | None = Field(
+        default=None,
+        ge=0,
+        le=3,
+        description="P67 autonomy level (0=supervised, 1=default, 2=auto, 3=full). "
+        "When set, overrides the constructor-injected RuntimeEnforcer with a "
+        "level-derived AutonomyBudget.",
+    )
 
 
 class InvokeIterativeResponse(BaseModel):
@@ -721,7 +729,11 @@ async def invoke_agent_iterative(
     )
 
     try:
-        result = await runtime.invoke_iterative(body.inputs, config=loop_config)
+        result = await runtime.invoke_iterative(
+            body.inputs,
+            config=loop_config,
+            autonomy_level=body.autonomy_level,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:

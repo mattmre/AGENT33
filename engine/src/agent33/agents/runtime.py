@@ -709,6 +709,7 @@ class AgentRuntime:
         self,
         inputs: dict[str, Any],
         config: ToolLoopConfig | None = None,
+        autonomy_level: int | None = None,
     ) -> IterativeAgentResult:
         """Run the agent with the iterative tool-use loop.
 
@@ -771,6 +772,16 @@ class AgentRuntime:
         )
         self._validate_required_inputs(inputs)
 
+        # --- P67: Resolve autonomy-level enforcer AFTER hooks (hooks can mutate inputs) ---
+        effective_enforcer = self._runtime_enforcer
+        if autonomy_level is not None:
+            from agent33.autonomy.enforcement import RuntimeEnforcer as _RuntimeEnforcer
+            from agent33.autonomy.levels import autonomy_level_to_budget
+
+            task_label = json.dumps(inputs, ensure_ascii=False)[:50] if inputs else "agent-task"
+            budget = autonomy_level_to_budget(autonomy_level, task_name=task_label)
+            effective_enforcer = _RuntimeEnforcer(budget)
+
         loop_config = config or ToolLoopConfig()
         routed_model: str | None = None
         routed_max_tokens: int | None = None
@@ -790,7 +801,7 @@ class AgentRuntime:
                 tool_governance=self._tool_governance,
                 tool_context=self._tool_context,
                 observation_capture=self._observation_capture,
-                runtime_enforcer=self._runtime_enforcer,
+                runtime_enforcer=effective_enforcer,
                 config=loop_config,
                 agent_name=self._definition.name,
                 session_id=self._session_id,
@@ -862,7 +873,7 @@ class AgentRuntime:
             tool_governance=self._tool_governance,
             tool_context=self._tool_context,
             observation_capture=self._observation_capture,
-            runtime_enforcer=self._runtime_enforcer,
+            runtime_enforcer=effective_enforcer,
             config=loop_config,
             agent_name=self._definition.name,
             session_id=self._session_id,
