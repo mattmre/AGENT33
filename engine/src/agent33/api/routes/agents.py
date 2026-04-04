@@ -494,6 +494,29 @@ async def profiling_agent_summary(
     return result
 
 
+@router.post("/preview-prompt", dependencies=[require_scope("agents:read")])
+async def preview_agent_prompt(
+    definition: AgentDefinition,
+) -> dict[str, str]:
+    """Return the system prompt that would be generated for this agent definition."""
+    from agent33.agents.runtime import _build_system_prompt
+
+    prompt = _build_system_prompt(definition)
+    return {"system_prompt": prompt}
+
+
+@router.post("/validate")
+async def validate_agent_definition(
+    definition: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate an agent definition without registering it. Returns errors if invalid."""
+    try:
+        agent_def = AgentDefinition.model_validate(definition)
+        return {"valid": True, "name": agent_def.name, "errors": []}
+    except Exception as exc:
+        return {"valid": False, "name": None, "errors": [str(exc)]}
+
+
 @router.get("/", dependencies=[require_scope("agents:read")])
 async def list_agents(
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
@@ -512,6 +535,35 @@ async def get_agent(
     if definition is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     return definition.model_dump(mode="json")
+
+
+@router.put("/{name}", dependencies=[require_scope("agents:write")])
+async def update_agent(
+    name: str,
+    definition: AgentDefinition,
+    registry: AgentRegistry = Depends(get_registry),  # noqa: B008
+) -> dict[str, Any]:
+    """Update an existing agent definition."""
+    existing = registry.get(name)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    registry.register(definition)
+    updated = registry.get(definition.name)
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Failed to update agent")
+    return updated.model_dump(mode="json")
+
+
+@router.delete("/{name}", status_code=204, dependencies=[require_scope("agents:write")])
+async def delete_agent(
+    name: str,
+    registry: AgentRegistry = Depends(get_registry),  # noqa: B008
+) -> None:
+    """Remove an agent definition from the registry."""
+    existing = registry.get(name)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    registry.remove(name)
 
 
 @router.post("/", status_code=201, dependencies=[require_scope("agents:write")])

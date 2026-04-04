@@ -87,3 +87,37 @@ export interface WorkflowLiveEvent {
 export interface WorkflowLiveTransportConnection {
   close: () => void;
 }
+
+// -- Agent Builder Types (P66) -----------------------------------------------
+
+export interface AgentBuilderState {
+  name: string;
+  description: string;
+  role: string;
+  version: string;
+  canReadFiles: boolean;
+  canWriteFiles: boolean;
+  canSearchWeb: boolean;
+  canRunCode: boolean;
+  canCallAPIs: boolean;
+  systemPromptPreview: string;
+  isPreviewLoading: boolean;
+  testMessage: string;
+  testResponse: string;
+  isTestLoading: boolean;
+}
+
+export interface AgentDefinitionExport {
+  name: string;
+  version: string;
+  role: string;
+  description: string;
+  capabilities: string[];
+  governance: {
+    scope: string;
+    network: string;
+    approval_required: string[];
+    tool_policies: Record<string, string>;
+  };
+  autonomy_level: string;
+}
