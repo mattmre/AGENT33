@@ -80,6 +80,20 @@ async def get_template_definition(template_id: str) -> dict[str, Any]:
     return defn
 
 
+@router.get("/{template_id}/sample", dependencies=[require_scope("workflows:read")])
+async def get_template_sample(template_id: str) -> dict[str, Any]:
+    """Return sample inputs for a template (for 'try with sample data' mode)."""
+    catalog = get_template_catalog()
+    summary = catalog.get_template(template_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found")
+    if not summary.sample_inputs:
+        raise HTTPException(
+            status_code=404, detail=f"Template '{template_id}' has no sample inputs"
+        )
+    return summary.sample_inputs
+
+
 @router.post("/refresh", dependencies=[require_scope("workflows:write")])
 async def refresh_templates() -> dict[str, Any]:
     """Re-scan the template directory and reload the catalog."""
