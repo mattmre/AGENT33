@@ -7,7 +7,13 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
-import nats
+try:
+    import nats
+
+    _NATS_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    nats = None  # type: ignore[assignment]
+    _NATS_AVAILABLE = False
 
 from agent33.config import settings
 
@@ -24,6 +30,10 @@ class NATSMessageBus:
     """Thin wrapper around a NATS connection for pub/sub and request/reply."""
 
     def __init__(self, url: str | None = None) -> None:
+        if not _NATS_AVAILABLE:
+            raise RuntimeError(
+                "NATS dependencies are not installed. Install with: pip install agent33[standard]"
+            )
         self._url = url or settings.nats_url
         self._nc: NATSClient | None = None
         self._subscriptions: list[Any] = []

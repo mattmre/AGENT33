@@ -6,10 +6,28 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Integer, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+try:
+    from sqlalchemy import Column, DateTime, Integer, Text, text
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.orm import DeclarativeBase
+
+    _SQLALCHEMY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _SQLALCHEMY_AVAILABLE = False
+    # Placeholders so the module-level class bodies below don't crash at import.
+    Column = None  # type: ignore[assignment]
+    DateTime = None  # type: ignore[assignment]
+    Integer = None  # type: ignore[assignment]
+    Text = None  # type: ignore[assignment]
+    text = None  # type: ignore[assignment]
+    JSONB = None  # type: ignore[assignment]
+    async_sessionmaker = None  # type: ignore[assignment]
+    create_async_engine = None  # type: ignore[assignment]
+
+    class DeclarativeBase:  # type: ignore[no-redef]
+        pass
+
 
 from agent33.observability.query_profiling import track_query
 
@@ -63,6 +81,11 @@ class LongTermMemory:
         pool_pre_ping: bool = True,
         pool_recycle: int = 1800,
     ) -> None:
+        if not _SQLALCHEMY_AVAILABLE:
+            raise RuntimeError(
+                "PostgreSQL dependencies are not installed. "
+                "Install with: pip install agent33[standard]"
+            )
         self._engine = create_async_engine(
             database_url,
             echo=False,
