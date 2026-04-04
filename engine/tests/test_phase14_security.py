@@ -790,9 +790,10 @@ class TestSecretStrConfig:
     def test_jwt_secret_is_secretstr(self) -> None:
         from agent33.config import Settings
 
-        s = Settings(jwt_secret="change-me-in-production", auth_bootstrap_enabled=False)
+        s = Settings(jwt_secret="my-custom-secret-value", auth_bootstrap_enabled=False)
         assert isinstance(s.jwt_secret, SecretStr)
-        assert s.jwt_secret.get_secret_value() == "change-me-in-production"
+        # An explicitly set secret must be preserved unchanged.
+        assert s.jwt_secret.get_secret_value() == "my-custom-secret-value"
 
     def test_api_secret_key_is_secretstr(self) -> None:
         from agent33.config import Settings
@@ -830,6 +831,8 @@ class TestSecretStrConfig:
     def test_check_production_secrets_works_with_secretstr(self) -> None:
         from agent33.config import Settings
 
+        # In development/lite mode, jwt_secret is auto-generated (no longer the default
+        # placeholder), so only api_secret_key will trigger a warning here.
         s = Settings(
             api_secret_key="change-me-in-production",
             jwt_secret="change-me-in-production",
@@ -837,7 +840,9 @@ class TestSecretStrConfig:
             auth_bootstrap_admin_password="boot-secret-12345",
         )
         warnings = s.check_production_secrets()
-        assert len(warnings) == 2
+        # jwt_secret was auto-generated, so only api_secret_key produces a warning.
+        assert len(warnings) == 1
+        assert any("api_secret_key" in w for w in warnings)
 
     def test_custom_secrets_pass_with_secretstr(self) -> None:
         from agent33.config import Settings

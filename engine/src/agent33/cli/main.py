@@ -10,6 +10,7 @@ from typing import Any
 
 import typer
 
+from agent33.cli.bootstrap import _bootstrap_generate
 from agent33.env.cli import app as env_app
 
 app = typer.Typer(
@@ -273,6 +274,29 @@ def diagnose(
 
     exit_code = _run_diagnose(fix=fix)
     raise typer.Exit(code=exit_code)
+
+
+@app.command()
+def bootstrap(
+    output: Path = typer.Option(  # noqa: B008
+        Path(".env.local"),  # noqa: B008
+        "--output",
+        "-o",
+        help="Output file path.",
+    ),
+    force: bool = typer.Option(  # noqa: B008
+        False,
+        "--force",
+        "-f",
+        help="Overwrite existing file.",
+    ),
+) -> None:
+    """Generate a .env.local file with secure defaults for local development.
+
+    Generates a cryptographically random JWT_SECRET and dev API key.
+    The output file is safe for local dev/lite mode — do NOT use in production.
+    """
+    _bootstrap_generate(output=output, force=force)
 
 
 if __name__ == "__main__":
