@@ -16,13 +16,13 @@ try:
 except ImportError:  # pragma: no cover
     _SQLALCHEMY_AVAILABLE = False
     # Placeholders so the module-level class bodies below don't crash at import.
-    Column = None  # type: ignore[assignment]
-    DateTime = None  # type: ignore[assignment]
-    Integer = None  # type: ignore[assignment]
-    Text = None  # type: ignore[assignment]
+    Column = None  # type: ignore[misc,assignment]
+    DateTime = None  # type: ignore[misc,assignment]
+    Integer = None  # type: ignore[misc,assignment]
+    Text = None  # type: ignore[misc,assignment]
     text = None  # type: ignore[assignment]
-    JSONB = None  # type: ignore[assignment]
-    async_sessionmaker = None  # type: ignore[assignment]
+    JSONB = None  # type: ignore[misc,assignment]
+    async_sessionmaker = None  # type: ignore[misc,assignment]
     create_async_engine = None  # type: ignore[assignment]
 
     class DeclarativeBase:  # type: ignore[no-redef]
