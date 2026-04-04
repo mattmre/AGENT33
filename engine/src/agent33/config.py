@@ -373,6 +373,8 @@ class Settings(BaseSettings):
     self_improve_require_approval: bool = True
     autonomy_max_stretch_hours: int = 24
     autonomy_allow_security_recon: bool = True
+    # P67: 0=supervised, 1=read-auto/write-approval, 2=auto-no-destructive, 3=full
+    autonomy_default_level: int = 1
     offline_mode: bool = False
     intake_output_dir: str = "docs/research/repo_dossiers"
     analysis_template_dir: str = "docs/research/templates"
