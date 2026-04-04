@@ -154,18 +154,38 @@ def test_wizard_openai_provider_sets_api_key(
     assert result.llm_provider == "openai"
     assert result.api_key_set is True
     assert result.llm_model == "gpt-4o-mini"
+    assert result.entered_api_key == "sk-test-key-12345"
 
 
 def test_wizard_openai_empty_key_does_not_set_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # ensure no ambient key
     result = _wizard(
         answers=["developer", "openai", "", "None — I'll configure manually"],
         tmp_path=tmp_path,
     )
     assert result.llm_provider == "openai"
     assert result.api_key_set is False
+    assert result.entered_api_key is None
+
+
+def test_wizard_openai_preexisting_env_key_sets_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If OPENAI_API_KEY already exists in env and user leaves blank, api_key_set is True."""
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-preexisting-key")
+    result = _wizard(
+        answers=["developer", "openai", "", "no", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_provider == "openai"
+    assert result.api_key_set is True
+    assert result.llm_model == "gpt-4o-mini"
+    # User did not enter a new key, so entered_api_key should be None
+    assert result.entered_api_key is None
 
 
 def test_wizard_ollama_provider_without_binary(
@@ -407,17 +427,32 @@ def test_build_env_lines_skip_provider() -> None:
     assert "OLLAMA" not in joined
 
 
-def test_build_env_lines_openai_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-abc")
+def test_build_env_lines_openai_with_entered_key() -> None:
     result = WizardResult(
         profile="production",
         llm_provider="openai",
         llm_model="gpt-4o-mini",
         api_key_set=True,
+        entered_api_key="sk-test-abc",
     )
     lines = _build_env_lines(result)
     joined = "\n".join(lines)
     assert "OPENAI_API_KEY=sk-test-abc" in joined
+    assert "DEFAULT_MODEL=gpt-4o-mini" in joined
+
+
+def test_build_env_lines_openai_without_entered_key_omits_api_key() -> None:
+    """If api_key_set from env but user didn't enter a key, don't write it to .env.local."""
+    result = WizardResult(
+        profile="production",
+        llm_provider="openai",
+        llm_model="gpt-4o-mini",
+        api_key_set=True,
+        entered_api_key=None,
+    )
+    lines = _build_env_lines(result)
+    joined = "\n".join(lines)
+    assert "OPENAI_API_KEY" not in joined
     assert "DEFAULT_MODEL=gpt-4o-mini" in joined
 
 
