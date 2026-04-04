@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from agent33.memory.bm25 import BM25Index
 from agent33.skills.loader import (
     load_from_directory,
     load_from_skillmd,
@@ -138,6 +139,28 @@ class SkillRegistry:
             ):
                 results.append(skill)
         return sorted(results, key=lambda s: s.name)
+
+    def search_ranked(self, query: str, top_k: int = 3) -> list[tuple[SkillDefinition, float]]:
+        """BM25-scored search across skill names, descriptions, and tags.
+
+        Builds a transient ``BM25Index`` over the current registry contents,
+        scores each skill against *query*, and returns the top *top_k* results
+        as ``(SkillDefinition, score)`` tuples sorted by descending score.
+        """
+        if not self._skills:
+            return []
+
+        index = BM25Index()
+        ordered_skills: list[SkillDefinition] = list(self._skills.values())
+
+        for skill in ordered_skills:
+            document = " ".join(
+                part for part in (skill.name, skill.description, " ".join(skill.tags)) if part
+            )
+            index.add_document(document, metadata={"name": skill.name})
+
+        results = index.search(query, top_k=top_k)
+        return [(ordered_skills[r.doc_index], r.score) for r in results]
 
     # ------------------------------------------------------------------
     # Progressive Disclosure
