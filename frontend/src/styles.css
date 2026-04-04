@@ -791,7 +791,8 @@ button:disabled {
 /* Chat Central & Sub-Layouts */
 .consumer-chat-layout,
 .consumer-voice-layout,
-.consumer-setup-layout {
+.consumer-setup-layout,
+.consumer-builder-layout {
   flex: 1;
   display: flex;
   flex-direction: column;

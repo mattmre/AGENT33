@@ -1,0 +1,254 @@
+/* Agent Builder Page — P66 dark theme */
+
+.agent-builder-page {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.agent-builder-header {
+  margin-bottom: 2rem;
+}
+
+.agent-builder-header h1 {
+  font-size: 2rem;
+  margin: 0 0 0.4rem 0;
+  color: #fff;
+}
+
+.agent-builder-header p {
+  color: var(--text-soft);
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.agent-builder-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .agent-builder-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -- Form column --------------------------------------------------------- */
+
+.agent-builder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.builder-section {
+  background: var(--bg-main);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-outer-sm);
+}
+
+.builder-section h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.8rem 0;
+  color: var(--accent);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.section-subtitle {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  margin: -0.4rem 0 1rem 0;
+}
+
+.builder-section label {
+  margin-bottom: 0.6rem;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+/* -- Capability toggles -------------------------------------------------- */
+
+.capability-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-inner);
+}
+
+.toggle-label {
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-inner);
+  cursor: pointer;
+  transition: background 0.25s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch.active .toggle-knob {
+  transform: translateX(22px);
+}
+
+/* -- Test area ----------------------------------------------------------- */
+
+.test-area {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.test-area input {
+  flex: 1;
+}
+
+.test-area button {
+  white-space: nowrap;
+}
+
+.test-response {
+  margin-top: 0.8rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-inner);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* -- Actions ------------------------------------------------------------- */
+
+.builder-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.action-primary {
+  background: var(--accent);
+  color: #03080c;
+  font-weight: 700;
+}
+
+.action-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(48, 213, 200, 0.3);
+  color: #03080c;
+}
+
+.save-feedback {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.save-feedback.success {
+  color: var(--ok);
+}
+
+.save-feedback.error {
+  color: var(--danger);
+}
+
+.validation-errors {
+  list-style: none;
+  padding: 0.8rem 1rem;
+  margin: 0;
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 10px;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.validation-errors li::before {
+  content: "\2022  ";
+}
+
+/* -- Preview column ------------------------------------------------------ */
+
+.agent-builder-preview {
+  position: sticky;
+  top: 1rem;
+  background: var(--bg-main);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-outer-sm);
+}
+
+.agent-builder-preview h2 {
+  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+  color: var(--accent);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.preview-loading {
+  color: var(--accent-warm);
+  font-size: 0.85rem;
+}
+
+.preview-placeholder {
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+.prompt-preview {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-inner);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 600px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
