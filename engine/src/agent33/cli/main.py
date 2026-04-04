@@ -10,11 +10,14 @@ from typing import Any
 
 import typer
 
+from agent33.env.cli import app as env_app
+
 app = typer.Typer(
     name="agent33",
     help="AGENT-33 -- Autonomous AI agent orchestration engine.",
     add_completion=False,
 )
+app.add_typer(env_app, name="env")
 
 
 @app.command()
