@@ -1879,6 +1879,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
+    # -- Outcomes service (P68-Lite) -------------------------------------------
+    from agent33.outcomes.service import OutcomesService
+
+    outcomes_service = OutcomesService()
+    app.state.outcomes_service = outcomes_service
+    outcomes.set_outcomes_service(outcomes_service)
+    logger.info("outcomes_service_initialized")
+
     # -- Context compression engine (Phase 50) ---------------------------------
     context_compressor = None
     if settings.context_compression_enabled:

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from agent33.api.routes.outcomes import _service
+from agent33.api.routes import outcomes as outcomes_mod
 from agent33.main import app
 from agent33.security.auth import create_access_token
 
@@ -19,9 +19,24 @@ def _client(scopes: list[str], *, tenant_id: str = "tenant-a") -> TestClient:
 
 @pytest.fixture(autouse=True)
 def reset_outcomes_service() -> None:
-    _service._events.clear()
+    """Ensure each test starts with a clean module-level _service.
+
+    Uses ``outcomes_mod._service`` (module attribute access) rather than
+    a captured import binding so that ``set_outcomes_service()`` replacements
+    are always visible.  Temporarily removes ``app.state.outcomes_service``
+    so the route helper ``get_outcomes_service`` falls back to ``_service``.
+    """
+    outcomes_mod._service._events.clear()
+    had_attr = hasattr(app.state, "outcomes_service")
+    saved = getattr(app.state, "outcomes_service", None)
+    if had_attr:
+        delattr(app.state, "outcomes_service")
     yield
-    _service._events.clear()
+    outcomes_mod._service._events.clear()
+    if had_attr:
+        app.state.outcomes_service = saved
+    elif hasattr(app.state, "outcomes_service"):
+        delattr(app.state, "outcomes_service")
 
 
 @pytest.fixture
@@ -227,12 +242,13 @@ def test_dashboard_contract(writer_client: TestClient, tenant_b_writer: TestClie
     assert summary["metric_counts"]["latency_ms"] == 1
 
     trends = payload["trends"]
-    assert len(trends) == 4
+    assert len(trends) == 5
     assert {item["metric_type"] for item in trends} == {
         "success_rate",
         "quality_score",
         "latency_ms",
         "cost_usd",
+        "failure_class",
     }
     assert all(item["direction"] in {"improving", "stable", "declining"} for item in trends)
 

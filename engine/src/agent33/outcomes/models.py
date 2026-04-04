@@ -21,6 +21,7 @@ class OutcomeMetricType(StrEnum):
     QUALITY_SCORE = "quality_score"
     LATENCY_MS = "latency_ms"
     COST_USD = "cost_usd"
+    FAILURE_CLASS = "failure_class"
 
 
 class TrendDirection(StrEnum):
