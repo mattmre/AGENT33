@@ -31,6 +31,7 @@ from agent33.packs.api_models import (
 )
 from agent33.packs.models import PackSource
 from agent33.packs.provenance import evaluate_trust
+from agent33.packs.registry import PackRegistry
 from agent33.security.permissions import require_scope
 
 logger = structlog.get_logger()
@@ -38,12 +39,15 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/v1/packs", tags=["packs"])
 
 
-def _get_pack_registry(request: Request) -> Any:
+def _get_pack_registry(request: Request) -> PackRegistry | None:
     """Retrieve PackRegistry from app state.
 
     Returns None if not initialized (graceful degradation).
     """
-    return getattr(request.app.state, "pack_registry", None)
+    registry = getattr(request.app.state, "pack_registry", None)
+    if isinstance(registry, PackRegistry):
+        return registry
+    return None
 
 
 def _get_skill_registry(request: Request) -> Any:
