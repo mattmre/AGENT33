@@ -299,5 +299,63 @@ def bootstrap(
     _bootstrap_generate(output=output, force=force)
 
 
+@app.command()
+def start(
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        "-P",
+        help=(
+            "Configuration profile to activate. "
+            "One of: minimal, developer, production, enterprise, airgapped. "
+            "Sets AGENT33_PROFILE before loading settings; env vars still override."
+        ),
+    ),
+    host: str = typer.Option("0.0.0.0", "--host", help="Host to bind to."),  # noqa: S104
+    port: int = typer.Option(8000, "--port", help="Port to listen on."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload (development only)."),
+) -> None:
+    """Start the AGENT-33 server.
+
+    Examples::
+
+        agent33 start --profile developer
+        agent33 start --profile production --port 9000
+    """
+    import subprocess
+
+    if profile:
+        import os
+
+        from agent33.config_profiles import PROFILES
+
+        if profile not in PROFILES:
+            from agent33.config_profiles import PROFILE_NAMES
+
+            typer.echo(
+                f"Unknown profile: {profile!r}. Valid profiles: {', '.join(PROFILE_NAMES)}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        os.environ["AGENT33_PROFILE"] = profile
+        typer.echo(f"Using profile: {profile}")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "agent33.main:app",
+        "--host",
+        host,
+        "--port",
+        str(port),
+    ]
+    if reload:
+        cmd.append("--reload")
+
+    result = subprocess.run(cmd, check=False)
+    raise typer.Exit(code=result.returncode)
+
+
 if __name__ == "__main__":
     app()

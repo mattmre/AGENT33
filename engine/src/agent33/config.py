@@ -9,7 +9,7 @@ import string
 from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 _logger = logging.getLogger(__name__)
 
@@ -756,6 +756,32 @@ class Settings(BaseSettings):
                 self.environment,
             )
         return self
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Wire in ProfileSettingsSource between dotenv and file secrets.
+
+        Priority (highest to lowest):
+        1. init_settings — values passed directly to Settings(...)
+        2. env_settings — environment variables (e.g. AGENT33_MODE=enterprise)
+        3. dotenv_settings — .env file
+        4. ProfileSettingsSource — profile preset via AGENT33_PROFILE env var
+        5. file_secret_settings — mounted secrets
+        """
+        import os
+
+        from agent33.config_profiles import ProfileSettingsSource
+
+        profile_name = os.environ.get("AGENT33_PROFILE")
+        profile_source = ProfileSettingsSource(settings_cls, profile_name=profile_name)
+        return (init_settings, env_settings, dotenv_settings, profile_source, file_secret_settings)
 
     def check_production_secrets(self) -> list[str]:
         """Check for default secrets.  Raises in production mode."""
