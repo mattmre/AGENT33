@@ -25,11 +25,11 @@
 
 ## High Finding
 
-**[PR #371 — P64] `.env.local` de-duplication absent in `_write_env`.**
+**[PR #371 — P64] `.env.local` de-duplication absent in `_write_env`.** — **Resolved.**
 
-`_write_env` appends a `# --- wizard ---` section to `.env.local` without checking if one already exists. Running `agent33 wizard` twice on the same directory silently writes duplicate `AGENT33_PROFILE`, `OLLAMA_BASE_URL`, and `DEFAULT_MODEL` entries. The last value wins in most `.env` parsers, so behavior is correct, but the file becomes noisy and confusing.
+~~`_write_env` appends a `# --- wizard ---` section to `.env.local` without checking if one already exists.~~
 
-**Remediation**: Before writing, check for `# --- wizard ---` in existing content and truncate at that marker, or strip matching keys before appending.
+Fixed in this PR. `wizard.py` uses marker-based replacement: `_write_env` looks for the `# --- wizard ---` marker in existing content and truncates at that position before writing the new wizard section. Rerunning `agent33 wizard` does not accumulate duplicates. Test `test_write_env_deduplicates_on_rerun` confirms this behavior.
 
 ---
 
@@ -109,6 +109,6 @@ When a profile key is not found, `get_field_value` returns `(None, "", False)`. 
 
 Before starting UX-B (P65–P67):
 
-1. **Close H1** (`_write_env` de-duplication) — 15 min fix in `wizard.py`
+1. **H1 closed** — implemented in `wizard.py` via marker-based replacement (`_write_env` de-duplication)
 2. **Document M2** (`InProcessMessageBus` no-subscriber contract) — code comment only
 3. Begin P65 (quick-start templates) from fresh `origin/main` worktree after P64 merges

@@ -172,6 +172,7 @@ class WizardResult:
     llm_provider: str = "skip"  # "openai" | "ollama" | "skip"
     llm_model: str | None = None
     api_key_set: bool = False
+    entered_api_key: str | None = None  # key user explicitly typed (not from env)
     template: str | None = None
     env_path: Path = field(default_factory=lambda: Path(".env.local"))
     env_written: bool = False
@@ -300,11 +301,17 @@ class FirstRunWizard:
                 "\n  Get your API key at: https://platform.openai.com/api-keys\n"
                 "  (The key will be written to your .env.local — never committed to git.)\n"
             )
-            key = self._io.secret("  Paste your OpenAI API key")
-            if key:
-                result.api_key_set = True
+            existing_key = os.environ.get("OPENAI_API_KEY", "").strip()
+            key = self._io.secret("  Paste your OpenAI API key").strip()
+            effective_key = key or existing_key
+            result.api_key_set = bool(effective_key)
+            if result.api_key_set:
                 result.llm_model = "gpt-4o-mini"
-                os.environ["OPENAI_API_KEY"] = key  # make available for step 3
+            if key:
+                # Only set in os.environ if user actually entered something new
+                os.environ["OPENAI_API_KEY"] = key
+                # Track that user explicitly entered a key (for .env.local writing)
+                result.entered_api_key = key
             result.llm_provider = "openai"
 
         elif choice == "ollama":
@@ -387,12 +394,11 @@ class FirstRunWizard:
             default=template_labels[0],
         )
 
-        # Map display label back to name
-        for tmpl in QUICK_TEMPLATES:
-            if choice.startswith(tmpl["label"]):
-                result.template = tmpl["name"]
-                break
-        # "None" path leaves result.template as None
+        # Map display label back to template name via dictionary lookup
+        label_to_name = {f"{t['label']} — {t['description']}": t["name"] for t in QUICK_TEMPLATES}
+        result.template = label_to_name.get(choice)
+        # "None — I'll configure manually" (or any unrecognized choice) leaves
+        # result.template as None
 
         result.steps_completed.append("template")
         label = result.template or "none"
@@ -516,9 +522,10 @@ def _build_env_lines(result: WizardResult) -> list[str]:
         "",
     ]
     if result.llm_provider == "openai":
-        key = os.environ.get("OPENAI_API_KEY", "")
-        if key:
-            lines.append(f"OPENAI_API_KEY={key}")
+        # Only write the API key if the user explicitly entered it during the
+        # wizard — do NOT write a key that was merely present in the ambient env.
+        if result.entered_api_key:
+            lines.append(f"OPENAI_API_KEY={result.entered_api_key}")
         if result.llm_model:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")
