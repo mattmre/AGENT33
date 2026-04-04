@@ -355,6 +355,44 @@ def test_env_file_appended_not_overwritten(tmp_path: Path) -> None:
     assert "AGENT33_PROFILE=minimal" in content
 
 
+def test_write_env_deduplicates_on_rerun(tmp_path: Path) -> None:
+    """Running wizard twice must not produce duplicate AGENT33_PROFILE entries."""
+    env_path = tmp_path / ".env.local"
+
+    # First run — developer profile
+    result1 = WizardResult(profile="developer", llm_provider="skip", env_path=env_path)
+    _write_env(env_path, _build_env_lines(result1))
+    content_after_first = env_path.read_text()
+    assert content_after_first.count("AGENT33_PROFILE=") == 1
+
+    # Second run — production profile
+    result2 = WizardResult(profile="production", llm_provider="skip", env_path=env_path)
+    _write_env(env_path, _build_env_lines(result2))
+    content_after_second = env_path.read_text()
+
+    # Only one AGENT33_PROFILE entry, and it's the new one
+    assert content_after_second.count("AGENT33_PROFILE=") == 1
+    assert "AGENT33_PROFILE=production" in content_after_second
+    assert "AGENT33_PROFILE=developer" not in content_after_second
+
+
+def test_write_env_preserves_pre_wizard_content_on_rerun(tmp_path: Path) -> None:
+    """Hand-edited lines before the wizard marker are preserved across reruns."""
+    env_path = tmp_path / ".env.local"
+    env_path.write_text("HAND_EDITED=keep_me\n", encoding="utf-8")
+
+    result = WizardResult(profile="minimal", llm_provider="skip", env_path=env_path)
+    _write_env(env_path, _build_env_lines(result))
+    # Rerun with different profile
+    result2 = WizardResult(profile="enterprise", llm_provider="skip", env_path=env_path)
+    _write_env(env_path, _build_env_lines(result2))
+
+    content = env_path.read_text()
+    assert "HAND_EDITED=keep_me" in content
+    assert "AGENT33_PROFILE=enterprise" in content
+    assert "AGENT33_PROFILE=minimal" not in content
+
+
 # ---------------------------------------------------------------------------
 # build_env_lines unit tests
 # ---------------------------------------------------------------------------

@@ -533,9 +533,21 @@ def _build_env_lines(result: WizardResult) -> list[str]:
     return lines
 
 
+_WIZARD_MARKER = "# --- wizard ---"
+
+
 def _write_env(path: Path, lines: list[str]) -> None:
-    """Append wizard-generated lines to ``path`` without overwriting existing content."""
+    """Write wizard-generated config to ``path``.
+
+    If the file already contains a ``# --- wizard ---`` section from a previous
+    run, that section (and everything after it) is replaced.  Content before
+    the marker — hand-edited lines — is preserved.  This prevents duplicate
+    entries when the wizard is re-run.
+    """
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    separator = "\n# --- wizard ---\n" if existing.strip() else ""
-    new_content = existing + separator + "\n".join(lines) + "\n"
+    # Strip any previous wizard section so we don't accumulate duplicates
+    marker_pos = existing.find(_WIZARD_MARKER)
+    base = existing[:marker_pos].rstrip("\n") if marker_pos >= 0 else existing.rstrip("\n")
+    separator = f"\n{_WIZARD_MARKER}\n" if base else f"{_WIZARD_MARKER}\n"
+    new_content = base + separator + "\n".join(lines) + "\n"
     path.write_text(new_content, encoding="utf-8")
