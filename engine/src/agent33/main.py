@@ -144,26 +144,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("SECURITY: %s — override via environment variable", warning)
 
     # -- Database (PostgreSQL + pgvector) ----------------------------------
-    long_term_memory = LongTermMemory(
-        settings.database_url,
-        embedding_dim=settings.embedding_dim,
-        pool_size=settings.db_pool_size,
-        max_overflow=settings.db_max_overflow,
-        pool_pre_ping=settings.db_pool_pre_ping,
-        pool_recycle=settings.db_pool_recycle,
-    )
-    try:
-        await long_term_memory.initialize()
-        logger.info(
-            "database_connected",
-            url=_redact_url(settings.database_url),
+    long_term_memory: LongTermMemory | None
+    if settings.agent33_mode == "lite":
+        logger.warning("database_init_skipped", reason="lite mode")
+        long_term_memory = None
+    else:
+        long_term_memory = LongTermMemory(
+            settings.database_url,
+            embedding_dim=settings.embedding_dim,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=settings.db_pool_pre_ping,
             pool_recycle=settings.db_pool_recycle,
         )
-    except Exception as exc:
-        logger.warning("database_init_failed", error=str(exc))
+        try:
+            await long_term_memory.initialize()
+            logger.info(
+                "database_connected",
+                url=_redact_url(settings.database_url),
+                pool_size=settings.db_pool_size,
+                max_overflow=settings.db_max_overflow,
+                pool_pre_ping=settings.db_pool_pre_ping,
+                pool_recycle=settings.db_pool_recycle,
+            )
+        except Exception as exc:
+            logger.warning("database_init_failed", error=str(exc))
     app.state.long_term_memory = long_term_memory
 
     # -- Shared orchestration state -----------------------------------------
@@ -197,33 +202,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     traces.set_trace_collector(trace_collector)
 
     # -- Redis -------------------------------------------------------------
-    redis_conn = None
-    try:
-        import redis.asyncio as aioredis
+    from agent33.lifespan.fallbacks import InProcessCache, InProcessMessageBus
 
-        _redis_client = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.redis_url,
-            decode_responses=True,
-            max_connections=settings.redis_max_connections,
-        )
-        await _redis_client.ping()
-        redis_conn = _redis_client
-        logger.info(
-            "redis_connected",
-            url=_redact_url(settings.redis_url),
-            max_connections=settings.redis_max_connections,
-        )
-    except Exception as exc:
-        logger.warning("redis_init_failed", error=str(exc))
+    if settings.agent33_mode == "lite":
+        logger.warning("redis_init_skipped_using_in_process_cache", reason="lite mode")
+        redis_conn: Any = InProcessCache()
+    else:
+        redis_conn = None
+        try:
+            import redis.asyncio as aioredis
+
+            _redis_client = aioredis.from_url(  # type: ignore[no-untyped-call]
+                settings.redis_url,
+                decode_responses=True,
+                max_connections=settings.redis_max_connections,
+            )
+            await _redis_client.ping()
+            redis_conn = _redis_client
+            logger.info(
+                "redis_connected",
+                url=_redact_url(settings.redis_url),
+                max_connections=settings.redis_max_connections,
+            )
+        except Exception as exc:
+            logger.warning("redis_init_failed_using_in_process_cache", error=str(exc))
+            redis_conn = InProcessCache()
     app.state.redis = redis_conn
 
     # -- NATS message bus --------------------------------------------------
-    nats_bus = NATSMessageBus(settings.nats_url)
-    try:
-        await nats_bus.connect()
-        logger.info("nats_connected", url=_redact_url(settings.nats_url))
-    except Exception as exc:
-        logger.warning("nats_init_failed", error=str(exc))
+    if settings.agent33_mode == "lite":
+        logger.warning("nats_init_skipped_using_in_process_bus", reason="lite mode")
+        nats_bus: Any = InProcessMessageBus()
+    else:
+        _nats_bus = NATSMessageBus(settings.nats_url)
+        try:
+            await _nats_bus.connect()
+            logger.info("nats_connected", url=_redact_url(settings.nats_url))
+            nats_bus = _nats_bus
+        except Exception as exc:
+            logger.warning("nats_init_failed_using_in_process_bus", error=str(exc))
+            nats_bus = InProcessMessageBus()
     app.state.nats_bus = nats_bus
 
     # -- Instance registry and scaling guards (P1.2) -----------------------
@@ -692,7 +710,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.bm25_index = bm25_index
 
     # -- BM25 warm-up from existing records --
-    if settings.bm25_warmup_enabled:
+    if settings.bm25_warmup_enabled and long_term_memory is not None:
         from agent33.memory.warmup import warm_up_bm25
 
         try:
@@ -707,7 +725,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.warning("bm25_warmup_failed", error=str(exc), exc_info=True)
 
     hybrid_searcher = None
-    if settings.rag_hybrid_enabled:
+    if settings.rag_hybrid_enabled and long_term_memory is not None:
         from agent33.memory.hybrid import HybridSearcher
 
         hybrid_searcher = HybridSearcher(
@@ -719,28 +737,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.hybrid_searcher = hybrid_searcher
 
-    rag_pipeline = RAGPipeline(
-        embedding_provider=active_embedder,
-        long_term_memory=long_term_memory,
-        top_k=settings.rag_top_k,
-        similarity_threshold=settings.rag_similarity_threshold,
-        hybrid_searcher=hybrid_searcher,
-        redact_enabled=settings.redact_secrets_enabled,
-    )
+    rag_pipeline = None
+    if long_term_memory is not None:
+        rag_pipeline = RAGPipeline(
+            embedding_provider=active_embedder,
+            long_term_memory=long_term_memory,
+            top_k=settings.rag_top_k,
+            similarity_threshold=settings.rag_similarity_threshold,
+            hybrid_searcher=hybrid_searcher,
+            redact_enabled=settings.redact_secrets_enabled,
+        )
+        logger.info(
+            "rag_pipeline_initialized",
+            hybrid=settings.rag_hybrid_enabled,
+            top_k=settings.rag_top_k,
+        )
+    else:
+        logger.warning("rag_pipeline_skipped", reason="no long_term_memory in lite mode")
     app.state.rag_pipeline = rag_pipeline
-    logger.info(
-        "rag_pipeline_initialized",
-        hybrid=settings.rag_hybrid_enabled,
-        top_k=settings.rag_top_k,
-    )
 
     # -- Progressive recall ------------------------------------------------
     from agent33.memory.progressive_recall import ProgressiveRecall
 
-    progressive_recall = ProgressiveRecall(
-        long_term_memory=long_term_memory,
-        embedding_provider=active_embedder,
-    )
+    progressive_recall = None
+    if long_term_memory is not None:
+        progressive_recall = ProgressiveRecall(
+            long_term_memory=long_term_memory,
+            embedding_provider=active_embedder,
+        )
     app.state.progressive_recall = progressive_recall
 
     # -- Skill registry + injector -----------------------------------------
@@ -1966,8 +1990,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await redis_conn.aclose()
         logger.info("redis_closed")
 
-    await long_term_memory.close()
-    logger.info("database_closed")
+    if long_term_memory is not None:
+        await long_term_memory.close()
+        logger.info("database_closed")
 
 
 def _redact_url(url: str) -> str:

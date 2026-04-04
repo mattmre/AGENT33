@@ -37,6 +37,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+lite = [
+    "aiosqlite>=0.19",
+    "fakeredis>=2.20",
+    "rank-bm25>=0.2.2",
+    "textual>=0.47",
+    "psutil>=5.9",
+]
+standard = [
+    "agent33[lite]",
+    "asyncpg>=0.29",
+    "sqlalchemy[asyncio]>=2.0",
+    "redis>=5.0",
+    "nats-py>=2.6",
+    "pgvector>=0.2",
+    "sentence-transformers>=2.2",
+]
+enterprise = [
+    "agent33[standard]",
+    "kubernetes>=28.1",
+    "prometheus-client>=0.19",
+    "opentelemetry-api>=1.20",
+]
 messaging = [
     "python-telegram-bot>=21,<22",
     "discord.py>=2.4,<3",

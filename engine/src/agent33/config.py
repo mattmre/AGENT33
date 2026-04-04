@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -348,6 +349,10 @@ class Settings(BaseSettings):
 
     # Environment
     environment: str = "development"
+
+    # Deployment mode (P60a — lite/standard/enterprise)
+    # Defaults to "standard" for backward compatibility with existing deployments.
+    agent33_mode: Literal["lite", "standard", "enterprise"] = "standard"
 
     # Matrix messaging adapter
     matrix_homeserver_url: str = ""  # e.g. "https://matrix.org"
