@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field
 
 from agent33.workflows.definition import ParameterDef, WorkflowDefinition
@@ -29,6 +30,7 @@ class TemplateSummary(BaseModel):
     outputs: dict[str, ParameterDef] = Field(default_factory=dict)
     step_count: int
     tags: list[str] = Field(default_factory=list)
+    sample_inputs: dict[str, Any] | None = None
 
 
 class TemplateSchema(BaseModel):
@@ -78,6 +80,11 @@ class TemplateCatalog:
         count = 0
         for yaml_path in sorted(self._template_dir.rglob("*.workflow.yaml")):
             try:
+                raw_text = yaml_path.read_text(encoding="utf-8")
+                raw_data = yaml.safe_load(raw_text)
+                sample_inputs: dict[str, Any] | None = (
+                    raw_data.get("sample_inputs") if isinstance(raw_data, dict) else None
+                )
                 definition = WorkflowDefinition.load_from_file(yaml_path)
             except Exception as exc:
                 logger.warning(
@@ -88,7 +95,11 @@ class TemplateCatalog:
                 continue
 
             template_id = definition.name
-            relative_path = str(yaml_path.relative_to(self._template_dir.parent.parent))
+            # Compute relative path; fall back to file name if outside expected tree
+            try:
+                relative_path = str(yaml_path.relative_to(self._template_dir.parent.parent))
+            except ValueError:
+                relative_path = str(yaml_path.relative_to(self._template_dir))
 
             tags = list(definition.metadata.tags) if definition.metadata.tags else []
 
@@ -102,12 +113,74 @@ class TemplateCatalog:
                 outputs=definition.outputs,
                 step_count=len(definition.steps),
                 tags=tags,
+                sample_inputs=sample_inputs,
             )
             self._templates[template_id] = summary
             self._definitions[template_id] = definition
             count += 1
 
         logger.info("template_catalog_refreshed count=%d", count)
+        return count
+
+    def add_directory(self, directory: str | Path) -> int:
+        """Scan an additional directory and merge templates into the catalog.
+
+        Unlike ``refresh()``, this does **not** clear existing entries. Templates
+        from the new directory are added (or overwrite same-id entries) on top of
+        what is already loaded.
+
+        Returns the number of templates loaded from *directory*.
+        """
+        dir_path = Path(directory)
+        if not dir_path.is_dir():
+            logger.warning(
+                "template_catalog_add_dir_missing path=%s",
+                str(dir_path),
+            )
+            return 0
+
+        count = 0
+        for yaml_path in sorted(dir_path.rglob("*.workflow.yaml")):
+            try:
+                raw_text = yaml_path.read_text(encoding="utf-8")
+                raw_data = yaml.safe_load(raw_text)
+                sample_inputs: dict[str, Any] | None = (
+                    raw_data.get("sample_inputs") if isinstance(raw_data, dict) else None
+                )
+                definition = WorkflowDefinition.load_from_file(yaml_path)
+            except Exception as exc:
+                logger.warning(
+                    "template_catalog_load_failed path=%s error=%s",
+                    str(yaml_path),
+                    str(exc),
+                )
+                continue
+
+            template_id = definition.name
+            try:
+                relative_path = str(yaml_path.relative_to(dir_path.parent.parent))
+            except ValueError:
+                relative_path = str(yaml_path.relative_to(dir_path))
+
+            tags = list(definition.metadata.tags) if definition.metadata.tags else []
+
+            summary = TemplateSummary(
+                id=template_id,
+                name=definition.name,
+                version=definition.version,
+                description=definition.description,
+                source_path=relative_path,
+                inputs=definition.inputs,
+                outputs=definition.outputs,
+                step_count=len(definition.steps),
+                tags=tags,
+                sample_inputs=sample_inputs,
+            )
+            self._templates[template_id] = summary
+            self._definitions[template_id] = definition
+            count += 1
+
+        logger.info("template_catalog_added_directory count=%d path=%s", count, str(dir_path))
         return count
 
     def list_templates(

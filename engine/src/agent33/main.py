@@ -1590,11 +1590,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _core_workflows_dir = Path("core/workflows")
     template_catalog = TemplateCatalog(_core_workflows_dir)
     template_catalog.refresh()
+
+    # Add quick-start operator templates from core/templates/ (P65)
+    _core_templates_dir = Path(settings.agent_definitions_dir).parent.parent / "core" / "templates"
+    if not _core_templates_dir.is_dir():
+        _core_templates_dir = Path("core/templates")
+    _qs_count = template_catalog.add_directory(_core_templates_dir)
+
     app.state.template_catalog = template_catalog
     workflow_templates.set_template_catalog(template_catalog)
     logger.info(
         "template_catalog_initialized",
         count=len(template_catalog.list_templates()),
+        quick_start_count=_qs_count,
         path=str(_core_workflows_dir),
     )
 
