@@ -168,15 +168,39 @@ class _MockApp:
 
 
 @pytest.mark.asyncio
-async def test_init_database_lite_mode_skips_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
-    """init_database sets app.state.long_term_memory=None in lite mode."""
+async def test_init_database_lite_mode_uses_sqlite(monkeypatch: pytest.MonkeyPatch) -> None:
+    """init_database sets app.state.long_term_memory to SQLiteLongTermMemory in lite mode."""
     from agent33.config import Settings
     from agent33.lifespan.phases import init_database
+    from agent33.memory.sqlite_long_term import SQLiteLongTermMemory
 
-    settings = Settings(agent33_mode="lite", jwt_secret="x" * 32)  # type: ignore[call-arg]
+    settings = Settings(  # type: ignore[call-arg]
+        agent33_mode="lite",
+        sqlite_memory_db_path=":memory:",
+        jwt_secret="x" * 32,
+    )
     app = _MockApp()  # type: ignore[assignment]
     await init_database(app, settings)  # type: ignore[arg-type]
-    assert app.state.long_term_memory is None  # type: ignore[attr-defined]
+    ltm = app.state.long_term_memory  # type: ignore[attr-defined]
+    assert isinstance(ltm, SQLiteLongTermMemory)
+    # Verify it is functional (store + retrieve round-trip)
+    mem_id = await ltm.store("test content", {"source": "phase_test"})
+    result = await ltm.get(mem_id)
+    assert result is not None
+    assert result["content"] == "test content"
+    await ltm.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_ltm_available_in_lite_mode() -> None:
+    """SQLiteLongTermMemory can be instantiated without any external services."""
+    from agent33.memory.sqlite_long_term import SQLiteLongTermMemory
+
+    m = SQLiteLongTermMemory(db_path=":memory:")
+    await m.initialize()
+    mem_id = await m.store("test content", {"key": "val"})
+    assert mem_id
+    await m.close()
 
 
 @pytest.mark.asyncio

@@ -31,10 +31,12 @@ def _redact_url(url: str) -> str:
 
 
 async def init_database(app: FastAPI, settings: Settings) -> None:
-    """Initialise the PostgreSQL/pgvector long-term memory store.
+    """Initialise the long-term memory store.
 
     In lite mode (``AGENT33_MODE=lite``) or when the database_url is empty,
-    the init is skipped and ``app.state.long_term_memory`` is set to ``None``.
+    a ``SQLiteLongTermMemory`` adapter is used instead of PostgreSQL/pgvector.
+    This means lite mode has a functioning long-term memory without any external
+    database service.
     """
     # Local import so the module-level load does not trigger SQLAlchemy import.
     from agent33.memory.long_term import _SQLALCHEMY_AVAILABLE, LongTermMemory
@@ -42,11 +44,17 @@ async def init_database(app: FastAPI, settings: Settings) -> None:
     db_url = settings.database_url.strip()
 
     if settings.agent33_mode == "lite" or not db_url:
-        logger.warning(
-            "database_init_skipped",
-            reason="lite mode" if settings.agent33_mode == "lite" else "no database_url",
+        from agent33.memory.sqlite_long_term import SQLiteLongTermMemory
+
+        reason = "lite mode" if settings.agent33_mode == "lite" else "no database_url"
+        logger.info(
+            "database_init_sqlite",
+            reason=reason,
+            db_path=settings.sqlite_memory_db_path,
         )
-        app.state.long_term_memory = None
+        sqlite_ltm = SQLiteLongTermMemory(db_path=settings.sqlite_memory_db_path)
+        await sqlite_ltm.initialize()
+        app.state.long_term_memory = sqlite_ltm
         return
 
     if not _SQLALCHEMY_AVAILABLE:
