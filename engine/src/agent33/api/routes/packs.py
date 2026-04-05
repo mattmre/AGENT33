@@ -196,6 +196,54 @@ async def search_packs(
 
 
 # ---------------------------------------------------------------------------
+# Pack Hub endpoints (P-PACK v2)
+#
+# These routes use fixed prefix /hub/ and MUST be registered before the
+# /{name} catch-all route so FastAPI matches them first.
+# ---------------------------------------------------------------------------
+
+
+def _get_pack_hub(request: Request) -> Any:
+    """Retrieve PackHub from app state."""
+    return getattr(request.app.state, "pack_hub", None)
+
+
+@router.get("/hub/search", dependencies=[require_scope("agents:read")])
+async def hub_search(
+    request: Request,
+    q: str = Query(..., min_length=1, description="Search query"),
+    tags: str = Query(default="", description="Comma-separated tag filter"),
+    limit: int = Query(default=10, ge=1, le=100, description="Max results"),
+) -> dict[str, Any]:
+    """Search the community pack registry."""
+    hub = _get_pack_hub(request)
+    if hub is None:
+        return {"results": [], "count": 0, "query": q}
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    results = await hub.search(q, tags=tag_list, limit=limit)
+    return {
+        "results": [r.model_dump() for r in results],
+        "count": len(results),
+        "query": q,
+    }
+
+
+@router.get("/hub/entry/{name}", dependencies=[require_scope("agents:read")])
+async def hub_get_entry(name: str, request: Request) -> dict[str, Any]:
+    """Get a single pack entry from the community registry."""
+    hub = _get_pack_hub(request)
+    if hub is None:
+        raise HTTPException(status_code=503, detail="Pack hub not initialized")
+
+    entry = await hub.get(name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found in registry")
+
+    return {"entry": entry.model_dump()}
+
+
+# ---------------------------------------------------------------------------
 # Pack health & audit endpoints (Phase 33 / S24)
 #
 # These routes use fixed prefixes (/health, /audit, /compliance) and MUST

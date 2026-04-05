@@ -395,6 +395,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.workflows.actions.invoke_agent import (
         register_agent,
         set_definition_registry,
+        set_pack_sharing_service,
     )
 
     set_definition_registry(agent_registry)
@@ -887,6 +888,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.pack_marketplace = pack_marketplace
     app.state.pack_trust_manager = pack_trust_manager
     app.state.pack_rollback_manager = pack_rollback_manager
+
+    # -- Pack Hub (P-PACK v2) — lazy init, no startup refresh ---------------
+    from agent33.packs.hub import PackHub
+
+    app.state.pack_hub = PackHub()
+    logger.info("pack_hub_initialized")
+
+    # -- Pack Sharing Service (P-PACK v2) -----------------------------------
+    from agent33.packs.sharing import PackSharingService
+
+    app.state.pack_sharing_service = PackSharingService(pack_registry)
+    set_pack_sharing_service(app.state.pack_sharing_service)
+    logger.info("pack_sharing_service_initialized")
 
     # -- Marketplace curation (Phase 33) -----------------------------------
     from agent33.packs.categories import CategoryRegistry
