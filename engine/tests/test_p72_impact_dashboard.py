@@ -88,16 +88,22 @@ def _client(scopes: list[str], *, tenant_id: str = "tenant-a") -> TestClient:
 
 @pytest.fixture(autouse=True)
 def reset_outcomes_service() -> Any:
-    """Ensure each test starts with a clean module-level _service."""
-    outcomes_mod._service._events.clear()
+    """Ensure each test starts with a clean, persistence-free _service.
+
+    Replaces the module-level ``_service`` with a fresh ``OutcomesService()``
+    (no persistence) to avoid inheriting a closed SQLite connection from a
+    prior lifespan teardown (P72 fix).
+    """
+    saved_service = outcomes_mod._service
+    outcomes_mod._service = OutcomesService()
     had_attr = hasattr(app.state, "outcomes_service")
-    saved = getattr(app.state, "outcomes_service", None)
+    saved_state = getattr(app.state, "outcomes_service", None)
     if had_attr:
         delattr(app.state, "outcomes_service")
     yield
-    outcomes_mod._service._events.clear()
+    outcomes_mod._service = saved_service
     if had_attr:
-        app.state.outcomes_service = saved
+        app.state.outcomes_service = saved_state
     elif hasattr(app.state, "outcomes_service"):
         delattr(app.state, "outcomes_service")
 

@@ -48,23 +48,35 @@ class OutcomePersistence:
         self._conn.commit()
 
     def save_event(self, event: OutcomeEvent) -> None:
-        """Persist a single outcome event."""
-        self._conn.execute(
-            """INSERT OR REPLACE INTO outcome_events
-               (id, tenant_id, domain, event_type, metric_type, value, occurred_at, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                event.id,
-                event.tenant_id,
-                event.domain,
-                event.event_type,
-                event.metric_type.value,
-                event.value,
-                event.occurred_at.isoformat(),
-                json.dumps(event.metadata),
-            ),
-        )
-        self._conn.commit()
+        """Persist a single outcome event (best-effort).
+
+        If the underlying connection is already closed (e.g. after lifespan
+        teardown), the error is logged and silently swallowed so that
+        in-memory operation continues unaffected.
+        """
+        try:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO outcome_events
+                   (id, tenant_id, domain, event_type, metric_type, value, occurred_at, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    event.id,
+                    event.tenant_id,
+                    event.domain,
+                    event.event_type,
+                    event.metric_type.value,
+                    event.value,
+                    event.occurred_at.isoformat(),
+                    json.dumps(event.metadata),
+                ),
+            )
+            self._conn.commit()
+        except sqlite3.ProgrammingError:
+            logger.debug(
+                "outcome_persistence_save_skipped",
+                reason="connection_closed",
+                event_id=event.id,
+            )
 
     def load_events(
         self,
@@ -73,29 +85,40 @@ class OutcomePersistence:
         since: datetime | None = None,
         limit: int = 1000,
     ) -> list[OutcomeEvent]:
-        """Load events from SQLite, optionally filtered by tenant and date."""
-        if since is not None:
-            cursor = self._conn.execute(
-                """SELECT id, tenant_id, domain, event_type, metric_type,
-                          value, occurred_at, metadata
-                   FROM outcome_events
-                   WHERE tenant_id = ? AND occurred_at >= ?
-                   ORDER BY occurred_at DESC
-                   LIMIT ?""",
-                (tenant_id, since.isoformat(), limit),
+        """Load events from SQLite, optionally filtered by tenant and date.
+
+        Returns an empty list if the connection is already closed.
+        """
+        try:
+            if since is not None:
+                cursor = self._conn.execute(
+                    """SELECT id, tenant_id, domain, event_type, metric_type,
+                              value, occurred_at, metadata
+                       FROM outcome_events
+                       WHERE tenant_id = ? AND occurred_at >= ?
+                       ORDER BY occurred_at DESC
+                       LIMIT ?""",
+                    (tenant_id, since.isoformat(), limit),
+                )
+            else:
+                cursor = self._conn.execute(
+                    """SELECT id, tenant_id, domain, event_type, metric_type,
+                              value, occurred_at, metadata
+                       FROM outcome_events
+                       WHERE tenant_id = ?
+                       ORDER BY occurred_at DESC
+                       LIMIT ?""",
+                    (tenant_id, limit),
+                )
+            rows = cursor.fetchall()
+            return [self._row_to_event(row) for row in rows]
+        except sqlite3.ProgrammingError:
+            logger.debug(
+                "outcome_persistence_load_skipped",
+                reason="connection_closed",
+                tenant_id=tenant_id,
             )
-        else:
-            cursor = self._conn.execute(
-                """SELECT id, tenant_id, domain, event_type, metric_type,
-                          value, occurred_at, metadata
-                   FROM outcome_events
-                   WHERE tenant_id = ?
-                   ORDER BY occurred_at DESC
-                   LIMIT ?""",
-                (tenant_id, limit),
-            )
-        rows = cursor.fetchall()
-        return [self._row_to_event(row) for row in rows]
+            return []
 
     @staticmethod
     def _row_to_event(row: sqlite3.Row) -> OutcomeEvent:

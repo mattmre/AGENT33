@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from agent33.api.routes import outcomes as outcomes_mod
 from agent33.main import app
+from agent33.outcomes.service import OutcomesService
 from agent33.security.auth import create_access_token
 
 
@@ -19,22 +20,27 @@ def _client(scopes: list[str], *, tenant_id: str = "tenant-a") -> TestClient:
 
 @pytest.fixture(autouse=True)
 def reset_outcomes_service() -> None:
-    """Ensure each test starts with a clean module-level _service.
+    """Ensure each test starts with a clean, persistence-free _service.
 
     Uses ``outcomes_mod._service`` (module attribute access) rather than
     a captured import binding so that ``set_outcomes_service()`` replacements
     are always visible.  Temporarily removes ``app.state.outcomes_service``
     so the route helper ``get_outcomes_service`` falls back to ``_service``.
+
+    Replaces the module-level ``_service`` with a fresh ``OutcomesService()``
+    (no persistence) to avoid inheriting a closed SQLite connection from a
+    prior lifespan teardown (P72 fix).
     """
-    outcomes_mod._service._events.clear()
+    saved_service = outcomes_mod._service
+    outcomes_mod._service = OutcomesService()
     had_attr = hasattr(app.state, "outcomes_service")
-    saved = getattr(app.state, "outcomes_service", None)
+    saved_state = getattr(app.state, "outcomes_service", None)
     if had_attr:
         delattr(app.state, "outcomes_service")
     yield
-    outcomes_mod._service._events.clear()
+    outcomes_mod._service = saved_service
     if had_attr:
-        app.state.outcomes_service = saved
+        app.state.outcomes_service = saved_state
     elif hasattr(app.state, "outcomes_service"):
         delattr(app.state, "outcomes_service")
 
