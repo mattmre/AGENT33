@@ -635,6 +635,43 @@ class PackRegistry:
                 results.append(pack)
         return sorted(results, key=lambda p: p.name)
 
+    async def check_for_updates(
+        self,
+        hub: object,
+    ) -> list[tuple[InstalledPack, object]]:
+        """Return installed packs with newer versions available on the hub.
+
+        Each element is ``(installed_pack, hub_entry)`` where the hub entry
+        has a higher semver than the installed version.
+
+        The *hub* parameter is typed as ``object`` to avoid a circular import;
+        at runtime it must be a :class:`~agent33.packs.hub.PackHub` instance.
+        The hub entry objects are :class:`~agent33.packs.hub.PackHubEntry`
+        instances at runtime.
+        """
+        from agent33.packs.hub import PackHub
+        from agent33.packs.version import Version
+
+        assert isinstance(hub, PackHub)
+
+        updates: list[tuple[InstalledPack, object]] = []
+
+        for pack in self._installed.values():
+            entry = await hub.get(pack.name)
+            if entry is None:
+                continue
+
+            try:
+                installed_ver = Version.parse(pack.version)
+                hub_ver = Version.parse(entry.version)
+            except ValueError:
+                continue
+
+            if hub_ver > installed_ver:
+                updates.append((pack, entry))
+
+        return updates
+
     @property
     def trust_policy(self) -> PackTrustPolicy:
         """Return the active trust policy."""

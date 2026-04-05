@@ -36,6 +36,7 @@ from agent33.packs.curation import (
     assess_pack_quality,
 )
 from agent33.packs.curation_service import CurationService
+from agent33.packs.hub import PackHub, PackHubConfig, PackHubEntry
 from agent33.packs.manifest import PackManifest
 from agent33.packs.marketplace import (
     LocalPackMarketplace,
@@ -62,9 +63,15 @@ from agent33.packs.provenance_models import (
     TrustDecision,
     TrustLevel,
 )
+from agent33.packs.sharing import PackShareRequest, PackSharingService
 
 __all__ = [
     "CategoryRegistry",
+    "PackHub",
+    "PackHubConfig",
+    "PackHubEntry",
+    "PackShareRequest",
+    "PackSharingService",
     "PackAuditEvent",
     "PackAuditService",
     "PackComplianceReport",

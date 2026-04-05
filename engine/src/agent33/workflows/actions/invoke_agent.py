@@ -8,6 +8,7 @@ import structlog
 
 if TYPE_CHECKING:
     from agent33.agents.registry import AgentRegistry
+    from agent33.packs.sharing import PackSharingService
 
 logger = structlog.get_logger()
 
@@ -17,11 +18,20 @@ _agent_registry: dict[str, Any] = {}
 # Optional bridge to the main AgentRegistry (set during app startup).
 _definition_registry: AgentRegistry | None = None
 
+# Optional pack sharing service (P-PACK v2).
+_pack_sharing_service: PackSharingService | None = None
+
 
 def set_definition_registry(registry: AgentRegistry) -> None:
     """Wire the main AgentRegistry so workflow steps can look up agents."""
     global _definition_registry  # noqa: PLW0603
     _definition_registry = registry
+
+
+def set_pack_sharing_service(service: PackSharingService) -> None:
+    """Wire the PackSharingService for agent-to-agent pack sharing (P-PACK v2)."""
+    global _pack_sharing_service  # noqa: PLW0603
+    _pack_sharing_service = service
 
 
 def register_agent(name: str, handler: Any) -> None:
@@ -65,6 +75,9 @@ async def execute(
 ) -> dict[str, Any]:
     """Invoke a named agent with the given inputs.
 
+    Before invocation, scans *inputs* for ``pack_ref`` keys and enables
+    any referenced packs for the session (P-PACK v2 agent-to-agent sharing).
+
     Args:
         agent: Name of the agent to invoke.
         inputs: Input data to pass to the agent.
@@ -84,6 +97,21 @@ async def execute(
 
     if dry_run:
         return {"dry_run": True, "agent": agent, "inputs": inputs}
+
+    # P-PACK v2: agent-to-agent pack sharing
+    if _pack_sharing_service is not None:
+        share_requests = _pack_sharing_service.extract_share_requests(inputs)
+        if share_requests:
+            session_id = inputs.get("session_id", inputs.get("_session_id", ""))
+            if session_id:
+                applied = _pack_sharing_service.apply_shares(share_requests, str(session_id))
+                if applied:
+                    logger.info(
+                        "pack_shares_applied",
+                        agent=agent,
+                        session_id=session_id,
+                        packs=applied,
+                    )
 
     handler = get_agent(agent)
     result = await handler(inputs)
