@@ -60,6 +60,7 @@ from agent33.api.routes import (
     research,
     reviews,
     sessions,
+    spawner,
     streaming,
     synthetic_envs,
     tool_approvals,
@@ -507,6 +508,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.delegation_manager = delegation_manager
     logger.info("delegation_manager_initialized")
+
+    # -- Sub-Agent Spawner (Phase 71) --------------------------------------
+    from agent33.spawner.service import SpawnerService
+
+    spawner_service = SpawnerService(delegation_manager=delegation_manager)
+    app.state.spawner_service = spawner_service
+    logger.info("spawner_service_initialized")
 
     # -- Tool registry + governance ----------------------------------------
     from agent33.security.approval_tokens import ApprovalTokenManager
@@ -1932,6 +1940,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     workflows.set_ws_manager(None)
 
+    _spawner_svc: Any = getattr(app.state, "spawner_service", None)
+    if _spawner_svc is not None:
+        try:
+            await _spawner_svc.shutdown()
+            logger.info("spawner_service_shutdown")
+        except Exception:
+            logger.warning("spawner_service_shutdown_failed", exc_info=True)
+
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
     if shutdown_multimodal_service is not None:
         await shutdown_multimodal_service.shutdown_voice_sessions()
@@ -2232,6 +2248,7 @@ app.include_router(tool_catalog_routes.router)
 app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(delegation.router)
+app.include_router(spawner.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(commands.router)
 app.include_router(execution_routes.router)
