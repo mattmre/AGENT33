@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import logging
 import re
 import time
@@ -16,6 +17,8 @@ from agent33.security.permissions import check_permission
 from agent33.tools.approvals import ApprovalReason, ToolApprovalService
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from agent33.agents.definition import AutonomyLevel
     from agent33.tools.base import ToolContext, ToolResult
 
@@ -85,6 +88,40 @@ class ToolGovernance:
         )
         self._approval_service = approval_service
         self._approval_token_manager = approval_token_manager
+        self._approved_tools: set[str] = set()
+
+    @property
+    def approved_tools(self) -> frozenset[str]:
+        """Return the set of globally approved tool names (read-only)."""
+        return frozenset(self._approved_tools)
+
+    def load_approved_tools_file(self, path: Path) -> None:
+        """Load CLI-approved tools from a JSON file.
+
+        The file is expected to be a JSON object whose keys are tool names
+        (values are metadata dicts with ``approved_at`` and ``reason``).
+        Tool names are added to the internal approved set, which is
+        additive to existing approvals (never replaces).
+
+        Silently skips if the file does not exist or cannot be parsed.
+        """
+        if not path.is_file():
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Failed to load approved tools from %s", path)
+            return
+        if not isinstance(data, dict):
+            logger.warning("Approved tools file has invalid format: %s", path)
+            return
+        added = 0
+        for tool_name in data:
+            if isinstance(tool_name, str) and tool_name.strip():
+                self._approved_tools.add(tool_name.strip())
+                added += 1
+        if added:
+            logger.info("Loaded %d approved tools from %s", added, path)
 
     def set_approval_service(self, approval_service: ToolApprovalService | None) -> None:
         """Set or clear the approval service used for ask/supervised policies."""
@@ -124,35 +161,40 @@ class ToolGovernance:
                     logger.warning("Tool policy denied: tool=%s", tool_name)
                     return False
                 if policy_result == "ask":
-                    if self._try_consume_approval(
-                        params=params,
-                        tool_name=tool_name,
-                        operation=operation,
-                        tenant_id=context.tenant_id,
-                    ):
-                        return True
-                    if self._approval_service is not None:
-                        approval = self._approval_service.request(
-                            reason=ApprovalReason.TOOL_POLICY_ASK,
+                    # CLI-approved tools bypass the ask policy
+                    if tool_name in self._approved_tools:
+                        logger.info("Tool approved via CLI: tool=%s (skipping ask)", tool_name)
+                        # Fall through to normal checks (same as "allow")
+                    else:
+                        if self._try_consume_approval(
+                            params=params,
                             tool_name=tool_name,
                             operation=operation,
-                            command=str(params.get("command", "")),
-                            requested_by=context.requested_by,
                             tenant_id=context.tenant_id,
-                            details="Tool policy requires operator approval.",
-                        )
+                        ):
+                            return True
+                        if self._approval_service is not None:
+                            approval = self._approval_service.request(
+                                reason=ApprovalReason.TOOL_POLICY_ASK,
+                                tool_name=tool_name,
+                                operation=operation,
+                                command=str(params.get("command", "")),
+                                requested_by=context.requested_by,
+                                tenant_id=context.tenant_id,
+                                details="Tool policy requires operator approval.",
+                            )
+                            logger.info(
+                                "Tool policy requires approval: tool=%s approval_id=%s",
+                                tool_name,
+                                approval.approval_id,
+                            )
+                        else:
+                            logger.info("Tool policy requires approval: tool=%s", tool_name)
                         logger.info(
-                            "Tool policy requires approval: tool=%s approval_id=%s",
+                            "Tool policy approval pending: tool=%s (blocking)",
                             tool_name,
-                            approval.approval_id,
                         )
-                    else:
-                        logger.info("Tool policy requires approval: tool=%s", tool_name)
-                    logger.info(
-                        "Tool policy approval pending: tool=%s (blocking)",
-                        tool_name,
-                    )
-                    return False
+                        return False
                 # "allow" continues to normal checks
 
         # --- Rate limiting ---

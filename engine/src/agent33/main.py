@@ -539,6 +539,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         approval_service=tool_approval_service,
         approval_token_manager=approval_token_manager,
     )
+    tool_governance.load_approved_tools_file(Path.home() / ".agent33" / "approved-tools.json")
     app.state.tool_governance = tool_governance
     mutation_audit_store = MutationAuditStore(state_store=orchestration_state_store)
     app.state.mutation_audit_store = mutation_audit_store

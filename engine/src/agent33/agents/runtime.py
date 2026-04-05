@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from agent33.llm.router import ModelRouter
     from agent33.memory.context_compressor import ContextCompressor
     from agent33.observability.metrics import CostTracker
+    from agent33.packs.registry import PackRegistry
     from agent33.tools.base import ToolContext
     from agent33.tools.discovery_runtime import ToolActivationManager
     from agent33.tools.governance import ToolGovernance
@@ -268,6 +269,7 @@ class AgentRuntime:
         context_compressor: ContextCompressor | None = None,
         cost_tracker: CostTracker | None = None,
         metrics_collector: Any | None = None,
+        pack_registry: PackRegistry | None = None,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -305,6 +307,7 @@ class AgentRuntime:
         self._context_compressor = context_compressor
         self._cost_tracker = cost_tracker
         self._metrics_collector = metrics_collector
+        self._pack_registry = pack_registry
 
     @property
     def definition(self) -> AgentDefinition:
@@ -467,6 +470,75 @@ class AgentRuntime:
             if param.required and name not in inputs:
                 raise ValueError(f"Missing required input: {name}")
 
+    def _inject_pack_addenda(self, system_prompt: str) -> str:
+        """Append prompt addenda from session-scoped packs.
+
+        If a :class:`PackRegistry` is available and the current session has
+        enabled packs with prompt addenda, those strings are concatenated
+        and appended to the system prompt.
+        """
+        if self._pack_registry is None:
+            return system_prompt
+        session_id = self._session_id
+        if not session_id:
+            return system_prompt
+        try:
+            addenda = self._pack_registry.get_session_prompt_addenda(session_id)
+        except Exception:
+            logger.debug("failed to retrieve pack addenda", exc_info=True)
+            return system_prompt
+        if not addenda:
+            return system_prompt
+        system_prompt += "\n\n# Pack Addenda\n" + "\n".join(addenda)
+        return system_prompt
+
+    def _get_pack_tool_config(self) -> dict[str, dict[str, object]]:
+        """Return merged tool config from session-scoped packs.
+
+        The result is a dict of ``tool_name -> config`` that can be used
+        as a narrowing overlay on ``ToolGovernance`` tool policies.
+        """
+        if self._pack_registry is None or not self._session_id:
+            return {}
+        try:
+            return self._pack_registry.get_session_tool_config(self._session_id)
+        except Exception:
+            logger.debug("failed to retrieve pack tool config", exc_info=True)
+            return {}
+
+    def _apply_pack_tool_narrowing(self) -> ToolContext | None:
+        """Return a ToolContext with pack-derived narrowing policies applied.
+
+        Pack tool config entries that contain a ``"policy"`` key (value
+        ``"deny"`` or ``"ask"``) are merged into the existing tool_policies
+        as a *narrowing-only* overlay.  An ``"allow"`` policy in a pack
+        cannot widen an existing ``"deny"`` — it is silently dropped.
+
+        Returns the (possibly new) ToolContext, or None if no tool context
+        is available.
+        """
+        if self._tool_context is None:
+            return None
+        pack_config = self._get_pack_tool_config()
+        if not pack_config:
+            return self._tool_context
+
+        # Build narrowing overlay from pack tool_config
+        narrowed_policies = dict(self._tool_context.tool_policies)
+        narrowing_order = {"deny": 2, "ask": 1, "allow": 0}
+        for tool_name, config in pack_config.items():
+            policy = str(config.get("policy", "")).lower()
+            if policy not in narrowing_order:
+                continue
+            existing = narrowed_policies.get(tool_name, "allow").lower()
+            # Only apply if it narrows (deny > ask > allow)
+            if narrowing_order.get(policy, 0) > narrowing_order.get(existing, 0):
+                narrowed_policies[tool_name] = policy
+
+        if narrowed_policies != self._tool_context.tool_policies:
+            return dataclasses.replace(self._tool_context, tool_policies=narrowed_policies)
+        return self._tool_context
+
     async def _run_pre_invoke_hook(
         self,
         *,
@@ -559,6 +631,9 @@ class AgentRuntime:
                     system_prompt += "\n" + "\n".join(memory_lines)
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
+
+        # Inject prompt addenda from session-scoped packs
+        system_prompt = self._inject_pack_addenda(system_prompt)
 
         inputs, system_prompt = await self._run_pre_invoke_hook(
             inputs=inputs,
@@ -766,6 +841,9 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
+        # Inject prompt addenda from session-scoped packs
+        system_prompt = self._inject_pack_addenda(system_prompt)
+
         inputs, system_prompt = await self._run_pre_invoke_hook(
             inputs=inputs,
             system_prompt=system_prompt,
@@ -786,6 +864,9 @@ class AgentRuntime:
         routed_model: str | None = None
         routed_max_tokens: int | None = None
 
+        # --- Apply pack tool narrowing overlay on ToolContext ---
+        effective_tool_context = self._apply_pack_tool_narrowing()
+
         # --- Reasoning protocol path (Phase 29.1) ---
         if self._reasoning_protocol is not None:
             routed_model, routed_max_tokens = self._resolve_execution_parameters(
@@ -799,7 +880,7 @@ class AgentRuntime:
                 router=self._router,
                 tool_registry=iterative_tool_registry,
                 tool_governance=self._tool_governance,
-                tool_context=self._tool_context,
+                tool_context=effective_tool_context,
                 observation_capture=self._observation_capture,
                 runtime_enforcer=effective_enforcer,
                 config=loop_config,
@@ -871,7 +952,7 @@ class AgentRuntime:
             router=self._router,
             tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
-            tool_context=self._tool_context,
+            tool_context=effective_tool_context,
             observation_capture=self._observation_capture,
             runtime_enforcer=effective_enforcer,
             config=loop_config,
@@ -1044,6 +1125,9 @@ class AgentRuntime:
             except Exception:
                 logger.debug("failed to retrieve memory context", exc_info=True)
 
+        # Inject prompt addenda from session-scoped packs
+        system_prompt = self._inject_pack_addenda(system_prompt)
+
         inputs, system_prompt = await self._run_pre_invoke_hook(
             inputs=inputs,
             system_prompt=system_prompt,
@@ -1061,11 +1145,12 @@ class AgentRuntime:
         from agent33.config import settings as _settings
 
         loop_config = config or ToolLoopConfig()
+        effective_tool_context = self._apply_pack_tool_narrowing()
         loop = ToolLoop(
             router=self._router,
             tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
-            tool_context=self._tool_context,
+            tool_context=effective_tool_context,
             observation_capture=self._observation_capture,
             runtime_enforcer=self._runtime_enforcer,
             config=loop_config,
