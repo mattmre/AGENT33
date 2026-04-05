@@ -40,6 +40,7 @@ from agent33.api.routes import (
     hooks,
     improvements,
     insights,
+    knowledge,
     marketplace,
     mcp,
     mcp_proxy,
@@ -775,6 +776,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             embedding_provider=active_embedder,
         )
     app.state.progressive_recall = progressive_recall
+
+    # -- Knowledge ingestion service (P70) ---------------------------------
+    from agent33.knowledge.service import KnowledgeIngestionService
+
+    knowledge_service = KnowledgeIngestionService(
+        long_term_memory=long_term_memory,
+        embedding_provider=active_embedder,
+        default_tenant_id=settings.knowledge_default_tenant_id,
+    )
+    knowledge_service.start()
+    app.state.knowledge_service = knowledge_service
+    logger.info("knowledge_ingestion_service_initialized")
 
     # -- Skill registry + injector -----------------------------------------
     from agent33.skills.injection import SkillInjector
@@ -1985,6 +1998,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await _tuning_loop_scheduler.stop()
         logger.info("tuning_loop_scheduler_stopped")
 
+    _knowledge_svc: Any = getattr(app.state, "knowledge_service", None)
+    if _knowledge_svc is not None:
+        _knowledge_svc.stop()
+        logger.info("knowledge_ingestion_service_stopped")
+
     # Close embedding provider (cache.close() delegates to provider.close())
     _embedder = getattr(app.state, "embedding_cache", None) or getattr(
         app.state, "embedding_provider", None
@@ -2256,5 +2274,6 @@ app.include_router(execution_routes.router)
 app.include_router(migrations.router)
 app.include_router(rate_limits_routes.router)
 app.include_router(streaming.router)
+app.include_router(knowledge.router)
 if settings.embedding_hot_swap_enabled:
     app.include_router(embedding_swap_routes.router)
