@@ -682,6 +682,7 @@ async def invoke_agent(
 
     outcomes_svc = _get_outcomes_service(request)
     invoke_start = time.monotonic()
+    invoke_session_id = _resolve_runtime_session_id(request)
 
     try:
         result = await runtime.invoke(body.inputs)
@@ -693,7 +694,11 @@ async def invoke_agent(
             event_type="invoke",
             metric_type=OutcomeMetricType.SUCCESS_RATE,
             value=0.0,
-            metadata={"error": str(exc), "termination": "validation_error"},
+            metadata={
+                "error": str(exc),
+                "termination": "validation_error",
+                "session_id": invoke_session_id,
+            },
         )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -704,7 +709,11 @@ async def invoke_agent(
             event_type="invoke",
             metric_type=OutcomeMetricType.SUCCESS_RATE,
             value=0.0,
-            metadata={"error": str(exc), "termination": "runtime_error"},
+            metadata={
+                "error": str(exc),
+                "termination": "runtime_error",
+                "session_id": invoke_session_id,
+            },
         )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
@@ -715,7 +724,11 @@ async def invoke_agent(
             event_type="invoke",
             metric_type=OutcomeMetricType.SUCCESS_RATE,
             value=0.0,
-            metadata={"error": str(exc), "termination": "error"},
+            metadata={
+                "error": str(exc),
+                "termination": "error",
+                "session_id": invoke_session_id,
+            },
         )
         # Handle HookAbortError without hard import dependency
         if type(exc).__name__ == "HookAbortError":
@@ -734,6 +747,7 @@ async def invoke_agent(
             "model": result.model,
             "tokens": result.tokens_used,
             "termination": "success",
+            "session_id": invoke_session_id,
         },
     )
     _record_outcome_safe(
@@ -743,7 +757,11 @@ async def invoke_agent(
         event_type="invoke",
         metric_type=OutcomeMetricType.LATENCY_MS,
         value=latency_ms,
-        metadata={"agent": name, "model": result.model},
+        metadata={
+            "agent": name,
+            "model": result.model,
+            "session_id": invoke_session_id,
+        },
     )
 
     return InvokeResponse(
@@ -882,6 +900,7 @@ async def invoke_agent_iterative(
 
     outcomes_svc = _get_outcomes_service(request)
     iter_tenant_id = token_payload.tenant_id or ""
+    iter_session_id = session_id
     iter_start = time.monotonic()
 
     try:
@@ -898,7 +917,11 @@ async def invoke_agent_iterative(
             event_type="invoke_iterative",
             metric_type=OutcomeMetricType.SUCCESS_RATE,
             value=0.0,
-            metadata={"error": str(exc), "termination": "validation_error"},
+            metadata={
+                "error": str(exc),
+                "termination": "validation_error",
+                "session_id": iter_session_id,
+            },
         )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -909,7 +932,11 @@ async def invoke_agent_iterative(
             event_type="invoke_iterative",
             metric_type=OutcomeMetricType.SUCCESS_RATE,
             value=0.0,
-            metadata={"error": str(exc), "termination": "runtime_error"},
+            metadata={
+                "error": str(exc),
+                "termination": "runtime_error",
+                "session_id": iter_session_id,
+            },
         )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -927,6 +954,7 @@ async def invoke_agent_iterative(
             "iterations": result.iterations,
             "tool_calls_made": result.tool_calls_made,
             "termination": result.termination_reason,
+            "session_id": iter_session_id,
         },
     )
     _record_outcome_safe(
@@ -936,7 +964,11 @@ async def invoke_agent_iterative(
         event_type="invoke_iterative",
         metric_type=OutcomeMetricType.LATENCY_MS,
         value=iter_latency_ms,
-        metadata={"agent": name, "model": result.model},
+        metadata={
+            "agent": name,
+            "model": result.model,
+            "session_id": iter_session_id,
+        },
     )
     # Record termination reason as a failure classification when non-successful
     if result.termination_reason not in ("complete", "success", "natural"):
@@ -949,6 +981,7 @@ async def invoke_agent_iterative(
             value=1.0,
             metadata={
                 "failure_class": result.termination_reason,
+                "session_id": iter_session_id,
                 "iterations": result.iterations,
                 "tool_calls_made": result.tool_calls_made,
             },

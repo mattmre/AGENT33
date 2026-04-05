@@ -1888,13 +1888,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
-    # -- Outcomes service (P68-Lite) -------------------------------------------
+    # -- Outcomes service (P68-Lite + P72 persistence) -------------------------
+    from agent33.outcomes.persistence import OutcomePersistence
     from agent33.outcomes.service import OutcomesService
 
-    outcomes_service = OutcomesService()
+    outcomes_persistence = OutcomePersistence(Path(settings.outcomes_db_path))
+    outcomes_service = OutcomesService(persistence=outcomes_persistence)
     app.state.outcomes_service = outcomes_service
+    app.state.outcomes_persistence = outcomes_persistence
     outcomes.set_outcomes_service(outcomes_service)
-    logger.info("outcomes_service_initialized")
+    logger.info("outcomes_service_initialized", db_path=settings.outcomes_db_path)
 
     # -- Context compression engine (Phase 50) ---------------------------------
     context_compressor = None
@@ -2009,6 +2012,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("instance_deregistered")
         except Exception:
             logger.warning("instance_deregister_failed", exc_info=True)
+
+    _outcomes_persistence: Any = getattr(app.state, "outcomes_persistence", None)
+    if _outcomes_persistence is not None:
+        _outcomes_persistence.close()
+        logger.info("outcomes_persistence_closed")
 
     _security_store: Any = getattr(app.state, "security_scan_store", None)
     if _security_store is not None:
