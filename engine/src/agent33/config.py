@@ -253,6 +253,9 @@ class Settings(BaseSettings):
     skillsbench_context_manager_enabled: bool = True
     skillsbench_storage_path: str = "var/skillsbench_runs"
 
+    # Outcomes persistence (P72)
+    outcomes_db_path: str = "var/outcomes.db"
+
     # Skill Packs
     pack_definitions_dir: str = "packs"
     pack_marketplace_dir: str = "pack-marketplace"

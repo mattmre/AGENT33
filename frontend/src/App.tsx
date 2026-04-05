@@ -16,12 +16,13 @@ import AgentBuilderPage from "./features/agent-builder/AgentBuilderPage";
 import "./features/agent-builder/AgentBuilderPage.css";
 import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
+import { ImpactDashboardPanel } from "./features/impact-dashboard";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
-type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "analytics" | "tools" | "builder" | "spawner" | "advanced";
+type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "analytics" | "impact" | "tools" | "builder" | "spawner" | "advanced";
 
 interface ActivityItem {
   id: string;
@@ -39,6 +40,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
+  { id: "impact", label: "Impact" },
   { id: "tools", label: "Tools" },
   { id: "builder", label: "Builder" },
   { id: "spawner", label: "Spawner" },
@@ -210,6 +212,13 @@ export default function App(): JSX.Element {
         {activeTab === "analytics" && (
           <div className="consumer-analytics-layout">
             <SessionAnalyticsDashboard token={token} apiKey={apiKey} onResult={onResult} />
+          </div>
+        )}
+
+        {/* Impact Dashboard -> ROI, pack impact, week-over-week trends */}
+        {activeTab === "impact" && (
+          <div className="consumer-impact-layout">
+            <ImpactDashboardPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
 

@@ -78,9 +78,64 @@ class OutcomeSummary(BaseModel):
     metric_counts: dict[str, int] = Field(default_factory=dict)
 
 
+class WeekOverWeekStat(BaseModel):
+    """Compare a metric's current-week average against the previous week."""
+
+    metric_type: OutcomeMetricType
+    current_week_avg: float
+    previous_week_avg: float
+    pct_change: float  # (current - previous) / previous * 100; 0 if previous == 0
+
+
+class FailureModeStat(BaseModel):
+    """Aggregated count for a specific failure classification."""
+
+    failure_class: str
+    count: int
+
+
+class ROIRequest(BaseModel):
+    """Payload for the ROI estimator endpoint."""
+
+    domain: str = Field(min_length=1)
+    hours_saved_per_success: float = Field(ge=0)
+    cost_per_hour_usd: float = Field(ge=0)
+    window_days: int = Field(default=30, ge=1)
+
+
+class ROIResponse(BaseModel):
+    """Result of the ROI estimation."""
+
+    total_invocations: int
+    success_count: int
+    failure_count: int
+    estimated_hours_saved: float
+    estimated_value_usd: float
+    success_rate: float
+    avg_latency_ms: float
+
+
+class PackImpactEntry(BaseModel):
+    """Impact statistics for a single pack."""
+
+    pack_name: str
+    sessions_applied: int
+    success_rate_with_pack: float
+    success_rate_without_pack: float
+    delta: float
+
+
+class PackImpactResponse(BaseModel):
+    """Pack impact response for the dashboard."""
+
+    packs: list[PackImpactEntry] = Field(default_factory=list)
+
+
 class OutcomeDashboard(BaseModel):
     """Dashboard contract with trend snapshots and recent events."""
 
     trends: list[OutcomeTrend] = Field(default_factory=list)
     recent_events: list[OutcomeEvent] = Field(default_factory=list)
     summary: OutcomeSummary = Field(default_factory=OutcomeSummary)
+    week_over_week: list[WeekOverWeekStat] = Field(default_factory=list)
+    top_failure_modes: list[FailureModeStat] = Field(default_factory=list)
