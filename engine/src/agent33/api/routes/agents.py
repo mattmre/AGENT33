@@ -657,6 +657,7 @@ async def invoke_agent(
     hook_registry = getattr(request.app.state, "hook_registry", None)
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector = getattr(request.app.state, "metrics_collector", None)
+    pack_registry = getattr(request.app.state, "pack_registry", None)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -676,6 +677,7 @@ async def invoke_agent(
         hook_registry=hook_registry,
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector,
+        pack_registry=pack_registry,
     )
 
     outcomes_svc = _get_outcomes_service(request)
@@ -848,6 +850,7 @@ async def invoke_agent_iterative(
     tool_activation_manager = getattr(request.app.state, "tool_activation_manager", None)
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
+    pack_registry_iter = getattr(request.app.state, "pack_registry", None)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -874,6 +877,7 @@ async def invoke_agent_iterative(
         context_compressor=context_compressor,
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector_iter,
+        pack_registry=pack_registry_iter,
     )
 
     outcomes_svc = _get_outcomes_service(request)
@@ -1036,6 +1040,7 @@ async def invoke_agent_iterative_stream(
 
     cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
+    pack_registry_stream = getattr(request.app.state, "pack_registry", None)
 
     runtime = AgentRuntime(
         definition=definition,
@@ -1063,7 +1068,12 @@ async def invoke_agent_iterative_stream(
         context_compressor=context_compressor,
         cost_tracker=cost_tracker_stream,
         metrics_collector=metrics_collector_stream,
+        pack_registry=pack_registry_stream,
     )
+
+    outcomes_svc_stream = _get_outcomes_service(request)
+    stream_tenant_id = token_payload.tenant_id or ""
+    stream_start = time.monotonic()
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
@@ -1081,7 +1091,43 @@ async def invoke_agent_iterative_stream(
                             "data": {"error": exc.detail, "phase": "telemetry_export"},
                         }
                         yield f"data: {json.dumps(error_payload)}\n\n"
+                        _record_outcome_safe(
+                            outcomes_svc_stream,
+                            tenant_id=stream_tenant_id,
+                            domain=name,
+                            event_type="invoke_iterative_stream",
+                            metric_type=OutcomeMetricType.SUCCESS_RATE,
+                            value=0.0,
+                            metadata={
+                                "error": exc.detail,
+                                "termination": "telemetry_export_error",
+                            },
+                        )
                         return
+                    # Record successful completion
+                    stream_latency_ms = (time.monotonic() - stream_start) * 1000
+                    completion_data = event.data if isinstance(event.data, dict) else {}
+                    _record_outcome_safe(
+                        outcomes_svc_stream,
+                        tenant_id=stream_tenant_id,
+                        domain=name,
+                        event_type="invoke_iterative_stream",
+                        metric_type=OutcomeMetricType.SUCCESS_RATE,
+                        value=1.0,
+                        metadata={
+                            "iterations": event.iteration,
+                            "termination": completion_data.get("termination_reason", "complete"),
+                        },
+                    )
+                    _record_outcome_safe(
+                        outcomes_svc_stream,
+                        tenant_id=stream_tenant_id,
+                        domain=name,
+                        event_type="invoke_iterative_stream",
+                        metric_type=OutcomeMetricType.LATENCY_MS,
+                        value=stream_latency_ms,
+                        metadata={"agent": name},
+                    )
                 yield event.to_sse()
         except asyncio.CancelledError:
             pass
@@ -1093,6 +1139,15 @@ async def invoke_agent_iterative_stream(
                 "data": {"error": str(exc), "phase": "endpoint"},
             }
             yield f"data: {json.dumps(error_payload)}\n\n"
+            _record_outcome_safe(
+                outcomes_svc_stream,
+                tenant_id=stream_tenant_id,
+                domain=name,
+                event_type="invoke_iterative_stream",
+                metric_type=OutcomeMetricType.SUCCESS_RATE,
+                value=0.0,
+                metadata={"error": str(exc), "termination": "error"},
+            )
 
     return StreamingResponse(
         event_generator(),
