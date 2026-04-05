@@ -178,6 +178,9 @@ class Settings(BaseSettings):
     bm25_warmup_max_records: int = 10_000
     bm25_warmup_page_size: int = 200
 
+    # Knowledge ingestion (P70)
+    knowledge_default_tenant_id: str = "system"
+
     # Training (self-evolving loop)
     training_enabled: bool = True
     training_optimize_interval: int = 100
