@@ -10,6 +10,7 @@ from typing import Any
 
 import typer
 
+from agent33.cli.bench import bench_app
 from agent33.cli.bootstrap import _bootstrap_generate
 from agent33.cli.packs import packs_app
 from agent33.cli.skills import skills_app
@@ -21,6 +22,7 @@ app = typer.Typer(
     help="AGENT-33 -- Autonomous AI agent orchestration engine.",
     add_completion=False,
 )
+app.add_typer(bench_app, name="bench")
 app.add_typer(env_app, name="env")
 app.add_typer(tools_app)
 app.add_typer(skills_app)
