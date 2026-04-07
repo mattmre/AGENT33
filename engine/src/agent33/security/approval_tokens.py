@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import threading
 import time
@@ -157,7 +158,7 @@ class ApprovalTokenManager:
 
             # Validate argument hash
             expected_hash = canonical_arg_hash(tool_name, arguments)
-            if data.get("arg_hash") != expected_hash:
+            if not hmac.compare_digest(data.get("arg_hash", ""), expected_hash):
                 raise ApprovalTokenError("Token argument hash mismatch (arguments were tampered)")
 
             # Validate tenant scope

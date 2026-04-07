@@ -8,6 +8,7 @@ It delegates to the existing skills loader for individual skill files.
 from __future__ import annotations
 
 import hashlib
+import hmac
 from typing import TYPE_CHECKING
 
 import structlog
@@ -222,7 +223,7 @@ def verify_checksums(pack_dir: Path) -> tuple[bool, list[str]]:
             continue
 
         actual_hash = hashlib.sha256(target.read_bytes()).hexdigest()
-        if actual_hash != expected_hash:
+        if not hmac.compare_digest(actual_hash, expected_hash):
             mismatches.append(
                 f"Checksum mismatch for {file_path}: "
                 f"expected {expected_hash[:16]}..., got {actual_hash[:16]}..."
