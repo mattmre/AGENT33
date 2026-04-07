@@ -2,14 +2,15 @@
 
 ## Goal
 
-Execute the remaining roadmap work sequentially from the post-Session 70 merged baseline, with one implementation PR per slice from fresh `origin/main` worktrees, while keeping planning files and research notes current enough to resume after interruption.
+Execute the POST-P72 roadmap clusters (POST-1 through POST-4) sequentially with disposable worktree agents, one PR per slice from fresh `origin/main` worktrees.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-03-13`; `#186`, `#187`, and `#188` are merged, so the next `pr-manager` loop starts directly at fresh `S11` implementation work rather than PR remediation.
-- Phase 46 is fully closed in the sequential queue via PR `#177`; the remaining roadmap now begins at `S11` because `S10` was reconciled as already complete on `main`.
-- The root checkout is on updated `origin/main`; the only intentional local leftovers are the four `.claude` history worktrees plus two untracked interrupted-analysis artifacts (`temp_report.txt`, `temp_search_results.txt`) that should not be deleted without approval.
-- Repo-only cleanup on `2026-03-13` removed the stale post-merge verify worktrees, merged implementation worktrees, and local review worktrees for `#187`/`#188`; only the intentional `.claude` prototype holdouts remain outside root.
+- There are no open GitHub PRs as of `2026-04-07`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (383+ PRs merged).
+- POST-P72 phase plan APPROVED in Session 122: `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+- ARCH-AEP Loops 1-6 COMPLETE; Loop 7 IN PROGRESS (background review agent).
+- Root checkout is intentionally dirty and lags `origin/main`.
 
 ## Resume Protocol
 
@@ -23,11 +24,54 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: none (Session 118 complete; only SkillsBench live eval remains, blocked on provider)
-- Current slice: none active
+- Active queue owner: Session 123
+- Current slice: POST-1.2 (docs refresh)
 - Resume artifact: `docs/next-session.md`
 
-## Session 118 Queue (2026-04-03)
+---
+
+# Task Plan — Session 123 (Active)
+
+## 2026-04-07 Session 123: POST-P72 Cluster Implementation
+
+### Goal
+Execute POST-P72 roadmap clusters POST-1 through POST-4 sequentially with disposable worktree agents.
+
+### Session 123 Queue
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | POST-1.1 — ARCH-AEP Loop 7 review + triage | in_progress |
+| T2 | POST-1.2 — Docs refresh (this PR) | in_progress |
+| T3 | POST-1.4 — SHA-256 timing oracle fix | pending (unblocks after T2) |
+| T4 | POST-1.3 — Frontend bundling decision | pending (unblocks after T2) |
+| T5 | POST-1.5 — SkillsBench baseline run | pending (blocked on T1) |
+| T6 | POST-2.1a — SkillsBench smoke suite CI | pending (blocked on T5) |
+| T7 | POST-2.1b — SkillsBench weekly run | pending (blocked on T6) |
+| T8 | POST-2.2 — Context window management | pending (blocked on T5) |
+| T9 | POST-2.3 — Iterative tool-use + 4-stage skill matching | pending (blocked on T8) |
+| T10 | POST-3.1 — Pack sandbox + injection tests | pending (blocked on T1) |
+| T11 | POST-3.2 — Pack registry v1 | pending (blocked on T10) |
+| T12 | POST-3.3 — CLI DX improvements | pending (blocked on T11) |
+| T13 | POST-3.4 — 5 seed packs | pending (blocked on T11) |
+| T14 | POST-4.1 — P69b UX spec + API contract | pending (blocked on T1) |
+| T15 | POST-4.2 — SSE event schema versioning | pending (blocked on T14) |
+| T16 | POST-4.3 — P69b implementation | pending (blocked on T15) |
+| T17 | POST-4.4 — P-PACK v3 A/B harness | pending (blocked on T16 + 30-day gate) |
+| T18 | POST-4.5 — P-PACK v3 behavior modifications | pending (blocked on T17) |
+
+### Sequential Execution Rules
+1. One fresh worktree per slice from origin/main
+2. One fresh agent per slice; dispose after merge
+3. One PR per slice
+4. No next slice starts before merge + fresh-main verification
+5. T1 (Loop 7) is the hard gate for T5, T10, T14 (and everything downstream)
+
+---
+
+## Prior Session Queues
+
+### Session 118 Queue (2026-04-03)
 
 | Order | Task | Type | Status | Notes |
 | --- | --- | --- | --- | --- |
