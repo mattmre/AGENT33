@@ -1,0 +1,32 @@
+{
+  "results": {
+    "tool": {
+      "name": "agent33-skillsbench",
+      "version": "1.0.0"
+    },
+    "summary": {
+      "tests": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "suites": 0,
+      "start": 1744063200000,
+      "stop": 1744063200000
+    },
+    "tests": []
+  },
+  "_meta": {
+    "note": "Stub baseline -- no real run has been performed yet. Replace this with output from `agent33 bench run` when SkillsBench repo and live LLM are available.",
+    "model": "stub",
+    "agent": "code-worker",
+    "commit": "62371ef",
+    "date": "2026-04-07",
+    "top_3_gap_categories": [
+      "scientific-computing (estimated: low pass rate without SkillsBench tools)",
+      "media-processing (estimated: requires specialized libraries)",
+      "security-analysis (estimated: requires security tools)"
+    ]
+  }
+}
