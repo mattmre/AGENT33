@@ -16,3 +16,6 @@ build/
 # Local LLM Models and Binaries
 models/
 bin/
+
+# Built frontend assets (populated by hatch_build.py during wheel build)
+src/agent33/static/ui/

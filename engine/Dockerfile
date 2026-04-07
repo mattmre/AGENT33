@@ -3,7 +3,8 @@ ARG PYTHON_BASE_IMAGE=python:3.11.13-slim-trixie@sha256:9bffe4353b925a1656688797
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
 WORKDIR /build
-COPY pyproject.toml .
+COPY pyproject.toml hatch_build.py ./
+ENV AGENT33_SKIP_FRONTEND_BUILD=1
 RUN pip install --no-cache-dir hatchling && \
     pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
     pip install --no-cache-dir .
@@ -32,8 +33,9 @@ COPY packs/ packs/
 # Docker build-policy change in this slice, so template catalog parity remains a
 # documented follow-up rather than a silent omission.
 COPY templates/ templates/
-COPY pyproject.toml .
+COPY pyproject.toml hatch_build.py ./
 
+ENV AGENT33_SKIP_FRONTEND_BUILD=1
 RUN pip install --no-cache-dir --upgrade "setuptools>=80.9.0" "wheel>=0.46.2" && \
     pip install --no-cache-dir -e .
 

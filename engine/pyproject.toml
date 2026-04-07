@@ -122,6 +122,9 @@ computer_use = "agent33.tools.computer_use:ComputerUseTool"
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent33"]
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
@@ -212,6 +215,8 @@ module = [
     "transformers.*",
     "PIL",
     "PIL.*",
+    "hatchling",
+    "hatchling.*",
 ]
 ignore_missing_imports = true
 
