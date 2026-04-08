@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from agent33.skills.definition import SkillDefinition
+    from agent33.skills.matching import SkillMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,16 @@ class SkillRegistry:
 
         results = index.search(query, top_k=top_k)
         return [(ordered_skills[r.doc_index], r.score) for r in results]
+
+    async def search_staged(self, query: str, matcher: SkillMatcher) -> list[SkillDefinition]:
+        """4-stage hybrid search using a SkillMatcher pipeline.
+
+        Delegates the full BM25 -> LLM-lenient -> full-content -> LLM-strict
+        pipeline to *matcher*. The caller is responsible for calling
+        ``matcher.reindex()`` after any registry changes before calling this.
+        """
+        result = await matcher.match(query)
+        return result.skills
 
     # ------------------------------------------------------------------
     # Progressive Disclosure
