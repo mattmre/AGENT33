@@ -270,6 +270,7 @@ class AgentRuntime:
         cost_tracker: CostTracker | None = None,
         metrics_collector: Any | None = None,
         pack_registry: PackRegistry | None = None,
+        evaluation_mode: bool = False,
     ) -> None:
         self._definition = definition
         self._router = router
@@ -308,6 +309,7 @@ class AgentRuntime:
         self._cost_tracker = cost_tracker
         self._metrics_collector = metrics_collector
         self._pack_registry = pack_registry
+        self._evaluation_mode = evaluation_mode
 
     @property
     def definition(self) -> AgentDefinition:
@@ -861,6 +863,10 @@ class AgentRuntime:
             effective_enforcer = _RuntimeEnforcer(budget)
 
         loop_config = config or ToolLoopConfig()
+        if self._evaluation_mode and not loop_config.evaluation_mode:
+            loop_config = dataclasses.replace(loop_config, evaluation_mode=True)
+        # In evaluation mode, suppress observation side effects
+        effective_observation = None if self._evaluation_mode else self._observation_capture
         routed_model: str | None = None
         routed_max_tokens: int | None = None
 
@@ -881,7 +887,7 @@ class AgentRuntime:
                 tool_registry=iterative_tool_registry,
                 tool_governance=self._tool_governance,
                 tool_context=effective_tool_context,
-                observation_capture=self._observation_capture,
+                observation_capture=effective_observation,
                 runtime_enforcer=effective_enforcer,
                 config=loop_config,
                 agent_name=self._definition.name,
@@ -953,7 +959,7 @@ class AgentRuntime:
             tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
             tool_context=effective_tool_context,
-            observation_capture=self._observation_capture,
+            observation_capture=effective_observation,
             runtime_enforcer=effective_enforcer,
             config=loop_config,
             agent_name=self._definition.name,
@@ -1031,7 +1037,7 @@ class AgentRuntime:
             await post_runner.run(hook_ctx)
 
         # Record observation for completed iterative invocation
-        if self._observation_capture is not None:
+        if self._observation_capture is not None and not self._evaluation_mode:
             try:
                 from agent33.memory.observation import Observation
 
@@ -1145,13 +1151,17 @@ class AgentRuntime:
         from agent33.config import settings as _settings
 
         loop_config = config or ToolLoopConfig()
+        if self._evaluation_mode and not loop_config.evaluation_mode:
+            loop_config = dataclasses.replace(loop_config, evaluation_mode=True)
+        # In evaluation mode, suppress observation side effects
+        effective_observation = None if self._evaluation_mode else self._observation_capture
         effective_tool_context = self._apply_pack_tool_narrowing()
         loop = ToolLoop(
             router=self._router,
             tool_registry=iterative_tool_registry,
             tool_governance=self._tool_governance,
             tool_context=effective_tool_context,
-            observation_capture=self._observation_capture,
+            observation_capture=effective_observation,
             runtime_enforcer=self._runtime_enforcer,
             config=loop_config,
             agent_name=self._definition.name,
