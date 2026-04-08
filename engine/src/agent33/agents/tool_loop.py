@@ -64,6 +64,19 @@ class ToolLoopConfig:
     enable_double_confirmation: bool = True
     loop_detection_threshold: int = 0  # 0 disables loop detection by default
     text_tool_parser: TextToolParser | None = None
+    evaluation_mode: bool = False
+    """If True, run in evaluation mode: stricter context enforcement, no side
+    effects recorded.
+
+    In evaluation mode the loop:
+    - Uses a simple word-count token estimate instead of the model's reported
+      token count to ensure deterministic context-window enforcement
+      independent of LLM availability.
+    - Proactively evicts the oldest non-system messages when the estimated
+      token count exceeds 90 % of ``model_context_window`` on the ToolLoop
+      that owns this config.
+    - Still respects ``max_iterations`` -- do NOT skip the termination logic.
+    """
 
 
 @dataclasses.dataclass(slots=True)
@@ -161,6 +174,44 @@ class ToolLoop:
         return self._last_accumulated_messages
 
     # ------------------------------------------------------------------
+    # Evaluation-mode context budget enforcement
+    # ------------------------------------------------------------------
+
+    def _evict_for_context_budget(
+        self,
+        messages: list[ChatMessage],
+        budget_tokens: int,
+    ) -> None:
+        """Evict oldest non-system messages until estimated token count fits in budget.
+
+        Uses a simple word-count heuristic (words * 1.3) as a token estimate.
+        System messages are never evicted.  At least 2 non-system messages are
+        kept to preserve the most recent exchange.
+
+        This is intentionally simple -- it is used only in evaluation mode where
+        determinism matters more than precision.
+        """
+
+        def _estimate_tokens(msg: ChatMessage) -> int:
+            content = msg.content or ""
+            if isinstance(content, list):
+                content = " ".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in content
+                )
+            return max(1, int(len(content.split()) * 1.3))
+
+        while True:
+            total = sum(_estimate_tokens(m) for m in messages)
+            if total <= budget_tokens:
+                break
+            # Find oldest non-system message (keep at least 2 non-system)
+            non_system = [i for i, m in enumerate(messages) if m.role != "system"]
+            if len(non_system) <= 2:
+                break
+            messages.pop(non_system[0])
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -198,6 +249,10 @@ class ToolLoop:
         while state.iteration < self._config.max_iterations:
             state.iteration += 1  # 1-based iteration count
             tool_descriptions = self._collect_tool_descriptions()
+
+            # --- Evaluation-mode: proactive context eviction ------------------
+            if self._config.evaluation_mode:
+                self._evict_for_context_budget(messages, int(self._model_context_window * 0.90))
 
             # --- Call the LLM -------------------------------------------------
             try:
@@ -485,6 +540,12 @@ class ToolLoop:
                     iteration=state.iteration,
                     data={"message_count": len(accumulated_messages)},
                 )
+
+                # --- Evaluation-mode: proactive context eviction ------------------
+                if self._config.evaluation_mode:
+                    self._evict_for_context_budget(
+                        accumulated_messages, int(self._model_context_window * 0.90)
+                    )
 
                 # --- LLM call -------------------------------------------------
                 yield ToolLoopEvent(

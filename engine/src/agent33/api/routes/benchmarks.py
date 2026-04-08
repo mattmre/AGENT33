@@ -133,6 +133,7 @@ def _build_skillsbench_adapter(
         tool_activation_manager=getattr(request.app.state, "tool_activation_manager", None),
         tool_discovery_mode=settings.tool_discovery_mode,
         tenant_id=token_payload.tenant_id or "",
+        evaluation_mode=True,
     )
 
     return SkillsBenchAdapter(
