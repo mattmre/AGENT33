@@ -153,6 +153,33 @@ class SkillsBenchAdapter:
         if skills_enabled and task.skills_dir is not None:
             loaded_skill_names = self._load_bundled_skills(task.skills_dir, task_id)
 
+        # 2b. If a 4-stage skill matcher is configured, filter to relevant skills only.
+        # This prevents answer-leaking skills from being injected while preserving
+        # access to genuinely relevant bundled skills.
+        if self._skill_matcher is not None and loaded_skill_names:
+            self._skill_matcher.reindex()
+            try:
+                match_result = await self._skill_matcher.match(task.instruction)
+                matched_names: set[str] = {s.name for s in match_result.skills}
+                rejected = [n for n in loaded_skill_names if n not in matched_names]
+                self._unload_bundled_skills(rejected)
+                loaded_skill_names = [n for n in loaded_skill_names if n in matched_names]
+                logger.info(
+                    "skillsbench_staged_matching task=%s total=%d matched=%d rejected=%d",
+                    task_id,
+                    len(loaded_skill_names) + len(rejected),
+                    len(loaded_skill_names),
+                    len(rejected),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "skillsbench_staged_matching_error task=%s error=%s",
+                    task_id,
+                    exc,
+                    exc_info=True,
+                )
+                # Fall back to using all loaded skills on matcher failure
+
         # 3. Invoke agent in a fresh temporary working directory
         with tempfile.TemporaryDirectory(prefix="skillsbench_") as tmp_str:
             working_dir = Path(tmp_str)
