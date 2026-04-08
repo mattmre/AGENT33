@@ -45,17 +45,18 @@ def bench_run(
         typer.Option("--trials", "-t", help="Trials per task (default 5)."),
     ] = 5,
 ) -> None:
-    """Run the full 86-task SkillsBench suite and write a CTRF report.
+    """Run the full SkillsBench suite with a live LLM and write a CTRF report.
 
     Requires a SkillsBench repository checkout (--skillsbench-root) and a
     running LLM at the configured endpoint. Results are written to the
     --output path and optionally compared against a --baseline CTRF file.
+
+    Exits with code 1 if task discovery fails, no LLM provider is
+    reachable, or the benchmark encounters a fatal error.
     """
-    import uuid
-    from datetime import UTC, datetime
+    import asyncio
 
     from agent33.benchmarks.skillsbench.config import SkillsBenchConfig
-    from agent33.benchmarks.skillsbench.models import BenchmarkRunResult, BenchmarkRunStatus
     from agent33.benchmarks.skillsbench.reporting import SkillsBenchCTRFGenerator
     from agent33.benchmarks.skillsbench.task_loader import SkillsBenchTaskLoader
 
@@ -68,15 +69,7 @@ def bench_run(
         )
         raise typer.Exit(code=1)
 
-    cfg = SkillsBenchConfig(
-        skillsbench_root=root,
-        agent_name=agent_name,
-        model=model,
-        trials_per_task=trials,
-    )
-
-    typer.echo(f"Running SkillsBench: root={root}, model={model}, trials={trials}")
-
+    # 1. Discover tasks
     try:
         loader = SkillsBenchTaskLoader(root)
         tasks = loader.discover_tasks()
@@ -85,24 +78,90 @@ def bench_run(
         typer.echo(f"[error] Failed to load tasks: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    # For the baseline run (no live LLM), generate stub CTRF with task inventory
-    run = BenchmarkRunResult(
-        run_id=str(uuid.uuid4()),
-        config_summary=cfg.model_dump(mode="json"),
-        status=BenchmarkRunStatus.COMPLETED,
-        started_at=datetime.now(UTC),
-        completed_at=datetime.now(UTC),
-        trials=[],
-    )
-    run.compute_aggregates()
+    if not tasks:
+        typer.echo("[error] No tasks found. Verify --skillsbench-root contains tasks/.", err=True)
+        raise typer.Exit(code=1)
 
+    # 2. Build runtime infrastructure
+    try:
+        from agent33.agents.definition import AgentDefinition, AgentRole
+        from agent33.agents.registry import AgentRegistry
+        from agent33.agents.runtime import AgentRuntime
+        from agent33.benchmarks.skillsbench.adapter import SkillsBenchAdapter
+        from agent33.benchmarks.skillsbench.runner import PytestBinaryRewardRunner
+        from agent33.config import settings
+        from agent33.llm.router import ModelRouter
+        from agent33.skills.registry import SkillRegistry
+
+        # Attempt to load agent definition from the configured definitions dir
+        definition: AgentDefinition | None = None
+        defs_dir = Path(settings.agent_definitions_dir)
+        if defs_dir.is_dir():
+            registry = AgentRegistry()
+            registry.discover(defs_dir)
+            definition = registry.get(agent_name)
+
+        if definition is None:
+            # Fallback: build a minimal agent definition for CLI usage
+            definition = AgentDefinition(
+                name=agent_name,
+                version="1.0.0",
+                role=AgentRole.IMPLEMENTER,
+                description=f"SkillsBench evaluation agent ({agent_name})",
+            )
+
+        router = ModelRouter()
+        skill_registry = SkillRegistry()
+        agent_runtime = AgentRuntime(
+            definition=definition,
+            router=router,
+            model=model,
+            evaluation_mode=True,
+        )
+        pytest_runner = PytestBinaryRewardRunner()
+        adapter = SkillsBenchAdapter(
+            task_loader=loader,
+            pytest_runner=pytest_runner,
+            skill_registry=skill_registry,
+            agent_runtime=agent_runtime,
+        )
+    except Exception as exc:
+        typer.echo(f"[error] Failed to initialize runtime: {exc}", err=True)
+        typer.echo(
+            "Ensure an LLM provider is configured (e.g. OLLAMA_BASE_URL) "
+            "before running `agent33 bench run`.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    # 3. Run the benchmark
+    cfg = SkillsBenchConfig(
+        skillsbench_root=root,
+        agent_name=agent_name,
+        model=model,
+        trials_per_task=trials,
+    )
+
+    typer.echo(f"Running {len(tasks)} tasks x {trials} trials with model={model} ...")
+
+    try:
+        run_result = asyncio.run(adapter.run_benchmark(cfg))
+    except Exception as exc:
+        typer.echo(f"[error] Benchmark execution failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    # 4. Write CTRF report
     generator = SkillsBenchCTRFGenerator()
-    report = generator.generate_report(run)
+    report = generator.generate_report(run_result)
 
     out_path = output or Path("ctrf-bench-report.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     typer.echo(f"CTRF report written to {out_path}")
+    typer.echo(
+        f"Results: {run_result.passed_trials}/{run_result.total_trials} passed "
+        f"({run_result.pass_rate:.1%})"
+    )
 
     if baseline and baseline.exists():
         _compare_baseline(report, baseline)

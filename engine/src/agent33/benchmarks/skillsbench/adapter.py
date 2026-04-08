@@ -17,6 +17,7 @@ protocol so it can be plugged directly into :class:`~agent33.evaluation.service.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import tempfile
@@ -94,6 +95,7 @@ class SkillsBenchAdapter:
         self._agent_runtime = agent_runtime
         self._skill_matcher = skill_matcher
         self._artifact_store = artifact_store
+        self._active_skills_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # TrialEvaluatorAdapter protocol
@@ -156,6 +158,7 @@ class SkillsBenchAdapter:
         # 2b. If a 4-stage skill matcher is configured, filter to relevant skills only.
         # This prevents answer-leaking skills from being injected while preserving
         # access to genuinely relevant bundled skills.
+        staged_matching_skipped = False
         if self._skill_matcher is not None and loaded_skill_names:
             self._skill_matcher.reindex()
             try:
@@ -179,6 +182,7 @@ class SkillsBenchAdapter:
                     exc_info=True,
                 )
                 # Fall back to using all loaded skills on matcher failure
+                staged_matching_skipped = True  # ARCH-AEP A-04
 
         # 3. Invoke agent in a fresh temporary working directory
         with tempfile.TemporaryDirectory(prefix="skillsbench_") as tmp_str:
@@ -198,41 +202,53 @@ class SkillsBenchAdapter:
                 "model": model,
                 "skills_enabled": skills_enabled,
                 "loaded_skills": loaded_skill_names,
+                "staged_matching_skipped": staged_matching_skipped,
             }
 
-            original_active_skills: list[str] | None = None
-            if loaded_skill_names:
-                runtime_any = self._agent_runtime
-                active_skills = getattr(runtime_any, "_active_skills", None)
-                if isinstance(active_skills, list):
-                    original_active_skills = list(active_skills)
-                    runtime_any._active_skills = list(
-                        dict.fromkeys([*active_skills, *loaded_skill_names])
-                    )
+            # Guard _active_skills mutation with a lock so concurrent
+            # trials sharing the same AgentRuntime cannot race on the
+            # snapshot-mutate-restore cycle.  (ARCH-AEP A-01)
+            async with self._active_skills_lock:
+                original_active_skills: list[str] | None = None
+                if loaded_skill_names:
+                    runtime_any = self._agent_runtime
+                    active_skills = getattr(runtime_any, "_active_skills", None)
+                    if isinstance(active_skills, list):
+                        original_active_skills = list(active_skills)
+                        runtime_any._active_skills = list(
+                            dict.fromkeys([*active_skills, *loaded_skill_names])
+                        )
 
-            try:
-                result = await self._agent_runtime.invoke_iterative(inputs=inputs)
-                tokens_used = result.tokens_used
-                trial_metadata["iterations"] = result.iterations
-                trial_metadata["tool_calls_made"] = result.tool_calls_made
-                trial_metadata["termination_reason"] = result.termination_reason
-                trial_metadata["agent_output"] = self._serialize_agent_payload(
-                    getattr(result, "output", {})
-                )
-                trial_metadata["agent_raw_response"] = str(getattr(result, "raw_response", ""))
-            except Exception as exc:
-                logger.warning(
-                    "skillsbench_agent_error task=%s error=%s", task_id, exc, exc_info=True
-                )
-                return TrialEvaluationOutcome(
-                    success=False,
-                    tokens_used=tokens_used,
-                    metadata={**trial_metadata, "error": str(exc), "reason": "agent_error"},
-                )
-            finally:
-                if original_active_skills is not None:
-                    runtime_any._active_skills = original_active_skills
-                self._unload_bundled_skills(loaded_skill_names)
+                try:
+                    result = await self._agent_runtime.invoke_iterative(inputs=inputs)
+                    tokens_used = result.tokens_used
+                    trial_metadata["iterations"] = result.iterations
+                    trial_metadata["tool_calls_made"] = result.tool_calls_made
+                    trial_metadata["termination_reason"] = result.termination_reason
+                    trial_metadata["agent_output"] = self._serialize_agent_payload(
+                        getattr(result, "output", {})
+                    )
+                    trial_metadata["agent_raw_response"] = str(getattr(result, "raw_response", ""))
+                except Exception as exc:
+                    logger.warning(
+                        "skillsbench_agent_error task=%s error=%s",
+                        task_id,
+                        exc,
+                        exc_info=True,
+                    )
+                    return TrialEvaluationOutcome(
+                        success=False,
+                        tokens_used=tokens_used,
+                        metadata={
+                            **trial_metadata,
+                            "error": str(exc),
+                            "reason": "agent_error",
+                        },
+                    )
+                finally:
+                    if original_active_skills is not None:
+                        runtime_any._active_skills = original_active_skills
+                    self._unload_bundled_skills(loaded_skill_names)
 
             # 4. Run pytest binary reward
             pytest_result = await self._pytest_runner.evaluate(
