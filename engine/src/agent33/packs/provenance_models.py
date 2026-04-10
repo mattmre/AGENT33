@@ -1,4 +1,4 @@
-﻿"""Shared pack provenance data models with no manifest dependencies."""
+"""Shared pack provenance data models with no manifest dependencies."""
 
 from __future__ import annotations
 
