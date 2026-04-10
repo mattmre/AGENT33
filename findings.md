@@ -1,5 +1,16 @@
 # Findings
 
+## 2026-04-10
+
+- The merged baseline is `c30e18c` / PR `#392`; the planning docs were one cluster behind and still described POST-1 and POST-2 as pending.
+- There are no open PRs right now, so the correct next action is a new sequential implementation wave rather than in-place PR-comment remediation.
+- ARCH-AEP Loop 7 is complete: verdict PASS-WITH-CONDITIONS; required fixes C-01/C-02 landed in PR `#385`.
+- ARCH-AEP Loop 8 is complete: verdict PASS-WITH-CONDITIONS; required HIGH fixes A-01/B-01 landed in PR `#392`.
+- POST-1 and POST-2 are complete on `main`; the next unstarted slice is POST-3.1 (pack sandbox + injection test suite).
+- `docs/phases/PHASE-PLAN-POST-P72-2026.md` was absent from `origin/main`; it is restored in the Session 124 planning-refresh PR so new worktrees can follow the documented Fresh Context Protocol safely.
+- Loop 8 left non-blocking follow-up notes B-02, B-03, B-05, and B-08; they should be treated as backlog items, not gates on POST-3 startup.
+- The planning source of truth for the remaining wave is now: `docs/phases/PHASE-PLAN-POST-P72-2026.md`, `docs/next-session.md`, `task_plan.md`, `progress.md`, and the Loop 7/Loop 8 research memos.
+
 ## 2026-03-13
 
 - Repo-only cleanup was limited to `D:\GITHUB\AGENT33`, `D:\GITHUB\AGENT33\worktrees`, and `D:\GITHUB\AGENT33\.claude\worktrees`.

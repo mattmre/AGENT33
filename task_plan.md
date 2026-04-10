@@ -2,15 +2,16 @@
 
 ## Goal
 
-Execute the POST-P72 roadmap clusters (POST-1 through POST-4) sequentially with disposable worktree agents, one PR per slice from fresh `origin/main` worktrees.
+Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) sequentially with disposable worktree agents, one PR per slice from fresh `origin/main` worktrees.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-07`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (383+ PRs merged).
-- POST-P72 phase plan APPROVED in Session 122: `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
-- ARCH-AEP Loops 1-6 COMPLETE; Loop 7 IN PROGRESS (background review agent).
-- Root checkout is intentionally dirty and lags `origin/main`.
+- There are no open GitHub PRs as of `2026-04-10`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (392 PRs merged).
+- POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+- ARCH-AEP Loops 1-8 are COMPLETE.
+- POST-1 and POST-2 are COMPLETE on `main`; the next unstarted slice is POST-3.1.
+- Treat the root checkout as disposable and always implement from fresh `origin/main` worktrees.
 
 ## Resume Protocol
 
@@ -24,48 +25,61 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 123
-- Current slice: POST-1.2 (docs refresh)
-- Resume artifact: `docs/next-session.md`
+- Active queue owner: Session 124
+- Current slice: POST-3.1 (pack sandbox + injection test suite)
+- Resume artifact: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 
 ---
 
-# Task Plan — Session 123 (Active)
+# Task Plan — Session 124 (Active)
 
-## 2026-04-07 Session 123: POST-P72 Cluster Implementation
+## 2026-04-10 Session 124: Remaining POST-P72 Execution
 
 ### Goal
-Execute POST-P72 roadmap clusters POST-1 through POST-4 sequentially with disposable worktree agents.
+Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentially with disposable worktree agents.
 
-### Session 123 Queue
+### Session 124 Queue
 
 | Task | Item | Status |
 |---|---|---|
-| T1 | POST-1.1 — ARCH-AEP Loop 7 review + triage | in_progress |
-| T2 | POST-1.2 — Docs refresh (this PR) | in_progress |
-| T3 | POST-1.4 — SHA-256 timing oracle fix | pending (unblocks after T2) |
-| T4 | POST-1.3 — Frontend bundling decision | pending (unblocks after T2) |
-| T5 | POST-1.5 — SkillsBench baseline run | pending (blocked on T1) |
-| T6 | POST-2.1a — SkillsBench smoke suite CI | pending (blocked on T5) |
-| T7 | POST-2.1b — SkillsBench weekly run | pending (blocked on T6) |
-| T8 | POST-2.2 — Context window management | pending (blocked on T5) |
-| T9 | POST-2.3 — Iterative tool-use + 4-stage skill matching | pending (blocked on T8) |
-| T10 | POST-3.1 — Pack sandbox + injection tests | pending (blocked on T1) |
-| T11 | POST-3.2 — Pack registry v1 | pending (blocked on T10) |
-| T12 | POST-3.3 — CLI DX improvements | pending (blocked on T11) |
-| T13 | POST-3.4 — 5 seed packs | pending (blocked on T11) |
-| T14 | POST-4.1 — P69b UX spec + API contract | pending (blocked on T1) |
-| T15 | POST-4.2 — SSE event schema versioning | pending (blocked on T14) |
-| T16 | POST-4.3 — P69b implementation | pending (blocked on T15) |
-| T17 | POST-4.4 — P-PACK v3 A/B harness | pending (blocked on T16 + 30-day gate) |
-| T18 | POST-4.5 — P-PACK v3 behavior modifications | pending (blocked on T17) |
+| T0 | Planning/docs reconciliation | completed in planning-refresh PR |
+| T1 | POST-3.1 — Pack sandbox + injection tests | pending |
+| T2 | POST-3.2 — Pack registry v1 | pending (blocked on T1) |
+| T3 | POST-3.3 — CLI DX improvements | pending (blocked on T2) |
+| T4 | POST-3.4 — 5 seed packs | pending (blocked on T2) |
+| T5 | POST-4.1 — P69b UX spec + API contract | pending (blocked on T4) |
+| T6 | POST-4.2 — SSE event schema versioning | pending (blocked on T5) |
+| T7 | POST-4.3 — P69b implementation | pending (blocked on T6) |
+| T8 | POST-4.4 — P-PACK v3 A/B harness | pending (blocked on T7 + 30-day gate) |
+| T9 | POST-4.5 — P-PACK v3 behavior modifications | pending (blocked on T8) |
+| T10 | POST-CLUSTER — Public launch preparation | pending (blocked on T9) |
+| T11 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (blocked on T9) |
+| T12 | POST-CLUSTER — Pack marketplace web UI | pending (blocked on T4) |
+| T13 | POST-CLUSTER — Community submissions | pending (blocked on T2) |
+
+### Session 123 Delivered
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | POST-1.1 — ARCH-AEP Loop 7 review + triage | completed |
+| T2 | POST-1.2 — Docs refresh | completed in PR #384 |
+| T3 | POST-1.4 — SHA-256 timing oracle fix | completed in PR #385 |
+| T4 | POST-1.3 — Frontend bundling decision | completed in PR #386 |
+| T5 | POST-1.5 — SkillsBench baseline CLI + docs | completed in PR #387 |
+| T6 | POST-2.1a — SkillsBench smoke suite CI | completed in PR #388 |
+| T7 | POST-2.1b — SkillsBench weekly run | completed in PR #390 |
+| T8 | POST-2.2 — Context window management | completed in PR #389 |
+| T9 | POST-2.3 — Iterative tool-use + 4-stage skill matching | completed in PR #391 |
+| T10 | POST-2 gate remediations | completed in PR #392 |
 
 ### Sequential Execution Rules
 1. One fresh worktree per slice from origin/main
 2. One fresh agent per slice; dispose after merge
 3. One PR per slice
 4. No next slice starts before merge + fresh-main verification
-5. T1 (Loop 7) is the hard gate for T5, T10, T14 (and everything downstream)
+5. POST-3.2 depends on POST-3.1; POST-3.3 and POST-3.4 depend on POST-3.2
+6. POST-4 starts only after POST-3.4 merges
+7. POST-4.4 remains blocked on POST-4.3 and the 30-day P68-Lite calendar gate
 
 ---
 
@@ -125,20 +139,26 @@ Session 117 is complete. All three immediate priorities from Session 116 are clo
 
 ## Smart Merge Plan
 
-1. `S10`: Phase 30 Stage 3 production trace tuning
-2. `S11`: Phase 47 capability pack expansion and workflow weaving
-3. `S12`: Phase 35 / 48 voice convergence decision
-4. `S13`: Phase 48 operator UX and production hardening
-5. `S14`: OpenClaw Track 7 web research and trust
-6. `S15`: OpenClaw Track 8 sessions and context engine UX
-7. `S16`: OpenClaw Track 9 operations, config, and doctor
-8. `S17`: OpenClaw Track 10 provenance, FE hardening, and closeout
+1. Planning/docs reconciliation (planning-refresh PR)
+2. POST-3.1 — Pack sandbox + injection tests
+3. POST-3.2 — Pack registry v1
+4. POST-3.3 — CLI DX improvements
+5. POST-3.4 — 5 seed packs
+6. POST-4.1 — P69b UX spec + API contract
+7. POST-4.2 — SSE event schema versioning
+8. POST-4.3 — P69b implementation
+9. POST-4.4 — P-PACK v3 A/B harness
+10. POST-4.5 — P-PACK v3 behavior modifications
+11. POST-CLUSTER — Public launch preparation
+12. POST-CLUSTER — P-ENV v2 auto-install + automated model download
+13. POST-CLUSTER — Pack marketplace web UI
+14. POST-CLUSTER — Community submissions
 
 Merge gates for every slice:
 
 - no later slice starts before the current slice is merged and recorded as verified
 - if `gh pr merge --delete-branch` collides with worktree branch usage, merge via GitHub API and continue from a fresh verification worktree
-- after `S17`, run one last fresh-`origin/main` verification pass covering the accumulated touched surfaces before declaring the roadmap wave closed
+- after POST-4.5, run one last fresh-`origin/main` verification pass covering the accumulated touched surfaces before declaring the POST-P72 wave closed
 
 ## Completed Sequence
 

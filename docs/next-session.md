@@ -1,64 +1,53 @@
 # Next Session Briefing
 
-Last updated: 2026-04-07 (Session 123 start)
+Last updated: 2026-04-10 (Session 124 start)
 
 ## Current State
 
-- **Branch posture**: root checkout is intentionally dirty and lags `origin/main`. Always use fresh worktrees.
+- **Branch posture**: treat the root checkout as disposable; always use fresh worktrees from `origin/main` for implementation.
 - **Open PRs**: 0
-- **Latest merged PR**: #383 (P72 — Impact Dashboard)
-- **Latest commit on main**: `729d68f`
-- **Cumulative PRs merged**: 383+
+- **Latest merged PR**: #392 (ARCH-AEP POST-2 remediations — concurrency lock + bench run wiring)
+- **Latest commit on main**: `c30e18c`
+- **Cumulative PRs merged**: 392
 - **All Phases 01-72**: COMPLETE
-- **Cluster UX-A (P60a, P-ENV, P63, P60b, P62, P61, P64)**: COMPLETE
-- **Cluster UX-B (P65, P66, P67)**: COMPLETE
-- **Cluster UX-C (P68-Lite, P69a, P-PACK v1)**: COMPLETE (with Loop 6 remediations)
-- **Cluster UX-D (P70, P71, P-PACK v2, P72)**: COMPLETE
-- **ARCH-AEP Loops 1-6**: COMPLETE
-- **ARCH-AEP Loop 7**: IN PROGRESS (background agent review running; results pending in `docs/research/session121-arch-aep-loop7.md`)
-- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md` (approved Session 122, 6-panel cascade review)
+- **Cluster UX-A/B/C/D**: COMPLETE
+- **ARCH-AEP Loops 1-7**: COMPLETE (Loop 7 PASS-WITH-CONDITIONS; conditions fixed in #385)
+- **ARCH-AEP Loop 8 (POST-2 gate)**: COMPLETE (HIGH findings fixed in #392)
+- **POST-1 — Foundation & Baseline**: COMPLETE (#384-#387)
+- **POST-2 — SkillsBench Competitiveness**: COMPLETE (#388-#392)
+- **POST-3 — Pack Ecosystem**: NOT STARTED
+- **POST-4 — Interruption & Self-Improvement**: NOT STARTED (POST-4.4/4.5 still require the 30-day P68-Lite calendar gate)
+- **POST-CLUSTER — Distribution & Ecosystem Growth**: NOT STARTED
+- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **CVE scan**: pre-existing failures on Dependency CVE Scan + Container Image Scan — not blocking
 
-## What Session 122 Delivered
+## What Session 123 Delivered
 
-- 6-panel cascade review of POST-P72 phase plan (two full review cycles):
-  - Cycle 1: Architecture & Planning (Mode C), Product Requirements, Developer Experience
-  - Cycle 2: Security Audit, Testing & Quality, DevOps & Deployment
-- Phase plan APPROVED: `docs/phases/PHASE-PLAN-POST-P72-2026.md` — Clusters POST-1 through POST-4
-- 18 locked architectural decisions (see phase plan for details)
-- Refreshed `next-session.md`, `task_plan.md`, `docs/phases/README.md`
+- `#384` — planning docs refresh for POST-P72 cluster start
+- `#385` — SHA-256 timing-oracle remediation (`hmac.compare_digest()`) + Loop 7 findings
+- `#386` — hatchling frontend build hook + pip smoke CI (POST-1.3)
+- `#387` — `agent33 bench` CLI commands + benchmarks README (POST-1.5)
+- `#388` — benchmark smoke CI wiring (POST-2.1a)
+- `#389` — evaluation mode for ToolLoop + AgentRuntime (POST-2.2)
+- `#390` — weekly SkillsBench scheduled workflow (POST-2.1b)
+- `#391` — 4-stage SkillMatcher wiring (POST-2.3)
+- `#392` — ARCH-AEP Loop 8 remediations for POST-2 gate
 
-## Session 123 Priority Queue
+## Session 124 Priority Queue
 
-### Immediate: POST-1 (Foundation & Baseline)
+### Immediate: POST-3 (Pack Ecosystem)
 
 | Priority | Task | Status |
 |---|---|---|
-| T1 | POST-1.1 — ARCH-AEP Loop 7 review + triage | in_progress |
-| T2 | POST-1.2 — Docs refresh (this PR) | in_progress |
-| T3 | POST-1.4 — SHA-256 timing oracle fix (`hmac.compare_digest()` in `sha256_verify()`) | pending |
-| T4 | POST-1.3 — Frontend bundling decision | pending |
-| T5 | POST-1.5 — SkillsBench baseline run | pending (blocked on T1) |
+| T1 | POST-3.1 — Pack sandbox + injection test suite (6 attack categories) | pending |
+| T2 | POST-3.2 — Pack registry v1 (GitHub JSON index, Sigstore signing, revocation) | pending (blocked on T1) |
+| T3 | POST-3.3 — CLI DX improvements (`--json`, `--plain`, pack-aware `diagnose`) | pending (blocked on T2) |
+| T4 | POST-3.4 — 5 seed packs (web-research, code-review, meeting-notes, document-summarizer, developer-assistant) | pending (blocked on T2) |
 
-POST-1 exit gate: Loop 7 remediations merged; next-session.md current; SkillsBench CTRF baseline committed to `benchmarks` branch.
+POST-3 exit gate: `agent33 pack search` works against live registry; 5 seed packs installable; pack signing enforced.
 
-### Subsequent Clusters
+### Follow-on: POST-4 (Interruption & Self-Improvement)
 
-**POST-2: SkillsBench Competitiveness**
-- POST-2.1a — SkillsBench smoke suite CI (every PR, mocked LLM, ≤15 tasks)
-- POST-2.1b — SkillsBench full run (weekly, live LLM, `benchmarks` branch)
-- POST-2.2 — Context window management for evaluation harness
-- POST-2.3 — Iterative tool-use loop + 4-stage skill matching
-- Exit gate: SkillsBench score improves in ≥2 targeted categories vs. baseline
-
-**POST-3: Pack Ecosystem**
-- POST-3.1 — Pack sandbox + injection test suite (6 attack categories)
-- POST-3.2 — Pack registry v1 (GitHub JSON index, Sigstore signing, revocation)
-- POST-3.3 — CLI DX improvements (`--json`, `--plain`, pack-aware `diagnose`)
-- POST-3.4 — 5 seed packs (web-research, code-review, meeting-notes, document-summarizer, developer-assistant)
-- Exit gate: `agent33 pack search` works against live registry; 5 seed packs installable; pack signing enforced
-
-**POST-4: Interruption & Self-Improvement**
 - POST-4.1 — P69b UX spec + API contract document
 - POST-4.2 — SSE event schema versioning (strict rejection model)
 - POST-4.3 — P69b implementation (PausedInvocation state, HMAC nonce, feature flag)
@@ -66,7 +55,8 @@ POST-1 exit gate: Loop 7 remediations merged; next-session.md current; SkillsBen
 - POST-4.5 — P-PACK v3 behavior modifications (feature flag, A/B regression gate)
 - Exit gate: P69b end-to-end tested; P-PACK v3 behavioral A/B tests passing; both behind feature flags
 
-**POST-CLUSTER: Distribution & Ecosystem Growth**
+### Post-Cluster: Distribution & Ecosystem Growth
+
 - Public launch preparation (README as product page)
 - P-ENV v2 auto-install + automated model download
 - Pack marketplace web UI
@@ -75,20 +65,16 @@ POST-1 exit gate: Loop 7 remediations merged; next-session.md current; SkillsBen
 ### Dependency Graph
 
 ```
-ARCH-AEP Loop 7
-  └──→ POST-1 (Foundation & Baseline) ──→ POST-2 (SkillsBench)
-        │                                        │
-        │                                   ARCH-AEP (POST-2)
-        │                                        │
-        └──→ POST-3 (Pack Ecosystem) ◄───────────┘
-               │
-          ARCH-AEP (POST-3 supply chain)
-               │
-               └──→ POST-4 (Interruption & Self-Improvement)
-                          │
-                    [calendar gate: 30 days P68-Lite data]
-                          │
-                     POST-4.4 / 4.5 (P-PACK v3)
+POST-3.1 — Pack sandbox + injection tests
+  └──→ POST-3.2 — Pack registry v1
+        ├──→ POST-3.3 — CLI DX improvements
+        └──→ POST-3.4 — 5 seed packs
+              └──→ POST-4.1 — P69b UX spec + API contract
+                    └──→ POST-4.2 — SSE event schema versioning
+                          └──→ POST-4.3 — P69b implementation
+                                └──→ POST-4.4 — P-PACK v3 A/B harness
+                                      [calendar gate: 30 days P68-Lite data]
+                                      └──→ POST-4.5 — P-PACK v3 behavior modifications
 ```
 
 ## Locked Architectural Decisions (Session 122)
@@ -114,18 +100,19 @@ These decisions are final and must not be reopened without explicit user approva
 
 ## Environmental Notes
 
-- Root checkout is intentionally dirty — do not implement from root
-- Use fresh worktrees from `origin/main` for all implementation work
+- Do not implement from the root checkout; use fresh worktrees from `origin/main`
 - One fresh worktree per slice; dispose after merge
-- One fresh agent per slice; dispose after merge
-- Post-P72 phase plan (`docs/phases/PHASE-PLAN-POST-P72-2026.md`) exists in root checkout but is not yet committed to `origin/main` — include in next code PR or dedicated docs PR
+- One fresh agent or research pass per slice; dispose after merge
+- Loop 7 report: `docs/research/session121-arch-aep-loop7.md`
+- Loop 8 report: `docs/research/session123-arch-aep-post2.md`
 
 ## Key References
 
 - `docs/phases/PHASE-PLAN-POST-P72-2026.md` — Approved POST-P72 phase plan (4 clusters + post-cluster)
-- `docs/phases/PHASE-PLAN-UX-AUTONOMY-2026.md` — Prior plan (fully executed)
 - `docs/phases/README.md` — Canonical phase index
 - `docs/research/skillsbench-analysis.md` — SkillsBench analysis (2,000+ lines)
+- `docs/research/session121-arch-aep-loop7.md` — Loop 7 PASS-WITH-CONDITIONS findings
+- `docs/research/session123-arch-aep-post2.md` — Loop 8 PASS-WITH-CONDITIONS findings
 - `task_plan.md` — Active execution queue
 - `progress.md` — Session-by-session progress log
 - `findings.md` — Technical findings and investigation notes
@@ -135,5 +122,6 @@ These decisions are final and must not be reopened without explicit user approva
 1. Create fresh worktree from `origin/main`
 2. Read `task_plan.md`, `findings.md`, and `progress.md`
 3. Read `docs/phases/PHASE-PLAN-POST-P72-2026.md` for current roadmap
-4. Check for ARCH-AEP Loop 7 results in `docs/research/session121-arch-aep-loop7.md`
-5. Research before implementing — each slice needs a scope doc first
+4. Read both ARCH-AEP reports: `docs/research/session121-arch-aep-loop7.md` and `docs/research/session123-arch-aep-post2.md`
+5. Check whether any PR comments or review findings exist before starting a new slice
+6. Research before implementing — each slice needs a scope doc first

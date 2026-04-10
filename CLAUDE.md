@@ -114,7 +114,7 @@ AGENT-33's adaptation strategy is **evolutionary integration**: absorb SkillsBen
 
 ## Development Phases
 
-Phase plans live in `docs/phases/`. The original core phases (01-21) are complete and the recent Session 50/51 stack is now merged on `main` (including Phases 32/33 core work plus Phase 31 persistence/quality hardening and A5 synthetic environments). Remaining work is primarily late-phase refinement/verification/hardening; see `docs/phases/README.md` for canonical status and `docs/next-session.md` for the active priority queue.
+Phase plans live in `docs/phases/`. The original core phases (01-21) are complete and the recent Session 50/51 stack is now merged on `main` (including Phases 32/33 core work plus Phase 31 persistence/quality hardening and A5 synthetic environments). The active remaining roadmap is the POST-P72 wave: POST-1 (Foundation & Baseline) and POST-2 (SkillsBench Competitiveness) are merged on `main`, and the live queue now begins at POST-3 (Pack Ecosystem). See `docs/phases/README.md` for canonical status and `docs/next-session.md` for the active priority queue.
 
 Before reopening a "remaining" roadmap item, audit the merged baseline first. Session 80
 confirmed that `S10 / Phase 30 Stage 3` was already present on `main`, and only the queue
