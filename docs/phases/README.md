@@ -55,6 +55,11 @@ This index lists the AGENT-33 development phases. Each phase file is a single-ph
 - `ROADMAP-REBASE-2026-03-26.md` (merged-baseline checkpoint and current remaining priority queue)
 - `qwen-adoption-phases.md` (Qwen-Agent competitive adaptation — Phases 36-43)
 
+## Post-P72 Roadmap (2026)
+| Plan | Title | File |
+| --- | --- | --- |
+| POST-1-4 | POST-P72 Phase Plan — SkillsBench, Packs, Interruption, Distribution | `PHASE-PLAN-POST-P72-2026.md` |
+
 ## Notes
 - Generic templates live in `core/phases/` and serve as structural examples.
 - This index is the canonical plan for AGENT-33 execution sequencing.

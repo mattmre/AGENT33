@@ -1,5 +1,33 @@
 # Progress Log
 
+## 2026-04-10 (Session 124 start)
+
+- Confirmed there are 0 open PRs on `mattmre/AGENT33`, so there is no active PR-comment remediation queue.
+- Audited the merged baseline through PR `#392` / commit `c30e18c`.
+- Confirmed POST-1 and POST-2 are complete on `main`; the next unstarted cluster is POST-3.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session124-planning-refresh` on branch `codex/session124-planning-refresh`.
+- Reconciled stale planning docs against merged PRs `#384`-`#392`.
+- Restored `docs/phases/PHASE-PLAN-POST-P72-2026.md` so the Fresh Context Protocol has a real roadmap file on `main`.
+- Opened planning-refresh PR `#393` so the next slice can start from crash-safe docs with the queue reset to POST-3.1.
+
+## 2026-04-07 (Session 123 execution complete)
+
+- POST-1 cluster COMPLETE.
+  - PR `#384` (`1b2ea36`): planning docs refresh for POST-P72 cluster start.
+  - PR `#385` (`b4defb9`): replace direct SHA-256 comparisons with `hmac.compare_digest()` and commit Loop 7 findings.
+  - PR `#386` (`62371ef`): hatchling frontend build hook + pip smoke CI.
+  - PR `#387` (`f8c7422`): `agent33 bench` CLI commands + benchmarks README.
+- POST-2 cluster COMPLETE.
+  - PR `#388` (`81e086b`): benchmark-smoke CI wiring.
+  - PR `#389` (`74d9df6`): evaluation mode for ToolLoop + AgentRuntime.
+  - PR `#390` (`a7689cd`): weekly SkillsBench scheduled workflow.
+  - PR `#391` (`05f6b1f`): 4-stage SkillMatcher wired into `SkillRegistry` + `SkillsBenchAdapter`.
+  - PR `#392` (`c30e18c`): ARCH-AEP Loop 8 remediations — concurrency lock + bench run wiring.
+- ARCH-AEP Loop 7 COMPLETE: PASS-WITH-CONDITIONS; conditions C-01/C-02 fixed in `#385`.
+- ARCH-AEP Loop 8 COMPLETE: 0C / 2H / 6M / 6L; both HIGH findings fixed in `#392`.
+- Cumulative PRs on `main`: 392.
+- Remaining roadmap: POST-3 (Pack Ecosystem) → POST-4 (Interruption & Self-Improvement) → POST-CLUSTER.
+
 ## 2026-04-07 (Session 123 start)
 
 - Loaded POST-P72 phase plan from docs/phases/PHASE-PLAN-POST-P72-2026.md (approved Session 122)
