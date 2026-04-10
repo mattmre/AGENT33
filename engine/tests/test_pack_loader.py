@@ -294,6 +294,14 @@ class TestVerifyChecksums:
         assert valid is False
         assert "not found" in mismatches[0].lower()
 
+    def test_path_traversal_in_checksums_blocked(self, tmp_path: Path) -> None:
+        (tmp_path / "CHECKSUMS.sha256").write_text(
+            "sha256:abc123  ../outside.txt\n", encoding="utf-8"
+        )
+        valid, mismatches = verify_checksums(tmp_path)
+        assert valid is False
+        assert "path traversal" in mismatches[0].lower()
+
 
 class TestComputePackChecksum:
     """Test pack checksum computation."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import codecs
 import re
 from dataclasses import dataclass, field
 
@@ -49,24 +50,53 @@ _INSTRUCTION_OVERRIDE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"reveal\s+(your|the)\s+(system|initial|original)\s+(prompt|instructions)", re.I),
 ]
 
+_UNICODE_ESCAPE_RE = re.compile(r"(?:\\u[0-9a-fA-F]{4}){4,}")
+_HEX_ENCODED_RE = re.compile(r"\b(?:[0-9a-fA-F]{2}){16,}\b")
+
+
+def _contains_known_injection(text: str) -> bool:
+    for pat in (
+        _SYSTEM_OVERRIDE_PATTERNS + _DELIMITER_INJECTION_PATTERNS + _INSTRUCTION_OVERRIDE_PATTERNS
+    ):
+        if pat.search(text):
+            return True
+    return False
+
 
 def _check_encoded_payloads(text: str) -> list[str]:
-    """Attempt to detect base64-encoded injection payloads."""
+    """Attempt to detect encoded injection payloads."""
     threats: list[str] = []
-    b64_re = re.compile(r"[A-Za-z0-9+/=]{40,}")
+    b64_re = re.compile(r"(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
     for match in b64_re.finditer(text):
         try:
             decoded = base64.b64decode(
                 match.group(),
                 validate=True,
             ).decode("utf-8", errors="ignore")
-            # Re-scan the decoded content for known attack patterns
-            for pat in _SYSTEM_OVERRIDE_PATTERNS + _INSTRUCTION_OVERRIDE_PATTERNS:
-                if pat.search(decoded):
-                    threats.append("encoded_payload: hidden injection in base64 segment")
-                    return threats
+            if _contains_known_injection(decoded):
+                threats.append("encoded_payload: hidden injection in encoded segment")
+                return threats
         except Exception:
             continue
+
+    for match in _UNICODE_ESCAPE_RE.finditer(text):
+        try:
+            decoded = codecs.decode(match.group(), "unicode_escape")
+            if _contains_known_injection(decoded):
+                threats.append("encoded_payload: hidden injection in encoded segment")
+                return threats
+        except Exception:
+            continue
+
+    for match in _HEX_ENCODED_RE.finditer(text):
+        try:
+            decoded = bytes.fromhex(match.group()).decode("utf-8", errors="ignore")
+            if _contains_known_injection(decoded):
+                threats.append("encoded_payload: hidden injection in encoded segment")
+                return threats
+        except Exception:
+            continue
+
     return threats
 
 

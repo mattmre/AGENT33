@@ -1,5 +1,19 @@
 # Findings
 
+## 2026-04-10 (POST-3.1)
+
+- The effective POST-3.1 sandbox is already present in the merged baseline: `CLIAdapter` subprocess isolation plus pack path-traversal and archive-extraction guards.
+- The real POST-3.1 gap is defensive coverage:
+  - encoded payload detection only handled Base64
+  - `PackManifest` scanned `prompt_addenda` but not `tool_config`
+  - checksum path-traversal and malicious zip entry cases were not fully locked by targeted tests
+- The safest implementation shape is surgical:
+  - extend `agent33.security.injection`
+  - extend `agent33.packs.manifest`
+  - expand the existing pack/security tests rather than introducing a second sandbox subsystem
+- `RemotePackMarketplace._safe_extract()` already had the right production guardrails; this slice adds explicit regression coverage for absolute-path and symlink archive entries.
+- POST-3.2 should build on this slice without reopening sandbox design decisions; Sigstore, revocation, and registry JSON remain explicitly out of scope until the next PR.
+
 ## 2026-04-10
 
 - The merged baseline is `c30e18c` / PR `#392`; the planning docs were one cluster behind and still described POST-1 and POST-2 as pending.

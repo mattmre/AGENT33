@@ -43,7 +43,7 @@ Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentiall
 | Task | Item | Status |
 |---|---|---|
 | T0 | Planning/docs reconciliation | completed in PR #393 |
-| T1 | POST-3.1 — Pack sandbox + injection tests | pending |
+| T1 | POST-3.1 — Pack sandbox + injection tests | in_review (PR #394 open; local validation complete) |
 | T2 | POST-3.2 — Pack registry v1 | pending (blocked on T1) |
 | T3 | POST-3.3 — CLI DX improvements | pending (blocked on T2) |
 | T4 | POST-3.4 — 5 seed packs | pending (blocked on T2) |

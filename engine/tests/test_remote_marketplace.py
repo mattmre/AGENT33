@@ -286,6 +286,65 @@ def test_malicious_zip_path_traversal_rejected(tmp_path: Path) -> None:
         marketplace.resolve("evil-pack", "1.0.0")
 
 
+def test_malicious_zip_absolute_path_rejected(tmp_path: Path) -> None:
+    """A zip archive with absolute-path entries should be rejected."""
+    archive_path = tmp_path / "absolute.zip"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("C:/Windows/System32/drivers/etc/hosts", "127.0.0.1 localhost")
+
+    index_path = _write_index(
+        tmp_path,
+        [
+            {
+                "name": "absolute-pack",
+                "description": "Absolute path entry",
+                "versions": [
+                    {"version": "1.0.0", "download_url": archive_path.as_uri()},
+                ],
+            }
+        ],
+    )
+
+    marketplace = RemotePackMarketplace(
+        RemoteMarketplaceConfig(name="absolute-source", index_url=index_path.as_uri()),
+        cache_dir=tmp_path / "cache",
+    )
+
+    with pytest.raises(ValueError, match="absolute path entry"):
+        marketplace.resolve("absolute-pack", "1.0.0")
+
+
+def test_malicious_zip_symlink_rejected(tmp_path: Path) -> None:
+    """A zip archive with symlink entries should be rejected."""
+    archive_path = tmp_path / "symlink.zip"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        symlink_info = zipfile.ZipInfo("packs/link")
+        symlink_info.create_system = 3
+        symlink_info.external_attr = 0o120777 << 16
+        zf.writestr(symlink_info, "target")
+
+    index_path = _write_index(
+        tmp_path,
+        [
+            {
+                "name": "symlink-pack",
+                "description": "Symlink entry",
+                "versions": [
+                    {"version": "1.0.0", "download_url": archive_path.as_uri()},
+                ],
+            }
+        ],
+    )
+
+    marketplace = RemotePackMarketplace(
+        RemoteMarketplaceConfig(name="symlink-source", index_url=index_path.as_uri()),
+        cache_dir=tmp_path / "cache",
+    )
+
+    with pytest.raises(ValueError, match="symlink entry"):
+        marketplace.resolve("symlink-pack", "1.0.0")
+
+
 def test_http_error_graceful_handling(tmp_path: Path) -> None:
     """HTTP errors during index fetch should propagate as httpx exceptions."""
     marketplace = RemotePackMarketplace(

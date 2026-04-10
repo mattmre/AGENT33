@@ -1,5 +1,25 @@
 # Progress Log
 
+## 2026-04-10 (Session 124 POST-3.1 in progress)
+
+- Started POST-3.1 from fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session124-post31-pack-sandbox` on branch `codex/session124-post31-pack-sandbox`.
+- Ran a fresh research pass over the current pack architecture and saved the scope memo to `docs/research/session124-post31-pack-sandbox-scope.md`.
+- Locked the slice to security hardening plus regression coverage rather than a new sandbox runtime:
+  - extend encoded-payload detection beyond Base64
+  - scan `tool_config` values during manifest validation
+  - add regression coverage for pack path traversal and archive extraction guards
+- Implemented:
+  - Unicode-escape and hex-encoded payload detection in `agent33.security.injection`
+  - `PackManifest` validation for `tool_config`
+  - new and expanded regression coverage in `test_security_hardening.py`, `test_ppack_v1.py`, `test_pack_loader.py`, and `test_remote_marketplace.py`
+- Focused validation for the touched surfaces is green:
+  - `pytest tests/test_security_hardening.py tests/test_ppack_v1.py tests/test_pack_loader.py tests/test_remote_marketplace.py -q --no-cov`
+  - `ruff check`
+  - `ruff format --check`
+  - `mypy src/agent33/security/injection.py src/agent33/packs/manifest.py`
+- Opened POST-3.1 PR `#394` and completed a no-noise self-review after confirming there were no actionable external review comments.
+- Next step: merge PR `#394`, verify from fresh `origin/main`, and then start POST-3.2.
+
 ## 2026-04-10 (Session 124 start)
 
 - Confirmed there are 0 open PRs on `mattmre/AGENT33`, so there is no active PR-comment remediation queue.

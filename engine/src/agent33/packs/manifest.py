@@ -167,6 +167,23 @@ class PackManifest(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _validate_tool_config_safe(self) -> PackManifest:
+        """Reject packs whose tool_config contains injection patterns."""
+        if not self.tool_config:
+            return self
+
+        from agent33.security.injection import scan_inputs_recursive
+
+        result = scan_inputs_recursive(self.tool_config)
+        if not result.is_safe:
+            threats = ", ".join(result.threats)
+            raise ValueError(
+                f"Tool config in pack '{self.name}' failed injection scan: {threats}. "
+                f"Review and sanitize the tool configuration before loading."
+            )
+        return self
+
 
 def parse_pack_yaml(path: Path) -> PackManifest:
     """Parse a PACK.yaml file and return a validated PackManifest.
