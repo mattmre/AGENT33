@@ -17,7 +17,8 @@
   - `ruff check`
   - `ruff format --check`
   - `mypy src/agent33/security/injection.py src/agent33/packs/manifest.py`
-- Next step: open the POST-3.1 PR, review it, and merge before starting POST-3.2.
+- Opened POST-3.1 PR `#394` and completed a no-noise self-review after confirming there were no actionable external review comments.
+- Next step: merge PR `#394`, verify from fresh `origin/main`, and then start POST-3.2.
 
 ## 2026-04-10 (Session 124 start)
 
