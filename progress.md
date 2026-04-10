@@ -8,7 +8,7 @@
 - Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session124-planning-refresh` on branch `codex/session124-planning-refresh`.
 - Reconciled stale planning docs against merged PRs `#384`-`#392`.
 - Restored `docs/phases/PHASE-PLAN-POST-P72-2026.md` so the Fresh Context Protocol has a real roadmap file on `main`.
-- Prepared Session 124 planning-refresh PR so the next slice can start from crash-safe docs with the queue reset to POST-3.1.
+- Opened planning-refresh PR `#393` so the next slice can start from crash-safe docs with the queue reset to POST-3.1.
 
 ## 2026-04-07 (Session 123 execution complete)
 
