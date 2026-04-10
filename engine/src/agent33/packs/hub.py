@@ -1,4 +1,4 @@
-"""Pack Hub: lightweight registry client for browsing and downloading packs.
+﻿"""Pack Hub: lightweight registry client for browsing and downloading packs.
 
 The hub reads a JSON registry (either from a remote URL or a local cache file)
 and provides search, lookup, and download capabilities.  When the remote
@@ -19,6 +19,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 logger = structlog.get_logger()
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -49,6 +50,26 @@ class PackHubEntry(BaseModel):
     sha256: str = ""  # hex digest for integrity check
     install_count: int = 0
     rating: float = 0.0  # 0.0-5.0
+    revoked: bool = False
+    revocation_reason: str = ""
+
+
+class RevocationRecord(BaseModel):
+    """Revocation record for a pack version in the registry."""
+
+    name: str
+    version: str = ""  # empty = all versions
+    reason: str = ""
+    revoked_at: str = ""
+
+
+class RevocationStatus(BaseModel):
+    """Result of a revocation check for a pack."""
+
+    name: str
+    version: str = ""
+    revoked: bool
+    reason: str = ""
 
 
 class PackRegistryPayload(BaseModel):
@@ -57,6 +78,10 @@ class PackRegistryPayload(BaseModel):
     schema_version: str = "1"
     updated_at: str = ""
     packs: list[PackHubEntry] = Field(default_factory=list)
+    revoked: list[RevocationRecord] = Field(
+        default_factory=list,
+        description="Explicit revocation list; install must reject matching entries",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +95,7 @@ class PackHub:
     def __init__(self, config: PackHubConfig | None = None) -> None:
         self._config = config or PackHubConfig()
         self._cache: list[PackHubEntry] = []
+        self._revocation_list: list[RevocationRecord] = []
         self._cache_loaded_at: float = 0.0
 
     # -- Public API ---------------------------------------------------------
@@ -106,13 +132,60 @@ class PackHub:
                 return entry
         return None
 
+    async def get_revocation_status(self, name: str, version: str = "") -> RevocationStatus:
+        """Return the revocation status for a named pack.
+
+        Checks both the per-entry ``revoked`` flag and the registry-level
+        ``revoked`` list.  An empty *version* matches any version-scoped
+        revocation records with empty version field.
+        """
+        await self._ensure_cache()
+        entry = await self.get(name)
+
+        # Check per-entry flag first
+        if entry is not None and entry.revoked:
+            return RevocationStatus(
+                name=name,
+                version=entry.version,
+                revoked=True,
+                reason=entry.revocation_reason or "Pack revoked by registry",
+            )
+
+        # Check explicit revocation list
+        for record in self._revocation_list:
+            if record.name == name:
+                if not record.version or not version or record.version == version:
+                    return RevocationStatus(
+                        name=name,
+                        version=record.version or version,
+                        revoked=True,
+                        reason=record.reason or "Pack revoked by registry",
+                    )
+
+        return RevocationStatus(name=name, version=version, revoked=False)
+
     async def download(self, entry: PackHubEntry, dest_dir: Path) -> Path:
         """Download a pack YAML to *dest_dir* and verify its sha256.
 
         Raises:
-            ValueError: If the download URL is empty, the sha256 doesn't
-                match, or the download fails.
+            ValueError: If the pack is revoked, download URL is empty,
+                the sha256 doesn't match, or the download fails.
         """
+        # --- Revocation guard (must happen before any extraction) ----------
+        status = await self.get_revocation_status(entry.name, entry.version)
+        if status.revoked:
+            logger.warning(
+                "pack_hub_download_rejected_revoked",
+                name=entry.name,
+                version=entry.version,
+                reason=status.reason,
+            )
+            raise ValueError(
+                f"Pack '{entry.name}' v{entry.version} is revoked and cannot be installed: "
+                f"{status.reason}"
+            )
+        # -------------------------------------------------------------------
+
         if not entry.download_url:
             raise ValueError(f"Pack '{entry.name}' has no download URL")
 
@@ -172,6 +245,7 @@ class PackHub:
             return
 
         self._cache = payload.packs
+        self._revocation_list = payload.revoked
         self._cache_loaded_at = time.monotonic()
 
         # Persist to disk
@@ -229,6 +303,7 @@ class PackHub:
             data: dict[str, Any] = json.loads(raw)
             payload = PackRegistryPayload.model_validate(data)
             self._cache = payload.packs
+            self._revocation_list = payload.revoked
             self._cache_loaded_at = time.monotonic()
             logger.debug(
                 "pack_hub_disk_cache_loaded",

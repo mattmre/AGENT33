@@ -1,4 +1,4 @@
-"""CLI commands for improvement pack management.
+﻿"""CLI commands for improvement pack management.
 
 Provides pack management subcommands:
 - ``agent33 packs validate`` -- local PACK.yaml validation
@@ -449,3 +449,51 @@ def publish_pack(
             indent=2,
         )
     )
+
+
+@packs_app.command("revocation-status")
+def revocation_status(
+    name: str = typer.Argument(..., help="Pack name to check for revocation."),
+    version: str = typer.Option("", "--version", help="Pack version to check (empty = any)."),
+    api_url: str = typer.Option(
+        "http://localhost:8000", envvar="AGENT33_API_URL", help="API base URL."
+    ),
+    token: str = typer.Option("", envvar="TOKEN", help="Bearer token for authentication."),
+) -> None:
+    """Check whether a pack is revoked in the community registry.
+
+    Exits with code 1 if the pack is revoked so this can be used in scripts
+    and CI pipelines as a pre-install gate.
+    """
+    import httpx
+
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    params: dict[str, str] = {}
+    if version:
+        params["version"] = version
+
+    try:
+        resp = httpx.get(
+            f"{api_url}/v1/packs/hub/revocation/{name}",
+            headers=headers,
+            params=params,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        status = resp.json()
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"Error {exc.response.status_code}: {exc.response.text}", err=True)
+        raise typer.Exit(1) from exc
+    except httpx.ConnectError as exc:
+        typer.echo(f"Cannot connect to {api_url}: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if status.get("revoked"):
+        reason = status.get("reason", "no reason provided")
+        typer.echo(f"REVOKED: {name} -- {reason}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"OK: {name} is not revoked.")

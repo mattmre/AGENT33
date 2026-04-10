@@ -1,9 +1,13 @@
-"""Pack signing, provenance verification, and trust policy enforcement.
+﻿"""Pack signing, provenance verification, and trust policy enforcement.
 
 Provides HMAC-SHA256 signing of pack manifests, signature verification,
 and trust policy evaluation to ensure packs are from trusted sources.
 
-Uses only stdlib ``hmac`` and ``hashlib`` -- no external crypto deps.
+HMAC-SHA256 is the primary on-disk signing mechanism.  Sigstore (keyless
+cosign) verification is also supported via ``algorithm="sigstore"``; the
+Python ``sigstore`` library is optional -- if absent, Sigstore verification
+is skipped with a warning rather than hard-failing.  Install the library
+with ``pip install sigstore`` to enable full Sigstore support.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from agent33.packs.manifest import PackManifest, manifest_to_dict
 from agent33.packs.provenance_models import (
     PackProvenance,
     PackTrustPolicy,
+    SigstoreBundle,
     TrustDecision,
     TrustLevel,
 )
@@ -28,13 +33,14 @@ logger = structlog.get_logger()
 __all__ = [
     "PackProvenance",
     "PackTrustPolicy",
+    "SigstoreBundle",
     "TrustDecision",
     "TrustLevel",
     "evaluate_trust",
     "sign_pack",
     "verify_pack",
+    "verify_pack_sigstore",
 ]
-
 
 # Ordered for comparison: higher index = more trusted
 _TRUST_ORDER: list[TrustLevel] = [
@@ -76,7 +82,8 @@ def sign_pack(
         trust_level: Trust classification to embed in provenance.
 
     Returns:
-        A ``PackProvenance`` containing the hex signature and metadata.
+        A ``PackProvenance`` with ``algorithm="sha256"`` containing the
+        hex signature and metadata.
     """
     payload = _canonical_manifest_bytes(manifest)
     sig = hmac.new(
@@ -109,21 +116,39 @@ def verify_pack(
 ) -> bool:
     """Verify a pack manifest's signature against its provenance.
 
+    Dispatches to the correct verifier based on ``provenance.algorithm``:
+
+    * ``"sha256"`` — HMAC-SHA256 using *verification_key*.
+    * ``"sigstore"`` — Sigstore keyless verification (key is ignored);
+      requires the optional ``sigstore`` Python package.
+
     Args:
         manifest: The pack manifest to verify.
         provenance: The provenance metadata containing the signature.
-        verification_key: The shared secret key for HMAC verification.
+        verification_key: Shared secret for HMAC verification (ignored for
+            Sigstore).
 
     Returns:
         ``True`` if the signature is valid, ``False`` otherwise.
     """
-    if provenance.algorithm != "sha256":
-        logger.warning(
-            "pack_verify_unsupported_algorithm",
-            algorithm=provenance.algorithm,
-        )
-        return False
+    if provenance.algorithm == "sha256":
+        return _verify_hmac(manifest, provenance, verification_key)
+    if provenance.algorithm == "sigstore":
+        return verify_pack_sigstore(manifest, provenance)
 
+    logger.warning(
+        "pack_verify_unsupported_algorithm",
+        algorithm=provenance.algorithm,
+    )
+    return False
+
+
+def _verify_hmac(
+    manifest: PackManifest,
+    provenance: PackProvenance,
+    verification_key: str,
+) -> bool:
+    """Verify HMAC-SHA256 signature."""
     payload = _canonical_manifest_bytes(manifest)
     expected_sig = hmac.new(
         verification_key.encode("utf-8"),
@@ -137,9 +162,87 @@ def verify_pack(
         "pack_verified",
         pack=manifest.name,
         signer=provenance.signer_id,
+        algorithm="sha256",
         valid=valid,
     )
     return valid
+
+
+def verify_pack_sigstore(
+    manifest: PackManifest,
+    provenance: PackProvenance,
+) -> bool:
+    """Verify a pack manifest signature using Sigstore (keyless cosign).
+
+    Requires the ``sigstore`` Python package (``pip install sigstore``).
+    If the package is unavailable this function logs a warning and returns
+    ``False`` so that callers can treat the result as unverified rather than
+    crash.
+
+    The ``provenance.signature`` field must contain the base64-encoded
+    Sigstore bundle JSON.  The ``provenance.sigstore_bundle`` field carries
+    the OIDC subject and Rekor log ID for human-readable audit; they are not
+    re-verified here (Sigstore's own verifier covers the full chain).
+
+    Args:
+        manifest: The pack manifest to verify.
+        provenance: Provenance with ``algorithm="sigstore"`` and a
+            base64-encoded bundle in ``signature``.
+
+    Returns:
+        ``True`` if the Sigstore bundle verifies successfully.
+        ``False`` if the library is unavailable, the bundle is malformed,
+        or verification fails.
+    """
+    try:
+        import base64
+
+        import sigstore  # type: ignore[import-untyped]
+        from sigstore.models import Bundle  # type: ignore[import-untyped]
+        from sigstore.verify import Verifier  # type: ignore[import-untyped]
+    except ImportError:
+        logger.warning(
+            "pack_sigstore_unavailable",
+            pack=manifest.name,
+            detail=(
+                "sigstore Python package not installed; "
+                "install with 'pip install sigstore' to enable Sigstore verification"
+            ),
+        )
+        return False
+
+    try:
+        bundle_bytes = base64.b64decode(provenance.signature)
+        bundle = Bundle.from_json(bundle_bytes.decode("utf-8"))
+    except Exception as exc:
+        logger.warning(
+            "pack_sigstore_bundle_parse_failed",
+            pack=manifest.name,
+            error=str(exc),
+        )
+        return False
+
+    try:
+        verifier = Verifier.production()
+        payload = _canonical_manifest_bytes(manifest)
+        verifier.verify_artifact(payload, bundle)  # raises on failure
+    except Exception as exc:
+        logger.warning(
+            "pack_sigstore_verify_failed",
+            pack=manifest.name,
+            signer=provenance.signer_id,
+            error=str(exc),
+        )
+        return False
+
+    logger.info(
+        "pack_verified",
+        pack=manifest.name,
+        signer=provenance.signer_id,
+        algorithm="sigstore",
+        valid=True,
+    )
+    return True
 
 
 def evaluate_trust(provenance: PackProvenance | None, policy: PackTrustPolicy) -> TrustDecision:
