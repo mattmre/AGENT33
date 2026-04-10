@@ -1,4 +1,4 @@
-"""FastAPI router for local skill pack management.
+﻿"""FastAPI router for local skill pack management.
 
 Provides 8 endpoints for listing, installing, uninstalling, enabling,
 disabling, searching, and syncing skill packs.  All pack state changes
@@ -241,6 +241,28 @@ async def hub_get_entry(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Pack '{name}' not found in registry")
 
     return {"entry": entry.model_dump()}
+
+@router.get("/hub/revocation/{name}", dependencies=[require_scope("agents:read")])
+async def hub_get_revocation_status(
+    name: str,
+    request: Request,
+    version: str = Query(default="", description="Pack version to check (empty = any)"),
+) -> dict[str, Any]:
+    """Return the revocation status for a named pack from the community registry.
+
+    Checks both the per-entry ``revoked`` flag on ``PackHubEntry`` and the
+    registry-level ``revoked`` list in ``PackRegistryPayload``.  A revoked
+    pack must be rejected during install.
+    """
+    hub = _get_pack_hub(request)
+    if hub is None:
+        raise HTTPException(status_code=503, detail="Pack hub not initialized")
+
+    from agent33.packs.hub import RevocationStatus
+
+    status: RevocationStatus = await hub.get_revocation_status(name, version)
+    return status.model_dump()
+
 
 
 # ---------------------------------------------------------------------------
