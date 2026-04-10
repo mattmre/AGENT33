@@ -7,10 +7,10 @@ Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) se
 ## Current Baseline
 
 - There are no open GitHub PRs as of `2026-04-10`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (392 PRs merged).
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (395 PRs merged).
 - POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - ARCH-AEP Loops 1-8 are COMPLETE.
-- POST-1 and POST-2 are COMPLETE on `main`; the next unstarted slice is POST-3.1.
+- POST-1 and POST-2 are COMPLETE on `main`; POST-3.1 and POST-3.2 are now COMPLETE.
 - Treat the root checkout as disposable and always implement from fresh `origin/main` worktrees.
 
 ## Resume Protocol
@@ -26,7 +26,7 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: Session 124
-- Current slice: POST-3.1 (pack sandbox + injection test suite)
+- Current slice: POST-3.3 (CLI DX improvements)
 - Resume artifact: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 
 ---
@@ -43,10 +43,10 @@ Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentiall
 | Task | Item | Status |
 |---|---|---|
 | T0 | Planning/docs reconciliation | completed in PR #393 |
-| T1 | POST-3.1 — Pack sandbox + injection tests | in_review (PR #394 open; local validation complete) |
-| T2 | POST-3.2 — Pack registry v1 | pending (blocked on T1) |
-| T3 | POST-3.3 — CLI DX improvements | pending (blocked on T2) |
-| T4 | POST-3.4 — 5 seed packs | pending (blocked on T2) |
+| T1 | POST-3.1 — Pack sandbox + injection tests | completed in PR #394 |
+| T2 | POST-3.2 — Pack registry v1 | completed in PR #395 |
+| T3 | POST-3.3 — CLI DX improvements | next_up |
+| T4 | POST-3.4 — 5 seed packs | pending |
 | T5 | POST-4.1 — P69b UX spec + API contract | pending (blocked on T4) |
 | T6 | POST-4.2 — SSE event schema versioning | pending (blocked on T5) |
 | T7 | POST-4.3 — P69b implementation | pending (blocked on T6) |
@@ -80,6 +80,14 @@ Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentiall
 5. POST-3.2 depends on POST-3.1; POST-3.3 and POST-3.4 depend on POST-3.2
 6. POST-4 starts only after POST-3.4 merges
 7. POST-4.4 remains blocked on POST-4.3 and the 30-day P68-Lite calendar gate
+
+## Session 124 Merge State
+
+- Latest merged PR on `main`: `#395`
+- Latest merged commit on `main`: `3dafe21`
+- POST-3.1 is complete on `main`
+- POST-3.2 is complete on `main`
+- Next fresh slice should start at POST-3.3 from updated `origin/main`
 
 ---
 
