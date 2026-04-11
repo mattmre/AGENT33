@@ -12,6 +12,7 @@ import typer
 
 from agent33.cli.bench import bench_app
 from agent33.cli.bootstrap import _bootstrap_generate
+from agent33.cli.output import resolve_output_mode
 from agent33.cli.packs import packs_app
 from agent33.cli.skills import skills_app
 from agent33.cli.tools import tools_app
@@ -270,6 +271,21 @@ def status(
 @app.command()
 def diagnose(
     fix: bool = typer.Option(False, "--fix", help="Auto-remediate safe issues."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    plain_output: bool = typer.Option(False, "--plain", help="Emit compact plain-text output."),
+    api_url: str = typer.Option(
+        "http://localhost:8000",
+        "--api-url",
+        envvar="AGENT33_API_URL",
+        help="API base URL for live pack health checks.",
+    ),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        "-t",
+        envvar="TOKEN",
+        help="Bearer token for pack health API checks. Falls back to TOKEN env var.",
+    ),
 ) -> None:
     """Run diagnostic checks on all AGENT-33 subsystems.
 
@@ -280,7 +296,13 @@ def diagnose(
     """
     from agent33.cli.diagnose import diagnose as _run_diagnose
 
-    exit_code = _run_diagnose(fix=fix)
+    output_mode = resolve_output_mode(json_output=json_output, plain_output=plain_output)
+    exit_code = _run_diagnose(
+        fix=fix,
+        output_mode=output_mode,
+        api_url=api_url,
+        token=token,
+    )
     raise typer.Exit(code=exit_code)
 
 

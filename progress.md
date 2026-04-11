@@ -1,5 +1,40 @@
 # Progress Log
 
+## 2026-04-11 (Session 125 POST-3.3 in progress)
+
+- Confirmed there are 0 open PRs on `mattmre/AGENT33`, so there is no PR-comment remediation queue to process before starting the next slice.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session125-post33-cli-dx` on branch `codex/session125-post33-cli-dx` from `origin/main` at `c764e51`.
+- Wrote the POST-3.3 scope lock to `docs/research/session125-post33-cli-dx-scope.md`.
+- Implemented POST-3.3 as a focused CLI DX slice:
+  - added shared CLI output helpers in `engine/src/agent33/cli/output.py`
+  - added `--json` / `--plain` support across the pack-management commands in `engine/src/agent33/cli/packs.py`
+  - extended `agent33 diagnose` with structured output modes and pack-aware checks for workspace readiness plus live `/v1/packs/health`
+  - wired the new diagnose flags through `engine/src/agent33/cli/main.py`
+- Added regression coverage for:
+  - pack list/search structured output
+  - diagnose JSON/plain output
+  - diagnose pack workspace and pack health API checks
+- Targeted POST-3.3 validation is green:
+  - `pytest tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py -q --no-cov`
+  - `ruff check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `ruff format --check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `mypy src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py --config-file pyproject.toml`
+- Opened POST-3.3 PR `#397`: `feat(cli): POST-3.3 CLI DX improvements`
+- Initial PR state:
+  - no actionable review comments or review threads yet
+  - one non-actionable Gemini quota notice comment
+  - CI started immediately after PR open
+- Review-driven follow-up fixes applied locally after a full diff review:
+  - corrected the `packs update` guidance string to reference the real `agent33 packs update` command
+  - hardened `Pack health API` diagnose parsing so non-JSON success responses degrade to WARN instead of crashing
+  - ensured `agent33 diagnose --fix --json` emits a single valid JSON payload after the re-check
+- Follow-up validation after those fixes is green:
+  - `pytest tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py -q --no-cov`
+  - `ruff check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `ruff format --check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `mypy src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py --config-file pyproject.toml`
+- Next step: push the follow-up commit to PR `#397`, watch CI/review to completion, then merge before starting POST-3.4.
+
 ## 2026-04-10 (Session 124 POST-3.2 merged)
 
 - POST-3.2 landed as PR `#395` (`3dafe21`): pack registry revocation support plus Sigstore-aware provenance verification.

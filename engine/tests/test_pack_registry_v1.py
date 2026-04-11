@@ -23,15 +23,16 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from agent33.packs.hub import (
     PackHub,
-    PackHubConfig,
     PackHubEntry,
     PackRegistryPayload,
     RevocationRecord,
@@ -47,7 +48,6 @@ from agent33.packs.provenance import (
     verify_pack_sigstore,
 )
 from agent33.packs.provenance_models import PackTrustPolicy
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -293,9 +293,9 @@ class TestProvenanceModelSigstore:
         assert "actions.githubusercontent.com" in prov.sigstore_bundle.oidc_issuer
 
     def test_sigstore_bundle_importable_from_provenance_models(self) -> None:
-        from agent33.packs.provenance_models import SigstoreBundle as SB
+        from agent33.packs.provenance_models import SigstoreBundle
 
-        assert SB is not None
+        assert SigstoreBundle is not None
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +348,11 @@ class TestVerifyPackSigstore:
     def test_returns_false_for_malformed_bundle_when_sigstore_installed(self) -> None:
         """Even if sigstore is somehow available, a bad bundle returns False."""
         manifest = _make_manifest()
-        prov = PackProvenance(signer_id="gha", signature="not-valid-base64!!!", algorithm="sigstore")
+        prov = PackProvenance(
+            signer_id="gha",
+            signature="not-valid-base64!!!",
+            algorithm="sigstore",
+        )
 
         try:
             import sigstore  # noqa: F401
@@ -398,10 +402,10 @@ class TestEvaluateTrustRegression:
 def _make_route_app(hub: PackHub | None = None) -> Any:
     """Create a minimal FastAPI app with the packs router and a fake auth middleware."""
     from typing import Any as _Any
+    from unittest.mock import MagicMock
 
     from fastapi import FastAPI
     from starlette.middleware.base import BaseHTTPMiddleware
-    from unittest.mock import MagicMock
 
     from agent33.api.routes.packs import router
 

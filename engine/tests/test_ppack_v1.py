@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 from typing import Any
@@ -531,6 +532,60 @@ class TestCLIPacksList:
         assert "my-pack v1.0.0 [installed]" in result.output
         assert "other-pack v2.0.0 [enabled]" in result.output
         assert "Installed packs (2)" in result.output
+
+    def test_list_json_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """List command supports machine-readable JSON output."""
+        import httpx
+        from typer.testing import CliRunner
+
+        from agent33.cli.main import app
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "packs": [{"name": "my-pack", "version": "1.0.0", "status": "installed"}],
+                    "count": 1,
+                }
+
+        monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["packs", "list", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["count"] == 1
+        assert payload["packs"][0]["name"] == "my-pack"
+
+    def test_list_plain_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """List command supports compact plain output."""
+        import httpx
+        from typer.testing import CliRunner
+
+        from agent33.cli.main import app
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "packs": [{"name": "my-pack", "version": "1.0.0", "status": "installed"}],
+                    "count": 1,
+                }
+
+        monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["packs", "list", "--plain"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "my-pack\t1.0.0\tinstalled"
 
 
 class TestCLIPacksApply:

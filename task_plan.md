@@ -6,8 +6,8 @@ Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) se
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-10`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (395 PRs merged).
+- There are no open GitHub PRs as of `2026-04-11`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (396 PRs merged).
 - POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - ARCH-AEP Loops 1-8 are COMPLETE.
 - POST-1 and POST-2 are COMPLETE on `main`; POST-3.1 and POST-3.2 are now COMPLETE.
@@ -25,9 +25,41 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 124
+- Active queue owner: Session 125
 - Current slice: POST-3.3 (CLI DX improvements)
-- Resume artifact: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+- Resume artifact: `docs/research/session125-post33-cli-dx-scope.md`
+
+---
+
+# Task Plan — Session 125 (Active)
+
+## 2026-04-11 Session 125: POST-3.3 CLI DX Improvements
+
+### Goal
+
+Execute POST-3.3 from a fresh `origin/main` worktree, keep the slice scoped to CLI output modes plus pack-aware diagnose, and prepare one reviewable PR before moving to POST-3.4.
+
+### Session 125 Queue
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | Review open PRs / comments | complete (0 open PRs on GitHub) |
+| T2 | Scope POST-3.3 | complete (`docs/research/session125-post33-cli-dx-scope.md`) |
+| T3 | Implement POST-3.3 CLI DX improvements | complete locally |
+| T4 | Targeted validation (pytest + ruff + mypy) | complete locally |
+| T5 | PR prep / self-review / push | in_progress (`#397` open; follow-up fixes ready to push) |
+| T6 | Merge planning for POST-3.3 → POST-3.4 → POST-4 | in_progress |
+
+### Session 125 Working State
+
+- Worktree: `C:\GitHub\repos\AGENT33\worktrees\session125-post33-cli-dx`
+- Branch: `codex/session125-post33-cli-dx`
+- Scope lock: `docs/research/session125-post33-cli-dx-scope.md`
+- Validation target:
+  - `pytest tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py -q --no-cov`
+  - `ruff check`
+  - `ruff format --check`
+  - `mypy src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py --config-file pyproject.toml`
 
 ---
 

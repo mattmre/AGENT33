@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import shutil
 import socket
@@ -9,6 +11,10 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+import httpx
+
+from agent33.cli.output import OutputMode
 
 
 class Status(Enum):
@@ -237,7 +243,128 @@ def _check_redis(redis_url: str | None) -> CheckResult:
         )
 
 
-def _run_all_checks() -> list[CheckResult]:
+def _count_pack_manifests(pack_dir: Path) -> int:
+    """Count pack manifest files under the configured pack directory."""
+    if not pack_dir.is_dir():
+        return 0
+    return sum(1 for path in pack_dir.rglob("*") if path.name.lower() == "pack.yaml")
+
+
+def _check_pack_workspace() -> CheckResult:
+    """Check local pack configuration and signing readiness."""
+    from agent33.config import Settings
+    from agent33.packs.hub import PackHubConfig
+
+    settings = Settings()
+    pack_dir = Path(settings.pack_definitions_dir)
+    cache_path = PackHubConfig().local_cache_path
+    remote_sources_raw = settings.pack_marketplace_remote_sources.strip()
+    remote_count = 0
+    invalid_remote_sources = False
+
+    if remote_sources_raw:
+        try:
+            parsed_sources = json.loads(remote_sources_raw)
+            if isinstance(parsed_sources, list):
+                remote_count = sum(1 for item in parsed_sources if isinstance(item, dict))
+            else:
+                invalid_remote_sources = True
+        except json.JSONDecodeError:
+            invalid_remote_sources = True
+
+    manifest_count = _count_pack_manifests(pack_dir)
+    cache_state = "present" if cache_path.exists() else "missing"
+    sigstore_available = importlib.util.find_spec("sigstore") is not None
+    message = (
+        f"{manifest_count} manifest(s); remote sources={remote_count}; "
+        f"hub cache {cache_state}; sigstore {'available' if sigstore_available else 'missing'}"
+    )
+
+    if invalid_remote_sources:
+        return CheckResult(
+            "Pack workspace",
+            Status.WARN,
+            "Pack remote sources config is not valid JSON",
+            fix_hint=(
+                "Set PACK_MARKETPLACE_REMOTE_SOURCES to a JSON array of remote source objects"
+            ),
+        )
+    if remote_count > 0 and not sigstore_available:
+        return CheckResult(
+            "Pack workspace",
+            Status.WARN,
+            message,
+            fix_hint="Install the optional sigstore package to enable keyless pack verification",
+        )
+    if not pack_dir.exists():
+        return CheckResult(
+            "Pack workspace",
+            Status.WARN,
+            message,
+            fix_hint=f"Create {pack_dir} or point PACK_DEFINITIONS_DIR at your pack directory",
+        )
+    return CheckResult("Pack workspace", Status.OK, message)
+
+
+def _check_pack_health_api(api_url: str, token: str | None) -> CheckResult:
+    """Check live pack health summary from the running API when reachable."""
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = httpx.get(f"{api_url}/v1/packs/health", headers=headers, timeout=5)
+    except httpx.ConnectError:
+        return CheckResult(
+            "Pack health API",
+            Status.SKIP,
+            f"{api_url} not reachable — skipping live pack health",
+        )
+
+    if resp.status_code in (401, 403):
+        return CheckResult(
+            "Pack health API",
+            Status.WARN,
+            f"Pack health API denied access ({resp.status_code})",
+            fix_hint="Set TOKEN with agents:read scope or run the API in a trusted local context",
+        )
+
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        return CheckResult(
+            "Pack health API",
+            Status.WARN,
+            f"Pack health check failed ({exc.response.status_code})",
+            fix_hint="Start agent33 and ensure /v1/packs/health is available",
+        )
+    try:
+        payload = resp.json()
+    except ValueError:
+        return CheckResult(
+            "Pack health API",
+            Status.WARN,
+            "Pack health API returned a non-JSON response",
+            fix_hint="Check the API/proxy path and ensure /v1/packs/health returns JSON",
+        )
+
+    return CheckResult(
+        "Pack health API",
+        Status.OK,
+        (
+            f"{payload.get('total_packs', 0)} packs — "
+            f"healthy {payload.get('healthy', 0)}, "
+            f"degraded {payload.get('degraded', 0)}, "
+            f"unhealthy {payload.get('unhealthy', 0)}"
+        ),
+    )
+
+
+def _run_all_checks(
+    *,
+    api_url: str = "http://localhost:8000",
+    token: str | None = None,
+) -> list[CheckResult]:
     """Run all diagnostic checks and return results."""
     db_url = os.environ.get("DATABASE_URL")
     redis_url = os.environ.get("REDIS_URL")
@@ -251,14 +378,66 @@ def _run_all_checks() -> list[CheckResult]:
         _check_llm_config(),
         _check_database(db_url),
         _check_redis(redis_url),
+        _check_pack_workspace(),
+        _check_pack_health_api(api_url, token),
     ]
 
 
-def _print_results(results: list[CheckResult]) -> int:
+def _exit_code(results: list[CheckResult]) -> int:
+    """Return the CLI exit code for a set of results."""
+    if any(result.status == Status.FAIL for result in results):
+        return 2
+    if any(result.status == Status.WARN for result in results):
+        return 1
+    return 0
+
+
+def _result_payload(results: list[CheckResult]) -> dict[str, object]:
+    """Build a structured payload for JSON rendering."""
+    return {
+        "checks": [
+            {
+                "name": result.name,
+                "status": result.status.value,
+                "message": result.message,
+                "fix_hint": result.fix_hint,
+                "auto_fixable": result.auto_fixable,
+            }
+            for result in results
+        ],
+        "summary": {
+            "exit_code": _exit_code(results),
+            "ok": sum(1 for result in results if result.status == Status.OK),
+            "warn": sum(1 for result in results if result.status == Status.WARN),
+            "fail": sum(1 for result in results if result.status == Status.FAIL),
+            "skip": sum(1 for result in results if result.status == Status.SKIP),
+        },
+    }
+
+
+def _print_results(results: list[CheckResult], output_mode: OutputMode = OutputMode.HUMAN) -> int:
     """Print a traffic-light summary table.
 
     Returns exit code: 0 = all OK, 1 = warnings only, 2 = at least one FAIL.
     """
+    exit_code = _exit_code(results)
+    if output_mode == OutputMode.JSON:
+        print(json.dumps(_result_payload(results), indent=2))
+        return exit_code
+    if output_mode == OutputMode.PLAIN:
+        for result in results:
+            print(
+                "\t".join(
+                    [
+                        result.status.value,
+                        result.name,
+                        result.message,
+                        result.fix_hint,
+                    ]
+                )
+            )
+        return exit_code
+
     print("\n=== AGENT-33 Diagnostic Report ===\n")
     has_fail = False
     has_warn = False
@@ -315,7 +494,13 @@ def _apply_fixes(results: list[CheckResult]) -> None:
                     print(f"  Could not start Ollama: {exc}")
 
 
-def diagnose(fix: bool = False) -> int:
+def diagnose(
+    fix: bool = False,
+    *,
+    output_mode: OutputMode = OutputMode.HUMAN,
+    api_url: str = "http://localhost:8000",
+    token: str | None = None,
+) -> int:
     """Run diagnostic checks on all AGENT-33 subsystems.
 
     Checks Python version, environment config, disk space, port availability,
@@ -327,14 +512,21 @@ def diagnose(fix: bool = False) -> int:
     Returns:
         Exit code: 0 = all OK, 1 = warnings, 2 = failures.
     """
-    results = _run_all_checks()
-    exit_code = _print_results(results)
+    results = _run_all_checks(api_url=api_url, token=token)
+    if fix and output_mode != OutputMode.HUMAN:
+        _apply_fixes(results)
+        results = _run_all_checks(api_url=api_url, token=token)
+        return _print_results(results, output_mode=output_mode)
+
+    exit_code = _print_results(results, output_mode=output_mode)
 
     if fix:
-        print("\n--- Applying fixes ---")
+        if output_mode == OutputMode.HUMAN:
+            print("\n--- Applying fixes ---")
         _apply_fixes(results)
-        print("\n--- Re-checking after fixes ---")
-        results = _run_all_checks()
-        exit_code = _print_results(results)
+        if output_mode == OutputMode.HUMAN:
+            print("\n--- Re-checking after fixes ---")
+        results = _run_all_checks(api_url=api_url, token=token)
+        exit_code = _print_results(results, output_mode=output_mode)
 
     return exit_code
