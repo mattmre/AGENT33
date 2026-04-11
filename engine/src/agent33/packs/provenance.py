@@ -197,8 +197,8 @@ def verify_pack_sigstore(
     try:
         import base64
 
-        from sigstore.models import Bundle  # type: ignore[import-untyped]
-        from sigstore.verify import Verifier  # type: ignore[import-untyped]
+        from sigstore.models import Bundle  # type: ignore[import-not-found]
+        from sigstore.verify import Verifier  # type: ignore[import-not-found]
     except ImportError:
         logger.warning(
             "pack_sigstore_unavailable",
