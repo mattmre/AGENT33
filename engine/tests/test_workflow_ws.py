@@ -157,6 +157,7 @@ class TestWorkflowEvent:
             "run_id": "run-2",
             "workflow_name": "wf-2",
             "timestamp": 1700000000.0,
+            "schema_version": 1,
             "step_id": "step-a",
             "data": {"duration_ms": 5.5},
         }

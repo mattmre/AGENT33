@@ -8,6 +8,54 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+# ---------------------------------------------------------------------------
+# Schema versioning
+# ---------------------------------------------------------------------------
+
+CURRENT_SCHEMA_VERSION: int = 1
+"""The schema version emitted in every SSE event payload.
+
+Clients that receive an event with a different ``schema_version`` must
+immediately close the connection and raise :exc:`SchemaVersionMismatchError`.
+There is no graceful downgrade path.
+"""
+
+
+class SchemaVersionMismatchError(Exception):
+    """Raised when an SSE client receives an event with an unexpected schema version."""
+
+    def __init__(self, received: int, expected: int) -> None:
+        self.received = received
+        self.expected = expected
+        super().__init__(
+            f"SSE schema version mismatch: expected {expected}, got {received}"
+        )
+
+
+def check_schema_version(
+    event_dict: dict[str, Any],
+    *,
+    expected_version: int = CURRENT_SCHEMA_VERSION,
+) -> None:
+    """Strict schema-version guard for SSE client consumers.
+
+    Reads ``schema_version`` from *event_dict*.  A missing key is treated as
+    version ``0`` (i.e. a pre-versioning payload), which is always a mismatch
+    against any positive *expected_version*.
+
+    Raises:
+        SchemaVersionMismatchError: When ``event_dict["schema_version"]`` does
+            not equal *expected_version*.
+    """
+    received: int = int(event_dict.get("schema_version", 0))
+    if received != expected_version:
+        raise SchemaVersionMismatchError(received=received, expected=expected_version)
+
+
+# ---------------------------------------------------------------------------
+# Event types
+# ---------------------------------------------------------------------------
+
 
 class WorkflowEventType(StrEnum):
     """Types of events emitted during workflow execution."""
@@ -39,6 +87,7 @@ class WorkflowEvent:
     step_id: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
     event_id: str | None = None
+    schema_version: int = CURRENT_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dict suitable for JSON serialization."""
@@ -47,6 +96,7 @@ class WorkflowEvent:
             "run_id": self.run_id,
             "workflow_name": self.workflow_name,
             "timestamp": self.timestamp,
+            "schema_version": self.schema_version,
         }
         if self.step_id is not None:
             result["step_id"] = self.step_id
