@@ -207,6 +207,7 @@ class TestWorkflowSSEEndpoint:
             "run_id": "run-api-key",
             "workflow_name": "wf-api-key",
             "timestamp": event["timestamp"],
+            "schema_version": 1,
             "data": {
                 "status": "pending",
                 "step_statuses": {},
@@ -280,6 +281,7 @@ class TestWorkflowSSEEndpoint:
             "run_id": "run-replay",
             "workflow_name": "wf-replay",
             "timestamp": events[1]["timestamp"],
+            "schema_version": 1,
             "step_id": "step-a",
         }
 
@@ -305,6 +307,7 @@ class TestWorkflowSSEEndpoint:
             "run_id": "run-heartbeat",
             "workflow_name": "wf-heartbeat",
             "timestamp": events[0]["timestamp"],
+            "schema_version": 1,
             "data": {
                 "status": "pending",
                 "step_statuses": {},
@@ -318,6 +321,7 @@ class TestWorkflowSSEEndpoint:
             "run_id": "run-heartbeat",
             "workflow_name": "wf-heartbeat",
             "timestamp": events[1]["timestamp"],
+            "schema_version": 1,
             "data": {"status": "pending", "terminal": False},
         }
 
