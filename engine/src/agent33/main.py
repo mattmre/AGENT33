@@ -53,6 +53,7 @@ from agent33.api.routes import (
     operations_hub,
     operator,
     outcomes,
+    p69b,
     packs,
     processes,
     provenance,
@@ -533,6 +534,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tool_approval_service = ToolApprovalService(state_store=orchestration_state_store)
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
+
+    # -- P69b tool approval gate (POST-4.3) --------------------------------
+    from agent33.autonomy.p69b_service import P69bService
+
+    p69b_service = P69bService(timeout_seconds=300)
+    app.state.p69b_service = p69b_service
+    logger.info("p69b_service_initialized")
 
     approval_token_manager = None
     if settings.approval_token_enabled:
@@ -2269,6 +2277,7 @@ app.include_router(reasoning.router)
 app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
+app.include_router(p69b.router)
 app.include_router(tool_approvals.router)
 app.include_router(tool_mutations.router)
 app.include_router(processes.router)
