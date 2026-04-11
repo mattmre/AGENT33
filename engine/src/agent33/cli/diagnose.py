@@ -331,13 +331,21 @@ def _check_pack_health_api(api_url: str, token: str | None) -> CheckResult:
 
     try:
         resp.raise_for_status()
-        payload = resp.json()
     except httpx.HTTPStatusError as exc:
         return CheckResult(
             "Pack health API",
             Status.WARN,
             f"Pack health check failed ({exc.response.status_code})",
             fix_hint="Start agent33 and ensure /v1/packs/health is available",
+        )
+    try:
+        payload = resp.json()
+    except ValueError:
+        return CheckResult(
+            "Pack health API",
+            Status.WARN,
+            "Pack health API returned a non-JSON response",
+            fix_hint="Check the API/proxy path and ensure /v1/packs/health returns JSON",
         )
 
     return CheckResult(
@@ -505,6 +513,11 @@ def diagnose(
         Exit code: 0 = all OK, 1 = warnings, 2 = failures.
     """
     results = _run_all_checks(api_url=api_url, token=token)
+    if fix and output_mode != OutputMode.HUMAN:
+        _apply_fixes(results)
+        results = _run_all_checks(api_url=api_url, token=token)
+        return _print_results(results, output_mode=output_mode)
+
     exit_code = _print_results(results, output_mode=output_mode)
 
     if fix:

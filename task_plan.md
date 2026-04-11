@@ -47,8 +47,8 @@ Execute POST-3.3 from a fresh `origin/main` worktree, keep the slice scoped to C
 | T2 | Scope POST-3.3 | complete (`docs/research/session125-post33-cli-dx-scope.md`) |
 | T3 | Implement POST-3.3 CLI DX improvements | complete locally |
 | T4 | Targeted validation (pytest + ruff + mypy) | complete locally |
-| T5 | PR prep / self-review / push | pending |
-| T6 | Merge planning for POST-3.3 → POST-3.4 → POST-4 | pending |
+| T5 | PR prep / self-review / push | in_progress (`#397` open; follow-up fixes ready to push) |
+| T6 | Merge planning for POST-3.3 → POST-3.4 → POST-4 | in_progress |
 
 ### Session 125 Working State
 

@@ -19,7 +19,21 @@
   - `ruff check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
   - `ruff format --check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
   - `mypy src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py --config-file pyproject.toml`
-- Next step: self-review the diff, prepare the POST-3.3 PR, then merge only after the review loop is complete.
+- Opened POST-3.3 PR `#397`: `feat(cli): POST-3.3 CLI DX improvements`
+- Initial PR state:
+  - no actionable review comments or review threads yet
+  - one non-actionable Gemini quota notice comment
+  - CI started immediately after PR open
+- Review-driven follow-up fixes applied locally after a full diff review:
+  - corrected the `packs update` guidance string to reference the real `agent33 packs update` command
+  - hardened `Pack health API` diagnose parsing so non-JSON success responses degrade to WARN instead of crashing
+  - ensured `agent33 diagnose --fix --json` emits a single valid JSON payload after the re-check
+- Follow-up validation after those fixes is green:
+  - `pytest tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py -q --no-cov`
+  - `ruff check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `ruff format --check src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_diagnose.py`
+  - `mypy src/agent33/cli/packs.py src/agent33/cli/diagnose.py src/agent33/cli/main.py src/agent33/cli/output.py --config-file pyproject.toml`
+- Next step: push the follow-up commit to PR `#397`, watch CI/review to completion, then merge before starting POST-3.4.
 
 ## 2026-04-10 (Session 124 POST-3.2 merged)
 

@@ -255,6 +255,22 @@ def test_check_pack_health_api_denied_warns(monkeypatch: pytest.MonkeyPatch) -> 
     assert "denied access" in result.message
 
 
+def test_check_pack_health_api_invalid_json_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict[str, int]:
+            raise json.JSONDecodeError("bad", "body", 0)
+
+    monkeypatch.setattr("httpx.get", lambda *a, **kw: FakeResponse())
+    result = _check_pack_health_api("http://localhost:8000", None)
+    assert result.status == Status.WARN
+    assert "non-JSON" in result.message
+
+
 def test_check_llm_config_with_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -434,3 +450,19 @@ def test_diagnose_cli_rejects_conflicting_output_flags() -> None:
     result = runner.invoke(app, ["diagnose", "--json", "--plain"])
     assert result.exit_code != 0
     assert "Use only one of --json or --plain" in result.output
+
+
+def test_diagnose_cli_fix_json_outputs_single_payload() -> None:
+    runner = CliRunner()
+    initial = [CheckResult("Pack workspace", Status.WARN, "warned")]
+    final = [CheckResult("Pack workspace", Status.OK, "fixed")]
+    with (
+        patch("agent33.cli.diagnose._run_all_checks", side_effect=[initial, final]),
+        patch("agent33.cli.diagnose._apply_fixes"),
+    ):
+        result = runner.invoke(app, ["diagnose", "--fix", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["ok"] == 1
+    assert payload["summary"]["warn"] == 0

@@ -511,7 +511,7 @@ def update_packs(
     elif check_only:
         typer.echo(f"\n{updates_found} update(s) available. Run without --check to apply.")
     else:
-        typer.echo(f"\n{updates_found} update(s) found. Use 'agent33 packs upgrade' to apply.")
+        typer.echo(f"\n{updates_found} update(s) found. Use 'agent33 packs update' to apply.")
 
 
 @packs_app.command("publish")
