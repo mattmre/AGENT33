@@ -680,6 +680,87 @@ class TestCLISearch:
         assert result.exit_code == 0
         assert "No packs found" in result.output
 
+    def test_search_json_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Search command supports machine-readable JSON output."""
+        import httpx
+        from typer.testing import CliRunner
+
+        from agent33.cli.main import app
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "results": [
+                        {
+                            "name": "code-review",
+                            "version": "2.0.0",
+                            "description": "Code review pack",
+                            "tags": ["review"],
+                        }
+                    ],
+                    "count": 1,
+                    "query": "code",
+                }
+
+        monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["packs", "search", "code", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["count"] == 1
+        assert payload["results"][0]["name"] == "code-review"
+
+    def test_search_plain_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Search command supports compact plain output."""
+        import httpx
+        from typer.testing import CliRunner
+
+        from agent33.cli.main import app
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "results": [
+                        {
+                            "name": "code-review",
+                            "version": "2.0.0",
+                            "description": "Code review pack",
+                            "tags": ["review", "security"],
+                        }
+                    ],
+                    "count": 1,
+                    "query": "code",
+                }
+
+        monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["packs", "search", "code", "--plain"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "code-review\t2.0.0\tCode review pack\treview,security"
+
+    def test_search_rejects_conflicting_output_flags(self) -> None:
+        """Search command rejects --json and --plain together."""
+        from typer.testing import CliRunner
+
+        from agent33.cli.main import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["packs", "search", "code", "--json", "--plain"])
+        assert result.exit_code != 0
+        assert "Use only one of --json or --plain" in result.output
+
 
 class TestCLIInstall:
     """CLI packs install command."""

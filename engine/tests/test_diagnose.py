@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import socket
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -16,6 +17,8 @@ from agent33.cli.diagnose import (
     _check_env_file,
     _check_llm_config,
     _check_ollama,
+    _check_pack_health_api,
+    _check_pack_workspace,
     _check_port,
     _check_python_version,
     _check_redis,
@@ -194,6 +197,64 @@ def test_check_database_other_url() -> None:
     assert result.status == Status.OK
 
 
+def test_check_pack_workspace_with_manifests(
+    tmp_path: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    packs_dir = tmp_path / "packs"
+    pack_dir = packs_dir / "demo-pack"
+    pack_dir.mkdir(parents=True)
+    (pack_dir / "PACK.yaml").write_text("name: demo-pack\nversion: '1.0.0'\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
+    monkeypatch.delenv("PACK_MARKETPLACE_REMOTE_SOURCES", raising=False)
+
+    result = _check_pack_workspace()
+    assert result.status == Status.OK
+    assert "1 manifest" in result.message
+
+
+def test_check_pack_workspace_invalid_remote_sources_warns(
+    tmp_path: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir()
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
+    monkeypatch.setenv("PACK_MARKETPLACE_REMOTE_SOURCES", "{bad json")
+
+    result = _check_pack_workspace()
+    assert result.status == Status.WARN
+    assert "not valid JSON" in result.message
+
+
+def test_check_pack_health_api_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict[str, int]:
+            return {"total_packs": 2, "healthy": 1, "degraded": 1, "unhealthy": 0}
+
+    monkeypatch.setattr("httpx.get", lambda *a, **kw: FakeResponse())
+    result = _check_pack_health_api("http://localhost:8000", None)
+    assert result.status == Status.OK
+    assert "2 packs" in result.message
+
+
+def test_check_pack_health_api_denied_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 403
+
+    monkeypatch.setattr("httpx.get", lambda *a, **kw: FakeResponse())
+    result = _check_pack_health_api("http://localhost:8000", None)
+    assert result.status == Status.WARN
+    assert "denied access" in result.message
+
+
 def test_check_llm_config_with_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -298,7 +359,7 @@ def test_diagnose_fix_reruns_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     call_count = 0
     original = _run_all_checks
 
-    def counting_run() -> list[CheckResult]:
+    def counting_run(*args, **kwargs) -> list[CheckResult]:
         nonlocal call_count
         call_count += 1
         return original()
@@ -332,3 +393,44 @@ def test_diagnose_cli_fix_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code in (0, 1, 2)
     # fix path emits "Applying fixes" section
     assert "Applying fixes" in result.output
+
+
+def test_diagnose_cli_json_output() -> None:
+    runner = CliRunner()
+    sample_results = [
+        CheckResult("Python version", Status.OK, "good"),
+        CheckResult(
+            "Pack workspace",
+            Status.WARN,
+            "missing sigstore",
+            fix_hint="install sigstore",
+        ),
+    ]
+    with patch("agent33.cli.diagnose._run_all_checks", return_value=sample_results):
+        result = runner.invoke(app, ["diagnose", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["summary"]["warn"] == 1
+    assert payload["checks"][1]["name"] == "Pack workspace"
+
+
+def test_diagnose_cli_plain_output() -> None:
+    runner = CliRunner()
+    sample_results = [
+        CheckResult("Python version", Status.OK, "good"),
+        CheckResult("Pack workspace", Status.WARN, "needs attention", fix_hint="fix it"),
+    ]
+    with patch("agent33.cli.diagnose._run_all_checks", return_value=sample_results):
+        result = runner.invoke(app, ["diagnose", "--plain"])
+
+    assert result.exit_code == 1
+    assert "ok\tPython version\tgood\t" in result.output
+    assert "warn\tPack workspace\tneeds attention\tfix it" in result.output
+
+
+def test_diagnose_cli_rejects_conflicting_output_flags() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["diagnose", "--json", "--plain"])
+    assert result.exit_code != 0
+    assert "Use only one of --json or --plain" in result.output
