@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import zipfile
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,12 @@ from agent33.packs.provenance_models import PackProvenance, TrustLevel
 from agent33.packs.version import Version
 
 logger = structlog.get_logger()
+
+# Matches Windows-style drive-letter absolute paths (e.g. C:/ or C:\) on any OS.
+# Path.is_absolute() only catches POSIX-style paths on Linux, so we need an
+# explicit check to reject zip entries that target Windows absolute paths when
+# running on a Linux CI host.
+_WIN_ABS_RE = re.compile(r"^[A-Za-z]:[/\\]")
 
 
 class RemoteMarketplaceConfig(BaseModel):
@@ -307,7 +314,7 @@ class RemotePackMarketplace:
         target_root = target_dir.resolve()
         for member in archive.infolist():
             member_path = Path(member.filename)
-            if member_path.is_absolute():
+            if member_path.is_absolute() or _WIN_ABS_RE.match(member.filename):
                 raise ValueError(f"Archive contains absolute path entry: {member.filename}")
             if (member.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError(f"Archive contains symlink entry: {member.filename}")
