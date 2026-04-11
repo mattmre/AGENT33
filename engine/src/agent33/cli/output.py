@@ -23,7 +23,8 @@ class OutputMode(StrEnum):
 def resolve_output_mode(*, json_output: bool = False, plain_output: bool = False) -> OutputMode:
     """Resolve mutually-exclusive CLI output flags."""
     if json_output and plain_output:
-        raise typer.BadParameter("Use only one of --json or --plain.")
+        typer.echo("Error: Use only one of --json or --plain.", err=True)
+        raise typer.Exit(code=2)
     if json_output:
         return OutputMode.JSON
     if plain_output:
