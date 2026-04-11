@@ -40,7 +40,7 @@ vulnerabilities, unsafe library usage, and insecure configuration patterns.
    - **CVE/CWE reference** if applicable (e.g., CWE-89 for SQL injection)
    - File and line number
    - Vulnerability category
-   - Severity: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`
+   - Severity: `[BLOCKING]` (for critical/high impact) or `[ADVISORY]` (for medium/low impact)
    - A clear explanation of how this could be exploited
    - A concrete remediation step
 4. Summarize total findings by severity.
@@ -52,23 +52,23 @@ vulnerabilities, unsafe library usage, and insecure configuration patterns.
 
 ### Findings
 
-**CRITICAL — File.py:88 — SQL Injection (CWE-89)**
+**[BLOCKING] — File.py:88 — SQL Injection (CWE-89)**
 Risk: User input is concatenated directly into a SQL query string, allowing an
 attacker to alter query logic or exfiltrate the database.
 Fix: Use parameterized queries: `cursor.execute("SELECT * FROM t WHERE id = %s", (user_id,))`
 
-**LOW — config.py:12 — Hardcoded Default Secret**
+**[ADVISORY] — config.py:12 — Hardcoded Default Secret**
 Risk: The default SECRET_KEY value is a weak placeholder; if not overridden in
 production it is trivially guessable.
 Fix: Remove the default; raise ValueError if SECRET_KEY is not set via environment.
 
 ### Summary
-CRITICAL: 1  HIGH: 0  MEDIUM: 0  LOW: 1
+[BLOCKING]: 1  [ADVISORY]: 1
 ```
 
 ## Quality Rules
 
 - Report every finding, not just the most severe.
-- Never mark a hardcoded credential as LOW; credentials are always HIGH or CRITICAL.
+- Never mark a hardcoded credential as [ADVISORY]; credentials are always [BLOCKING].
 - Provide a concrete fix for every finding, not just "sanitize this input."
 - If no security issues are found, state "No security issues identified." explicitly.

@@ -14,10 +14,17 @@ tool_config, and validates via PackManifest.model_validate().
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
+from typer.testing import CliRunner
+
+from agent33.cli.main import app
+from agent33.skills.loader import parse_frontmatter
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -41,7 +48,7 @@ _REQUIRED_PACK_FIELDS = ("name", "version", "description", "author", "skills")
 # ---------------------------------------------------------------------------
 
 
-def _load_pack_yaml(pack_name: str) -> dict:  # type: ignore[type-arg]
+def _load_pack_yaml(pack_name: str) -> dict[str, Any]:
     """Load and parse a PACK.yaml for the given seed pack."""
     pack_yaml = _PACKS_DIR / pack_name / "PACK.yaml"
     raw = pack_yaml.read_text(encoding="utf-8")
@@ -84,8 +91,6 @@ class TestPackYamlStructure:
 
     def test_version_is_semver(self, pack_name: str) -> None:
         """The version field follows MAJOR.MINOR.PATCH semver format."""
-        import re
-
         data = _load_pack_yaml(pack_name)
         version = data["version"]
         # Pydantic validator uses ^\d+\.\d+\.\d+$ — replicate it here
@@ -154,6 +159,7 @@ class TestSkillFilesExist:
         data = _load_pack_yaml(pack_name)
         for skill in data.get("skills", []):
             skill_md = _skill_dir(pack_name, skill["path"]) / "SKILL.md"
+            assert skill_md.is_file(), f"{skill_md} does not exist"
             content = skill_md.read_text(encoding="utf-8")
             assert content.startswith("---"), (
                 f"SKILL.md for '{skill['name']}' in pack '{pack_name}' "
@@ -162,8 +168,6 @@ class TestSkillFilesExist:
 
     def test_skill_md_frontmatter_has_name_and_description(self, pack_name: str) -> None:
         """Each SKILL.md frontmatter contains at minimum a name and description."""
-        from agent33.skills.loader import parse_frontmatter
-
         data = _load_pack_yaml(pack_name)
         for skill in data.get("skills", []):
             skill_md = _skill_dir(pack_name, skill["path"]) / "SKILL.md"
@@ -172,6 +176,10 @@ class TestSkillFilesExist:
             assert metadata.get("name"), (
                 f"SKILL.md for '{skill['name']}' in pack '{pack_name}' "
                 f"frontmatter is missing 'name'"
+            )
+            assert metadata["name"] == skill["name"], (
+                f"SKILL.md name {metadata['name']!r} does not match "
+                f"manifest entry {skill['name']!r}"
             )
             assert metadata.get("description"), (
                 f"SKILL.md for '{skill['name']}' in pack '{pack_name}' "
@@ -203,10 +211,6 @@ class TestCLIValidateCommand:
 
     def test_validate_passes_default_output(self, pack_name: str) -> None:
         """agent33 packs validate exits 0 and reports 'Validation passed'."""
-        from typer.testing import CliRunner
-
-        from agent33.cli.main import app
-
         pack_dir = str(_PACKS_DIR / pack_name)
         runner = CliRunner()
         result = runner.invoke(app, ["packs", "validate", pack_dir])
@@ -219,10 +223,6 @@ class TestCLIValidateCommand:
 
     def test_validate_reports_correct_skill_count(self, pack_name: str) -> None:
         """Validate output reports the number of skills defined in PACK.yaml."""
-        from typer.testing import CliRunner
-
-        from agent33.cli.main import app
-
         data = _load_pack_yaml(pack_name)
         expected_count = len(data.get("skills", []))
 
@@ -230,19 +230,13 @@ class TestCLIValidateCommand:
         runner = CliRunner()
         result = runner.invoke(app, ["packs", "validate", pack_dir])
         assert result.exit_code == 0, f"validate failed for '{pack_name}':\n{result.output}"
-        assert f"{expected_count} skill" in result.output, (
+        assert re.search(rf"\b{expected_count}\b.*skill", result.output), (
             f"Expected '{expected_count} skill(s)' in validate output for '{pack_name}':\n"
             f"{result.output}"
         )
 
     def test_validate_json_output_is_valid(self, pack_name: str) -> None:
         """--json flag produces valid JSON with validation: passed."""
-        import json
-
-        from typer.testing import CliRunner
-
-        from agent33.cli.main import app
-
         pack_dir = str(_PACKS_DIR / pack_name)
         runner = CliRunner()
         result = runner.invoke(app, ["packs", "validate", "--json", pack_dir])
@@ -265,10 +259,6 @@ class TestCLIValidateCommand:
 
     def test_validate_plain_output_is_parseable(self, pack_name: str) -> None:
         """--plain flag produces key=value output parseable as a mapping."""
-        from typer.testing import CliRunner
-
-        from agent33.cli.main import app
-
         pack_dir = str(_PACKS_DIR / pack_name)
         runner = CliRunner()
         result = runner.invoke(app, ["packs", "validate", "--plain", pack_dir])

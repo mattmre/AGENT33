@@ -31,7 +31,7 @@ For shorter documents, use `extract-key-points` or `generate-abstract` directly.
 
 1. Read the document using `file_ops`.
 2. Identify natural boundaries: headings, section breaks, chapter markers.
-3. Split the document into chunks of 2,000-4,000 tokens each, splitting at
+3. Split the document into chunks of 10,000-15,000 characters (roughly 2,000-3,000 words) each, splitting at
    sentence or paragraph boundaries — never mid-sentence.
 4. Number each chunk and record its source location (section name / page range).
 
