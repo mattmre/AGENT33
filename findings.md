@@ -1,5 +1,19 @@
 # Findings
 
+## 2026-04-10 (POST-3.2)
+
+- The merged baseline already had the lightweight GitHub-backed registry client; the meaningful POST-3.2 gap was revocation semantics plus Sigstore-aware provenance verification.
+- The safe POST-3.2 implementation shape is additive rather than transport-heavy:
+  - add revocation metadata to `PackHubEntry` and the registry JSON payload
+  - reject revoked packs before any hub download
+  - expose revocation status via a fixed-prefix API route and narrow CLI surface
+  - preserve the existing HMAC provenance path while dispatching `algorithm="sigstore"` to optional Sigstore verification
+- The current pack-registry transport still centers on registry metadata rather than a broader archive redesign, so POST-3.2 intentionally does not reopen pack-install transport architecture.
+- Sigstore support is present as runtime-aware verification:
+  - missing `sigstore` runtime support becomes explicit verification failure, not implicit trust
+  - HMAC `sha256` signing/verification behavior remains intact for existing flows
+- POST-3.3 can now build on a cleaner registry trust surface without revisiting revocation or provenance model design.
+
 ## 2026-04-10 (POST-3.1)
 
 - The effective POST-3.1 sandbox is already present in the merged baseline: `CLIAdapter` subprocess isolation plus pack path-traversal and archive-extraction guards.

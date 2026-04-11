@@ -1,4 +1,4 @@
-﻿"""Pack signing, provenance verification, and trust policy enforcement.
+"""Pack signing, provenance verification, and trust policy enforcement.
 
 Provides HMAC-SHA256 signing of pack manifests, signature verification,
 and trust policy evaluation to ensure packs are from trusted sources.
@@ -197,7 +197,6 @@ def verify_pack_sigstore(
     try:
         import base64
 
-        import sigstore  # type: ignore[import-untyped]
         from sigstore.models import Bundle  # type: ignore[import-untyped]
         from sigstore.verify import Verifier  # type: ignore[import-untyped]
     except ImportError:

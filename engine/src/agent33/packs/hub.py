@@ -1,4 +1,4 @@
-﻿"""Pack Hub: lightweight registry client for browsing and downloading packs.
+"""Pack Hub: lightweight registry client for browsing and downloading packs.
 
 The hub reads a JSON registry (either from a remote URL or a local cache file)
 and provides search, lookup, and download capabilities.  When the remote
@@ -153,14 +153,15 @@ class PackHub:
 
         # Check explicit revocation list
         for record in self._revocation_list:
-            if record.name == name:
-                if not record.version or not version or record.version == version:
-                    return RevocationStatus(
-                        name=name,
-                        version=record.version or version,
-                        revoked=True,
-                        reason=record.reason or "Pack revoked by registry",
-                    )
+            if record.name == name and (
+                not record.version or not version or record.version == version
+            ):
+                return RevocationStatus(
+                    name=name,
+                    version=record.version or version,
+                    revoked=True,
+                    reason=record.reason or "Pack revoked by registry",
+                )
 
         return RevocationStatus(name=name, version=version, revoked=False)
 

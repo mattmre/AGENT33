@@ -13,7 +13,7 @@ This plan captures the post-P72 roadmap after UX clusters A-D landed on `main`. 
 | --- | --- | --- |
 | POST-1 — Foundation & Baseline | Complete | PRs #384-#387 |
 | POST-2 — SkillsBench Competitiveness | Complete | PRs #388-#392 |
-| POST-3 — Pack Ecosystem | Not started | Next active cluster |
+| POST-3 — Pack Ecosystem | In progress | POST-3.1 and POST-3.2 are complete; POST-3.3 is next |
 | POST-4 — Interruption & Self-Improvement | Not started | Depends on POST-3; P-PACK v3 also depends on 30-day P68-Lite gate |
 | POST-CLUSTER — Distribution & Ecosystem Growth | Not started | Follows POST-4 and registry maturity |
 
@@ -39,10 +39,10 @@ This plan captures the post-P72 roadmap after UX clusters A-D landed on `main`. 
 - Exit gate: code complete; confirm first weekly benchmark data against baseline
 - Delivered by PRs `#388`-`#392`
 
-### POST-3 — Pack Ecosystem (Next Active Cluster)
+### POST-3 — Pack Ecosystem (Active Cluster)
 
-- POST-3.1 — Pack sandbox + injection test suite (6 attack categories)
-- POST-3.2 — Pack registry v1 (GitHub JSON index, Sigstore signing, revocation)
+- POST-3.1 — Pack sandbox + injection test suite (complete in PR `#394`)
+- POST-3.2 — Pack registry v1 (complete in PR `#395`)
 - POST-3.3 — CLI DX improvements (`--json`, `--plain`, pack-aware `diagnose`)
 - POST-3.4 — 5 seed packs (web-research, code-review, meeting-notes, document-summarizer, developer-assistant)
 - Exit gate: `agent33 pack search` works against the live registry; 5 seed packs installable; pack signing enforced

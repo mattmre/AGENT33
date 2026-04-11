@@ -1,5 +1,17 @@
 # Progress Log
 
+## 2026-04-10 (Session 124 POST-3.2 merged)
+
+- POST-3.2 landed as PR `#395` (`3dafe21`): pack registry revocation support plus Sigstore-aware provenance verification.
+- Delivered in `#395`:
+  - revocation metadata, revocation-list parsing, revocation status lookup, and revoked-download rejection in `agent33.packs.hub`
+  - `SigstoreBundle` metadata and Sigstore verification dispatch in pack provenance models/runtime
+  - `GET /v1/packs/hub/revocation/{name}`
+  - `agent33 packs revocation-status`
+  - focused POST-3.2 regression coverage in `engine/tests/test_pack_registry_v1.py`
+- There were no actionable external review comments on the PR; the only comment was a non-actionable Gemini quota notice.
+- Next step: start POST-3.3 from a fresh `origin/main` worktree and keep the recovery docs aligned as that slice advances.
+
 ## 2026-04-10 (Session 124 POST-3.1 in progress)
 
 - Started POST-3.1 from fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session124-post31-pack-sandbox` on branch `codex/session124-post31-pack-sandbox`.

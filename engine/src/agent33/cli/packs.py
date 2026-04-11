@@ -1,4 +1,4 @@
-﻿"""CLI commands for improvement pack management.
+"""CLI commands for improvement pack management.
 
 Provides pack management subcommands:
 - ``agent33 packs validate`` -- local PACK.yaml validation
