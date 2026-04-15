@@ -1,5 +1,26 @@
 # Progress Log
 
+## 2026-04-15 (Session 127 PR #403 maintenance merge)
+
+- Audited the only open PR, `#403`, which bumped `actions/github-script` from `v8` to `v9` in `.github/workflows/ci.yml` and `.github/workflows/benchmarks-weekly.yml`.
+- Confirmed both inline `github-script` snippets are compatible with v9: no `require('@actions/github')` usage and no `getOctokit` redeclaration hazards.
+- Resolved the PR's red `lint` status by pushing formatting-only fixes for inherited drift in:
+  - `engine/src/agent33/autonomy/p69b_service.py`
+  - `engine/src/agent33/workflows/events.py`
+  - `engine/tests/test_p69b_pause_resume.py`
+- Created repository labels `dependencies` and `github-actions` to resolve Dependabot's missing-label warning without widening the code diff.
+- Approved and merged PR `#403` as commit `87c6637`.
+- Post-merge verification from fresh `origin/main` passed:
+  - `python scripts/check_import_boundaries.py`
+  - `python scripts/check_runtime_compatibility.py`
+  - `python -m ruff check src/ tests/`
+  - `python -m ruff format --check src/ tests/`
+  - `python -m mypy src/`
+  - `PYTHONPATH=src python -m pytest tests/test_p69b_pause_resume.py -q --no-cov`
+- Functional CI for `#403` was green, but repo-level `Dependency CVE Scan` and `Container Image Scan` still required an admin override to merge.
+- Cumulative PRs on `main`: 403.
+- Roadmap posture is unchanged: `POST-4.4` and `POST-4.5` remain blocked on the 30-day P68-Lite gate. See `docs/research/session127-pr403-github-script-v9-audit.md` for the maintenance audit trail.
+
 ## 2026-04-11 (Session 126 POST-4.1 → POST-4.3 merged)
 
 - Session 126 executed the full unblocked POST-P72 queue: POST-3.3 fix → POST-3.4 → POST-4.1 → POST-4.2 → POST-4.3.

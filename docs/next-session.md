@@ -1,43 +1,52 @@
 # Next Session Briefing
 
-Last updated: 2026-04-11 (Session 126 close)
+Last updated: 2026-04-15 (post-`#403` maintenance sync)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: #401 (POST-4.3 P69b tool approval)
-- **Latest commit on main**: `fd092f3`
-- **Cumulative PRs merged**: 401
+- **Latest merged PR**: `#403` (`build(deps): bump actions/github-script from 8 to 9`)
+- **Latest merged implementation PR**: `#401` (`feat(p69b): POST-4.3 P69b tool approval pause/resume`)
+- **Latest commit on main**: `87c6637`
+- **Cumulative PRs merged**: 403
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
-- **POST-3.1 (Pack sandbox + injection tests)**: COMPLETE
-- **POST-3.2 (Pack registry v1)**: COMPLETE
-- **POST-3.3 (CLI DX improvements)**: COMPLETE — PR #397
-- **POST-3.4 (5 seed packs)**: COMPLETE — PR #398
-- **POST-4.1 (P69b UX spec + API contract)**: COMPLETE — PR #399
-- **POST-4.2 (SSE event schema versioning)**: COMPLETE — PR #400
-- **POST-4.3 (P69b implementation)**: COMPLETE — PR #401
+- **POST-3 (Pack Ecosystem)**: COMPLETE
+- **POST-4.1 (P69b UX spec + API contract)**: COMPLETE — PR `#399`
+- **POST-4.2 (SSE event schema versioning)**: COMPLETE — PR `#400`
+- **POST-4.3 (P69b implementation)**: COMPLETE — PR `#401`
 - **POST-4.4 (P-PACK v3 A/B harness)**: BLOCKED — 30-day P68-Lite data gate
 - **POST-4.5 (P-PACK v3 behavior mods)**: BLOCKED — depends on POST-4.4
-- **CVE scan**: pre-existing failures on Dependency CVE Scan + Container Image Scan — not blocking
+- **POST-CLUSTER (Distribution & Ecosystem Growth)**: NOT STARTED
+- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+- **Security scan posture**: `Dependency CVE Scan` + `Container Image Scan` still fail on the current baseline. Functional CI for `#403` was green, but those repo-level scans still required an admin override for merge.
 
-## What Session 126 Delivered
+## What Session 127 Delivered
 
 | PR | Commit | Slice | Description |
 |----|--------|-------|-------------|
-| #397 | `b09873b` | POST-3.3 | CLI DX: `--json`/`--plain` on pack commands, pack-aware `diagnose` |
-| #398 | `4195694` | POST-3.4 | 5 seed packs (web-research, code-review, meeting-notes, document-summarizer, developer-assistant) |
-| #399 | `fca50ab` | POST-4.1 | P69b UX spec + API contract (docs-only) |
-| #400 | `899e7b4` | POST-4.2 | SSE `schema_version` field + `SchemaVersionMismatchError` strict rejection |
-| #401 | `fd092f3` | POST-4.3 | P69b `PausedInvocation`, `P69bService`, 4 REST endpoints, HMAC nonce, feature flag |
+| #403 | `87c6637` | maintenance | `actions/github-script` v9 bump, plus a formatting-only unblock for inherited lint drift on the PR branch |
+
+Additional maintenance completed during the PR review:
+
+- Verified both inline `github-script` usages are v9-compatible (no `require('@actions/github')`, no `getOctokit` redeclaration hazards)
+- Created the missing repository labels `dependencies` and `github-actions` so Dependabot can label future workflow dependency PRs cleanly
+- Saved the audit summary to `docs/research/session127-pr403-github-script-v9-audit.md`
+
+## Current Roadmap Posture
+
+- **Roadmap authority**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+- **Current execution queue**: `docs/sessions/session126-task-plan.md`
+- **Recovery note**: stale root checkouts may still have out-of-date planning docs; prefer fresh `origin/main` worktrees plus this file when recovering context
+- **Maintenance follow-up**: if maintenance PRs should merge normally again, add a dedicated slice to either fix the underlying security-scan failures or adjust the merge policy/ruleset around those known repo-wide findings
 
 ## Next Session Priority Queue
 
 ### Immediate: POST-4.4 A/B Harness (when 30-day gate opens)
 
-**GATE**: Cannot start until 30 days after P68-Lite activation. Check P68-Lite activation date in `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+**GATE**: Cannot start until 30 days after P68-Lite activation. Check the gate note in `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 
 | Priority | Task | Status |
 |----------|------|--------|
@@ -47,44 +56,47 @@ Last updated: 2026-04-11 (Session 126 close)
 **POST-4.4 scope** (when unblocked):
 - A/B assignment logic (deterministic by user/session hash)
 - Outcome collection records in DB
-- Statistical test runner (scipy.stats): 95% confidence, n>=30, -5% regression threshold, Bonferroni correction
+- Statistical test runner (`scipy.stats`): 95% confidence, `n>=30`, `-5%` regression threshold, Bonferroni correction
 - Report generation (JSON + markdown)
 - 30-day calendar gate enforcement
-- Alert hook: auto-open GitHub issue if weekly run shows >5% drop
-- Worktree: `worktrees/session-s5-ab-harness`, branch `session126-s5-ab-harness`
+- Alert hook: auto-open GitHub issue if weekly run shows `>5%` drop
+- Worktree: `worktrees/session126-s5-ab-harness`, branch `session126-s5-ab-harness`
 
 **POST-4.5 scope** (after POST-4.4 merged + A/B tests pass):
 - Behavior changes to pack application/selection logic (per P-PACK v3 spec)
 - Gated behind `ppack_v3_enabled` feature flag
 - A/B regression gate in CI: `pytest tests/test_ppack_v3_ab.py` must pass
 
-### If Gate Not Yet Open: Optional Hardening Work
+### If The Gate Is Still Closed: Optional Hardening Work
 
-- P68-Lite monitoring: verify outcomes table is not empty >24h
-- P69b: DB migration to persist `PausedInvocation` rows (current impl is in-memory only)
-- SSE: document schema_version upgrade path for when v2 is planned
-- `docs/phases/README.md` POST-4 cluster status update
+- P68-Lite monitoring: verify the `outcomes` table is not empty for `>24h`
+- P69b persistence follow-up: reconcile the current in-memory `P69bService` with the original DB-backed `PausedInvocation` design intent
+- SSE upgrade note: document the future client migration path before any v2 schema is introduced
+- Security scan/ruleset follow-up: either fix the underlying `Dependency CVE Scan` / `Container Image Scan` failures or remove the need for admin override on unrelated maintenance PRs
 
 ## Key References
 
-- `docs/sessions/session126-task-plan.md` — Session 126 master task plan (authoritative for S5/S6)
-- `docs/phases/PHASE-PLAN-POST-P72-2026.md` — Approved POST-P72 phase plan with locked decisions
+- `docs/phases/PHASE-PLAN-POST-P72-2026.md` — current POST-P72 roadmap
+- `docs/sessions/session126-task-plan.md` — authoritative Session 126 queue for `POST-4.4` / `POST-4.5`
+- `docs/research/session127-pr403-github-script-v9-audit.md` — maintenance audit for PR `#403`
 - `docs/research/session126-p69b-ux-spec.md` — P69b UX spec
 - `docs/research/session126-p69b-api-contract.md` — P69b API contract
-- `engine/src/agent33/autonomy/p69b_models.py` — PausedInvocation model + exception types
-- `engine/src/agent33/autonomy/p69b_service.py` — P69bService (in-memory; DB migration pending)
-- `engine/src/agent33/workflows/events.py` — WorkflowEvent with schema_version + check_schema_version()
+- `engine/src/agent33/autonomy/p69b_models.py` — `PausedInvocation` model + P69b exception types
+- `engine/src/agent33/autonomy/p69b_service.py` — current `P69bService` implementation
+- `engine/src/agent33/workflows/events.py` — `WorkflowEvent` schema versioning
 
 ## Worktree Hygiene
 
-Session 126 worktrees to clean up after this PR merges:
+Remove completed maintenance worktrees after this docs sync PR merges:
+
 ```bash
-git worktree remove --force worktrees/session126-s2-p69b-spec
-git worktree remove --force worktrees/session126-s3-sse-versioning
-git worktree remove --force worktrees/session126-s4-p69b-impl
+git worktree remove --force worktrees/pr403-review
+git worktree remove --force worktrees/post403-verify
 git worktree prune
 ```
+
 If Windows reserved-name files block removal:
+
 ```cmd
 cmd /c rd /s /q "\\?\C:\GitHub\repos\AGENT33\worktrees\<name>"
 git worktree prune
