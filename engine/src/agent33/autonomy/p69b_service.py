@@ -115,9 +115,7 @@ class P69bService:
             self._store[approval_id] = updated
             raise ToolApprovalTimeout(f"Approval expired at {record.expires_at}")
 
-        new_status = (
-            PausedInvocationStatus.APPROVED if approved else PausedInvocationStatus.DENIED
-        )
+        new_status = PausedInvocationStatus.APPROVED if approved else PausedInvocationStatus.DENIED
         updated = record.model_copy(
             update={
                 "status": new_status,
@@ -137,8 +135,7 @@ class P69bService:
         return [
             r
             for r in self._store.values()
-            if r.invocation_id == invocation_id
-            and r.status == PausedInvocationStatus.PENDING
+            if r.invocation_id == invocation_id and r.status == PausedInvocationStatus.PENDING
         ]
 
     def get_all_pending(self, tenant_id: str) -> list[PausedInvocation]:

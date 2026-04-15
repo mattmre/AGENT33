@@ -27,9 +27,7 @@ class SchemaVersionMismatchError(Exception):
     def __init__(self, received: int, expected: int) -> None:
         self.received = received
         self.expected = expected
-        super().__init__(
-            f"SSE schema version mismatch: expected {expected}, got {received}"
-        )
+        super().__init__(f"SSE schema version mismatch: expected {expected}, got {received}")
 
 
 def check_schema_version(
