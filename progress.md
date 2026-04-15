@@ -10,7 +10,7 @@
   - `engine/tests/test_p69b_pause_resume.py`
 - Created repository labels `dependencies` and `github-actions` to resolve Dependabot's missing-label warning without widening the code diff.
 - Approved and merged PR `#403` as commit `87c6637`.
-- Post-merge verification from fresh `origin/main` passed:
+- Post-merge verification from fresh `origin/main` passed (commands run from `engine/`):
   - `python scripts/check_import_boundaries.py`
   - `python scripts/check_runtime_compatibility.py`
   - `python -m ruff check src/ tests/`

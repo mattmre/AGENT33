@@ -6,15 +6,20 @@
 
 ---
 
-## Current State (at session start)
+## Current State (synced 2026-04-15)
 
-- All Phases P01-P72: COMPLETE (383+ PRs merged)
+- All Phases P01-P72: COMPLETE (403 PRs merged)
 - POST-1 (Foundation & Baseline): COMPLETE
 - POST-2 (SkillsBench Competitiveness): COMPLETE
 - POST-3.1 (Pack sandbox + injection tests): COMPLETE
 - POST-3.2 (Pack registry v1): COMPLETE
-- POST-3.3 (CLI DX improvements): PR #397 — CI fixes applied, waiting for green CI → MERGE
-- POST-3.4 through POST-4.5: PENDING
+- POST-3.3 (CLI DX improvements): COMPLETE — PR `#397`
+- POST-3.4 (5 seed packs): COMPLETE — PR `#398`
+- POST-4.1 (P69b UX spec + API contract): COMPLETE — PR `#399`
+- POST-4.2 (SSE event schema versioning): COMPLETE — PR `#400`
+- POST-4.3 (P69b implementation): COMPLETE — PR `#401`
+- POST-4.4 / POST-4.5: BLOCKED on the 30-day P68-Lite gate (opens `2026-05-04`)
+- Session wrap/docs sync: COMPLETE — PR `#402`
 
 ## Session 126 Execution Queue
 
@@ -25,7 +30,7 @@
 | S2 | POST-4.1 — P69b UX spec + API contract | POST-4 | #399 | S1 merged | ✅ MERGED `fca50ab` |
 | S3 | POST-4.2 — SSE event schema versioning | POST-4 | #400 | S2 merged | ✅ MERGED `899e7b4` |
 | S4 | POST-4.3 — P69b implementation | POST-4 | #401 | S3 merged | ✅ MERGED `fd092f3` |
-| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session126-s5-ab-harness` | S4 + 30-day gate | BLOCKED |
+| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session126-s5-ab-harness` | S4 + gate opens `2026-05-04` | BLOCKED |
 | S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session126-s6-ab-behavior` | S5 merged | BLOCKED |
 | SX | Docs refresh + session wrap | docs | #402 | all | ✅ COMPLETE |
 
@@ -221,7 +226,7 @@ engine/packs/{pack-name}/
 
 ## S5 — POST-4.4: P-PACK v3 A/B Harness
 
-**GATE**: Cannot start until 30 days after P68-Lite activation.
+**GATE**: Cannot start until `2026-05-04` (30 days after P68-Lite merged in PR `#378` at `2026-04-04T23:50:44Z`).
 **P68-Lite monitoring**: Alert if outcomes table empty >24h.
 
 **Goal**: Purpose-built A/B harness for P-PACK v3 behavioral testing.
@@ -300,7 +305,7 @@ Every slice moves through these phases in order:
 | 3 | S2 POST-4.1 P69b spec | Squash via API | lint green (docs-only) |
 | 4 | S3 POST-4.2 SSE versioning | Squash via API | lint + test green |
 | 5 | S4 POST-4.3 P69b impl | Squash via API | lint + test green |
-| 6 | S5 POST-4.4 A/B harness | Squash via API (after 30-day gate) | lint + test green |
+| 6 | S5 POST-4.4 A/B harness | Squash via API (after gate opens `2026-05-04`) | lint + test green |
 | 7 | S6 POST-4.5 behavior mods | Squash via API | lint + test + A/B gate green |
 
 **Merge command** (avoids worktree collision):
@@ -313,7 +318,7 @@ gh api -X PUT repos/mattmre/AGENT33/pulls/{PR_NUM}/merge -f merge_method=squash
 ## Key References
 
 - `docs/phases/PHASE-PLAN-POST-P72-2026.md` — Approved POST-P72 phase plan
-- `docs/next-session.md` — Priority queue (may be stale; this file is authoritative for S126)
+- `docs/next-session.md` — operator handoff synced to the merged baseline through `#403`
 - `docs/research/session125-post33-cli-dx-scope.md` — POST-3.3 scope (context for S1)
 - `docs/research/skillsbench-analysis.md` — SkillsBench analysis
 - `engine/src/agent33/autonomy/` — Autonomy enforcement (context for S2-S4)

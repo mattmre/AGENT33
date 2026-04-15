@@ -31,7 +31,7 @@ Dependabot also left a repo-config comment because the labels `dependencies` and
 
 ## Validation Snapshot
 
-Local validation on the PR branch and again from fresh `origin/main`:
+Local validation was run from `engine/` on the PR branch and again from fresh `origin/main`:
 
 - `python scripts/check_import_boundaries.py`
 - `python scripts/check_runtime_compatibility.py`

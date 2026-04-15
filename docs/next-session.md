@@ -46,11 +46,11 @@ Additional maintenance completed during the PR review:
 
 ### Immediate: POST-4.4 A/B Harness (when 30-day gate opens)
 
-**GATE**: Cannot start until 30 days after P68-Lite activation. Check the gate note in `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+**GATE**: P68-Lite merged in PR `#378` at `2026-04-04T23:50:44Z`, so the 30-day gate opens on `2026-05-04`. Do not start POST-4.4 before that date.
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | POST-4.4 — P-PACK v3 A/B harness | BLOCKED (30-day gate) |
+| T1 | POST-4.4 — P-PACK v3 A/B harness | BLOCKED until `2026-05-04` (30-day gate) |
 | T2 | POST-4.5 — P-PACK v3 behavior mods | BLOCKED (depends on T1) |
 
 **POST-4.4 scope** (when unblocked):
