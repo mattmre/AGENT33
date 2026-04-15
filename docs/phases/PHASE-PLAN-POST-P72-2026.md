@@ -1,21 +1,38 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored to `main` in Session 124  
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#403` on 2026-04-15
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
 
-This plan captures the post-P72 roadmap after UX clusters A-D landed on `main`. The work focuses on benchmark competitiveness, pack distribution/security, interruption/self-improvement, and the final distribution wave. It is the canonical roadmap file referenced by the Fresh Context Protocol.
+This file is the canonical roadmap for the post-P72 wave. It captures what is already merged on `main`, what remains blocked, and which slices should resume next from fresh `origin/main` worktrees.
 
 ## Current Status Snapshot
 
 | Cluster | Status | Notes |
 | --- | --- | --- |
-| POST-1 — Foundation & Baseline | Complete | PRs #384-#387 |
-| POST-2 — SkillsBench Competitiveness | Complete | PRs #388-#392 |
-| POST-3 — Pack Ecosystem | In progress | POST-3.1 and POST-3.2 are complete; POST-3.3 is next |
-| POST-4 — Interruption & Self-Improvement | Not started | Depends on POST-3; P-PACK v3 also depends on 30-day P68-Lite gate |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Not started | Follows POST-4 and registry maturity |
+| POST-1 — Foundation & Baseline | Complete | PRs `#384`-`#387` |
+| POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
+| POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
+| POST-4 — Interruption & Self-Improvement | Gate-blocked | `POST-4.1`-`POST-4.3` complete in PRs `#399`-`#401`; `POST-4.4` / `POST-4.5` blocked on the 30-day P68-Lite gate |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Not started | Follows POST-4 completion and broader registry maturity |
+
+## Current Execution Queue
+
+| Order | Slice | Status | Notes |
+| --- | --- | --- | --- |
+| 1 | POST-4.4 — P-PACK v3 A/B harness | Blocked | Cannot start until `2026-05-04` (30 days after P68-Lite merged in PR `#378`) |
+| 2 | POST-4.5 — P-PACK v3 behavior modifications | Blocked | Depends on POST-4.4 merge and passing A/B gate |
+| 3 | POST-CLUSTER — Public launch preparation | Pending | Starts after POST-4.5 |
+| 4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after POST-4.5 |
+| 5 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after POST-4.5 |
+| 6 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
+
+## Optional Work While POST-4.4 Is Blocked
+
+- Verify P68-Lite monitoring remains healthy (`outcomes` table not empty for >24h)
+- Reconcile P69b persistence design intent versus the current in-memory implementation
+- Document the future SSE schema upgrade path before any version 2 work begins
 
 ## Cluster Plans
 
@@ -39,21 +56,21 @@ This plan captures the post-P72 roadmap after UX clusters A-D landed on `main`. 
 - Exit gate: code complete; confirm first weekly benchmark data against baseline
 - Delivered by PRs `#388`-`#392`
 
-### POST-3 — Pack Ecosystem (Active Cluster)
+### POST-3 — Pack Ecosystem (Complete)
 
-- POST-3.1 — Pack sandbox + injection test suite (complete in PR `#394`)
-- POST-3.2 — Pack registry v1 (complete in PR `#395`)
-- POST-3.3 — CLI DX improvements (`--json`, `--plain`, pack-aware `diagnose`)
-- POST-3.4 — 5 seed packs (web-research, code-review, meeting-notes, document-summarizer, developer-assistant)
-- Exit gate: `agent33 pack search` works against the live registry; 5 seed packs installable; pack signing enforced
+- POST-3.1 — Pack sandbox + injection tests (PR `#394`)
+- POST-3.2 — Pack registry v1 revocation + Sigstore verification (PR `#395`)
+- POST-3.3 — CLI DX improvements (`--json`, `--plain`, pack-aware `diagnose`) (PR `#397`)
+- POST-3.4 — 5 seed packs (PR `#398`)
+- Exit gate: live registry support, installable seed packs, and pack-signing enforcement landed on `main`
 
-### POST-4 — Interruption & Self-Improvement
+### POST-4 — Interruption & Self-Improvement (Gate-Blocked)
 
-- POST-4.1 — P69b UX spec + API contract document
-- POST-4.2 — SSE event schema versioning (strict rejection model)
-- POST-4.3 — P69b implementation (`PausedInvocation`, HMAC nonce, feature flag)
-- POST-4.4 — P-PACK v3 A/B harness (30-day calendar gate + statistical significance)
-- POST-4.5 — P-PACK v3 behavior modifications (feature flag, A/B regression gate)
+- POST-4.1 — P69b UX spec + API contract document (**complete** in PR `#399`)
+- POST-4.2 — SSE event schema versioning, strict rejection model (**complete** in PR `#400`)
+- POST-4.3 — P69b implementation (**complete** in PR `#401`)
+- POST-4.4 — P-PACK v3 A/B harness (**blocked until `2026-05-04`** on the 30-day calendar gate; P68-Lite merged in PR `#378` at `2026-04-04T23:50:44Z`)
+- POST-4.5 — P-PACK v3 behavior modifications (**blocked** on POST-4.4)
 - Exit gate: P69b end-to-end tested; P-PACK v3 behavioral A/B tests passing; both behind feature flags
 
 ### POST-CLUSTER — Distribution & Ecosystem Growth
@@ -74,8 +91,9 @@ POST-3.1 — Pack sandbox + injection tests
                     └──→ POST-4.2 — SSE event schema versioning
                           └──→ POST-4.3 — P69b implementation
                                 └──→ POST-4.4 — P-PACK v3 A/B harness
-                                      [calendar gate: 30 days P68-Lite data]
+                                      [calendar gate opens 2026-05-04 after 30 days of P68-Lite data]
                                       └──→ POST-4.5 — P-PACK v3 behavior modifications
+                                            └──→ POST-CLUSTER work
 ```
 
 ## Locked Architectural Decisions (Session 122)
@@ -102,8 +120,8 @@ These decisions are final and must not be reopened without explicit user approva
 ## Execution Rules
 
 1. Use one fresh worktree per slice from updated `origin/main`.
-2. Use one fresh agent/research pass per slice and dispose of it after merge.
+2. Use one fresh research pass per slice and dispose of it after merge.
 3. Open one PR per slice.
 4. Do not start a later slice before the current one is merged and verified from fresh `origin/main`.
 5. If research changes roadmap assumptions, write a memo under `docs/research/` before implementation.
-6. Always update `docs/next-session.md`, `task_plan.md`, `progress.md`, and `findings.md` after major milestones so recovery does not depend on chat history.
+6. Always refresh `docs/next-session.md`, this file, `docs/sessions/session126-task-plan.md`, `progress.md`, and any active queue docs after major milestones.
