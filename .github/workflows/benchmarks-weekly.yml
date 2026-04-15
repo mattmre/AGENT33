@@ -3,7 +3,7 @@
 # - Detects >5pp regression vs committed baseline; auto-opens GitHub issue
 # - Commits results to the benchmarks branch (NOT main)
 # Node.js 24 migration: actions/checkout@v6, actions/setup-python@v6,
-#   actions/upload-artifact@v7, actions/github-script@v8
+#   actions/upload-artifact@v7, actions/github-script@v9
 name: Benchmarks Weekly
 
 on:
@@ -120,7 +120,7 @@ jobs:
 
       - name: Open regression issue
         if: steps.regression.outputs.regression == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const drop = '${{ steps.regression.outputs.drop }}';

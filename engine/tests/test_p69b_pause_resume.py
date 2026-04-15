@@ -350,9 +350,7 @@ def p69b_disabled_client() -> Any:
     svc = P69bService(timeout_seconds=300)
     original = getattr(app.state, "p69b_service", None)
     app.state.p69b_service = svc
-    env_without_flag = {
-        k: v for k, v in os.environ.items() if k != "P69B_TOOL_APPROVAL_ENABLED"
-    }
+    env_without_flag = {k: v for k, v in os.environ.items() if k != "P69B_TOOL_APPROVAL_ENABLED"}
     with patch.dict(os.environ, env_without_flag, clear=True):
         client = TestClient(app, raise_server_exceptions=True)
         yield client
@@ -441,9 +439,7 @@ class TestP69bRoutes:
         assert "approval_id" in item
         assert "expires_at" in item
 
-    def test_pause_returns_503_when_feature_disabled(
-        self, p69b_disabled_client: Any
-    ) -> None:
+    def test_pause_returns_503_when_feature_disabled(self, p69b_disabled_client: Any) -> None:
         """POST /v1/invocations/{id}/pause returns 503 when feature flag is off."""
         client = p69b_disabled_client
         nonce = _make_nonce()
@@ -466,9 +462,7 @@ class TestP69bRoutes:
             # FastAPI may return detail as a string — the key check is the 503 status
             assert "ToolApprovalFeatureDisabled" in str(detail)
 
-    def test_global_pending_approvals_returns_paginated_list(
-        self, p69b_client: Any
-    ) -> None:
+    def test_global_pending_approvals_returns_paginated_list(self, p69b_client: Any) -> None:
         """GET /v1/approvals/pending returns paginated results for the tenant."""
         client, svc = p69b_client
         nonce1 = compute_nonce(_INVOCATION, "tool_a", _SECRET, timestamp=time.time())
@@ -564,9 +558,7 @@ class TestP69bRoutes:
                 tool_input={},
                 nonce=nonce,
             )
-            consumed = record.model_copy(
-                update={"status": PausedInvocationStatus.CONSUMED}
-            )
+            consumed = record.model_copy(update={"status": PausedInvocationStatus.CONSUMED})
             svc._store[record.id] = consumed
 
             # Now try to pause again with the same nonce via the API
