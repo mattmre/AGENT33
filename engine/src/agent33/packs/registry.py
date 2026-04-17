@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING
 
 import structlog
@@ -70,7 +71,8 @@ class PackRegistry:
         self._session_enabled: dict[str, set[str]] = {}  # session_id -> set of pack names
         self._session_pack_sources: dict[str, dict[str, str]] = {}
         self._session_pack_sequence: dict[str, dict[str, int]] = {}
-        self._session_activation_counter = 0
+        self._session_activation_counter: dict[str, int] = {}
+        self._session_tracking_lock = RLock()
         self._marketplace = marketplace
         self._trust_policy = trust_policy or PackTrustPolicy()
         self._trust_policy_manager = trust_policy_manager
@@ -516,24 +518,12 @@ class PackRegistry:
     # Session-Scoped Enable/Disable (P-PACK v1)
     # ------------------------------------------------------------------
 
-    def _ensure_session_tracking(self) -> None:
-        """Initialize v3 session-pack tracking fields for legacy test fixtures."""
-        if not hasattr(self, "_session_pack_sources"):
-            self._session_pack_sources = {}
-        if not hasattr(self, "_session_pack_sequence"):
-            self._session_pack_sequence = {}
-        if not hasattr(self, "_session_activation_counter"):
-            self._session_activation_counter = 0
-        if not hasattr(self, "_ppack_v3_enabled"):
-            self._ppack_v3_enabled = False
-
     def _record_session_pack_activation(
         self,
         pack_name: str,
         session_id: str,
         source: str,
     ) -> None:
-        self._ensure_session_tracking()
         sources = self._session_pack_sources.setdefault(session_id, {})
         sequence = self._session_pack_sequence.setdefault(session_id, {})
         existing_source = sources.get(pack_name)
@@ -543,9 +533,18 @@ class PackRegistry:
         if existing_source == source:
             return
 
-        self._session_activation_counter += 1
+        next_sequence = self._session_activation_counter.get(session_id, 0) + 1
+        self._session_activation_counter[session_id] = next_sequence
         sources[pack_name] = source
-        sequence[pack_name] = self._session_activation_counter
+        sequence[pack_name] = next_sequence
+
+    def clear_session_state(self, session_id: str) -> None:
+        """Remove all session-scoped pack tracking for a session."""
+        with self._session_tracking_lock:
+            self._session_enabled.pop(session_id, None)
+            self._session_pack_sources.pop(session_id, None)
+            self._session_pack_sequence.pop(session_id, None)
+            self._session_activation_counter.pop(session_id, None)
 
     def _session_pack_order(
         self,
@@ -553,20 +552,17 @@ class PackRegistry:
         *,
         ppack_variant: str | None = None,
     ) -> list[str]:
-        names = self._session_enabled.get(session_id, set())
+        with self._session_tracking_lock:
+            names = set(self._session_enabled.get(session_id, set()))
+            sources = dict(self._session_pack_sources.get(session_id, {}))
+            sequence = dict(self._session_pack_sequence.get(session_id, {}))
         if not names:
             return []
 
         installed_names = [name for name in names if name in self._installed]
-        if (
-            not getattr(self, "_ppack_v3_enabled", False)
-            or str(ppack_variant).lower() != "treatment"
-        ):
+        if not self._ppack_v3_enabled or str(ppack_variant).lower() != "treatment":
             return sorted(installed_names)
 
-        self._ensure_session_tracking()
-        sources = self._session_pack_sources.get(session_id, {})
-        sequence = self._session_pack_sequence.get(session_id, {})
         return sorted(
             installed_names,
             key=lambda name: (
@@ -593,10 +589,11 @@ class PackRegistry:
         if source not in _SESSION_PACK_SOURCE_PRECEDENCE:
             raise ValueError(f"Unsupported session pack source '{source}'")
 
-        if session_id not in self._session_enabled:
-            self._session_enabled[session_id] = set()
-        self._session_enabled[session_id].add(pack_name)
-        self._record_session_pack_activation(pack_name, session_id, source)
+        with self._session_tracking_lock:
+            if session_id not in self._session_enabled:
+                self._session_enabled[session_id] = set()
+            self._session_enabled[session_id].add(pack_name)
+            self._record_session_pack_activation(pack_name, session_id, source)
         logger.info(
             "pack_enabled_for_session",
             name=pack_name,
@@ -613,19 +610,14 @@ class PackRegistry:
         if pack_name not in self._installed:
             raise ValueError(f"Pack '{pack_name}' is not installed")
 
-        if session_id in self._session_enabled:
-            self._session_enabled[session_id].discard(pack_name)
-            if not self._session_enabled[session_id]:
-                self._session_enabled.pop(session_id, None)
-        self._ensure_session_tracking()
-        if session_id in self._session_pack_sources:
-            self._session_pack_sources[session_id].pop(pack_name, None)
-            if not self._session_pack_sources[session_id]:
-                self._session_pack_sources.pop(session_id, None)
-        if session_id in self._session_pack_sequence:
-            self._session_pack_sequence[session_id].pop(pack_name, None)
-            if not self._session_pack_sequence[session_id]:
-                self._session_pack_sequence.pop(session_id, None)
+        with self._session_tracking_lock:
+            if session_id in self._session_enabled:
+                self._session_enabled[session_id].discard(pack_name)
+                if not self._session_enabled[session_id]:
+                    self.clear_session_state(session_id)
+                else:
+                    self._session_pack_sources.get(session_id, {}).pop(pack_name, None)
+                    self._session_pack_sequence.get(session_id, {}).pop(pack_name, None)
         logger.info("pack_disabled_for_session", name=pack_name, session_id=session_id)
 
     def get_session_packs(

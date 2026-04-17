@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -47,7 +48,8 @@ def _make_registry(
     registry._session_enabled = {}
     registry._session_pack_sources = {}
     registry._session_pack_sequence = {}
-    registry._session_activation_counter = 0
+    registry._session_activation_counter = {}
+    registry._session_tracking_lock = RLock()
     registry._marketplace = None
     registry._trust_policy = PackTrustPolicy()
     registry._trust_policy_manager = None

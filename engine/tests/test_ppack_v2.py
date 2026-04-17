@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -125,9 +126,14 @@ def _make_registry(packs: list[InstalledPack] | None = None) -> Any:
     registry._installed = {}
     registry._enabled = {}
     registry._session_enabled = {}
+    registry._session_pack_sources = {}
+    registry._session_pack_sequence = {}
+    registry._session_activation_counter = {}
+    registry._session_tracking_lock = RLock()
     registry._marketplace = None
     registry._trust_policy = PackTrustPolicy()
     registry._trust_policy_manager = None
+    registry._ppack_v3_enabled = False
 
     for p in packs or []:
         registry._installed[p.name] = p

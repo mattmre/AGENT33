@@ -30,6 +30,7 @@ from agent33.agents.effort import AgentEffort, AgentEffortRouter
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
+from agent33.evaluation.ppack_ab_models import PPackABAssignment
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
 from agent33.observability.effort_telemetry import (
@@ -287,6 +288,40 @@ def _get_ppack_ab_service(request: Request) -> PPackABService | None:
     return getattr(request.app.state, "ppack_ab_service", None)
 
 
+def _resolve_ppack_assignment(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> PPackABAssignment | None:
+    """Resolve and cache the active P-PACK assignment for the current request."""
+    if not session_id:
+        return None
+    cached_assignment = getattr(request.state, "ppack_assignment", None)
+    cached_tenant_id = getattr(request.state, "ppack_assignment_tenant_id", "")
+    cached_session_id = getattr(request.state, "ppack_assignment_session_id", "")
+    if (
+        isinstance(cached_assignment, PPackABAssignment)
+        and cached_tenant_id == tenant_id
+        and cached_session_id == session_id
+    ):
+        return cached_assignment
+
+    ab_service = _get_ppack_ab_service(request)
+    if ab_service is None:
+        return None
+    try:
+        assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
+    except Exception:
+        logger.warning("ppack_variant_assignment_failed", exc_info=True)
+        return None
+
+    request.state.ppack_assignment = assignment
+    request.state.ppack_assignment_tenant_id = tenant_id
+    request.state.ppack_assignment_session_id = session_id
+    return assignment
+
+
 def _resolve_ppack_variant(
     request: Request,
     *,
@@ -294,17 +329,12 @@ def _resolve_ppack_variant(
     session_id: str,
 ) -> str:
     """Resolve the active P-PACK variant for runtime behavior selection."""
-    if not session_id:
-        return ""
-    ab_service = _get_ppack_ab_service(request)
-    if ab_service is None:
-        return ""
-    try:
-        assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
-    except Exception:
-        logger.warning("ppack_variant_assignment_failed", exc_info=True)
-        return ""
-    return assignment.variant.value
+    assignment = _resolve_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=session_id,
+    )
+    return assignment.variant.value if assignment is not None else ""
 
 
 def _build_outcome_metadata(
@@ -317,15 +347,14 @@ def _build_outcome_metadata(
     payload = dict(metadata or {})
     if session_id:
         payload.setdefault("session_id", session_id)
-        ab_service = _get_ppack_ab_service(request)
-        if ab_service is not None:
-            try:
-                assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
-            except Exception:
-                logger.warning("ppack_variant_assignment_failed", exc_info=True)
-            else:
-                payload.setdefault("experiment_key", assignment.experiment_key)
-                payload.setdefault("ppack_variant", assignment.variant.value)
+        assignment = _resolve_ppack_assignment(
+            request,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
+        if assignment is not None:
+            payload.setdefault("experiment_key", assignment.experiment_key)
+            payload.setdefault("ppack_variant", assignment.variant.value)
     return payload
 
 
