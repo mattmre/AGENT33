@@ -1924,14 +1924,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     # -- Outcomes service (P68-Lite + P72 persistence) -------------------------
+    from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
+    from agent33.evaluation.ppack_ab_service import GitHubIssueAlertConfig, PPackABService
     from agent33.outcomes.persistence import OutcomePersistence
     from agent33.outcomes.service import OutcomesService
 
     outcomes_persistence = OutcomePersistence(Path(settings.outcomes_db_path))
     outcomes_service = OutcomesService(persistence=outcomes_persistence)
+    ppack_ab_persistence = PPackABPersistence(settings.outcomes_db_path)
+    ppack_ab_service = PPackABService(
+        outcomes_service=outcomes_service,
+        persistence=ppack_ab_persistence,
+        enabled=settings.ppack_v3_ab_enabled,
+        experiment_key=settings.ppack_v3_ab_experiment_key,
+        confidence_level=settings.comparative_confidence_level,
+        minimum_sample_size=settings.ppack_v3_ab_min_samples_per_variant,
+        regression_threshold=settings.ppack_v3_ab_regression_threshold,
+        weekly_window_days=settings.ppack_v3_ab_weekly_window_days,
+        alert_config=GitHubIssueAlertConfig(
+            enabled=settings.ppack_v3_ab_issue_alert_enabled,
+            owner=settings.ppack_v3_ab_github_owner,
+            repo=settings.ppack_v3_ab_github_repo,
+            token=settings.ppack_v3_ab_github_token.get_secret_value(),
+        ),
+    )
     app.state.outcomes_service = outcomes_service
     app.state.outcomes_persistence = outcomes_persistence
+    app.state.ppack_ab_service = ppack_ab_service
+    app.state.ppack_ab_persistence = ppack_ab_persistence
     outcomes.set_outcomes_service(outcomes_service)
+    outcomes.set_ppack_ab_service(ppack_ab_service)
     logger.info("outcomes_service_initialized", db_path=settings.outcomes_db_path)
 
     # -- Context compression engine (Phase 50) ---------------------------------
@@ -2057,6 +2079,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _outcomes_persistence is not None:
         _outcomes_persistence.close()
         logger.info("outcomes_persistence_closed")
+
+    _ppack_ab_persistence: Any = getattr(app.state, "ppack_ab_persistence", None)
+    if _ppack_ab_persistence is not None:
+        _ppack_ab_persistence.close()
+        logger.info("ppack_ab_persistence_closed")
 
     _security_store: Any = getattr(app.state, "security_scan_store", None)
     if _security_store is not None:

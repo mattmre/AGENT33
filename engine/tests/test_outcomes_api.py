@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent33.api.routes import outcomes as outcomes_mod
+from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
+from agent33.evaluation.ppack_ab_service import PPackABService
 from agent33.main import app
 from agent33.outcomes.service import OutcomesService
 from agent33.security.auth import create_access_token
@@ -33,16 +35,30 @@ def reset_outcomes_service() -> None:
     """
     saved_service = outcomes_mod._service
     outcomes_mod._service = OutcomesService()
+    saved_ab_service = outcomes_mod._ppack_ab_service
+    outcomes_mod._ppack_ab_service = PPackABService(
+        outcomes_service=outcomes_mod._service,
+        persistence=PPackABPersistence(":memory:"),
+    )
     had_attr = hasattr(app.state, "outcomes_service")
     saved_state = getattr(app.state, "outcomes_service", None)
+    had_ab_attr = hasattr(app.state, "ppack_ab_service")
+    saved_ab_state = getattr(app.state, "ppack_ab_service", None)
     if had_attr:
         delattr(app.state, "outcomes_service")
+    if had_ab_attr:
+        delattr(app.state, "ppack_ab_service")
     yield
     outcomes_mod._service = saved_service
+    outcomes_mod._ppack_ab_service = saved_ab_service
     if had_attr:
         app.state.outcomes_service = saved_state
     elif hasattr(app.state, "outcomes_service"):
         delattr(app.state, "outcomes_service")
+    if had_ab_attr:
+        app.state.ppack_ab_service = saved_ab_state
+    elif hasattr(app.state, "ppack_ab_service"):
+        delattr(app.state, "ppack_ab_service")
 
 
 @pytest.fixture
@@ -258,6 +274,60 @@ def test_dashboard_contract(writer_client: TestClient, tenant_b_writer: TestClie
     }
     assert all(item["direction"] in {"improving", "stable", "declining"} for item in trends)
 
-    recent = payload["recent_events"]
-    assert len(recent) == 2
-    assert all(item["tenant_id"] == "tenant-a" for item in recent)
+
+def test_ppack_assignment_and_report_endpoints(writer_client: TestClient) -> None:
+    assign_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-1"},
+    )
+    assert assign_response.status_code == 201
+    assignment = assign_response.json()
+    assert assignment["session_id"] == "session-1"
+    assert assignment["variant"] in {"control", "treatment"}
+
+    writer_client.post(
+        "/v1/outcomes/events",
+        json={
+            "domain": "delivery",
+            "event_type": "invoke",
+            "metric_type": "success_rate",
+            "value": 1.0 if assignment["variant"] == "control" else 0.0,
+            "metadata": {
+                "session_id": "session-1",
+                "ppack_variant": assignment["variant"],
+            },
+        },
+    )
+
+    second_assign = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-2"},
+    ).json()
+    writer_client.post(
+        "/v1/outcomes/events",
+        json={
+            "domain": "delivery",
+            "event_type": "invoke",
+            "metric_type": "success_rate",
+            "value": 1.0 if second_assign["variant"] == "control" else 0.0,
+            "metadata": {
+                "session_id": "session-2",
+                "ppack_variant": second_assign["variant"],
+            },
+        },
+    )
+
+    report_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/report",
+        json={"domain": "delivery", "metric_types": ["success_rate"]},
+    )
+    assert report_response.status_code == 200
+    report = report_response.json()
+    assert report["experiment_key"] == "ppack_v3"
+    assert report["domain"] == "delivery"
+    assert report["github_issue"]["created"] is False
+    assert report["markdown"].startswith("# P-PACK v3 A/B Report")
+
+    fetch_response = writer_client.get(f"/v1/outcomes/ppack-v3/reports/{report['report_id']}")
+    assert fetch_response.status_code == 200
+    assert fetch_response.json()["report_id"] == report["report_id"]

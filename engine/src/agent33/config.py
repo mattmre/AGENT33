@@ -255,6 +255,16 @@ class Settings(BaseSettings):
 
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
+    ppack_v3_ab_enabled: bool = True
+    ppack_v3_enabled: bool = False
+    ppack_v3_ab_experiment_key: str = "ppack_v3"
+    ppack_v3_ab_min_samples_per_variant: int = 30
+    ppack_v3_ab_regression_threshold: float = -0.05
+    ppack_v3_ab_weekly_window_days: int = 7
+    ppack_v3_ab_issue_alert_enabled: bool = False
+    ppack_v3_ab_github_owner: str = ""
+    ppack_v3_ab_github_repo: str = ""
+    ppack_v3_ab_github_token: SecretStr = SecretStr("")
 
     # Skill Packs
     pack_definitions_dir: str = "packs"
