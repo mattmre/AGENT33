@@ -6,8 +6,8 @@ Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) se
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-11`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (396 PRs merged).
+- There are no open GitHub PRs as of `2026-04-17`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (404 PRs merged).
 - POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - ARCH-AEP Loops 1-8 are COMPLETE.
 - POST-1 and POST-2 are COMPLETE on `main`; POST-3.1 and POST-3.2 are now COMPLETE.
@@ -25,13 +25,41 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 125
-- Current slice: POST-3.3 (CLI DX improvements)
-- Resume artifact: `docs/research/session125-post33-cli-dx-scope.md`
+- Active queue owner: Session 127
+- Current slice: POST-4.4 (P-PACK v3 A/B harness)
+- Resume artifact: `docs/research/session127-post44-roadmap-unblock.md`
 
 ---
 
-# Task Plan — Session 125 (Active)
+# Task Plan — Session 127 (Active)
+
+## 2026-04-17 Session 127: POST-4 Remaining Wave
+
+### Goal
+
+Remove the calendar/data blockers from the remaining POST roadmap and execute the rest of the implementation wave sequentially from fresh `origin/main` worktrees.
+
+### Session 127 Queue
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | POST-4.4 — P-PACK v3 A/B harness | in_progress |
+| T2 | POST-4.5 — P-PACK v3 behavior modifications | pending (depends on T1 validation) |
+| T3 | POST-CLUSTER — Public launch preparation | pending (depends on T2) |
+| T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (depends on T2) |
+| T5 | POST-CLUSTER — Pack marketplace web UI | pending (depends on T2) |
+| T6 | POST-CLUSTER — Community submissions | pending (depends on T2) |
+
+### Session 127 Rules
+1. One fresh worktree per slice from `origin/main`
+2. One fresh agent per slice; dispose after merge
+3. One PR per slice
+4. No later slice starts before merge + fresh-main verification
+5. The former POST-4.4 calendar/data gate is removed; implementation proceeds immediately
+
+---
+
+# Task Plan — Session 125 (Historical)
 
 ## 2026-04-11 Session 125: POST-3.3 CLI DX Improvements
 
@@ -82,7 +110,7 @@ Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentiall
 | T5 | POST-4.1 — P69b UX spec + API contract | pending (blocked on T4) |
 | T6 | POST-4.2 — SSE event schema versioning | pending (blocked on T5) |
 | T7 | POST-4.3 — P69b implementation | pending (blocked on T6) |
-| T8 | POST-4.4 — P-PACK v3 A/B harness | pending (blocked on T7 + 30-day gate) |
+| T8 | POST-4.4 — P-PACK v3 A/B harness | superseded by Session 127 active queue |
 | T9 | POST-4.5 — P-PACK v3 behavior modifications | pending (blocked on T8) |
 | T10 | POST-CLUSTER — Public launch preparation | pending (blocked on T9) |
 | T11 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (blocked on T9) |
@@ -111,7 +139,7 @@ Execute the remaining POST-3, POST-4, and post-cluster roadmap items sequentiall
 4. No next slice starts before merge + fresh-main verification
 5. POST-3.2 depends on POST-3.1; POST-3.3 and POST-3.4 depend on POST-3.2
 6. POST-4 starts only after POST-3.4 merges
-7. POST-4.4 remains blocked on POST-4.3 and the 30-day P68-Lite calendar gate
+7. POST-4.4 is no longer gated by calendar/data collection; execute it immediately after the preceding implementation slices
 
 ## Session 124 Merge State
 

@@ -6,9 +6,9 @@
 
 ---
 
-## Current State (synced 2026-04-15)
+## Current State (synced 2026-04-17)
 
-- All Phases P01-P72: COMPLETE (403 PRs merged)
+- All Phases P01-P72: COMPLETE (404 PRs merged)
 - POST-1 (Foundation & Baseline): COMPLETE
 - POST-2 (SkillsBench Competitiveness): COMPLETE
 - POST-3.1 (Pack sandbox + injection tests): COMPLETE
@@ -18,7 +18,8 @@
 - POST-4.1 (P69b UX spec + API contract): COMPLETE — PR `#399`
 - POST-4.2 (SSE event schema versioning): COMPLETE — PR `#400`
 - POST-4.3 (P69b implementation): COMPLETE — PR `#401`
-- POST-4.4 / POST-4.5: BLOCKED on the 30-day P68-Lite gate (opens `2026-05-04`)
+- POST-4.4: ACTIVE — calendar/data gate removed; implementation begins immediately in Session 127
+- POST-4.5: QUEUED — starts immediately after POST-4.4 validation
 - Session wrap/docs sync: COMPLETE — PR `#402`
 
 ## Session 126 Execution Queue
@@ -30,8 +31,8 @@
 | S2 | POST-4.1 — P69b UX spec + API contract | POST-4 | #399 | S1 merged | ✅ MERGED `fca50ab` |
 | S3 | POST-4.2 — SSE event schema versioning | POST-4 | #400 | S2 merged | ✅ MERGED `899e7b4` |
 | S4 | POST-4.3 — P69b implementation | POST-4 | #401 | S3 merged | ✅ MERGED `fd092f3` |
-| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session126-s5-ab-harness` | S4 + gate opens `2026-05-04` | BLOCKED |
-| S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session126-s6-ab-behavior` | S5 merged | BLOCKED |
+| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session127-s5-ab-harness` | S4 merged | ACTIVE |
+| S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session127-s6-ab-behavior` | S5 validated | QUEUED |
 | SX | Docs refresh + session wrap | docs | #402 | all | ✅ COMPLETE |
 
 ---
@@ -226,8 +227,8 @@ engine/packs/{pack-name}/
 
 ## S5 — POST-4.4: P-PACK v3 A/B Harness
 
-**GATE**: Cannot start until `2026-05-04` (30 days after P68-Lite merged in PR `#378` at `2026-04-04T23:50:44Z`).
-**P68-Lite monitoring**: Alert if outcomes table empty >24h.
+**Execution policy**: The prior calendar/data gate is removed. Implement immediately and use the harness itself for validation plus post-implementation monitoring.
+**P68-Lite monitoring**: Alert if outcomes table empties during rollout.
 
 **Goal**: Purpose-built A/B harness for P-PACK v3 behavioral testing.
 
@@ -239,30 +240,29 @@ engine/packs/{pack-name}/
 
 **Scope**:
 - A/B assignment logic (deterministic by user/session hash)
-- Outcome collection records in DB
+- Assignment persistence + outcome collection records in DB
 - Statistical test runner (scipy.stats)
 - Report generation (JSON + markdown)
-- 30-day calendar gate enforcement
 - Alert hook: auto-open GitHub issue if weekly run shows >5% drop
 
-**Worktree**: `worktrees/session126-s5-ab-harness` from fresh `origin/main`
-**Branch**: `session126-s5-ab-harness`
+**Worktree**: `worktrees/session127-s5-ab-harness` from fresh `origin/main`
+**Branch**: `session127-s5-ab-harness`
 
 ---
 
 ## S6 — POST-4.5: P-PACK v3 Behavior Modifications
 
-**Goal**: Apply P-PACK v3 behavior changes behind A/B gate + feature flag.
+**Goal**: Apply P-PACK v3 behavior changes behind a rollout feature flag and validate them with the POST-4.4 harness.
 
-**GATE**: S5 A/B harness must be merged AND P-PACK v3 A/B tests must pass.
+**Execution order**: Starts immediately after the POST-4.4 slice is implemented and validated in sequence.
 
 **Scope**:
 - Behavior changes to pack application/selection logic (per P-PACK v3 spec)
 - Gated behind `ppack_v3_enabled` feature flag
-- A/B regression gate in CI: `pytest tests/test_ppack_v3_ab.py` must pass
+- CI validation includes `pytest tests/test_ppack_v3_ab.py`
 
-**Worktree**: `worktrees/session126-s6-ab-behavior` from fresh `origin/main`
-**Branch**: `session126-s6-ab-behavior`
+**Worktree**: `worktrees/session127-s6-ab-behavior` from fresh `origin/main`
+**Branch**: `session127-s6-ab-behavior`
 
 ---
 
@@ -305,8 +305,8 @@ Every slice moves through these phases in order:
 | 3 | S2 POST-4.1 P69b spec | Squash via API | lint green (docs-only) |
 | 4 | S3 POST-4.2 SSE versioning | Squash via API | lint + test green |
 | 5 | S4 POST-4.3 P69b impl | Squash via API | lint + test green |
-| 6 | S5 POST-4.4 A/B harness | Squash via API (after gate opens `2026-05-04`) | lint + test green |
-| 7 | S6 POST-4.5 behavior mods | Squash via API | lint + test + A/B gate green |
+| 6 | S5 POST-4.4 A/B harness | Squash via API | lint + test green |
+| 7 | S6 POST-4.5 behavior mods | Squash via API | lint + test + `test_ppack_v3_ab.py` green |
 
 **Merge command** (avoids worktree collision):
 ```bash

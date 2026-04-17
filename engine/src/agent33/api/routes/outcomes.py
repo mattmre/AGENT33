@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import sqlite3
+from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
+from agent33.evaluation.ppack_ab_models import (
+    GitHubIssuePublishResult,
+)
+from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
+from agent33.evaluation.ppack_ab_service import PPackABService
 from agent33.outcomes.models import (
     OutcomeEventCreate,
     OutcomeMetricType,
@@ -24,6 +32,10 @@ router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 
 # Module-level fallback; replaced by lifespan via set_outcomes_service().
 _service = OutcomesService()
+_ppack_ab_service = PPackABService(
+    outcomes_service=_service,
+    persistence=PPackABPersistence(":memory:"),
+)
 
 
 def set_outcomes_service(service: OutcomesService) -> None:
@@ -32,10 +44,22 @@ def set_outcomes_service(service: OutcomesService) -> None:
     _service = service
 
 
+def set_ppack_ab_service(service: PPackABService) -> None:
+    """Swap the module-level P-PACK A/B service (called from lifespan)."""
+    global _ppack_ab_service
+    _ppack_ab_service = service
+
+
 def get_outcomes_service(request: Request) -> OutcomesService:
     """Return the outcomes service from app.state, falling back to module-level."""
     svc: OutcomesService | None = getattr(request.app.state, "outcomes_service", None)
     return svc if svc is not None else _service
+
+
+def get_ppack_ab_service(request: Request) -> PPackABService:
+    """Return the P-PACK A/B service from app.state, falling back to module-level."""
+    svc: PPackABService | None = getattr(request.app.state, "ppack_ab_service", None)
+    return svc if svc is not None else _ppack_ab_service
 
 
 def _tenant_id(request: Request) -> str:
@@ -43,6 +67,25 @@ def _tenant_id(request: Request) -> str:
     if user is None:
         return ""
     return getattr(user, "tenant_id", "")
+
+
+class PPackABAssignmentRequest(BaseModel):
+    session_id: str = Field(min_length=1)
+
+
+class PPackABReportRequest(BaseModel):
+    domain: str | None = None
+    since: datetime | None = None
+    until: datetime | None = None
+    metric_types: list[OutcomeMetricType] = Field(
+        default_factory=lambda: [
+            OutcomeMetricType.SUCCESS_RATE,
+            OutcomeMetricType.QUALITY_SCORE,
+            OutcomeMetricType.LATENCY_MS,
+            OutcomeMetricType.COST_USD,
+        ]
+    )
+    open_github_issue: bool = False
 
 
 @router.post("/events", status_code=201, dependencies=[require_scope("outcomes:write")])
@@ -186,3 +229,87 @@ async def get_pack_impact(request: Request) -> dict[str, Any]:
         )
 
     return PackImpactResponse(packs=entries).model_dump(mode="json")
+
+
+@router.post(
+    "/ppack-v3/assignments",
+    status_code=201,
+    dependencies=[require_scope("outcomes:write")],
+)
+async def assign_ppack_variant(
+    body: PPackABAssignmentRequest,
+    request: Request,
+) -> dict[str, Any]:
+    try:
+        assignment = get_ppack_ab_service(request).assign_variant(
+            tenant_id=_tenant_id(request),
+            session_id=body.session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return assignment.model_dump(mode="json")
+
+
+@router.get(
+    "/ppack-v3/assignments/{session_id}",
+    dependencies=[require_scope("outcomes:read")],
+)
+async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, Any]:
+    assignment = get_ppack_ab_service(request).get_assignment(
+        tenant_id=_tenant_id(request),
+        session_id=session_id,
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="P-PACK v3 assignment not found")
+    return assignment.model_dump(mode="json")
+
+
+@router.post(
+    "/ppack-v3/report",
+    dependencies=[require_scope("outcomes:write")],
+)
+async def generate_ppack_report(
+    body: PPackABReportRequest,
+    request: Request,
+) -> dict[str, Any]:
+    service = get_ppack_ab_service(request)
+    try:
+        if body.since is None and body.until is None:
+            report = service.generate_weekly_report(
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                metric_types=body.metric_types,
+            )
+        else:
+            report = service.generate_report(
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                since=body.since,
+                until=body.until,
+                metric_types=body.metric_types,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    issue_result = GitHubIssuePublishResult(reason="GitHub alert not requested")
+    if body.open_github_issue:
+        issue_result = await service.publish_github_issue(report)
+    payload = report.model_dump(mode="json")
+    payload["github_issue"] = issue_result.model_dump(mode="json")
+    return payload
+
+
+@router.get(
+    "/ppack-v3/reports/{report_id}",
+    dependencies=[require_scope("outcomes:read")],
+)
+async def get_ppack_report(report_id: str, request: Request) -> dict[str, Any]:
+    report = get_ppack_ab_service(request).get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="P-PACK v3 report not found")
+    return report.model_dump(mode="json")

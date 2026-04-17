@@ -1,5 +1,23 @@
 # Progress Log
 
+## 2026-04-17 (Session 127 POST-4 execution unblock)
+
+- User direction changed the roadmap policy: remove the remaining calendar/data gates and execute the rest of the development wave now, then test and monitor afterward.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s5-ab-harness` on branch `session127-s5-ab-harness` from updated `origin/main` at `a77e731`.
+- Re-audited the active roadmap and found the only remaining blockers were planning-only gate assumptions in:
+  - `docs/next-session.md`
+  - `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+  - `docs/sessions/session126-task-plan.md`
+  - `task_plan.md`
+- Mapped reusable implementation surfaces for `POST-4.4` / `POST-4.5`:
+  - `agent33.outcomes.*` already provides SQLite-backed outcome persistence
+  - `agent33.api.routes.agents` already records `session_id` into outcome metadata
+  - `agent33.packs.registry` already applies session-scoped packs deterministically
+  - `agent33.evaluation.*` already provides experiment, benchmark, regression, and report patterns
+- Wrote `docs/research/session127-post44-roadmap-unblock.md` to record the new execution posture and the implementation map.
+- Updated the roadmap/task artifacts so `POST-4.4` is now the active slice and `POST-4.5` is queued immediately behind it.
+- Next step: implement the `POST-4.4` harness in this worktree, validate it, then roll directly into `POST-4.5`.
+
 ## 2026-04-15 (Session 127 PR #403 maintenance merge)
 
 - Audited the only open PR, `#403`, which bumped `actions/github-script` from `v8` to `v9` in `.github/workflows/ci.yml` and `.github/workflows/benchmarks-weekly.yml`.
@@ -19,7 +37,7 @@
   - `PYTHONPATH=src python -m pytest tests/test_p69b_pause_resume.py -q --no-cov`
 - Functional CI for `#403` was green, but repo-level `Dependency CVE Scan` and `Container Image Scan` still required an admin override to merge.
 - Cumulative PRs on `main`: 403.
-- Roadmap posture is unchanged: `POST-4.4` and `POST-4.5` remain blocked on the 30-day P68-Lite gate. See `docs/research/session127-pr403-github-script-v9-audit.md` for the maintenance audit trail.
+- Roadmap posture at the end of the maintenance merge was still blocked on the 30-day P68-Lite gate; that posture was later superseded by the 2026-04-17 unblock decision. See `docs/research/session127-pr403-github-script-v9-audit.md` for the maintenance audit trail.
 
 ## 2026-04-11 (Session 126 POST-4.1 → POST-4.3 merged)
 
@@ -30,8 +48,7 @@
 - **PR #400** (`899e7b4`) — POST-4.2: SSE event schema versioning. Added `schema_version: int = 1` to `WorkflowEvent`, `CURRENT_SCHEMA_VERSION`, `SchemaVersionMismatchError`, `check_schema_version()`. 70 tests (31 new). ruff + mypy clean. MERGED.
 - **PR #401** (`fd092f3`) — POST-4.3: P69b tool approval pause/resume. `PausedInvocation` model, `P69bService` (in-memory, feature-flagged), 4 REST endpoints (`POST /pause`, `POST /resume`, `GET /pending-approvals`, `GET /approvals/pending`), HMAC-SHA256 nonce, headless env var, `/tmp/agent33_disable_p69b` kill switch. 34 tests. ruff + mypy clean. MERGED.
 - Cumulative PRs on main: 401.
-- **BLOCKED**: POST-4.4 (S5) requires 30-day P68-Lite data gate. POST-4.5 (S6) blocked on S5.
-- Next session: POST-4.4 A/B harness (earliest start: 30 days after P68-Lite activation).
+- At the time Session 126 closed, POST-4.4 and POST-4.5 were still treated as gate-blocked. That assumption is now superseded by the 2026-04-17 execution-policy update.
 
 ## 2026-04-11 (Session 125 POST-3.3 in progress)
 

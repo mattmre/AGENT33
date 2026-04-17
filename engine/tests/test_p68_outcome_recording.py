@@ -23,6 +23,8 @@ from agent33.agents.definition import AgentDefinition, AgentRole
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentResult, IterativeAgentResult
 from agent33.api.routes.agents import _record_outcome_safe
+from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
+from agent33.evaluation.ppack_ab_service import PPackABService
 from agent33.main import app
 from agent33.outcomes.models import OutcomeMetricType
 from agent33.outcomes.service import OutcomesService
@@ -91,12 +93,22 @@ def invoke_client(outcomes_service: OutcomesService) -> TestClient:
     registry = _make_registry()
     app.state.agent_registry = registry
     app.state.outcomes_service = outcomes_service
+    app.state.ppack_ab_service = PPackABService(
+        outcomes_service=outcomes_service,
+        persistence=PPackABPersistence(":memory:"),
+    )
     # model_router needed for iterative; install a mock to avoid 503
     app.state.model_router = MagicMock()
-    client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
+    client = TestClient(
+        app,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Session-ID": "test-session-123",
+        },
+    )
     yield client  # type: ignore[misc]
     # Cleanup app.state attributes we set
-    for attr in ("agent_registry", "outcomes_service", "model_router"):
+    for attr in ("agent_registry", "outcomes_service", "ppack_ab_service", "model_router"):
         if hasattr(app.state, attr):
             delattr(app.state, attr)
 
@@ -171,6 +183,8 @@ def test_invoke_records_success_and_latency(
     assert success_events[0].metadata["termination"] == "success"
     assert success_events[0].metadata["model"] == "test-model"
     assert success_events[0].metadata["tokens"] == 42
+    assert success_events[0].metadata["ppack_variant"] in {"control", "treatment"}
+    assert success_events[0].metadata["experiment_key"] == "ppack_v3"
     assert success_events[0].domain == "test-agent"
     assert success_events[0].event_type == "invoke"
 
@@ -178,6 +192,7 @@ def test_invoke_records_success_and_latency(
     assert latency_events[0].value >= 0  # mocked calls may complete in 0ms
     assert isinstance(latency_events[0].value, float)
     assert latency_events[0].metadata["agent"] == "test-agent"
+    assert latency_events[0].metadata["ppack_variant"] in {"control", "treatment"}
 
 
 # ---------------------------------------------------------------------------
