@@ -162,10 +162,6 @@ Latest merged implementation PR:
 
 - `#406` — `POST-4.5: apply P-PACK v3 behavior rollout`
 
-Release notes snapshot:
-
-- [RELEASE_NOTES_2026-01-16.md](RELEASE_NOTES_2026-01-16.md)
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
