@@ -40,3 +40,20 @@ docker compose up -d frontend
 Frontend runs at `http://localhost:3000`.
 
 Runtime API URL is configured via `API_BASE_URL` env var on the frontend container.
+
+For the normal local stack, start the full runtime from `engine/`:
+
+```bash
+docker compose up -d
+```
+
+Then:
+
+- open `http://localhost:3000`
+- sign in with local bootstrap credentials from `.env.example`
+- use the domain workspace to access agents, workflows, memory, reviews, evaluations, releases, and dashboard surfaces
+
+See:
+
+- `../docs/getting-started.md`
+- `../docs/ONBOARDING.md`

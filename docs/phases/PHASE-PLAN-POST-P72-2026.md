@@ -14,18 +14,17 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-1 — Foundation & Baseline | Complete | PRs `#384`-`#387` |
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
-| POST-4 — Interruption & Self-Improvement | Active | `POST-4.1`-`POST-4.4` complete in PRs `#399`-`#405`; `POST-4.5` is now the active implementation slice |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Not started | Follows POST-4 completion and broader registry maturity |
+| POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation is the current slice |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | POST-4.5 — P-PACK v3 behavior modifications | Active | Source-aware session pack precedence behind `ppack_v3_enabled`, evaluated via the merged A/B harness |
-| 2 | POST-CLUSTER — Public launch preparation | Pending | Starts after POST-4.5 |
-| 3 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after POST-4.5 |
-| 4 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after POST-4.5 |
-| 5 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
+| 1 | POST-CLUSTER — Public launch preparation | Active | Root README product page plus onboarding/getting-started/release-readiness docs |
+| 2 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after launch-prep docs land |
+| 3 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after P-ENV v2 |
+| 4 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
 
 ## Parallel Follow-up Work During POST-4 Execution
 
@@ -63,18 +62,18 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - POST-3.4 — 5 seed packs (PR `#398`)
 - Exit gate: live registry support, installable seed packs, and pack-signing enforcement landed on `main`
 
-### POST-4 — Interruption & Self-Improvement (Active)
+### POST-4 — Interruption & Self-Improvement (Complete)
 
 - POST-4.1 — P69b UX spec + API contract document (**complete** in PR `#399`)
 - POST-4.2 — SSE event schema versioning, strict rejection model (**complete** in PR `#400`)
 - POST-4.3 — P69b implementation (**complete** in PR `#401`)
 - POST-4.4 — P-PACK v3 A/B harness (**complete** in PR `#405`)
-- POST-4.5 — P-PACK v3 behavior modifications (**active** in worktree `session127-s6-post45`)
+- POST-4.5 — P-PACK v3 behavior modifications (**complete** in PR `#406`)
 - Completion criteria: P69b end-to-end tested; P-PACK v3 behavioral A/B tests passing; both behind feature flags
 
-### POST-CLUSTER — Distribution & Ecosystem Growth
+### POST-CLUSTER — Distribution & Ecosystem Growth (Active)
 
-- Public launch preparation (README as product page)
+- Public launch preparation (README as product page, onboarding/getting-started/release-checklist docs) (**active**)
 - P-ENV v2 auto-install + automated model download
 - Pack marketplace web UI
 - Community submissions (only after pack signing + approval queue proven)
