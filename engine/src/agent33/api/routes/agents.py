@@ -30,6 +30,7 @@ from agent33.agents.effort import AgentEffort, AgentEffortRouter
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
+from agent33.evaluation.ppack_ab_models import PPackABAssignment
 from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
 from agent33.observability.effort_telemetry import (
@@ -287,6 +288,55 @@ def _get_ppack_ab_service(request: Request) -> PPackABService | None:
     return getattr(request.app.state, "ppack_ab_service", None)
 
 
+def _resolve_ppack_assignment(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> PPackABAssignment | None:
+    """Resolve and cache the active P-PACK assignment for the current request."""
+    if not session_id:
+        return None
+    cached_assignment = getattr(request.state, "ppack_assignment", None)
+    cached_tenant_id = getattr(request.state, "ppack_assignment_tenant_id", "")
+    cached_session_id = getattr(request.state, "ppack_assignment_session_id", "")
+    if (
+        isinstance(cached_assignment, PPackABAssignment)
+        and cached_tenant_id == tenant_id
+        and cached_session_id == session_id
+    ):
+        return cached_assignment
+
+    ab_service = _get_ppack_ab_service(request)
+    if ab_service is None:
+        return None
+    try:
+        assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
+    except Exception:
+        logger.warning("ppack_variant_assignment_failed", exc_info=True)
+        return None
+
+    request.state.ppack_assignment = assignment
+    request.state.ppack_assignment_tenant_id = tenant_id
+    request.state.ppack_assignment_session_id = session_id
+    return assignment
+
+
+def _resolve_ppack_variant(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> str:
+    """Resolve the active P-PACK variant for runtime behavior selection."""
+    assignment = _resolve_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=session_id,
+    )
+    return assignment.variant.value if assignment is not None else ""
+
+
 def _build_outcome_metadata(
     request: Request,
     *,
@@ -297,15 +347,14 @@ def _build_outcome_metadata(
     payload = dict(metadata or {})
     if session_id:
         payload.setdefault("session_id", session_id)
-        ab_service = _get_ppack_ab_service(request)
-        if ab_service is not None:
-            try:
-                assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
-            except Exception:
-                logger.warning("ppack_variant_assignment_failed", exc_info=True)
-            else:
-                payload.setdefault("experiment_key", assignment.experiment_key)
-                payload.setdefault("ppack_variant", assignment.variant.value)
+        assignment = _resolve_ppack_assignment(
+            request,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
+        if assignment is not None:
+            payload.setdefault("experiment_key", assignment.experiment_key)
+            payload.setdefault("ppack_variant", assignment.variant.value)
     return payload
 
 
@@ -686,13 +735,19 @@ async def invoke_agent(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector = getattr(request.app.state, "metrics_collector", None)
     pack_registry = getattr(request.app.state, "pack_registry", None)
+    invoke_session_id = _resolve_runtime_session_id(request)
+    invoke_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=tenant_id,
+        session_id=invoke_session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
         model=body.model or _default_agent_model(),
         temperature=body.temperature,
-        session_id=_resolve_runtime_session_id(request),
+        session_id=invoke_session_id,
         invocation_mode="invoke",
         effort=body.effort,
         effort_router=effort_router,
@@ -706,11 +761,11 @@ async def invoke_agent(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector,
         pack_registry=pack_registry,
+        ppack_variant=invoke_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
     invoke_start = time.monotonic()
-    invoke_session_id = _resolve_runtime_session_id(request)
 
     try:
         result = await runtime.invoke(body.inputs)
@@ -917,6 +972,11 @@ async def invoke_agent_iterative(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
     pack_registry_iter = getattr(request.app.state, "pack_registry", None)
+    iterative_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -944,6 +1004,7 @@ async def invoke_agent_iterative(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector_iter,
         pack_registry=pack_registry_iter,
+        ppack_variant=iterative_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
@@ -1142,6 +1203,11 @@ async def invoke_agent_iterative_stream(
     cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
     pack_registry_stream = getattr(request.app.state, "pack_registry", None)
+    stream_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -1170,6 +1236,7 @@ async def invoke_agent_iterative_stream(
         cost_tracker=cost_tracker_stream,
         metrics_collector=metrics_collector_stream,
         pack_registry=pack_registry_stream,
+        ppack_variant=stream_ppack_variant,
     )
 
     outcomes_svc_stream = _get_outcomes_service(request)

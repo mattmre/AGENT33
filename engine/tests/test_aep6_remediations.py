@@ -82,7 +82,10 @@ class TestPackAddendaInjection:
         result = await runtime.invoke({"task": "hello"})
 
         # The pack registry was called with our session id
-        mock_registry.get_session_prompt_addenda.assert_called_once_with("sess-001")
+        mock_registry.get_session_prompt_addenda.assert_called_once_with(
+            "sess-001",
+            ppack_variant="",
+        )
 
         # Verify the addenda ended up in the LLM call
         call_args = router.providers["mock"].complete.call_args

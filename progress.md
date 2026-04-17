@@ -1,5 +1,27 @@
 # Progress Log
 
+## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
+
+- Verified `main` advanced to `b591454` after merging PR `#405` (`POST-4.4: add P-PACK v3 A/B harness`).
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s6-post45` on branch `session127-s6-post45` from that merged `main`.
+- Locked the POST-4.5 behavior contract to a source-aware session pack resolution model:
+  - control sessions keep the existing name-sorted P-PACK v1 behavior
+  - treatment sessions under `ppack_v3_enabled` apply workflow-shared packs before explicit session packs
+  - activation order is preserved within the shared and explicit groups
+- Implemented the behavior in:
+  - `engine/src/agent33/packs/registry.py`
+  - `engine/src/agent33/packs/sharing.py`
+  - `engine/src/agent33/agents/runtime.py`
+  - `engine/src/agent33/api/routes/agents.py`
+  - `engine/src/agent33/main.py`
+- Added regression coverage in `engine/tests/test_ppack_v3_ab.py` and updated runtime expectations in `engine/tests/test_aep6_remediations.py`.
+- Focused validation is green:
+  - `pytest --no-cov tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_ppack_v3_ab.py tests/test_p68_outcome_recording.py tests/test_aep6_remediations.py -q`
+  - `ruff check ...`
+  - `ruff format --check ...`
+  - `mypy src/agent33/packs/registry.py src/agent33/packs/sharing.py src/agent33/agents/runtime.py src/agent33/api/routes/agents.py`
+- Next step: write the POST-4.5 research/spec memo, open the PR, and move into the normal CI/review loop.
+
 ## 2026-04-17 (Session 127 POST-4 execution unblock)
 
 - User direction changed the roadmap policy: remove the remaining calendar/data gates and execute the rest of the development wave now, then test and monitor afterward.
