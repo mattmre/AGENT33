@@ -287,6 +287,26 @@ def _get_ppack_ab_service(request: Request) -> PPackABService | None:
     return getattr(request.app.state, "ppack_ab_service", None)
 
 
+def _resolve_ppack_variant(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> str:
+    """Resolve the active P-PACK variant for runtime behavior selection."""
+    if not session_id:
+        return ""
+    ab_service = _get_ppack_ab_service(request)
+    if ab_service is None:
+        return ""
+    try:
+        assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
+    except Exception:
+        logger.warning("ppack_variant_assignment_failed", exc_info=True)
+        return ""
+    return assignment.variant.value
+
+
 def _build_outcome_metadata(
     request: Request,
     *,
@@ -686,13 +706,19 @@ async def invoke_agent(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector = getattr(request.app.state, "metrics_collector", None)
     pack_registry = getattr(request.app.state, "pack_registry", None)
+    invoke_session_id = _resolve_runtime_session_id(request)
+    invoke_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=tenant_id,
+        session_id=invoke_session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
         model=body.model or _default_agent_model(),
         temperature=body.temperature,
-        session_id=_resolve_runtime_session_id(request),
+        session_id=invoke_session_id,
         invocation_mode="invoke",
         effort=body.effort,
         effort_router=effort_router,
@@ -706,11 +732,11 @@ async def invoke_agent(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector,
         pack_registry=pack_registry,
+        ppack_variant=invoke_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
     invoke_start = time.monotonic()
-    invoke_session_id = _resolve_runtime_session_id(request)
 
     try:
         result = await runtime.invoke(body.inputs)
@@ -917,6 +943,11 @@ async def invoke_agent_iterative(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
     pack_registry_iter = getattr(request.app.state, "pack_registry", None)
+    iterative_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -944,6 +975,7 @@ async def invoke_agent_iterative(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector_iter,
         pack_registry=pack_registry_iter,
+        ppack_variant=iterative_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
@@ -1142,6 +1174,11 @@ async def invoke_agent_iterative_stream(
     cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
     pack_registry_stream = getattr(request.app.state, "pack_registry", None)
+    stream_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -1170,6 +1207,7 @@ async def invoke_agent_iterative_stream(
         cost_tracker=cost_tracker_stream,
         metrics_collector=metrics_collector_stream,
         pack_registry=pack_registry_stream,
+        ppack_variant=stream_ppack_variant,
     )
 
     outcomes_svc_stream = _get_outcomes_service(request)

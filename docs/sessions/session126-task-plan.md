@@ -18,8 +18,8 @@
 - POST-4.1 (P69b UX spec + API contract): COMPLETE — PR `#399`
 - POST-4.2 (SSE event schema versioning): COMPLETE — PR `#400`
 - POST-4.3 (P69b implementation): COMPLETE — PR `#401`
-- POST-4.4: ACTIVE — calendar/data gate removed; implementation begins immediately in Session 127
-- POST-4.5: QUEUED — starts immediately after POST-4.4 validation
+- POST-4.4: COMPLETE — merged as PR `#405`
+- POST-4.5: ACTIVE — implementation in progress in Session 127 worktree `session127-s6-post45`
 - Session wrap/docs sync: COMPLETE — PR `#402`
 
 ## Session 126 Execution Queue
@@ -31,8 +31,8 @@
 | S2 | POST-4.1 — P69b UX spec + API contract | POST-4 | #399 | S1 merged | ✅ MERGED `fca50ab` |
 | S3 | POST-4.2 — SSE event schema versioning | POST-4 | #400 | S2 merged | ✅ MERGED `899e7b4` |
 | S4 | POST-4.3 — P69b implementation | POST-4 | #401 | S3 merged | ✅ MERGED `fd092f3` |
-| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session127-s5-ab-harness` | S4 merged | ACTIVE |
-| S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session127-s6-ab-behavior` | S5 validated | QUEUED |
+| S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session127-s5-ab-harness` | S4 merged | ✅ MERGED `b591454` |
+| S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session127-s6-post45` | S5 merged | ACTIVE |
 | SX | Docs refresh + session wrap | docs | #402 | all | ✅ COMPLETE |
 
 ---

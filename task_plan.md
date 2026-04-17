@@ -26,8 +26,8 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: Session 127
-- Current slice: POST-4.4 (P-PACK v3 A/B harness)
-- Resume artifact: `docs/research/session127-post44-roadmap-unblock.md`
+- Current slice: POST-4.5 (P-PACK v3 behavior modifications)
+- Resume artifact: `docs/research/session127-post45-ppack-v3-behavior.md`
 
 ---
 
@@ -43,8 +43,8 @@ Remove the calendar/data blockers from the remaining POST roadmap and execute th
 
 | Task | Item | Status |
 |---|---|---|
-| T1 | POST-4.4 — P-PACK v3 A/B harness | in_progress |
-| T2 | POST-4.5 — P-PACK v3 behavior modifications | pending (depends on T1 validation) |
+| T1 | POST-4.4 — P-PACK v3 A/B harness | complete (merged as PR `#405`) |
+| T2 | POST-4.5 — P-PACK v3 behavior modifications | in_progress |
 | T3 | POST-CLUSTER — Public launch preparation | pending (depends on T2) |
 | T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (depends on T2) |
 | T5 | POST-CLUSTER — Pack marketplace web UI | pending (depends on T2) |

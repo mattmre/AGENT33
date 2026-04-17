@@ -14,19 +14,18 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-1 — Foundation & Baseline | Complete | PRs `#384`-`#387` |
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
-| POST-4 — Interruption & Self-Improvement | Active | `POST-4.1`-`POST-4.3` complete in PRs `#399`-`#401`; `POST-4.4` is now the active implementation slice and `POST-4.5` follows immediately after validation |
+| POST-4 — Interruption & Self-Improvement | Active | `POST-4.1`-`POST-4.4` complete in PRs `#399`-`#405`; `POST-4.5` is now the active implementation slice |
 | POST-CLUSTER — Distribution & Ecosystem Growth | Not started | Follows POST-4 completion and broader registry maturity |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | POST-4.4 — P-PACK v3 A/B harness | Active | Calendar/data gate removed; implement immediately from fresh `origin/main` |
-| 2 | POST-4.5 — P-PACK v3 behavior modifications | Queued | Starts immediately after POST-4.4 validation |
-| 3 | POST-CLUSTER — Public launch preparation | Pending | Starts after POST-4.5 |
-| 4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after POST-4.5 |
-| 5 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after POST-4.5 |
-| 6 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
+| 1 | POST-4.5 — P-PACK v3 behavior modifications | Active | Source-aware session pack precedence behind `ppack_v3_enabled`, evaluated via the merged A/B harness |
+| 2 | POST-CLUSTER — Public launch preparation | Pending | Starts after POST-4.5 |
+| 3 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after POST-4.5 |
+| 4 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after POST-4.5 |
+| 5 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
 
 ## Parallel Follow-up Work During POST-4 Execution
 
@@ -69,8 +68,8 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - POST-4.1 — P69b UX spec + API contract document (**complete** in PR `#399`)
 - POST-4.2 — SSE event schema versioning, strict rejection model (**complete** in PR `#400`)
 - POST-4.3 — P69b implementation (**complete** in PR `#401`)
-- POST-4.4 — P-PACK v3 A/B harness (**active**; operator removed the calendar/data gate and approved immediate execution)
-- POST-4.5 — P-PACK v3 behavior modifications (**queued immediately after POST-4.4 validation**)
+- POST-4.4 — P-PACK v3 A/B harness (**complete** in PR `#405`)
+- POST-4.5 — P-PACK v3 behavior modifications (**active** in worktree `session127-s6-post45`)
 - Completion criteria: P69b end-to-end tested; P-PACK v3 behavioral A/B tests passing; both behind feature flags
 
 ### POST-CLUSTER — Distribution & Ecosystem Growth

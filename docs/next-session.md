@@ -1,15 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-04-17 (POST-4 execution unblock sync)
+Last updated: 2026-04-17 (POST-4.5 implementation in progress)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#404` (`docs(session127): sync post-403 maintenance state`)
-- **Latest merged implementation PR**: `#401` (`feat(p69b): POST-4.3 P69b tool approval pause/resume`)
-- **Latest commit on main**: `a77e731`
-- **Cumulative PRs merged**: 404
+- **Latest merged PR**: `#405` (`POST-4.4: add P-PACK v3 A/B harness`)
+- **Latest merged implementation PR**: `#405` (`POST-4.4: add P-PACK v3 A/B harness`)
+- **Latest commit on main**: `b591454`
+- **Cumulative PRs merged**: 405
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
@@ -17,8 +17,8 @@ Last updated: 2026-04-17 (POST-4 execution unblock sync)
 - **POST-4.1 (P69b UX spec + API contract)**: COMPLETE — PR `#399`
 - **POST-4.2 (SSE event schema versioning)**: COMPLETE — PR `#400`
 - **POST-4.3 (P69b implementation)**: COMPLETE — PR `#401`
-- **POST-4.4 (P-PACK v3 A/B harness)**: ACTIVE — calendar/data gate removed; implementation should proceed immediately
-- **POST-4.5 (P-PACK v3 behavior mods)**: QUEUED — starts immediately after the POST-4.4 slice is validated
+- **POST-4.4 (P-PACK v3 A/B harness)**: COMPLETE — PR `#405`
+- **POST-4.5 (P-PACK v3 behavior mods)**: ACTIVE — implementation is in progress on `session127-s6-post45`
 - **POST-CLUSTER (Distribution & Ecosystem Growth)**: NOT STARTED
 - **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **Security scan posture**: `Dependency CVE Scan` + `Container Image Scan` still fail on the current baseline. Functional CI for `#403` was green, but those repo-level scans still required an admin override for merge.
@@ -29,6 +29,7 @@ Last updated: 2026-04-17 (POST-4 execution unblock sync)
 | PR | Commit | Slice | Description |
 |----|--------|-------|-------------|
 | #403 | `87c6637` | maintenance | `actions/github-script` v9 bump, plus a formatting-only unblock for inherited lint drift on the PR branch |
+| #405 | `b591454` | POST-4.4 | deterministic P-PACK v3 A/B assignment, persistence, reporting, and GitHub alert integration |
 
 Additional maintenance completed during the PR review:
 
@@ -45,27 +46,22 @@ Additional maintenance completed during the PR review:
 
 ## Next Session Priority Queue
 
-### Immediate: POST-4.4 A/B Harness
+### Immediate: POST-4.5 behavior rollout
 
-The prior 30-day calendar/data gate has been explicitly removed. `POST-4.4` is the active implementation slice.
+`POST-4.4` is merged. The active slice is now `POST-4.5`, using the merged A/B harness to compare control vs treatment behavior.
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | POST-4.4 — P-PACK v3 A/B harness | ACTIVE |
-| T2 | POST-4.5 — P-PACK v3 behavior mods | QUEUED after T1 |
+| T1 | POST-4.5 — P-PACK v3 behavior mods | ACTIVE |
+| T2 | POST-CLUSTER — Public launch preparation | QUEUED after T1 |
 
-**POST-4.4 scope**:
-- A/B assignment logic (deterministic by user/session hash)
-- Assignment persistence + outcome collection records in DB
-- Statistical test runner (`scipy.stats`): 95% confidence, `n>=30`, `-5%` regression threshold, Bonferroni correction
-- Report generation (JSON + markdown)
-- Alert hook: auto-open GitHub issue if weekly run shows `>5%` drop
-- Worktree: `worktrees/session127-s5-ab-harness`, branch `session127-s5-ab-harness`
-
-**POST-4.5 scope** (next slice after POST-4.4 validation):
-- Behavior changes to pack application/selection logic (per P-PACK v3 spec)
-- Gated behind `ppack_v3_enabled` feature flag
+**POST-4.5 scope**:
+- Keep control sessions on the existing name-sorted P-PACK v1 behavior
+- Route treatment sessions to source-aware session pack resolution when `ppack_v3_enabled` is on
+- Apply workflow-shared packs before explicit session-enabled packs, preserving activation order within each source group
+- Thread the assigned A/B variant into `AgentRuntime` so prompt addenda and tool-config narrowing follow the correct treatment/control path
 - CI validation includes `pytest tests/test_ppack_v3_ab.py`
+- Worktree: `worktrees/session127-s6-post45`, branch `session127-s6-post45`
 
 ### Secondary Follow-up Work
 
@@ -79,6 +75,7 @@ The prior 30-day calendar/data gate has been explicitly removed. `POST-4.4` is t
 - `docs/phases/PHASE-PLAN-POST-P72-2026.md` — current POST-P72 roadmap
 - `docs/sessions/session126-task-plan.md` — authoritative Session 126 queue for `POST-4.4` / `POST-4.5`
 - `docs/research/session127-post44-roadmap-unblock.md` — rationale and implementation posture for removing the calendar/data gate
+- `docs/research/session127-post45-ppack-v3-behavior.md` — POST-4.5 behavior contract and source-precedence rollout notes
 - `docs/research/session127-pr403-github-script-v9-audit.md` — maintenance audit for PR `#403`
 - `docs/research/session126-p69b-ux-spec.md` — P69b UX spec
 - `docs/research/session126-p69b-api-contract.md` — P69b API contract

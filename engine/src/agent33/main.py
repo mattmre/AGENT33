@@ -881,6 +881,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         skill_registry=skill_registry,
         marketplace=pack_marketplace,
         trust_policy_manager=pack_trust_manager,
+        ppack_v3_enabled=settings.ppack_v3_enabled,
     )
     pack_rollback_manager = PackRollbackManager(
         pack_registry,
