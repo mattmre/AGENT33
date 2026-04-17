@@ -360,10 +360,14 @@ class PPackABService:
         treatment_n = len(treatment_values)
         standard_error_sq = (control_variance / control_n) + (treatment_variance / treatment_n)
         if standard_error_sq <= 0:
-            return 0.0 if not math.isclose(
-                statistics.fmean(control_values),
-                statistics.fmean(treatment_values),
-            ) else 1.0
+            return (
+                0.0
+                if not math.isclose(
+                    statistics.fmean(control_values),
+                    statistics.fmean(treatment_values),
+                )
+                else 1.0
+            )
         t_stat = abs(
             statistics.fmean(control_values) - statistics.fmean(treatment_values)
         ) / math.sqrt(standard_error_sq)

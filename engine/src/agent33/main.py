@@ -1931,7 +1931,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     outcomes_persistence = OutcomePersistence(Path(settings.outcomes_db_path))
     outcomes_service = OutcomesService(persistence=outcomes_persistence)
-    ppack_ab_persistence = PPackABPersistence(settings.outcomes_db_path)
+    ppack_ab_persistence = PPackABPersistence(settings.ppack_v3_ab_db_path)
     ppack_ab_service = PPackABService(
         outcomes_service=outcomes_service,
         persistence=ppack_ab_persistence,
@@ -1955,6 +1955,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     outcomes.set_outcomes_service(outcomes_service)
     outcomes.set_ppack_ab_service(ppack_ab_service)
     logger.info("outcomes_service_initialized", db_path=settings.outcomes_db_path)
+    logger.info("ppack_ab_service_initialized", db_path=settings.ppack_v3_ab_db_path)
 
     # -- Context compression engine (Phase 50) ---------------------------------
     context_compressor = None

@@ -255,6 +255,7 @@ class Settings(BaseSettings):
 
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
+    ppack_v3_ab_db_path: str = "var/ppack_ab.db"
     ppack_v3_ab_enabled: bool = True
     ppack_v3_enabled: bool = False
     ppack_v3_ab_experiment_key: str = "ppack_v3"

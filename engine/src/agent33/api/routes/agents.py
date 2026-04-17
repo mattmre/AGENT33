@@ -1220,19 +1220,19 @@ async def invoke_agent_iterative_stream(
                         event_type="invoke_iterative_stream",
                         metric_type=OutcomeMetricType.SUCCESS_RATE,
                         value=1.0,
-                            metadata=_build_outcome_metadata(
-                                request,
-                                tenant_id=stream_tenant_id,
-                                session_id=_resolve_runtime_session_id(request),
-                                metadata={
-                                    "iterations": event.iteration,
-                                    "termination": completion_data.get(
-                                        "termination_reason",
-                                        "complete",
-                                    ),
-                                },
-                            ),
-                        )
+                        metadata=_build_outcome_metadata(
+                            request,
+                            tenant_id=stream_tenant_id,
+                            session_id=_resolve_runtime_session_id(request),
+                            metadata={
+                                "iterations": event.iteration,
+                                "termination": completion_data.get(
+                                    "termination_reason",
+                                    "complete",
+                                ),
+                            },
+                        ),
+                    )
                     _record_outcome_safe(
                         outcomes_svc_stream,
                         tenant_id=stream_tenant_id,
