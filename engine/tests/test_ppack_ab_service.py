@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
+import httpx
+import pytest
 
 from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
-from agent33.evaluation.ppack_ab_service import PPackABService
+from agent33.evaluation.ppack_ab_service import GitHubIssueAlertConfig, PPackABService
 from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
 from agent33.outcomes.service import OutcomesService
 
@@ -78,3 +82,30 @@ def test_generate_report_detects_significant_regression() -> None:
     assert comparison.regression_detected is True
     assert comparison.statistically_significant is True
     assert comparison.directional_delta_pct <= -0.05
+
+
+@pytest.mark.asyncio
+async def test_publish_github_issue_returns_reason_on_http_error() -> None:
+    service = PPackABService(
+        outcomes_service=OutcomesService(),
+        persistence=PPackABPersistence(":memory:"),
+        alert_config=GitHubIssueAlertConfig(
+            enabled=True,
+            owner="mattmre",
+            repo="AGENT33",
+            token="test-token",
+        ),
+    )
+    report = service.generate_weekly_report(
+        tenant_id="tenant-a",
+        metric_types=[OutcomeMetricType.SUCCESS_RATE],
+    )
+    report.overall_regression = True
+    with patch(
+        "httpx.AsyncClient.post",
+        new=AsyncMock(side_effect=httpx.ConnectError("boom")),
+    ):
+        result = await service.publish_github_issue(report)
+    assert result.attempted is True
+    assert result.created is False
+    assert "HTTP error" in result.reason

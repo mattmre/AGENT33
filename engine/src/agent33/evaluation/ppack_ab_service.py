@@ -8,6 +8,7 @@ import math
 import statistics
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from statistics import NormalDist
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,14 @@ from agent33.outcomes.models import OutcomeEvent, OutcomeMetricType
 if TYPE_CHECKING:
     from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
     from agent33.outcomes.service import OutcomesService
+
+
+@lru_cache(maxsize=1)
+def _load_scipy_stats() -> Any | None:
+    try:
+        return importlib.import_module("scipy.stats")
+    except ModuleNotFoundError:
+        return None
 
 
 @dataclass(slots=True)
@@ -222,22 +231,34 @@ class PPackABService:
             "Automated weekly regression alert for the P-PACK v3 A/B harness.\n\n"
             f"{report.markdown}\n"
         )
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"https://api.github.com/repos/{self._alert_config.owner}/{self._alert_config.repo}/issues",
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {self._alert_config.token}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-                json={"title": title, "body": body},
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"https://api.github.com/repos/{self._alert_config.owner}/{self._alert_config.repo}/issues",
+                    headers={
+                        "Accept": "application/vnd.github+json",
+                        "Authorization": f"Bearer {self._alert_config.token}",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json={"title": title, "body": body},
+                )
+        except httpx.HTTPError as exc:
+            return GitHubIssuePublishResult(
+                attempted=True,
+                reason=f"GitHub issue creation failed due to HTTP error: {exc}",
             )
         if response.status_code >= 300:
             return GitHubIssuePublishResult(
                 attempted=True,
                 reason=f"GitHub issue creation failed: {response.status_code}",
             )
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            return GitHubIssuePublishResult(
+                attempted=True,
+                reason=f"GitHub issue creation failed due to invalid JSON response: {exc}",
+            )
         return GitHubIssuePublishResult(
             attempted=True,
             created=True,
@@ -349,7 +370,7 @@ class PPackABService:
     def _welch_ttest(self, control_values: list[float], treatment_values: list[float]) -> float:
         if len(control_values) < 2 or len(treatment_values) < 2:
             return 1.0
-        scipy_stats = self._load_scipy_stats()
+        scipy_stats = _load_scipy_stats()
         if scipy_stats is not None:
             result = scipy_stats.ttest_ind(control_values, treatment_values, equal_var=False)
             p_value = float(result.pvalue)
@@ -372,9 +393,3 @@ class PPackABService:
             statistics.fmean(control_values) - statistics.fmean(treatment_values)
         ) / math.sqrt(standard_error_sq)
         return 2 * (1 - NormalDist().cdf(t_stat))
-
-    def _load_scipy_stats(self) -> Any | None:
-        try:
-            return importlib.import_module("scipy.stats")
-        except ModuleNotFoundError:
-            return None

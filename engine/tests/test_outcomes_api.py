@@ -325,9 +325,22 @@ def test_ppack_assignment_and_report_endpoints(writer_client: TestClient) -> Non
     report = report_response.json()
     assert report["experiment_key"] == "ppack_v3"
     assert report["domain"] == "delivery"
+    assert report["since"] is not None
+    assert report["until"] is not None
     assert report["github_issue"]["created"] is False
     assert report["markdown"].startswith("# P-PACK v3 A/B Report")
 
     fetch_response = writer_client.get(f"/v1/outcomes/ppack-v3/reports/{report['report_id']}")
     assert fetch_response.status_code == 200
     assert fetch_response.json()["report_id"] == report["report_id"]
+
+
+def test_ppack_report_endpoint_requires_write_scope(
+    reader_client: TestClient,
+) -> None:
+    response = reader_client.post(
+        "/v1/outcomes/ppack-v3/report",
+        json={"domain": "delivery", "metric_types": ["success_rate"]},
+    )
+    assert response.status_code == 403
+    assert "outcomes:write" in response.json()["detail"]

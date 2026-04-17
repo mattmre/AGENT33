@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
@@ -267,7 +268,7 @@ async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, A
 
 @router.post(
     "/ppack-v3/report",
-    dependencies=[require_scope("outcomes:read")],
+    dependencies=[require_scope("outcomes:write")],
 )
 async def generate_ppack_report(
     body: PPackABReportRequest,
@@ -275,13 +276,24 @@ async def generate_ppack_report(
 ) -> dict[str, Any]:
     service = get_ppack_ab_service(request)
     try:
-        report = service.generate_report(
-            tenant_id=_tenant_id(request),
-            domain=body.domain,
-            since=body.since,
-            until=body.until,
-            metric_types=body.metric_types,
-        )
+        if body.since is None and body.until is None:
+            report = service.generate_weekly_report(
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                metric_types=body.metric_types,
+            )
+        else:
+            report = service.generate_report(
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                since=body.since,
+                until=body.until,
+                metric_types=body.metric_types,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     issue_result = GitHubIssuePublishResult(reason="GitHub alert not requested")

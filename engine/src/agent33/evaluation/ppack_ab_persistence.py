@@ -18,10 +18,16 @@ class PPackABPersistence:
             Path(path_text).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(path_text, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._configure_connection(path_text)
         self._create_schema()
 
     def close(self) -> None:
         self._conn.close()
+
+    def _configure_connection(self, path_text: str) -> None:
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        if path_text != ":memory:":
+            self._conn.execute("PRAGMA journal_mode = WAL")
 
     def _create_schema(self) -> None:
         self._conn.executescript(
