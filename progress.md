@@ -22,6 +22,19 @@
   - `mypy src/agent33/packs/registry.py src/agent33/packs/sharing.py src/agent33/agents/runtime.py src/agent33/api/routes/agents.py`
 - Next step: write the POST-4.5 research/spec memo, open the PR, and move into the normal CI/review loop.
 
+## 2026-04-17 (Session 127 POST-4.5 merged and POST-CLUSTER launch-prep started)
+
+- Merged PR `#406` (`POST-4.5: apply P-PACK v3 behavior rollout`) and verified the merge from a fresh-main worktree at `f7ad606`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s8-public-launch` on branch `session127-s8-public-launch` from merged `main`.
+- Scope-locked the next slice as a docs-first public launch preparation wave:
+  - root `README.md` becomes the product-facing landing page
+  - add `docs/getting-started.md`
+  - add `docs/ONBOARDING.md`
+  - add `docs/RELEASE_CHECKLIST.md`
+  - refresh `docs/README.md`, `engine/README.md`, and `frontend/README.md`
+- Synced roadmap and handoff docs so they now reflect `POST-4.5` complete and `POST-CLUSTER — Public launch preparation` active.
+- Next step: open the launch-prep PR from `session127-s8-public-launch`.
+
 ## 2026-04-17 (Session 127 POST-4 execution unblock)
 
 - User direction changed the roadmap policy: remove the remaining calendar/data gates and execute the rest of the development wave now, then test and monitor afterward.

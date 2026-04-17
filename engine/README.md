@@ -88,11 +88,14 @@ ruff check src/ tests/
 
 Canonical docs are in the repository root `docs/` directory:
 
+- `../docs/getting-started.md`
+- `../docs/ONBOARDING.md`
 - `../docs/setup-guide.md`
 - `../docs/walkthroughs.md`
 - `../docs/use-cases.md`
 - `../docs/functionality-and-workflows.md`
 - `../docs/api-surface.md`
+- `../docs/RELEASE_CHECKLIST.md`
 
 ## Operational Notes
 
@@ -100,3 +103,15 @@ Canonical docs are in the repository root `docs/` directory:
 - Several services are in-memory and reset on restart (workflow/review/evaluation/release/autonomy/improvement/traces).
 - Webhook adapters must be registered in-process before `/v1/webhooks/*` endpoints are usable.
 - Training routes exist, but full runtime wiring for `training_runner` and `agent_optimizer` is partial by default.
+
+## Troubleshooting
+
+- `curl http://localhost:8000/health` fails:
+  - check that `docker compose up -d` completed successfully
+  - inspect `docker compose logs api`
+- `401` or `403` on `/v1/*` routes:
+  - verify your bearer token and scopes against `../docs/api-surface.md`
+- frontend loads but calls fail:
+  - verify `API_BASE_URL` and that the API is healthy on `http://localhost:8000`
+- public/shared deployment prep:
+  - do **not** rely on bootstrap auth; use `../docs/RELEASE_CHECKLIST.md` before exposing the stack
