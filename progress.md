@@ -40,9 +40,10 @@
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
-- Next step: open the first remediation PR from
-  `session128-s1-review-remediation`, then start the P-ENV v2 follow-up from a
-  fresh post-merge worktree.
+- Opened PR `#409` (`Session 128: harden pack/session lifecycle cleanup`) from
+  branch `session128-s1-review-remediation`.
+- Next step: review and merge `#409`, verify `main` from a fresh worktree, then
+  start the P-ENV v2 follow-up from a fresh post-merge worktree.
 
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 

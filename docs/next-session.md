@@ -5,7 +5,7 @@ Last updated: 2026-04-18 (PR `#408` merged, Session 128 remediation active)
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
-- **Open PRs**: 0
+- **Open PRs**: 1
 - **Latest merged PR**: `#408` (`POST-CLUSTER: add P-ENV v2 Ollama bootstrap`)
 - **Latest merged implementation PR**: `#408` (`POST-CLUSTER: add P-ENV v2 Ollama bootstrap`)
 - **Latest commit on main**: `943b683`
@@ -46,7 +46,7 @@ work discovered while auditing merged review threads on PRs `#406`-`#408`.
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | ACTIVE |
+| T1 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | ACTIVE in PR `#409` |
 | T2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | QUEUED after T1 |
 | T3 | POST-CLUSTER — Pack marketplace web UI | QUEUED after T2 |
 | T4 | POST-CLUSTER — Community submissions | QUEUED after T3 |
