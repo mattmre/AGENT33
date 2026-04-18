@@ -1,5 +1,71 @@
 # Progress Log
 
+## 2026-04-18 (Session 128 review-remediation audit and queue reset)
+
+- Verified there are `0` open PRs on `mattmre/AGENT33` and that `origin/main`
+  is at `943b683` after merging PR `#408`
+  (`POST-CLUSTER: add P-ENV v2 Ollama bootstrap`).
+- Confirmed the root checkout is stale (`pr-405`) and created a fresh worktree
+  `C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation` on
+  branch `session128-s1-review-remediation` from updated `origin/main`.
+- Audited merged review threads plus code for PRs `#406`, `#407`, and `#408`.
+- Locked the immediate follow-up queue to two remediation PRs before the
+  remaining roadmap resumes:
+  - pack/session lifecycle cleanup for POST-4.5 session-scoped pack state
+  - P-ENV v2 and launch-doc reliability fixes from the merged review feedback
+- Identified the concrete blocking issues before the next roadmap slice:
+  - `PackRegistry.clear_session_state()` is not wired into terminal session
+    lifecycle paths, so session-scoped pack state can leak after session end or
+    archive
+  - the P-ENV v2 happy path writes `.env.local`, but the runtime still defaults
+    to `.env`, so wizard/bootstrap output can be ignored by `agent33 start`
+  - the canonical Ollama model name and bundled-start documentation drifted
+    across runtime, config, and docs after PRs `#407` and `#408`
+- Wrote the Session 128 remediation plan and queue-reset docs so recovery now
+  points at the real merged baseline through `#408`.
+- Implemented the first remediation slice in
+  `engine/src/agent33/sessions/service.py`,
+  `engine/src/agent33/sessions/archive.py`, and `engine/src/agent33/main.py`:
+  terminal session completion and archive cleanup now clear session-scoped pack
+  tracking via a narrow session cleanup callback, while suspended sessions
+  remain resumable.
+- Added focused regression coverage in:
+  - `engine/tests/test_phase44_session_service.py`
+  - `engine/tests/test_session_catalog.py`
+- Focused validation is green from the Session 128 remediation worktree using
+  the worktree-local source path:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_integration.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_integration_wiring.py -k "lifespan or expected_attributes" --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Opened PR `#409` (`Session 128: harden pack/session lifecycle cleanup`) from
+  branch `session128-s1-review-remediation`.
+- Reviewed PR `#409` feedback and found one substantive issue repeated by both
+  review bots: the new terminal session cleanup callback should be treated as a
+  best-effort lifecycle side effect rather than aborting session teardown if it
+  raises.
+- Ran a fresh review agent against `#409` to sanity-check the bot feedback
+  before patching; no additional substantive issues were found.
+- Hardened `OperatorSessionService.clear_terminal_session_state()` to log and
+  continue when the injected cleanup callback raises, matching the existing
+  best-effort lifecycle patterns already used for hooks, status refresh, and
+  shutdown flush.
+- Added regression coverage for:
+  - completed session teardown continuing after cleanup-callback failure
+  - archived-session cleanup continuing after cleanup-callback failure
+- Re-ran the targeted Session 128 validation stack after the review fix:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_integration.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_integration_wiring.py -k "lifespan or expected_attributes" --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Next step: push the PR `#409` review-fix commit, watch CI to completion,
+  merge it, verify `main` from a fresh worktree, then start the P-ENV v2
+  follow-up from a fresh post-merge worktree.
+
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 
 - Verified `main` advanced to `b591454` after merging PR `#405` (`POST-4.4: add P-PACK v3 A/B harness`).

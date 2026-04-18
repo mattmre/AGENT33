@@ -4,6 +4,9 @@
 **Owner**: Session 126
 **Scope**: POST-3.3 fix → POST-3.4 → POST-4.1 through POST-4.5
 
+**Superseded**: The live execution queue moved to `docs/sessions/session128-task-plan.md`
+in Session 128 after PRs `#405`-`#408` merged.
+
 ---
 
 ## Current State (synced 2026-04-17)
