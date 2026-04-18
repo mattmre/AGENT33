@@ -15,16 +15,15 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation is the current slice |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation is complete in `#407`; P-ENV v2 is the current slice |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | POST-CLUSTER — Public launch preparation | Active | Root README product page plus onboarding/getting-started/release-readiness docs |
-| 2 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Pending | Starts after launch-prep docs land |
-| 3 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after P-ENV v2 |
-| 4 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
+| 1 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Active | Wizard-driven local Ollama bootstrap plus automated recommended-model download |
+| 2 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after P-ENV v2 |
+| 3 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
 
 ## Parallel Follow-up Work During POST-4 Execution
 
@@ -73,8 +72,8 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 
 ### POST-CLUSTER — Distribution & Ecosystem Growth (Active)
 
-- Public launch preparation (README as product page, onboarding/getting-started/release-checklist docs) (**active**)
-- P-ENV v2 auto-install + automated model download
+- Public launch preparation (README as product page, onboarding/getting-started/release-checklist docs) (**complete** in PR `#407`)
+- P-ENV v2 auto-install + automated model download (**active**)
 - Pack marketplace web UI
 - Community submissions (only after pack signing + approval queue proven)
 

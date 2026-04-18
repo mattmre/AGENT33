@@ -21,7 +21,6 @@ is fully testable without a live terminal.
 from __future__ import annotations
 
 import os
-import shutil
 from dataclasses import dataclass, field
 
 try:
@@ -33,7 +32,10 @@ except ImportError:  # pragma: no cover
 
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from agent33.env.detect import EnvProfile
 
 # ---------------------------------------------------------------------------
 # I/O protocol — the only thing tests need to replace
@@ -171,11 +173,15 @@ class WizardResult:
     profile: str = "developer"
     llm_provider: str = "skip"  # "openai" | "ollama" | "skip"
     llm_model: str | None = None
+    recommended_ollama_model: str | None = None
+    ollama_base_url: str = "http://localhost:11434"
     api_key_set: bool = False
     entered_api_key: str | None = None  # key user explicitly typed (not from env)
     template: str | None = None
     env_path: Path = field(default_factory=lambda: Path(".env.local"))
     env_written: bool = False
+    ollama_service_bootstrapped: bool = False
+    ollama_model_downloaded: bool = False
     completed: bool = False
     steps_completed: list[str] = field(default_factory=list)
 
@@ -241,10 +247,11 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         try:
-            env = detect_env()
+            env = self._load_env_profile()
             hw = env.hardware
             tools = env.tools
             rec = env.selected_model
+            result.recommended_ollama_model = rec.ollama_model or None
 
             self._io.info(f"  CPU cores   : {hw.cpu_cores}")
             self._io.info(f"  RAM         : {hw.ram_gb:.1f} GB")
@@ -315,24 +322,18 @@ class FirstRunWizard:
             result.llm_provider = "openai"
 
         elif choice == "ollama":
-            ollama_ok = shutil.which("ollama") is not None
-            if not ollama_ok:
-                self._io.info(
-                    "\n  Ollama is not installed.  Install it from https://ollama.com\n"
-                    "  then re-run `agent33 wizard` or set OLLAMA_BASE_URL manually.\n"
-                )
-            else:
-                self._io.info("\n  Ollama detected.  Checking for a suitable model…")
-                try:
-                    model = _pick_ollama_model()
-                    self._io.info(f"  Using model: {model}")
-                    result.llm_model = model
-                except Exception:
-                    self._io.info(
-                        "  (Could not detect Ollama models — will use llama3.2:3b as default)"
-                    )
-                    result.llm_model = "llama3.2:3b"
             result.llm_provider = "ollama"
+            result.llm_model = result.recommended_ollama_model or "llama3.2:3b"
+            if self._ensure_ollama_ready(result):
+                try:
+                    self._configure_ollama_model(result)
+                except Exception as exc:
+                    self._io.info(f"  (Could not inspect or download Ollama models: {exc})")
+            else:
+                self._io.info(
+                    "  (Could not provision Ollama automatically — writing "
+                    "configuration with the recommended model.)"
+                )
 
         else:
             self._io.info(
@@ -433,6 +434,114 @@ class FirstRunWizard:
         )
         result.steps_completed.append("complete")
 
+    def _load_env_profile(self) -> EnvProfile:
+        """Load a fresh environment profile, falling back for legacy call sites."""
+        try:
+            profile = detect_env(force_refresh=True)
+        except TypeError:
+            profile = detect_env()
+        return profile
+
+    def _ensure_ollama_ready(self, result: WizardResult) -> bool:
+        """Make Ollama reachable using the local or bundled path when possible."""
+        from agent33.env.ollama_setup import (
+            inspect_ollama_environment,
+            start_bundled_ollama_service,
+            start_local_ollama_service,
+            wait_for_ollama,
+        )
+
+        env = inspect_ollama_environment(
+            base_url=result.ollama_base_url,
+            search_start=self._env_path.parent,
+        )
+        if env.reachable:
+            self._io.info("\n  Ollama detected and reachable.")
+            return True
+
+        if env.binary_available and self._io.confirm(
+            "  Ollama is installed but not running. Start it automatically now?",
+            default=True,
+        ):
+            self._io.info("  Starting local Ollama service…")
+            if start_local_ollama_service() and wait_for_ollama(result.ollama_base_url):
+                result.ollama_service_bootstrapped = True
+                self._io.info("  ✓ Local Ollama is reachable.")
+                return True
+            self._io.info("  (Could not start local Ollama automatically.)")
+
+        if (
+            env.docker_compose_available
+            and env.bundled_compose_dir is not None
+            and self._io.confirm(
+                "  Start the bundled Ollama container automatically?",
+                default=True,
+            )
+        ):
+            self._io.info("  Starting bundled Ollama container…")
+            try:
+                start_bundled_ollama_service(env.bundled_compose_dir)
+            except Exception as exc:
+                self._io.info(f"  (Bundled Ollama startup failed: {exc})")
+            else:
+                if wait_for_ollama(result.ollama_base_url):
+                    result.ollama_service_bootstrapped = True
+                    self._io.info("  ✓ Bundled Ollama is reachable.")
+                    return True
+                self._io.info("  (Bundled Ollama did not become reachable in time.)")
+
+        if env.binary_available:
+            self._io.info(
+                "  Ollama is installed but still not reachable. Start it with "
+                "`ollama serve` or use the bundled container from the engine directory."
+            )
+        else:
+            self._io.info("  Ollama is not installed locally.")
+            self._io.info(
+                "  Install it from https://ollama.com or run the wizard from "
+                "the engine directory to use the bundled container."
+            )
+        return False
+
+    def _configure_ollama_model(self, result: WizardResult) -> None:
+        """Select or download the recommended Ollama model."""
+        from agent33.env.ollama_setup import list_ollama_models, pull_ollama_model
+
+        preferred_model = result.recommended_ollama_model or result.llm_model or "llama3.2:3b"
+        available_models = list_ollama_models(result.ollama_base_url)
+
+        if preferred_model in available_models:
+            result.llm_model = preferred_model
+            self._io.info(f"  Using model: {preferred_model}")
+            return
+
+        if available_models:
+            self._io.info(f"  Recommended model not present yet: {preferred_model}")
+        else:
+            self._io.info(f"  No Ollama models are available yet at {result.ollama_base_url}.")
+
+        if self._io.confirm(
+            f"  Download the recommended model now ({preferred_model})?",
+            default=True,
+        ):
+            self._io.info(f"  Downloading {preferred_model}… This may take a few minutes.")
+            pull_ollama_model(preferred_model, base_url=result.ollama_base_url)
+            result.llm_model = preferred_model
+            result.ollama_model_downloaded = True
+            self._io.info(f"  ✓ Model downloaded: {preferred_model}")
+            return
+
+        if available_models:
+            selected_model = _pick_ollama_model(available_models)
+            result.llm_model = selected_model
+            self._io.info(f"  Using available model: {selected_model}")
+            return
+
+        result.llm_model = preferred_model
+        self._io.info(
+            f"  Keeping recommended model configured without download: {preferred_model}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -446,21 +555,9 @@ def _mode_to_profile(mode: str) -> str:
     )
 
 
-def _pick_ollama_model() -> str:
-    """Ask Ollama for the list of pulled models and return the best one."""
-    import subprocess
-
-    proc = subprocess.run(
-        ["ollama", "list"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    if proc.returncode != 0 or not proc.stdout.strip():
-        return "llama3.2:3b"
-
-    lines = proc.stdout.strip().splitlines()[1:]  # skip header
-    pulled = [ln.split()[0] for ln in lines if ln.strip()]
+def _pick_ollama_model(available_models: list[str] | None = None) -> str:
+    """Return the preferred model from the available Ollama model list."""
+    pulled = available_models or []
 
     # Prefer models in priority order
     preferred = ["qwen2.5-coder:32b", "llama3.1:8b", "llama3.2:3b", "tinyllama:1.1b"]
@@ -503,7 +600,7 @@ def _stream_test_response(result: WizardResult, io: WizardIO) -> None:
         model = result.llm_model or "llama3.2:3b"
         with httpx.Client(timeout=60) as client:
             resp = client.post(
-                "http://localhost:11434/api/generate",
+                f"{result.ollama_base_url.rstrip('/')}/api/generate",
                 json={
                     "model": model,
                     "prompt": "What can you do? (answer in 2 sentences)",
@@ -530,9 +627,9 @@ def _build_env_lines(result: WizardResult) -> list[str]:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")
     elif result.llm_provider == "ollama":
-        lines.append("OLLAMA_BASE_URL=http://localhost:11434")
+        lines.append(f"OLLAMA_BASE_URL={result.ollama_base_url}")
         if result.llm_model:
-            lines.append(f"DEFAULT_MODEL={result.llm_model}")
+            lines.append(f"OLLAMA_DEFAULT_MODEL={result.llm_model}")
         lines.append("")
     if result.template:
         lines.append(f"AGENT33_DEFAULT_TEMPLATE={result.template}")

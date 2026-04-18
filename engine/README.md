@@ -27,6 +27,17 @@ If you want a bundled Ollama service for this stack instead:
 
 ```bash
 docker compose --profile local-ollama up -d ollama
+```
+
+Then run the first-run wizard from `engine/` to detect your hardware and auto-download the recommended model:
+
+```bash
+python -m agent33.cli.main wizard
+```
+
+Manual fallback:
+
+```bash
 docker compose exec ollama ollama pull llama3.2
 ```
 
