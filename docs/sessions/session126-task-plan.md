@@ -20,7 +20,8 @@
 - POST-4.3 (P69b implementation): COMPLETE — PR `#401`
 - POST-4.4: COMPLETE — merged as PR `#405`
 - POST-4.5: COMPLETE — merged as PR `#406`
-- POST-CLUSTER (public launch preparation): ACTIVE — Session 127 worktree `session127-s8-public-launch`
+- POST-CLUSTER (public launch preparation): COMPLETE — merged as PR `#407`
+- POST-CLUSTER (P-ENV v2 auto-install + automated model download): ACTIVE — Session 127 worktree `session127-s10-penv2`
 - Session wrap/docs sync: COMPLETE — PR `#402`
 
 ## Session 126 Execution Queue
@@ -34,7 +35,8 @@
 | S4 | POST-4.3 — P69b implementation | POST-4 | #401 | S3 merged | ✅ MERGED `fd092f3` |
 | S5 | POST-4.4 — P-PACK v3 A/B harness | POST-4 | `session127-s5-ab-harness` | S4 merged | ✅ MERGED `b591454` |
 | S6 | POST-4.5 — P-PACK v3 behavior mods | POST-4 | `session127-s6-post45` | S5 merged | ✅ MERGED `f7ad606` |
-| S7 | POST-CLUSTER — Public launch preparation | POST-CLUSTER | `session127-s8-public-launch` | S6 merged | ACTIVE |
+| S7 | POST-CLUSTER — Public launch preparation | POST-CLUSTER | `session127-s8-public-launch` | S6 merged | ✅ MERGED `cfa8cac` |
+| S8 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | POST-CLUSTER | `session127-s10-penv2` | S7 merged | ACTIVE |
 | SX | Docs refresh + session wrap | docs | #402 | all | ✅ COMPLETE |
 
 ---

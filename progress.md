@@ -35,6 +35,26 @@
 - Synced roadmap and handoff docs so they now reflect `POST-4.5` complete and `POST-CLUSTER — Public launch preparation` active.
 - Next step: open the launch-prep PR from `session127-s8-public-launch`.
 
+## 2026-04-18 (Session 127 POST-CLUSTER P-ENV v2 implementation)
+
+- Verified `main` advanced to `cfa8cac` after merging PR `#407` (`POST-CLUSTER: prepare public launch docs`).
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s10-penv2` on branch `session127-s10-penv2` from merged `main`.
+- Scope-locked `POST-CLUSTER — P-ENV v2` as a first-run bootstrap upgrade:
+  - refresh wizard env detection instead of trusting stale cache
+  - auto-start local `ollama serve` when available
+  - fall back to the bundled `docker compose --profile local-ollama` service when local Ollama is unavailable
+  - auto-download the recommended Ollama model when missing
+  - standardize generated config on `OLLAMA_DEFAULT_MODEL`
+- Implemented the new local Ollama provisioning helpers in `engine/src/agent33/env/ollama_setup.py`.
+- Updated the wizard/bootstrap/diagnose path to use the new bootstrap flow and config key.
+- Updated setup docs so the wizard is the recommended path and manual `ollama pull` remains the fallback.
+- Focused validation is green:
+  - `PYTHONPATH=src python -m pytest tests/test_env_detect.py tests/test_ollama_setup.py tests/test_wizard.py tests/test_bootstrap.py tests/test_diagnose.py -q --no-cov`
+  - `python -m ruff check ...`
+  - `python -m ruff format --check ...`
+  - `python -m mypy src/agent33/env/ollama_setup.py src/agent33/cli/bootstrap.py src/agent33/cli/diagnose.py src/agent33/cli/wizard.py --config-file pyproject.toml`
+- Next step: open the P-ENV v2 PR from `session127-s10-penv2`.
+
 ## 2026-04-17 (Session 127 POST-4 execution unblock)
 
 - User direction changed the roadmap policy: remove the remaining calendar/data gates and execute the rest of the development wave now, then test and monitor afterward.

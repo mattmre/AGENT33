@@ -13,6 +13,7 @@ Tests verify:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from agent33.cli.wizard import (
@@ -192,28 +193,126 @@ def test_wizard_ollama_provider_without_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: None)  # no ollama binary
-    result = _wizard(
-        answers=["developer", "ollama", "None — I'll configure manually"],
-        tmp_path=tmp_path,
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=False,
+            bundled_compose_dir=None,
+        ),
     )
-    assert result.llm_provider == "ollama"
-    # No model set because ollama not installed
-    assert result.llm_model is None
-
-
-def test_wizard_ollama_provider_with_binary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
     result = _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
     )
     assert result.llm_provider == "ollama"
     assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_with_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_ensure_ollama_ready",
+        lambda self, result: True,
+    )
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
+    result = _wizard(
+        answers=["developer", "ollama", "no", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_provider == "ollama"
+    assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_starts_bundled_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.2:3b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=True,
+            bundled_compose_dir=tmp_path,
+        ),
+    )
+    started: list[Path] = []
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.start_bundled_ollama_service",
+        lambda compose_dir: started.append(compose_dir),
+    )
+    monkeypatch.setattr("agent33.env.ollama_setup.wait_for_ollama", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.list_ollama_models",
+        lambda _base_url: ["llama3.2:3b"],
+    )
+
+    result = _wizard(
+        answers=[
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ],
+        tmp_path=tmp_path,
+    )
+
+    assert started == [tmp_path]
+    assert result.ollama_service_bootstrapped is True
+    assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_downloads_recommended_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.1:8b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=True,
+            reachable=True,
+            docker_compose_available=False,
+            bundled_compose_dir=None,
+        ),
+    )
+    pull_calls: list[tuple[str, str]] = []
+    model_lists = [[], ["llama3.1:8b"]]
+
+    def _list_models(_base_url: str) -> list[str]:
+        return model_lists.pop(0)
+
+    monkeypatch.setattr("agent33.env.ollama_setup.list_ollama_models", _list_models)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.pull_ollama_model",
+        lambda model, *, base_url: pull_calls.append((model, base_url)),
+    )
+
+    result = _wizard(
+        answers=[
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ],
+        tmp_path=tmp_path,
+    )
+
+    assert pull_calls == [("llama3.1:8b", "http://localhost:11434")]
+    assert result.ollama_model_downloaded is True
+    assert result.llm_model == "llama3.1:8b"
 
 
 # ---------------------------------------------------------------------------
@@ -337,15 +436,23 @@ def test_wizard_env_contains_ollama_url_when_ollama_chosen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_ensure_ollama_ready",
+        lambda self, result: True,
+    )
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
     )
     content = (tmp_path / ".env.local").read_text()
     assert "OLLAMA_BASE_URL=http://localhost:11434" in content
-    assert "DEFAULT_MODEL=llama3.2:3b" in content
+    assert "OLLAMA_DEFAULT_MODEL=llama3.2:3b" in content
 
 
 def test_wizard_env_contains_template_when_chosen(
@@ -465,7 +572,7 @@ def test_build_env_lines_ollama() -> None:
     lines = _build_env_lines(result)
     joined = "\n".join(lines)
     assert "OLLAMA_BASE_URL=http://localhost:11434" in joined
-    assert "DEFAULT_MODEL=llama3.1:8b" in joined
+    assert "OLLAMA_DEFAULT_MODEL=llama3.1:8b" in joined
 
 
 def test_build_env_lines_with_template() -> None:
@@ -546,3 +653,22 @@ def test_wizard_full_happy_path_completes(tmp_path: Path, monkeypatch: pytest.Mo
 def _failing_detect() -> None:
     """Stand-in for detect_env that raises — tests graceful fallback."""
     raise ImportError("env detection not available")
+
+
+def _fake_env_profile(model: str = "llama3.2:3b") -> object:
+    return SimpleNamespace(
+        hardware=SimpleNamespace(
+            cpu_cores=8,
+            ram_gb=16.0,
+            gpu_vram_gb=0.0,
+            gpu_brand="",
+        ),
+        tools=SimpleNamespace(
+            ollama_available=False,
+            docker_available=True,
+        ),
+        selected_model=SimpleNamespace(
+            ollama_model=model,
+        ),
+        mode="lite",
+    )

@@ -119,7 +119,24 @@ curl http://localhost:8000/health
 
 You should receive a JSON payload with service statuses (`ollama`, `redis`, `postgres`, `nats`, and channel health entries).
 
-## 5. Pull an Ollama Model
+## 5. Configure Ollama and Pull a Model
+
+Recommended path:
+
+```bash
+cd engine
+python -m agent33.cli.main wizard
+```
+
+The wizard now:
+
+- refreshes your environment profile
+- recommends the best local Ollama model for your hardware
+- starts `ollama serve` automatically when possible
+- falls back to the bundled `docker compose --profile local-ollama` Ollama service when available
+- downloads the recommended model if it is missing
+
+Manual fallback:
 
 ```bash
 ollama pull llama3.2

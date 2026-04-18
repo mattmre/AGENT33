@@ -60,6 +60,16 @@ Wait about 15-30 seconds for PostgreSQL and Redis health checks to pass before t
 
 ### 4. Pull a model
 
+Recommended path:
+
+```bash
+python -m agent33.cli.main wizard
+```
+
+The wizard can start a local or bundled Ollama service automatically and download the recommended model for your hardware.
+
+Manual fallback:
+
 ```bash
 docker compose exec ollama ollama pull llama3.2
 ```

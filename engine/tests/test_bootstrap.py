@@ -71,6 +71,7 @@ def test_bootstrap_creates_file(tmp_path: Path) -> None:
     assert "JWT_SECRET=" in content
     assert "AGENT33_MODE=lite" in content
     assert "AGENT33_DEV_API_KEY=" in content
+    assert "OLLAMA_DEFAULT_MODEL=llama3.2:3b" in content
 
 
 def test_bootstrap_secret_in_file_is_64_chars(tmp_path: Path) -> None:

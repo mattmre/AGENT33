@@ -290,10 +290,12 @@ def test_check_llm_config_with_anthropic_key(monkeypatch: pytest.MonkeyPatch) ->
 def test_check_llm_config_ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b")
     with patch("urllib.request.urlopen"):
         result = _check_llm_config()
     assert result.status == Status.OK
     assert "ollama" in result.message.lower()
+    assert "llama3.2:3b" in result.message
 
 
 def test_check_llm_config_no_provider(monkeypatch: pytest.MonkeyPatch) -> None:

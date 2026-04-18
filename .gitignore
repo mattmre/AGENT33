@@ -12,6 +12,8 @@ build/
 .venv/
 venv/
 env/
+!engine/src/agent33/env/
+!engine/src/agent33/env/*.py
 
 # IDE & editor
 .idea/

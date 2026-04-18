@@ -1,15 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-04-17 (POST-4.5 merged, public launch prep active)
+Last updated: 2026-04-18 (public launch prep merged, P-ENV v2 active)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#406` (`POST-4.5: apply P-PACK v3 behavior rollout`)
-- **Latest merged implementation PR**: `#406` (`POST-4.5: apply P-PACK v3 behavior rollout`)
-- **Latest commit on main**: `f7ad606`
-- **Cumulative PRs merged**: 406
+- **Latest merged PR**: `#407` (`POST-CLUSTER: prepare public launch docs`)
+- **Latest merged implementation PR**: `#407` (`POST-CLUSTER: prepare public launch docs`)
+- **Latest commit on main**: `cfa8cac`
+- **Cumulative PRs merged**: 407
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
@@ -19,7 +19,7 @@ Last updated: 2026-04-17 (POST-4.5 merged, public launch prep active)
 - **POST-4.3 (P69b implementation)**: COMPLETE — PR `#401`
 - **POST-4.4 (P-PACK v3 A/B harness)**: COMPLETE — PR `#405`
 - **POST-4.5 (P-PACK v3 behavior mods)**: COMPLETE — PR `#406`
-- **POST-CLUSTER (Distribution & Ecosystem Growth)**: ACTIVE — public launch preparation is now the current slice
+- **POST-CLUSTER (Distribution & Ecosystem Growth)**: ACTIVE — P-ENV v2 is now the current slice
 - **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **Security scan posture**: `Dependency CVE Scan` + `Container Image Scan` still fail on the current baseline. Functional CI for `#403` was green, but those repo-level scans still required an admin override for merge.
 - **Roadmap policy update**: operator decision is to remove calendar/data gates from the remaining roadmap and complete the implementation wave first, then test and monitor.
@@ -31,6 +31,7 @@ Last updated: 2026-04-17 (POST-4.5 merged, public launch prep active)
 | #403 | `87c6637` | maintenance | `actions/github-script` v9 bump, plus a formatting-only unblock for inherited lint drift on the PR branch |
 | #405 | `b591454` | POST-4.4 | deterministic P-PACK v3 A/B assignment, persistence, reporting, and GitHub alert integration |
 | #406 | `f7ad606` | POST-4.5 | treatment-only source-aware pack ordering, runtime variant wiring, and review-fix hardening for session tracking |
+| #407 | `cfa8cac` | POST-CLUSTER | product-facing README, onboarding/getting-started/release docs, and launch-prep handoff sync |
 
 Additional maintenance completed during the PR review:
 
@@ -47,24 +48,23 @@ Additional maintenance completed during the PR review:
 
 ## Next Session Priority Queue
 
-### Immediate: POST-CLUSTER public launch preparation
+### Immediate: POST-CLUSTER P-ENV v2
 
-`POST-4.5` is merged and verified from a fresh-main worktree. The active slice is now `POST-CLUSTER — Public launch preparation`, centered on making the root README a product page and tightening the operator-facing docs path.
+`POST-CLUSTER — Public launch preparation` is merged and verified from fresh `main`. The active slice is now `POST-CLUSTER — P-ENV v2 auto-install + automated model download`, centered on zero-touch local Ollama bootstrap and model provisioning through the first-run flow.
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | POST-CLUSTER — Public launch preparation | ACTIVE |
-| T2 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | QUEUED after T1 |
-| T3 | POST-CLUSTER — Pack marketplace web UI | QUEUED after T2 |
-| T4 | POST-CLUSTER — Community submissions | QUEUED after T3 |
+| T1 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | ACTIVE |
+| T2 | POST-CLUSTER — Pack marketplace web UI | QUEUED after T1 |
+| T3 | POST-CLUSTER — Community submissions | QUEUED after T2 |
 
-**Public launch prep scope**:
-- Rewrite the root `README.md` as a product-facing landing page
-- Add a fast-path `docs/getting-started.md`
-- Add `docs/ONBOARDING.md` for new operators
-- Add `docs/RELEASE_CHECKLIST.md` for launch-readiness and public exposure checks
-- Refresh docs index and component README cross-links
-- Worktree: `worktrees/session127-s8-public-launch`, branch `session127-s8-public-launch`
+**P-ENV v2 scope**:
+- refresh wizard environment detection so model recommendations are based on current hardware
+- auto-start local `ollama serve` when the binary exists but the service is down
+- fall back to the bundled `docker compose --profile local-ollama` service when available
+- auto-download the recommended Ollama model when it is missing
+- standardize generated env output on `OLLAMA_DEFAULT_MODEL`
+- Worktree: `worktrees/session127-s10-penv2`, branch `session127-s10-penv2`
 
 ### Secondary Follow-up Work
 
@@ -80,6 +80,7 @@ Additional maintenance completed during the PR review:
 - `docs/research/session127-post44-roadmap-unblock.md` — rationale and implementation posture for removing the calendar/data gate
 - `docs/research/session127-post45-ppack-v3-behavior.md` — POST-4.5 behavior contract and source-precedence rollout notes
 - `docs/research/session127-postcluster-public-launch-scope.md` — launch-prep scope lock and doc-surface contract
+- `docs/research/session127-postcluster-penv2-scope.md` — P-ENV v2 scope lock for local Ollama bootstrap + automated model download
 - `docs/research/session127-pr403-github-script-v9-audit.md` — maintenance audit for PR `#403`
 - `docs/research/session126-p69b-ux-spec.md` — P69b UX spec
 - `docs/research/session126-p69b-api-contract.md` — P69b API contract

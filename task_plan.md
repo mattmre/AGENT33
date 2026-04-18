@@ -26,8 +26,8 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: Session 127
-- Current slice: POST-CLUSTER (Public launch preparation)
-- Resume artifact: `docs/research/session127-postcluster-public-launch-scope.md`
+- Current slice: POST-CLUSTER (P-ENV v2 auto-install + automated model download)
+- Resume artifact: `docs/research/session127-postcluster-penv2-scope.md`
 
 ---
 
@@ -45,8 +45,8 @@ Remove the calendar/data blockers from the remaining POST roadmap and execute th
 |---|---|---|
 | T1 | POST-4.4 — P-PACK v3 A/B harness | complete (merged as PR `#405`) |
 | T2 | POST-4.5 — P-PACK v3 behavior modifications | complete (merged as PR `#406`) |
-| T3 | POST-CLUSTER — Public launch preparation | in_progress |
-| T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (depends on T3) |
+| T3 | POST-CLUSTER — Public launch preparation | complete (merged as PR `#407`) |
+| T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | in_progress |
 | T5 | POST-CLUSTER — Pack marketplace web UI | pending (depends on T4) |
 | T6 | POST-CLUSTER — Community submissions | pending (depends on T5) |
 

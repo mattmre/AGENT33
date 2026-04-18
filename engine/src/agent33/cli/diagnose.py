@@ -173,7 +173,7 @@ def _check_llm_config() -> CheckResult:
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    model = os.environ.get("DEFAULT_MODEL", "")
+    model = os.environ.get("OLLAMA_DEFAULT_MODEL") or os.environ.get("DEFAULT_MODEL", "")
 
     if openai_key:
         return CheckResult("LLM provider", Status.OK, "OpenAI API key configured")
