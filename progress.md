@@ -95,8 +95,11 @@
   - `ruff check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
   - `ruff format --check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
   - `mypy engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py --config-file engine/pyproject.toml`
-- Next step: open the dedicated R2 follow-up PR, review CI/comments to
-  completion, merge it, and then start the marketplace slice from fresh `main`.
+- Opened PR `#410` (`Session 128: harden P-ENV v2 startup reliability`) from
+  branch `session128-s2-penv2-hardening`.
+- Next step: review CI/comments on `#410`, land any follow-up fixes, merge it,
+  verify `main` from a fresh worktree, and then start the marketplace slice
+  from fresh `main`.
 
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 

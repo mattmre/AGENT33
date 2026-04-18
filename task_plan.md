@@ -52,7 +52,7 @@ roadmap slices in sequence.
 |---|---|---|
 | T1 | Reset planning and session tracking to the real merged baseline through `#408` | complete |
 | T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | complete (merged as PR `#409`, fresh-main verified) |
-| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | implementation + validation complete; PR prep active |
+| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | PR open as `#410`, awaiting review |
 | T4 | POST-CLUSTER - Pack marketplace web UI | queued after T3 |
 | T5 | POST-CLUSTER - Community submissions | queued after T4 |
 

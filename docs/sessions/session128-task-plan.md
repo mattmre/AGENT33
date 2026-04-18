@@ -26,7 +26,7 @@ POST-CLUSTER roadmap slices
 |---|------|------|-------------------|------------|--------|
 | R0 | Audit merged review feedback and planning drift | research/docs | `session128-s1-review-remediation` | — | complete |
 | R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | complete (merged as `#409`, fresh-main verified) |
-| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | implementation + validation complete; PR prep active |
+| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | PR open as `#410`, awaiting review |
 | R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | queued |
 | R4 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R3 merged | queued |
 
