@@ -22,6 +22,7 @@ from agent33.sessions.storage import FileSessionStorage
 def _make_service(
     tmp_path: Path,
     hook_registry: Any = None,
+    session_cleanup_callback: Any = None,
 ) -> OperatorSessionService:
     """Helper to create a service with file storage."""
     storage = FileSessionStorage(base_dir=tmp_path)
@@ -30,6 +31,7 @@ def _make_service(
         hook_registry=hook_registry,
         checkpoint_interval_seconds=60.0,
         max_sessions_retained=100,
+        session_cleanup_callback=session_cleanup_callback,
     )
 
 
@@ -84,6 +86,17 @@ class TestSessionLifecycle:
         # Lock should be removed
         assert svc.storage.read_lock(session.session_id) is None
 
+    async def test_end_session_completed_clears_terminal_session_state(
+        self, tmp_path: Path
+    ) -> None:
+        cleanup = MagicMock()
+        svc = _make_service(tmp_path, session_cleanup_callback=cleanup)
+        session = await svc.start_session(purpose="End cleanup test")
+
+        await svc.end_session(session.session_id)
+
+        cleanup.assert_called_once_with(session.session_id)
+
     async def test_end_session_suspended(self, tmp_path: Path) -> None:
         svc = _make_service(tmp_path)
         session = await svc.start_session()
@@ -92,6 +105,20 @@ class TestSessionLifecycle:
             status=OperatorSessionStatus.SUSPENDED,
         )
         assert ended.status == OperatorSessionStatus.SUSPENDED
+
+    async def test_end_session_suspended_preserves_terminal_session_state(
+        self, tmp_path: Path
+    ) -> None:
+        cleanup = MagicMock()
+        svc = _make_service(tmp_path, session_cleanup_callback=cleanup)
+        session = await svc.start_session()
+
+        await svc.end_session(
+            session.session_id,
+            status=OperatorSessionStatus.SUSPENDED,
+        )
+
+        cleanup.assert_not_called()
 
     async def test_end_session_logs_end_event(self, tmp_path: Path) -> None:
         svc = _make_service(tmp_path)

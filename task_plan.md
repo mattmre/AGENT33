@@ -2,16 +2,21 @@
 
 ## Goal
 
-Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) sequentially with disposable worktree agents, one PR per slice from fresh `origin/main` worktrees.
+Execute the remaining post-merge hardening work plus the remaining POST-CLUSTER
+roadmap slices sequentially, one fresh worktree and one PR at a time from
+updated `origin/main`.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-17`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (404 PRs merged).
-- POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
-- ARCH-AEP Loops 1-8 are COMPLETE.
-- POST-1 and POST-2 are COMPLETE on `main`; POST-3.1 and POST-3.2 are now COMPLETE.
-- Treat the root checkout as disposable and always implement from fresh `origin/main` worktrees.
+- There are no open GitHub PRs as of `2026-04-18`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (408 PRs merged).
+- POST-1 through POST-4 are COMPLETE on `main`.
+- POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
+- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, but merged review feedback
+  left follow-up hardening work before the pack marketplace slice should start.
+- POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+- Treat the root checkout as disposable and always implement from fresh
+  `origin/main` worktrees.
 
 ## Resume Protocol
 
@@ -25,9 +30,39 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 127
-- Current slice: POST-CLUSTER (P-ENV v2 auto-install + automated model download)
-- Resume artifact: `docs/research/session127-postcluster-penv2-scope.md`
+- Active queue owner: Session 128
+- Current slice: Post-merge review remediation for PRs `#406`-`#408`
+- Resume artifact: `docs/research/session128-postmerge-review-remediation-plan.md`
+
+---
+
+# Task Plan - Session 128 (Active)
+
+## 2026-04-18 Session 128: Post-Merge Hardening And Remaining POST-CLUSTER Work
+
+### Goal
+
+Clear the actionable merged-review follow-up work from PRs `#406`-`#408`,
+repair the stale tracking layer, and then continue the remaining POST-CLUSTER
+roadmap slices in sequence.
+
+### Session 128 Queue
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | Reset planning and session tracking to the real merged baseline through `#408` | complete |
+| T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | validation complete, PR prep active |
+| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | queued after T2 |
+| T4 | POST-CLUSTER - Pack marketplace web UI | queued after T3 |
+| T5 | POST-CLUSTER - Community submissions | queued after T4 |
+
+### Session 128 Rules
+
+1. One fresh worktree per slice from `origin/main`
+2. One fresh agent per slice; dispose after merge
+3. One PR per slice
+4. No later slice starts before merge plus fresh-main verification
+5. Review-thread follow-up fixes land before the remaining roadmap slices
 
 ---
 

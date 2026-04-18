@@ -42,14 +42,16 @@ class SessionArchiveService:
         if session.status == OperatorSessionStatus.ARCHIVED:
             raise ValueError(f"Session {session_id} is already archived.")
 
+        previous_status = session.status
         session.status = OperatorSessionStatus.ARCHIVED
         session.updated_at = datetime.now(UTC)
         self._session_service.storage.save_session(session)
+        self._session_service.clear_terminal_session_state(session_id)
 
         logger.info(
             "session_archived session_id=%s previous_status=%s",
             session_id,
-            session.status.value,
+            previous_status.value,
         )
         return session
 
@@ -67,6 +69,7 @@ class SessionArchiveService:
         for session in sessions:
             age_days = (cutoff - session.updated_at).total_seconds() / 86400
             if age_days >= older_than_days:
+                self._session_service.clear_terminal_session_state(session.session_id)
                 self._session_service.storage.delete_session(session.session_id)
                 removed += 1
                 logger.debug(

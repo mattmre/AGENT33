@@ -388,6 +388,24 @@ class TestSessionArchiveService:
         assert reloaded is not None
         assert reloaded.status == OperatorSessionStatus.ARCHIVED
 
+    async def test_archive_clears_terminal_session_state(
+        self, storage: FileSessionStorage
+    ) -> None:
+        """Archiving a terminal session clears pack-scoped session state."""
+        cleanup = MagicMock()
+        session_service = OperatorSessionService(
+            storage=storage,
+            session_cleanup_callback=cleanup,
+        )
+        session = await session_service.start_session(purpose="done")
+        await session_service.end_session(session.session_id)
+
+        archive_svc = SessionArchiveService(session_service)
+        cleanup.reset_mock()
+        await archive_svc.archive(session.session_id)
+
+        cleanup.assert_called_once_with(session.session_id)
+
     async def test_archive_active_session_raises(
         self, session_service: OperatorSessionService
     ) -> None:
@@ -438,6 +456,32 @@ class TestSessionArchiveService:
 
         # Verify it was actually deleted
         assert await session_service.get_session(session.session_id) is None
+
+    async def test_cleanup_archived_clears_terminal_session_state(
+        self, storage: FileSessionStorage
+    ) -> None:
+        """cleanup_archived clears pack-scoped state before deleting old sessions."""
+        cleanup = MagicMock()
+        session_service = OperatorSessionService(
+            storage=storage,
+            session_cleanup_callback=cleanup,
+        )
+        session = await session_service.start_session(purpose="old")
+        await session_service.end_session(session.session_id)
+
+        archive_svc = SessionArchiveService(session_service)
+        await archive_svc.archive(session.session_id)
+
+        s = await session_service.get_session(session.session_id)
+        assert s is not None
+        s.updated_at = datetime.now(UTC) - timedelta(days=100)
+        session_service.storage.save_session(s)
+
+        cleanup.reset_mock()
+        removed = await archive_svc.cleanup_archived(older_than_days=90)
+
+        assert removed == 1
+        cleanup.assert_called_once_with(session.session_id)
 
     async def test_cleanup_archived_keeps_recent(
         self, session_service: OperatorSessionService

@@ -1013,6 +1013,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             hook_registry=hook_registry,
             checkpoint_interval_seconds=settings.operator_session_checkpoint_interval_seconds,
             max_sessions_retained=settings.operator_session_max_retained,
+            session_cleanup_callback=pack_registry.clear_session_state,
         )
         app.state.operator_session_service = operator_session_service
         sessions.set_session_service(operator_session_service)

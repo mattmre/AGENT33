@@ -37,11 +37,13 @@ class OperatorSessionService:
         hook_registry: Any | None = None,
         checkpoint_interval_seconds: float = 60.0,
         max_sessions_retained: int = 100,
+        session_cleanup_callback: Callable[[str], None] | None = None,
     ) -> None:
         self._storage = storage
         self._hook_registry = hook_registry
         self._checkpoint_interval = checkpoint_interval_seconds
         self._max_retained = max_sessions_retained
+        self._session_cleanup_callback = session_cleanup_callback
         # In-memory cache of active sessions for fast lookup
         self._active: dict[str, OperatorSession] = {}
         self._status_snapshot_builder: (
@@ -58,6 +60,11 @@ class OperatorSessionService:
     ) -> None:
         """Attach or clear the status-line snapshot builder."""
         self._status_snapshot_builder = builder
+
+    def clear_terminal_session_state(self, session_id: str) -> None:
+        """Run any terminal lifecycle cleanup registered for the session."""
+        if self._session_cleanup_callback is not None:
+            self._session_cleanup_callback(session_id)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -169,6 +176,8 @@ class OperatorSessionService:
         self._storage.remove_lock(session_id)
 
         self._active.pop(session_id, None)
+        if status == OperatorSessionStatus.COMPLETED:
+            self.clear_terminal_session_state(session_id)
 
         logger.info(
             "session_ended session_id=%s status=%s",

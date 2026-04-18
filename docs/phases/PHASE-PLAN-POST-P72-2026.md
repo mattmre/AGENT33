@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#404` on 2026-04-15, execution posture updated in Session 127
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#408` on 2026-04-18, execution posture updated in Session 128
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,17 +15,17 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation is complete in `#407`; P-ENV v2 is the current slice |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; merged-review remediation is active before the pack marketplace slice |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | Active | Wizard-driven local Ollama bootstrap plus automated recommended-model download |
-| 2 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after P-ENV v2 |
-| 3 | POST-CLUSTER — Community submissions | Pending | Only after pack signing + approval queue are proven |
+| 1 | Post-merge review remediation (`#406`-`#408`) | Active | Clear actionable review feedback before the remaining roadmap slices continue |
+| 2 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after remediation PRs land and are verified |
+| 3 | POST-CLUSTER — Community submissions | Pending | Only after the marketplace slice and approval flow are proven |
 
-## Parallel Follow-up Work During POST-4 Execution
+## Parallel Follow-up Work During POST-CLUSTER Execution
 
 - Verify P68-Lite monitoring remains healthy (`outcomes` table not empty during rollout)
 - Reconcile P69b persistence design intent versus the current in-memory implementation
@@ -73,8 +73,9 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 ### POST-CLUSTER — Distribution & Ecosystem Growth (Active)
 
 - Public launch preparation (README as product page, onboarding/getting-started/release-checklist docs) (**complete** in PR `#407`)
-- P-ENV v2 auto-install + automated model download (**active**)
-- Pack marketplace web UI
+- P-ENV v2 auto-install + automated model download (**complete** in PR `#408`)
+- Post-merge remediation for PRs `#406`-`#408` (**active** before the next roadmap slice)
+- Pack marketplace web UI (**next roadmap slice**)
 - Community submissions (only after pack signing + approval queue proven)
 
 ## Dependency Graph
