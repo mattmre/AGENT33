@@ -336,8 +336,12 @@ def test_wizard_skips_test_invocation_when_user_declines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(FirstRunWizard, "_ensure_ollama_ready", lambda self, result: True)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     result = _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
@@ -350,8 +354,12 @@ def test_wizard_test_invocation_failure_is_graceful(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(FirstRunWizard, "_ensure_ollama_ready", lambda self, result: True)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     monkeypatch.setattr(
         "agent33.cli.wizard._stream_test_response",
         lambda _result, _io: (_ for _ in ()).throw(RuntimeError("connection refused")),
