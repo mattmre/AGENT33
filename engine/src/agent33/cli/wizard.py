@@ -20,6 +20,7 @@ is fully testable without a live terminal.
 
 from __future__ import annotations
 
+import inspect
 import os
 from dataclasses import dataclass, field
 
@@ -27,7 +28,7 @@ try:
     from agent33.env.detect import detect_env
 except ImportError:  # pragma: no cover
 
-    def detect_env() -> object:  # type: ignore[misc]
+    def detect_env(*, force_refresh: bool = False) -> object:  # type: ignore[misc]
         raise ImportError("agent33.env.detect not available")
 
 
@@ -435,12 +436,11 @@ class FirstRunWizard:
         result.steps_completed.append("complete")
 
     def _load_env_profile(self) -> EnvProfile:
-        """Load a fresh environment profile, falling back for legacy call sites."""
-        try:
-            profile = detect_env(force_refresh=True)
-        except TypeError:
-            profile = detect_env()
-        return profile
+        """Load a fresh environment profile without masking runtime TypeErrors."""
+        signature = inspect.signature(detect_env)
+        if "force_refresh" in signature.parameters:
+            return detect_env(force_refresh=True)
+        return detect_env()
 
     def _ensure_ollama_ready(self, result: WizardResult) -> bool:
         """Make Ollama reachable using the local or bundled path when possible."""

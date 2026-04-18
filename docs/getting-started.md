@@ -34,6 +34,9 @@ For local-only setup, the defaults are acceptable. For anything beyond local dev
 - `ENCRYPTION_KEY`
 - `AUTH_BOOTSTRAP_ENABLED`
 
+Docker Compose reads `.env`. The bootstrap/wizard path writes `.env.local` for
+local CLI/runtime usage and does not replace the Compose config file.
+
 ## 2. Start the stack
 
 ```bash
@@ -52,7 +55,8 @@ docker compose -f docker-compose.yml -f docker-compose.shared-ollama.yml up -d
 - bundled Ollama profile:
 
 ```bash
-docker compose --profile local-ollama up -d ollama
+# set OLLAMA_BASE_URL=http://ollama:11434 in .env first
+docker compose --profile local-ollama up -d
 ```
 
 - dev container with tooling:
@@ -114,7 +118,7 @@ curl -X POST http://localhost:8000/v1/agents/orchestrator/invoke \
     "inputs": {
       "task": "Create a short checklist for verifying a local AGENT-33 deployment"
     },
-    "model": "llama3.2",
+    "model": "llama3.2:3b",
     "temperature": 0.2
   }'
 ```

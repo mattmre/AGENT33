@@ -62,9 +62,41 @@
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
-- Next step: push the PR `#409` review-fix commit, watch CI to completion,
-  merge it, verify `main` from a fresh worktree, then start the P-ENV v2
-  follow-up from a fresh post-merge worktree.
+- Squash-merged PR `#409` (`Session 128: harden pack/session lifecycle cleanup`)
+  and verified the merged result from fresh `origin/main` at `0918881`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session128-s2-penv2-hardening`
+  on branch `session128-s2-penv2-hardening` from the verified merged baseline.
+- Ran a fresh explore-agent audit for the R2 slice and confirmed the scope still
+  required on merged `main`:
+  - runtime settings still ignore `.env.local`
+  - runtime default model still drifts from bootstrap/wizard/docs
+  - wizard env refresh still has the broad `TypeError` fallback
+  - bundled Ollama startup still hides `docker compose` diagnostics
+  - Ollama pull timeout is still fixed at 900 seconds
+  - setup docs still need a true first-time bootstrap/start path
+- Wrote the R2 scope lock to
+  `docs/research/session128-r2-penv2-hardening-scope.md`.
+- Implemented the R2 reliability fixes in:
+  - `engine/src/agent33/config.py`
+  - `engine/src/agent33/env/ollama_setup.py`
+  - `engine/src/agent33/cli/wizard.py`
+  - `engine/.env.example`
+  - `docs/setup-guide.md`
+  - `docs/getting-started.md`
+- Added focused regression coverage in:
+  - `engine/tests/test_bootstrap.py`
+  - `engine/tests/test_ollama_setup.py`
+  - `engine/tests/test_wizard.py`
+- Ran a fresh code-review agent before PR prep; it found one real docs/code
+  mismatch in the manual Compose startup wording, and that clarification is now
+  folded into `docs/setup-guide.md`.
+- Focused R2 validation is green:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s2-penv2-hardening\engine\src pytest engine/tests/test_env_detect.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py engine/tests/test_bootstrap.py engine/tests/test_diagnose.py --no-cov -q`
+  - `ruff check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+  - `ruff format --check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+  - `mypy engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py --config-file engine/pyproject.toml`
+- Next step: open the dedicated R2 follow-up PR, review CI/comments to
+  completion, merge it, and then start the marketplace slice from fresh `main`.
 
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 

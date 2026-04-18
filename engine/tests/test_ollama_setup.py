@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
+
+import pytest
+
 from agent33.env.ollama_setup import (
     find_bundled_ollama_compose_dir,
     inspect_ollama_environment,
+    start_bundled_ollama_service,
 )
 
 
@@ -53,3 +58,25 @@ def test_inspect_ollama_environment_reports_binary_and_bundled_paths(
     assert env.reachable is False
     assert env.docker_compose_available is True
     assert env.bundled_compose_dir == engine_dir
+
+
+def test_start_bundled_ollama_service_surfaces_compose_output(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    def _fail(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            ["docker", "compose"],
+            output="compose stdout",
+            stderr="compose stderr",
+        )
+
+    monkeypatch.setattr("agent33.env.ollama_setup.subprocess.run", _fail)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        start_bundled_ollama_service(tmp_path)
+
+    message = str(exc_info.value)
+    assert "compose stderr" in message
+    assert "compose stdout" in message

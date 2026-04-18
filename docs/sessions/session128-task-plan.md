@@ -25,8 +25,8 @@ POST-CLUSTER roadmap slices
 | # | Task | Type | Branch / Worktree | Depends On | Status |
 |---|------|------|-------------------|------------|--------|
 | R0 | Audit merged review feedback and planning drift | research/docs | `session128-s1-review-remediation` | — | complete |
-| R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | PR `#409` review feedback addressed locally; push/CI pending |
-| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | queued |
+| R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | complete (merged as `#409`, fresh-main verified) |
+| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | implementation + validation complete; PR prep active |
 | R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | queued |
 | R4 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R3 merged | queued |
 
@@ -120,6 +120,36 @@ operator-facing correctness issues left by PRs `#407` and `#408`.
 - `engine/src/agent33/cli/wizard.py`
 - `engine/src/agent33/cli/bootstrap.py`
 - setup and onboarding docs touched by `#407` / `#408`
+
+**Fresh-main audit confirmed on `0918881`:**
+- runtime still loads `.env` while wizard/bootstrap emit `.env.local`
+- runtime default model is still `llama3.2` while bootstrap/wizard already use
+  `llama3.2:3b`
+- wizard still carries the broad `TypeError` env-refresh fallback
+- bundled Ollama startup still hides `docker compose` diagnostics on failure
+- Ollama pull timeout is still fixed at 900 seconds
+- setup docs still need a reliable first-time bootstrap/start path
+
+**Implemented:**
+- runtime settings now load `.env.local` after `.env`, so local CLI/runtime
+  flows consume wizard/bootstrap output without dropping the Compose `.env`
+  contract
+- standardized the default Ollama model to `llama3.2:3b` in runtime defaults and
+  `.env.example`
+- replaced the broad wizard `TypeError` fallback with an explicit
+  signature-based compatibility check for `detect_env(force_refresh=...)`
+- surfaced bundled `docker compose` stdout/stderr in bundled Ollama startup
+  failures
+- increased the default Ollama pull timeout to 1800 seconds
+- clarified `setup-guide.md` and `getting-started.md` so Compose `.env` and
+  local `.env.local` flows are documented separately and bundled-start examples
+  reflect the real stack contract
+
+**Validation completed:**
+- `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s2-penv2-hardening\engine\src pytest engine/tests/test_env_detect.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py engine/tests/test_bootstrap.py engine/tests/test_diagnose.py --no-cov -q`
+- `ruff check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+- `ruff format --check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+- `mypy engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py --config-file engine/pyproject.toml`
 
 ---
 

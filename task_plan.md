@@ -8,8 +8,8 @@ updated `origin/main`.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-18`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (408 PRs merged).
+- There are no open GitHub PRs as of `2026-04-18` after merging `#409`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (409 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
 - POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, but merged review feedback
@@ -31,8 +31,8 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: Session 128
-- Current slice: Post-merge review remediation for PRs `#406`-`#408`
-- Resume artifact: `docs/research/session128-postmerge-review-remediation-plan.md`
+- Current slice: R2 follow-up PR for P-ENV v2 and launch-doc reliability
+- Resume artifact: `docs/research/session128-r2-penv2-hardening-scope.md`
 
 ---
 
@@ -51,8 +51,8 @@ roadmap slices in sequence.
 | Task | Item | Status |
 |---|---|---|
 | T1 | Reset planning and session tracking to the real merged baseline through `#408` | complete |
-| T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | review feedback addressed locally; push/CI pending on `#409` |
-| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | queued after T2 |
+| T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | complete (merged as PR `#409`, fresh-main verified) |
+| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | implementation + validation complete; PR prep active |
 | T4 | POST-CLUSTER - Pack marketplace web UI | queued after T3 |
 | T5 | POST-CLUSTER - Community submissions | queued after T4 |
 

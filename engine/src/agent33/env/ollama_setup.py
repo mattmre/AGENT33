@@ -14,7 +14,7 @@ import httpx
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 _OLLAMA_STARTUP_TIMEOUT_SECONDS = 90.0
 _OLLAMA_PROBE_INTERVAL_SECONDS = 2.0
-_OLLAMA_PULL_TIMEOUT_SECONDS = 900.0
+_OLLAMA_PULL_TIMEOUT_SECONDS = 1800.0
 
 
 @dataclass(frozen=True)
@@ -102,14 +102,32 @@ def start_local_ollama_service() -> bool:
 
 def start_bundled_ollama_service(compose_dir: Path) -> None:
     """Start the repo's bundled Ollama service via Docker Compose."""
-    subprocess.run(  # noqa: S603
-        ["docker", "compose", "--profile", "local-ollama", "up", "-d", "ollama"],
-        cwd=compose_dir,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    try:
+        subprocess.run(  # noqa: S603
+            ["docker", "compose", "--profile", "local-ollama", "up", "-d", "ollama"],
+            cwd=compose_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            _format_process_failure(
+                "docker compose failed to start bundled Ollama",
+                returncode=exc.returncode,
+                stdout=exc.stdout,
+                stderr=exc.stderr,
+            )
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            _format_process_failure(
+                "docker compose timed out starting bundled Ollama",
+                stdout=exc.stdout,
+                stderr=exc.stderr,
+            )
+        ) from exc
 
 
 def wait_for_ollama(
@@ -188,3 +206,33 @@ def _candidate_dirs(search_start: Path | None) -> list[Path]:
             _add(current)
             _add(current / "engine")
     return candidates
+
+
+def _format_process_failure(
+    message: str,
+    *,
+    returncode: int | None = None,
+    stdout: str | bytes | None = None,
+    stderr: str | bytes | None = None,
+) -> str:
+    """Render subprocess stdout/stderr into a single actionable error."""
+
+    def _normalize(value: str | bytes | None) -> str:
+        if isinstance(value, bytes):
+            return value.decode(errors="replace").strip()
+        if isinstance(value, str):
+            return value.strip()
+        return ""
+
+    details: list[str] = []
+    stderr_text = _normalize(stderr)
+    stdout_text = _normalize(stdout)
+    if stderr_text:
+        details.append(f"stderr: {stderr_text}")
+    if stdout_text and stdout_text != stderr_text:
+        details.append(f"stdout: {stdout_text}")
+
+    suffix = f" (exit code {returncode})" if returncode is not None else ""
+    if not details:
+        return f"{message}{suffix}"
+    return f"{message}{suffix}: {' | '.join(details)}"
