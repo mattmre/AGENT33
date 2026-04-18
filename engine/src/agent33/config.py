@@ -17,7 +17,11 @@ _logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """AGENT-33 engine settings loaded from environment."""
 
-    model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
+    model_config = {
+        "env_prefix": "",
+        "env_file": (".env", ".env.local"),
+        "extra": "ignore",
+    }
 
     # API
     api_port: int = 8000
@@ -28,7 +32,7 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
-    ollama_default_model: str = "llama3.2"
+    ollama_default_model: str = "llama3.2:3b"
 
     # Local "Heretic" & Ultra-Sparse Orchestration
     # (optimized for single RTX 3090 - 24GB VRAM).

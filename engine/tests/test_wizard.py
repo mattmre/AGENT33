@@ -273,6 +273,42 @@ def test_wizard_ollama_provider_starts_bundled_service(
     assert result.llm_model == "llama3.2:3b"
 
 
+def test_wizard_ollama_provider_surfaces_bundled_start_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.2:3b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=True,
+            bundled_compose_dir=tmp_path,
+        ),
+    )
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.start_bundled_ollama_service",
+        lambda _compose_dir: (_ for _ in ()).throw(
+            RuntimeError("docker compose failed: stderr: bind error")
+        ),
+    )
+
+    io = MockIO(
+        [
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ]
+    )
+    result = FirstRunWizard(io=io, env_path=tmp_path / ".env.local").run()
+
+    assert result.completed is True
+    assert any("bind error" in message for message in io.messages)
+
+
 def test_wizard_ollama_provider_downloads_recommended_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -617,6 +653,25 @@ def test_wizard_handles_missing_env_detection(
     )
     assert result.completed is True
     assert result.profile == "developer"
+
+
+def test_load_env_profile_uses_force_refresh_when_supported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+
+    def _detect(*, force_refresh: bool = False):
+        calls.append(force_refresh)
+        return _fake_env_profile()
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _detect, raising=False)
+
+    wizard = FirstRunWizard(io=MockIO([]), env_path=tmp_path / ".env.local")
+    profile = wizard._load_env_profile()
+
+    assert calls == [True]
+    assert profile.selected_model.ollama_model == "llama3.2:3b"
 
 
 def test_wizard_full_happy_path_completes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

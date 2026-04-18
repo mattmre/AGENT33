@@ -203,6 +203,25 @@ def test_config_explicit_jwt_secret_preserved() -> None:
     assert s.jwt_secret.get_secret_value() == explicit
 
 
+def test_settings_load_env_local_after_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Settings should load .env.local and let it override .env values."""
+    from agent33.config import Settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OLLAMA_DEFAULT_MODEL", raising=False)
+    (tmp_path / ".env").write_text("OLLAMA_DEFAULT_MODEL=tinyllama:1.1b\n", encoding="utf-8")
+    (tmp_path / ".env.local").write_text(
+        "OLLAMA_DEFAULT_MODEL=llama3.1:8b\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings()
+
+    assert settings.ollama_default_model == "llama3.1:8b"
+
+
 def test_config_standard_mode_non_dev_env_raises() -> None:
     """Standard mode + non-dev environment + default JWT_SECRET must SystemExit."""
     from agent33.config import Settings
