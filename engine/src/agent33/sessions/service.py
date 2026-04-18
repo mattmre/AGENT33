@@ -64,7 +64,14 @@ class OperatorSessionService:
     def clear_terminal_session_state(self, session_id: str) -> None:
         """Run any terminal lifecycle cleanup registered for the session."""
         if self._session_cleanup_callback is not None:
-            self._session_cleanup_callback(session_id)
+            try:
+                self._session_cleanup_callback(session_id)
+            except Exception:
+                logger.warning(
+                    "session_cleanup_callback_failed session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
 
     # ------------------------------------------------------------------
     # Lifecycle

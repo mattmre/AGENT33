@@ -25,7 +25,7 @@ POST-CLUSTER roadmap slices
 | # | Task | Type | Branch / Worktree | Depends On | Status |
 |---|------|------|-------------------|------------|--------|
 | R0 | Audit merged review feedback and planning drift | research/docs | `session128-s1-review-remediation` | — | complete |
-| R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | PR open as `#409`, awaiting review |
+| R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | PR `#409` review feedback addressed locally; push/CI pending |
 | R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | queued |
 | R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | queued |
 | R4 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R3 merged | queued |
@@ -89,6 +89,14 @@ lifecycle states while preserving suspended sessions that must remain resumable.
 - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
 - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
 - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+
+**Review-fix follow-up:**
+- reviewed all PR `#409` comments and checks
+- accepted the single substantive review theme: cleanup callback failure should
+  not abort terminal lifecycle flows
+- updated `OperatorSessionService.clear_terminal_session_state()` to log and
+  continue on callback failure
+- added failure-path regression coverage in the touched session tests
 
 ---
 

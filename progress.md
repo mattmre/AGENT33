@@ -42,8 +42,29 @@
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
 - Opened PR `#409` (`Session 128: harden pack/session lifecycle cleanup`) from
   branch `session128-s1-review-remediation`.
-- Next step: review and merge `#409`, verify `main` from a fresh worktree, then
-  start the P-ENV v2 follow-up from a fresh post-merge worktree.
+- Reviewed PR `#409` feedback and found one substantive issue repeated by both
+  review bots: the new terminal session cleanup callback should be treated as a
+  best-effort lifecycle side effect rather than aborting session teardown if it
+  raises.
+- Ran a fresh review agent against `#409` to sanity-check the bot feedback
+  before patching; no additional substantive issues were found.
+- Hardened `OperatorSessionService.clear_terminal_session_state()` to log and
+  continue when the injected cleanup callback raises, matching the existing
+  best-effort lifecycle patterns already used for hooks, status refresh, and
+  shutdown flush.
+- Added regression coverage for:
+  - completed session teardown continuing after cleanup-callback failure
+  - archived-session cleanup continuing after cleanup-callback failure
+- Re-ran the targeted Session 128 validation stack after the review fix:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_integration.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_integration_wiring.py -k "lifespan or expected_attributes" --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Next step: push the PR `#409` review-fix commit, watch CI to completion,
+  merge it, verify `main` from a fresh worktree, then start the P-ENV v2
+  follow-up from a fresh post-merge worktree.
 
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 

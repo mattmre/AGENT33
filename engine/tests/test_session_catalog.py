@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
@@ -482,6 +483,38 @@ class TestSessionArchiveService:
 
         assert removed == 1
         cleanup.assert_called_once_with(session.session_id)
+
+    async def test_cleanup_archived_logs_cleanup_failure_and_continues(
+        self,
+        storage: FileSessionStorage,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """cleanup_archived still removes old sessions when cleanup raises."""
+
+        def cleanup_callback(_: str) -> None:
+            raise RuntimeError("cleanup failed")
+
+        session_service = OperatorSessionService(
+            storage=storage,
+            session_cleanup_callback=cleanup_callback,
+        )
+        session = await session_service.start_session(purpose="old")
+        await session_service.end_session(session.session_id)
+
+        archive_svc = SessionArchiveService(session_service)
+        await archive_svc.archive(session.session_id)
+
+        s = await session_service.get_session(session.session_id)
+        assert s is not None
+        s.updated_at = datetime.now(UTC) - timedelta(days=100)
+        session_service.storage.save_session(s)
+
+        with caplog.at_level(logging.WARNING):
+            removed = await archive_svc.cleanup_archived(older_than_days=90)
+
+        assert removed == 1
+        assert "session_cleanup_callback_failed" in caplog.text
+        assert await session_service.get_session(session.session_id) is None
 
     async def test_cleanup_archived_keeps_recent(
         self, session_service: OperatorSessionService

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -96,6 +97,21 @@ class TestSessionLifecycle:
         await svc.end_session(session.session_id)
 
         cleanup.assert_called_once_with(session.session_id)
+
+    async def test_end_session_completed_logs_cleanup_failure_and_continues(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        def cleanup_callback(_: str) -> None:
+            raise RuntimeError("cleanup failed")
+
+        svc = _make_service(tmp_path, session_cleanup_callback=cleanup_callback)
+        session = await svc.start_session(purpose="End cleanup failure test")
+
+        with caplog.at_level(logging.WARNING):
+            ended = await svc.end_session(session.session_id)
+
+        assert ended.status == OperatorSessionStatus.COMPLETED
+        assert "session_cleanup_callback_failed" in caplog.text
 
     async def test_end_session_suspended(self, tmp_path: Path) -> None:
         svc = _make_service(tmp_path)
