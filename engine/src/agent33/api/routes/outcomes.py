@@ -247,6 +247,8 @@ async def assign_ppack_variant(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return assignment.model_dump(mode="json")
@@ -257,10 +259,13 @@ async def assign_ppack_variant(
     dependencies=[require_scope("outcomes:read")],
 )
 async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, Any]:
-    assignment = get_ppack_ab_service(request).get_assignment(
-        tenant_id=_tenant_id(request),
-        session_id=session_id,
-    )
+    try:
+        assignment = get_ppack_ab_service(request).get_assignment(
+            tenant_id=_tenant_id(request),
+            session_id=session_id,
+        )
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
     if assignment is None:
         raise HTTPException(status_code=404, detail="P-PACK v3 assignment not found")
     return assignment.model_dump(mode="json")
@@ -309,7 +314,10 @@ async def generate_ppack_report(
     dependencies=[require_scope("outcomes:read")],
 )
 async def get_ppack_report(report_id: str, request: Request) -> dict[str, Any]:
-    report = get_ppack_ab_service(request).get_report(report_id)
+    try:
+        report = get_ppack_ab_service(request).get_report(report_id)
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
     if report is None:
         raise HTTPException(status_code=404, detail="P-PACK v3 report not found")
     return report.model_dump(mode="json")

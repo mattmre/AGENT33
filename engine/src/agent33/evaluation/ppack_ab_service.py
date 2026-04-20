@@ -310,12 +310,6 @@ class PPackABService:
         event: OutcomeEvent,
         assignments_by_session: dict[str, PPackABAssignment],
     ) -> PPackABVariant | None:
-        raw_variant = event.metadata.get("ppack_variant")
-        if isinstance(raw_variant, str) and raw_variant in {
-            PPackABVariant.CONTROL.value,
-            PPackABVariant.TREATMENT.value,
-        }:
-            return PPackABVariant(raw_variant)
         session_id = event.metadata.get("session_id")
         if not isinstance(session_id, str) or not session_id.strip():
             return None
