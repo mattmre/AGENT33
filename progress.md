@@ -1,5 +1,38 @@
 # Progress Log
 
+## 2026-04-20 (Session 130 community submissions scoping)
+
+- Squash-merged PR `#413` (`Session 130: add pack marketplace web UI`) as
+  commit `d38f1b1`.
+- Verified the merged marketplace slice from fresh `origin/main` in
+  `C:\GitHub\repos\AGENT33\worktrees\session130-s1-postmerge-verify` using:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions`
+  on branch `session130-s2-community-submissions` from verified merged `main`.
+- Audited the current backend/community surfaces and confirmed the narrow next
+  slice should be submission UX on top of the existing curation backend rather
+  than an admin review console or broader PackHub rebuild.
+- Added a scope-lock note in
+  `docs/research/session130-s2-community-submissions-scope.md`.
+- Extended the existing marketplace detail panel with community-submission UX:
+  - submission/resubmission action for installed packs
+  - live curation status display
+  - quality assessment preview and check breakdown
+  - reviewer note surfacing for existing records
+- Added focused frontend coverage for the new submission flow.
+- Validation passed:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions\engine\src pytest engine\tests\test_marketplace_curation.py --no-cov -q`
+- Opened PR `#414` (`Session 130: add community pack submission flow`).
+- Addressed the first automated PR review pass:
+  - allow `draft` curation records to remain submittable
+  - keep submission UX available when installed-pack detail fetch fails
+  - separate success/error submission messaging and neutralize status-pill styling
+
 ## 2026-04-20 (Session 130 pack marketplace web UI)
 
 - Verified the docs/operator remediation slice landed on `main` as PR `#412`

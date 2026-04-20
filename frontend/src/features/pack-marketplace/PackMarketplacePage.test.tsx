@@ -293,4 +293,463 @@ describe("PackMarketplacePage", () => {
       expect.objectContaining({ method: "POST" })
     ));
   });
+
+  it("submits an installed pack for community curation and shows the updated status", async () => {
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+
+      if (url === "http://localhost:8000/v1/marketplace/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "community-pack",
+              description: "Community-ready automation pack",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              latest_version: "1.2.0",
+              versions_count: 1,
+              sources: ["community"]
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/categories") {
+        return jsonResponse({ categories: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/featured") {
+        return jsonResponse({ records: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/curation") {
+        return jsonResponse({ records: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "community-pack",
+              version: "1.2.0",
+              description: "Community-ready automation pack",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              skills_count: 2,
+              status: "installed"
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/packs/community-pack") {
+        return jsonResponse({
+          name: "community-pack",
+          description: "Community-ready automation pack",
+          author: "AGENT-33",
+          tags: ["community", "automation"],
+          category: "automation",
+          latest_version: "1.2.0",
+          sources: ["community"],
+          versions: [
+            {
+              version: "1.2.0",
+              description: "Current release",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              skills_count: 2,
+              source_name: "community",
+              source_type: "registry",
+              trust_level: "verified"
+            }
+          ]
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs/community-pack") {
+        return jsonResponse({
+          name: "community-pack",
+          version: "1.2.0",
+          description: "Community-ready automation pack",
+          author: "AGENT-33",
+          tags: ["community", "automation"],
+          category: "automation",
+          skills_count: 2,
+          status: "installed",
+          license: "MIT",
+          loaded_skill_names: ["workflow-builder", "ops-helper"],
+          engine_min_version: "0.1.0",
+          installed_at: null,
+          source: "marketplace",
+          source_reference: "community",
+          checksum: "checksum",
+          enabled_for_tenant: true
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs/community-pack/trust") {
+        return jsonResponse({
+          pack_name: "community-pack",
+          installed_version: "1.2.0",
+          source: "marketplace",
+          source_reference: "community",
+          allowed: true,
+          reason: "",
+          policy: { require_signature: false, min_trust_level: "medium", allowed_signers: [] }
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/quality/community-pack") {
+        return jsonResponse({
+          overall_score: 0.92,
+          label: "high",
+          passed: true,
+          checks: [
+            {
+              name: "description_quality",
+              passed: true,
+              score: 1,
+              reason: "description length: 74 chars"
+            }
+          ]
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/curation/submit") {
+        expect(init).toEqual(
+          expect.objectContaining({
+            method: "POST",
+            headers: expect.objectContaining({
+              Accept: "application/json",
+              Authorization: "Bearer session-token",
+              "Content-Type": "application/json"
+            }),
+            body: JSON.stringify({ pack_name: "community-pack", version: "1.2.0" })
+          })
+        );
+
+        return jsonResponse(
+          {
+            pack_name: "community-pack",
+            version: "1.2.0",
+            status: "submitted",
+            quality: {
+              overall_score: 0.92,
+              label: "high",
+              passed: true,
+              checks: [
+                {
+                  name: "description_quality",
+                  passed: true,
+                  score: 1,
+                  reason: "description length: 74 chars"
+                }
+              ]
+            },
+            badges: [],
+            featured: false,
+            verified: false,
+            reviewer_id: "",
+            review_notes: "",
+            deprecation_reason: "",
+            submitted_at: null,
+            reviewed_at: null,
+            listed_at: null,
+            download_count: 0
+          },
+          201
+        );
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    const user = userEvent.setup();
+    render(<PackMarketplacePage token="session-token" apiKey={null} />);
+
+    await user.click(await screen.findByRole("button", { name: /open details for community-pack/i }));
+    expect(await screen.findByText(/quality preview:/i)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: /submit for curation/i }));
+
+    expect(
+      await screen.findByText("Submitted community-pack for marketplace curation.")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("submitted").length).toBeGreaterThan(0);
+  });
+
+  it("keeps submission available when installed detail fetch fails", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url === "http://localhost:8000/v1/marketplace/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "community-pack",
+              description: "Community-ready automation pack",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              latest_version: "1.2.0",
+              versions_count: 1,
+              sources: ["community"]
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/categories") {
+        return jsonResponse({ categories: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/featured") {
+        return jsonResponse({ records: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/curation") {
+        return jsonResponse({ records: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "community-pack",
+              version: "1.2.0",
+              description: "Community-ready automation pack",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              skills_count: 2,
+              status: "installed"
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/packs/community-pack") {
+        return jsonResponse({
+          name: "community-pack",
+          description: "Community-ready automation pack",
+          author: "AGENT-33",
+          tags: ["community", "automation"],
+          category: "automation",
+          latest_version: "1.2.0",
+          sources: ["community"],
+          versions: [
+            {
+              version: "1.2.0",
+              description: "Current release",
+              author: "AGENT-33",
+              tags: ["community", "automation"],
+              category: "automation",
+              skills_count: 2,
+              source_name: "community",
+              source_type: "registry",
+              trust_level: "verified"
+            }
+          ]
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs/community-pack") {
+        return jsonResponse({ detail: "detail unavailable" }, 500);
+      }
+
+      if (url === "http://localhost:8000/v1/packs/community-pack/trust") {
+        return jsonResponse({
+          pack_name: "community-pack",
+          installed_version: "1.2.0",
+          source: "marketplace",
+          source_reference: "community",
+          allowed: true,
+          reason: "",
+          policy: { require_signature: false, min_trust_level: "medium", allowed_signers: [] }
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/quality/community-pack") {
+        return jsonResponse({
+          overall_score: 0.92,
+          label: "high",
+          passed: true,
+          checks: []
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    const user = userEvent.setup();
+    render(<PackMarketplacePage token="session-token" apiKey={null} />);
+
+    await user.click(await screen.findByRole("button", { name: /open details for community-pack/i }));
+
+    expect(
+      await screen.findByText("Installed pack detail failed: detail unavailable")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /submit for curation/i })).toBeInTheDocument();
+    expect(
+      screen.queryByText(/install this pack before submitting it for marketplace curation/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats draft curation records as submittable", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url === "http://localhost:8000/v1/marketplace/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "draft-pack",
+              description: "Drafted community pack",
+              author: "AGENT-33",
+              tags: ["community"],
+              category: "automation",
+              latest_version: "0.4.0",
+              versions_count: 1,
+              sources: ["community"]
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/categories") {
+        return jsonResponse({ categories: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/featured") {
+        return jsonResponse({ records: [], count: 0 });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/curation") {
+        return jsonResponse({
+          records: [
+            {
+              pack_name: "draft-pack",
+              version: "0.4.0",
+              status: "draft",
+              quality: null,
+              badges: [],
+              featured: false,
+              verified: false,
+              reviewer_id: "",
+              review_notes: "",
+              deprecation_reason: "",
+              submitted_at: null,
+              reviewed_at: null,
+              listed_at: null,
+              download_count: 0
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs") {
+        return jsonResponse({
+          packs: [
+            {
+              name: "draft-pack",
+              version: "0.4.0",
+              description: "Drafted community pack",
+              author: "AGENT-33",
+              tags: ["community"],
+              category: "automation",
+              skills_count: 1,
+              status: "installed"
+            }
+          ],
+          count: 1
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/packs/draft-pack") {
+        return jsonResponse({
+          name: "draft-pack",
+          description: "Drafted community pack",
+          author: "AGENT-33",
+          tags: ["community"],
+          category: "automation",
+          latest_version: "0.4.0",
+          sources: ["community"],
+          versions: [
+            {
+              version: "0.4.0",
+              description: "Current release",
+              author: "AGENT-33",
+              tags: ["community"],
+              category: "automation",
+              skills_count: 1,
+              source_name: "community",
+              source_type: "registry",
+              trust_level: "verified"
+            }
+          ]
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs/draft-pack") {
+        return jsonResponse({
+          name: "draft-pack",
+          version: "0.4.0",
+          description: "Drafted community pack",
+          author: "AGENT-33",
+          tags: ["community"],
+          category: "automation",
+          skills_count: 1,
+          status: "installed",
+          license: "MIT",
+          loaded_skill_names: ["workflow-builder"],
+          engine_min_version: "0.1.0",
+          installed_at: null,
+          source: "marketplace",
+          source_reference: "community",
+          checksum: "checksum",
+          enabled_for_tenant: true
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/packs/draft-pack/trust") {
+        return jsonResponse({
+          pack_name: "draft-pack",
+          installed_version: "0.4.0",
+          source: "marketplace",
+          source_reference: "community",
+          allowed: true,
+          reason: "",
+          policy: { require_signature: false, min_trust_level: "medium", allowed_signers: [] }
+        });
+      }
+
+      if (url === "http://localhost:8000/v1/marketplace/quality/draft-pack") {
+        return jsonResponse({
+          overall_score: 0.65,
+          label: "medium",
+          passed: true,
+          checks: []
+        });
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    const user = userEvent.setup();
+    render(<PackMarketplacePage token="session-token" apiKey={null} />);
+
+    await user.click(await screen.findByRole("button", { name: /open details for draft-pack/i }));
+
+    expect(await screen.findByRole("button", { name: /submit for curation/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /resubmit for curation/i })).not.toBeInTheDocument();
+  });
 });
