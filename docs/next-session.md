@@ -1,11 +1,11 @@
 # Next Session Briefing
 
-Last updated: 2026-04-20 (PR `#413` merged, Session 130 community submissions active)
+Last updated: 2026-04-20 (PR `#414` open, Session 130 community submissions in review)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
-- **Open PRs**: 0
+- **Open PRs**: 1 (`#414`)
 - **Latest merged PR**: `#413` (`Session 130: add pack marketplace web UI`)
 - **Latest merged implementation PR**: `#413` (`Session 130: add pack marketplace web UI`)
 - **Latest commit on main**: `d38f1b1`
@@ -40,7 +40,7 @@ Last updated: 2026-04-20 (PR `#413` merged, Session 130 community submissions ac
 - **Current execution queue**: this file plus `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **Current session log**: `docs/sessions/session-129-2026-04-20.md`
 - **Recovery note**: stale root checkouts may still have out-of-date planning docs; prefer fresh `origin/main` worktrees plus this file when recovering context
-- **Immediate implementation focus**: complete the community-submission UX from the fresh Session 130 worktree on top of the existing curation backend
+- **Immediate implementation focus**: review, fix, and merge PR `#414` after CI completes; community-submission UX is already implemented on the branch
 
 ## Next Session Priority Queue
 
@@ -55,7 +55,7 @@ Last updated: 2026-04-20 (PR `#413` merged, Session 130 community submissions ac
 - surface submission status, quality assessment, and review notes in the UI
 - support resubmission for `changes_requested` / `unlisted` states
 - keep admin review controls out of scope for this PR
-- Worktree: `worktrees/session130-s2-community-submissions`, branch `session130-s2-community-submissions`
+- Worktree: `worktrees/session130-s2-community-submissions`, branch `session130-s2-community-submissions`, PR `#414`
 
 ### Secondary Follow-up Work
 

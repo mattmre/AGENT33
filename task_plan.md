@@ -8,7 +8,7 @@ updated `origin/main`.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-20` after merging `#413`.
+- There is 1 open GitHub PR as of `2026-04-20`: `#414` (`Session 130: add community pack submission flow`).
 - All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (413 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
@@ -38,6 +38,7 @@ If execution stops mid-slice, resume in this order:
 - Current slice: `POST-CLUSTER` community submissions
 - Worktree: `C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions`
 - Branch: `session130-s2-community-submissions`
+- Active PR: `#414` (`Session 130: add community pack submission flow`)
 - Resume artifact: `docs/research/session130-s2-community-submissions-scope.md`
 
 ---

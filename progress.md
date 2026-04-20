@@ -27,6 +27,7 @@
   - `npm run lint`
   - `npm run build`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions\engine\src pytest engine\tests\test_marketplace_curation.py --no-cov -q`
+- Opened PR `#414` (`Session 130: add community pack submission flow`).
 
 ## 2026-04-20 (Session 130 pack marketplace web UI)
 
