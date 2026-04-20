@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -49,6 +50,7 @@ def reset_outcomes_service() -> None:
     if had_ab_attr:
         delattr(app.state, "ppack_ab_service")
     yield
+    outcomes_mod._ppack_ab_service.close()
     outcomes_mod._service = saved_service
     outcomes_mod._ppack_ab_service = saved_ab_service
     if had_attr:
@@ -274,6 +276,10 @@ def test_dashboard_contract(writer_client: TestClient, tenant_b_writer: TestClie
     }
     assert all(item["direction"] in {"improving", "stable", "declining"} for item in trends)
 
+    recent_events = payload["recent_events"]
+    assert len(recent_events) == 2
+    assert all(event["tenant_id"] == "tenant-a" for event in recent_events)
+
 
 def test_ppack_assignment_and_report_endpoints(writer_client: TestClient) -> None:
     assign_response = writer_client.post(
@@ -344,3 +350,147 @@ def test_ppack_report_endpoint_requires_write_scope(
     )
     assert response.status_code == 403
     assert "outcomes:write" in response.json()["detail"]
+
+
+def test_ppack_variant_resolution_uses_persisted_assignment(
+    writer_client: TestClient,
+) -> None:
+    """Variant resolution should trust persisted assignments over caller metadata."""
+    assign_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-integrity"},
+    )
+    assert assign_response.status_code == 201
+    assignment = assign_response.json()
+    true_variant = assignment["variant"]
+    spoofed_variant = "treatment" if true_variant == "control" else "control"
+
+    writer_client.post(
+        "/v1/outcomes/events",
+        json={
+            "domain": "delivery",
+            "event_type": "invoke",
+            "metric_type": "success_rate",
+            "value": 1.0,
+            "metadata": {
+                "session_id": "session-integrity",
+                "ppack_variant": spoofed_variant,
+            },
+        },
+    )
+
+    report_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/report",
+        json={"domain": "delivery", "metric_types": ["success_rate"]},
+    )
+    assert report_response.status_code == 200
+    report = report_response.json()
+    comparisons = report["comparisons"]
+    success_comparison = next(c for c in comparisons if c["metric_type"] == "success_rate")
+
+    if true_variant == "control":
+        assert success_comparison["control_count"] == 1
+        assert success_comparison["treatment_count"] == 0
+    else:
+        assert success_comparison["control_count"] == 0
+        assert success_comparison["treatment_count"] == 1
+
+
+def test_ppack_assignment_sqlite_error_returns_503(
+    writer_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assignment persistence failures should return 503."""
+    from agent33.api.routes import outcomes as outcomes_mod
+
+    def raise_sqlite_error(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(
+        outcomes_mod._ppack_ab_service._persistence,
+        "save_assignment",
+        raise_sqlite_error,
+    )
+
+    response = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-error"},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
+
+
+def test_ppack_get_assignment_sqlite_error_returns_503(
+    writer_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assignment retrieval persistence failures should return 503."""
+    from agent33.api.routes import outcomes as outcomes_mod
+
+    def raise_sqlite_error(*args, **kwargs):
+        raise sqlite3.DatabaseError("disk I/O error")
+
+    monkeypatch.setattr(
+        outcomes_mod._ppack_ab_service._persistence,
+        "get_assignment",
+        raise_sqlite_error,
+    )
+
+    response = writer_client.get("/v1/outcomes/ppack-v3/assignments/session-test")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
+
+
+def test_ppack_get_report_sqlite_error_returns_503(
+    writer_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Report retrieval persistence failures should return 503."""
+    from agent33.api.routes import outcomes as outcomes_mod
+
+    def raise_sqlite_error(*args, **kwargs):
+        raise sqlite3.IntegrityError("constraint violation")
+
+    monkeypatch.setattr(
+        outcomes_mod._ppack_ab_service._persistence,
+        "get_report",
+        raise_sqlite_error,
+    )
+
+    response = writer_client.get("/v1/outcomes/ppack-v3/reports/report-test")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
+
+
+def test_ppack_get_report_is_tenant_scoped(
+    writer_client: TestClient,
+    tenant_b_writer: TestClient,
+) -> None:
+    assign_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-tenant-a"},
+    )
+    assert assign_response.status_code == 201
+    assignment = assign_response.json()
+    writer_client.post(
+        "/v1/outcomes/events",
+        json={
+            "domain": "delivery",
+            "event_type": "invoke",
+            "metric_type": "success_rate",
+            "value": 1.0,
+            "metadata": {
+                "session_id": "session-tenant-a",
+                "ppack_variant": assignment["variant"],
+            },
+        },
+    )
+    report_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/report",
+        json={"domain": "delivery", "metric_types": ["success_rate"]},
+    )
+    assert report_response.status_code == 200
+    report_id = report_response.json()["report_id"]
+
+    response = tenant_b_writer.get(f"/v1/outcomes/ppack-v3/reports/{report_id}")
+    assert response.status_code == 404
