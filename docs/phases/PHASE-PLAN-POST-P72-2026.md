@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#411` on 2026-04-20, execution posture updated in Session 129
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#412` on 2026-04-20, execution posture updated in Session 130
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,14 +15,14 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; remediation PRs `#409`-`#411` landed, and the final operator/docs cleanup slice is active before the pack marketplace slice |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; remediation PRs `#409`-`#412` landed, and the marketplace web UI is the active remaining slice before community submissions |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | Post-merge review remediation (`#406`-`#411`) | Active | Lifecycle cleanup, P-ENV/docs reliability, and P-PACK hardening are complete; remaining operator/docs polish is the last remediation slice before the remaining roadmap resumes |
-| 2 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after remediation PRs land and are verified |
+| 1 | Post-merge review remediation (`#406`-`#412`) | Complete | Lifecycle cleanup, P-ENV/docs reliability, P-PACK hardening, and operator/docs queue sync are now merged on `main` |
+| 2 | POST-CLUSTER — Pack marketplace web UI | Active | Current Session 130 slice in fresh worktree `session130-s1-pack-marketplace` |
 | 3 | POST-CLUSTER — Community submissions | Pending | Only after the marketplace slice and approval flow are proven |
 
 ## Parallel Follow-up Work During POST-CLUSTER Execution
@@ -77,8 +77,8 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - Lifecycle cleanup follow-up (**complete** in PR `#409`)
 - P-ENV/docs reliability follow-up (**complete** in PR `#410`)
 - P-PACK review-debt hardening (**complete** in PR `#411`)
-- Remaining operator/docs remediation (**active** before the next roadmap slice)
-- Pack marketplace web UI (**next roadmap slice**)
+- Remaining operator/docs remediation (**complete** in PR `#412`)
+- Pack marketplace web UI (**active current slice**)
 - Community submissions (only after pack signing + approval queue proven)
 
 ## Dependency Graph

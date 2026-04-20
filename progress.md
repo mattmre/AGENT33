@@ -1,5 +1,44 @@
 # Progress Log
 
+## 2026-04-20 (Session 130 pack marketplace web UI)
+
+- Verified the docs/operator remediation slice landed on `main` as PR `#412`
+  / commit `d11eac5`, then created fresh worktree
+  `C:\GitHub\repos\AGENT33\worktrees\session130-s1-pack-marketplace`
+  on branch `session130-s1-pack-marketplace`.
+- Confirmed latest `main` already exposes the backend marketplace surfaces, so
+  this slice stayed frontend-first rather than reopening the API layer.
+- Implemented a new `Marketplace` tab in `frontend/src/App.tsx` with a dedicated
+  `frontend/src/features/pack-marketplace/` feature slice:
+  - client-side browse/search/category filtering over `/v1/marketplace/packs`
+  - featured / curation / installed-state aggregation
+  - pack detail panel with version selection
+  - install action via `POST /v1/marketplace/install`
+  - status display for installed, tenant enablement, and trust posture
+- Added focused frontend regression coverage in
+  `frontend/src/features/pack-marketplace/PackMarketplacePage.test.tsx`.
+- Fixed one accessibility regression discovered during testing: marketplace pack
+  cards must keep their native button role rather than overriding it with
+  `role="listitem"`.
+- Targeted frontend validation is green:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+- Opened PR `#413` (`Session 130: add pack marketplace web UI`) from branch
+  `session130-s1-pack-marketplace`.
+- Addressed the first PR `#413` review pass:
+  - preserve featured state when curation and featured records overlap
+  - make version rows clickable with accessible pressed-state semantics
+  - preserve the actual installed version when deriving local skills-count state
+  - surface backend error detail in marketplace API failures
+  - isolate the focused frontend tests by unstubbing globals after each run
+  - expose category-toggle state via `aria-pressed`
+- Re-ran the focused marketplace validation stack successfully after the review
+  fixes.
+- Validation caveat on this Windows host: the default Vitest worker pool hung
+  for this spec, so the stable single-fork invocation above is the reliable
+  command when re-running the marketplace tests locally.
+
 ## 2026-04-20 (Session 129 PR #411 merge and operator/docs follow-up)
 
 - Squash-merged PR `#411` (`Session 129: harden P-PACK A/B review debt`) as

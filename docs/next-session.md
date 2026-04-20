@@ -1,15 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-04-20 (PR `#411` merged, Session 129 operator/docs follow-up active)
+Last updated: 2026-04-20 (PR `#412` merged, Session 130 marketplace UI active)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#411` (`Session 129: harden P-PACK A/B review debt`)
-- **Latest merged implementation PR**: `#411` (`Session 129: harden P-PACK A/B review debt`)
-- **Latest commit on main**: `8f1cbe3`
-- **Cumulative PRs merged**: 411
+- **Latest merged PR**: `#412` (`Session 129: sync operator docs and queue state`)
+- **Latest merged implementation PR**: `#412` (`Session 129: sync operator docs and queue state`)
+- **Latest commit on main**: `d11eac5`
+- **Cumulative PRs merged**: 412
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
@@ -31,6 +31,7 @@ Last updated: 2026-04-20 (PR `#411` merged, Session 129 operator/docs follow-up 
 | #409 | `0918881` | remediation | session/pack lifecycle cleanup for terminal session paths |
 | #410 | `5de4f78` | remediation | P-ENV v2 startup reliability plus launch-doc/runtime contract fixes |
 | #411 | `8f1cbe3` | remediation | P-PACK v3 persistence hardening, tenant-safe report fetches, and report-integrity fixes |
+| #412 | `d11eac5` | remediation | operator/docs queue sync, Session 129 note dedupe, and `llama3.2:3b` contract alignment |
 
 ## Current Roadmap Posture
 
@@ -38,28 +39,23 @@ Last updated: 2026-04-20 (PR `#411` merged, Session 129 operator/docs follow-up 
 - **Current execution queue**: this file plus `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **Current session log**: `docs/sessions/session-129-2026-04-20.md`
 - **Recovery note**: stale root checkouts may still have out-of-date planning docs; prefer fresh `origin/main` worktrees plus this file when recovering context
-- **Immediate non-roadmap gate**: finish the remaining operator/docs remediation from the merged review-debt wave before starting the marketplace slice
+- **Immediate implementation focus**: complete the marketplace web UI from the fresh Session 130 worktree, then open the next PR before moving to community submissions
 
 ## Next Session Priority Queue
 
-### Immediate: Post-Merge Review Remediation
-
-There are no open PRs to review. The immediate queue is the last remaining
-operator/docs follow-up work discovered while auditing merged review threads and
-handoff drift across PRs `#407`-`#411`.
+### Immediate: Remaining POST-CLUSTER implementation
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | Follow-up PR: remaining operator/docs polish from `#407`/`#408`/`#411` review debt | ACTIVE locally in `worktrees/session129-s2-operator-docs` |
-| T2 | POST-CLUSTER — Pack marketplace web UI | QUEUED after T1 |
-| T3 | POST-CLUSTER — Community submissions | QUEUED after T2 |
+| T1 | POST-CLUSTER — Pack marketplace web UI | ACTIVE locally in `worktrees/session130-s1-pack-marketplace` |
+| T2 | POST-CLUSTER — Community submissions | QUEUED after T1 |
 
-**T1 scope**:
-- sync `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and queue trackers to merged `main` through `#411`
-- fix remaining operator-facing docs drift from the public-launch / P-ENV wave:
-  onboarding links, Ollama default URL/model wording, clearer local credential guidance
-- remove the duplicate `docs/sessions/session-129-2026-04-19.md` note and keep `session-129-2026-04-20.md` as the canonical Session 129 record
-- Worktree: `worktrees/session129-s2-operator-docs`, branch `session129-s2-operator-docs`
+**T1 scope** (now open as PR `#413`):
+- add a first-class marketplace tab to the frontend app shell
+- browse/filter/search marketplace packs from the existing backend contract
+- surface featured/curation/installed/trust state in the UI
+- install packs from the web UI without reopening the backend scope
+- Worktree: `worktrees/session130-s1-pack-marketplace`, branch `session130-s1-pack-marketplace`
 
 ### Secondary Follow-up Work
 
@@ -73,8 +69,9 @@ handoff drift across PRs `#407`-`#411`.
 - `docs/phases/PHASE-PLAN-POST-P72-2026.md` - current POST-P72 roadmap
 - `docs/sessions/session128-task-plan.md` - merged remediation queue history plus the current handoff into Session 129
 - `docs/sessions/session-129-2026-04-20.md` - Session 129 merged remediation log
+- `docs/research/session130-s1-pack-marketplace-scope.md` - marketplace scope lock and validation notes
 - `docs/research/session128-postmerge-review-remediation-plan.md` - merged-review findings and follow-up sequencing
-- `docs/research/session129-s2-operator-docs-review-debt.md` - current scope lock for the remaining operator/docs cleanup
+- `docs/research/session129-s2-operator-docs-review-debt.md` - completed operator/docs remediation scope note
 - `docs/research/session127-post45-ppack-v3-behavior.md` - POST-4.5 behavior contract and source-precedence notes
 - `docs/research/session127-postcluster-public-launch-scope.md` - launch-prep scope lock and doc-surface contract
 - `docs/research/session127-postcluster-penv2-scope.md` - P-ENV v2 scope lock
