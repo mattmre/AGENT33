@@ -21,6 +21,8 @@ describe("PackMarketplacePage", () => {
 
   afterEach(() => {
     delete window.__AGENT33_CONFIG__;
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
   });
 
   it("uses the API key for marketplace loading and shows pack state badges", async () => {

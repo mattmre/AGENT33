@@ -26,6 +26,15 @@
   - `npm run build`
 - Opened PR `#413` (`Session 130: add pack marketplace web UI`) from branch
   `session130-s1-pack-marketplace`.
+- Addressed the first PR `#413` review pass:
+  - preserve featured state when curation and featured records overlap
+  - make version rows clickable with accessible pressed-state semantics
+  - preserve the actual installed version when deriving local skills-count state
+  - surface backend error detail in marketplace API failures
+  - isolate the focused frontend tests by unstubbing globals after each run
+  - expose category-toggle state via `aria-pressed`
+- Re-ran the focused marketplace validation stack successfully after the review
+  fixes.
 - Validation caveat on this Windows host: the default Vitest worker pool hung
   for this spec, so the stable single-fork invocation above is the reliable
   command when re-running the marketplace tests locally.

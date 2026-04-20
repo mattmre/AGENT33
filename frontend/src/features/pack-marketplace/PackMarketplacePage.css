@@ -288,20 +288,34 @@
 }
 
 .pack-marketplace-version-list li {
+  margin: 0;
+}
+
+.pack-marketplace-version-button {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+  width: 100%;
   padding: 0.75rem 0.85rem;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
 }
 
-.pack-marketplace-version-list li.active {
+.pack-marketplace-version-button.active {
   border-color: rgba(48, 213, 200, 0.35);
 }
 
-.pack-marketplace-version-list li > div {
+.pack-marketplace-version-button:hover,
+.pack-marketplace-version-button:focus-visible {
+  border-color: rgba(48, 213, 200, 0.35);
+  outline: none;
+}
+
+.pack-marketplace-version-button > div {
   display: flex;
   flex-direction: column;
   gap: 0.18rem;

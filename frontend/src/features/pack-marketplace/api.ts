@@ -25,9 +25,50 @@ function headers(token: string | null, apiKey: string | null): Record<string, st
   return result;
 }
 
+function extractErrorDetail(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const detail = record.detail;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (detail && typeof detail === "object") {
+    const detailRecord = detail as Record<string, unknown>;
+    if (typeof detailRecord.message === "string" && detailRecord.message.trim()) {
+      return detailRecord.message;
+    }
+  }
+
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+
+  return null;
+}
+
 async function parseJson<T>(response: Response, message: string): Promise<T> {
   if (!response.ok) {
-    throw new Error(`${message}: ${response.status}`);
+    let errorText: string | null = null;
+
+    try {
+      const body = await response.text();
+      if (body) {
+        try {
+          errorText = extractErrorDetail(JSON.parse(body)) ?? body;
+        } catch {
+          errorText = body;
+        }
+      }
+    } catch {
+      errorText = null;
+    }
+
+    throw new Error(`${message}: ${errorText || response.status}`);
   }
   return response.json() as Promise<T>;
 }

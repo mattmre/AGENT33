@@ -244,18 +244,24 @@ function PackDetailPanel({
             </div>
             <ul className="pack-marketplace-version-list">
               {pack.versions.map((version) => (
-                <li
-                  key={version.version}
-                  className={selectedVersion === version.version ? "active" : undefined}
-                >
-                  <div>
-                    <strong>{version.version}</strong>
-                    <span>{version.source_name || version.source_type || "marketplace"}</span>
-                  </div>
-                  <div>
-                    <span>{version.skills_count} skill(s)</span>
-                    <span>{formatTrust(version.trust_level)}</span>
-                  </div>
+                <li key={version.version}>
+                  <button
+                    type="button"
+                    className={`pack-marketplace-version-button ${
+                      selectedVersion === version.version ? "active" : ""
+                    }`}
+                    aria-pressed={selectedVersion === version.version}
+                    onClick={() => onVersionChange(version.version)}
+                  >
+                    <div>
+                      <strong>{version.version}</strong>
+                      <span>{version.source_name || version.source_type || "marketplace"}</span>
+                    </div>
+                    <div>
+                      <span>{version.skills_count} skill(s)</span>
+                      <span>{formatTrust(version.trust_level)}</span>
+                    </div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -325,10 +331,26 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
         installedMap(installedResult.status === "fulfilled" ? installedResult.value : [])
       );
 
-      const mergedCuration = {
-        ...(featuredResult.status === "fulfilled" ? recordMap(featuredResult.value) : {}),
-        ...(curationResult.status === "fulfilled" ? recordMap(curationResult.value) : {})
-      };
+      const mergedCuration =
+        curationResult.status === "fulfilled" ? recordMap(curationResult.value) : {};
+
+      if (featuredResult.status === "fulfilled") {
+        featuredResult.value.forEach((record) => {
+          const existing = mergedCuration[record.pack_name];
+          if (!existing) {
+            mergedCuration[record.pack_name] = record;
+            return;
+          }
+
+          mergedCuration[record.pack_name] = {
+            ...existing,
+            ...record,
+            featured: true,
+            badges: Array.from(new Set([...existing.badges, ...record.badges]))
+          };
+        });
+      }
+
       setCurationByPack(mergedCuration);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load marketplace");
@@ -447,25 +469,25 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
         selectedPackDetail.name,
         selectedVersion || selectedPackDetail.latest_version
       );
+      const installedVersion = result.version || selectedVersion || selectedPackDetail.latest_version;
 
       setInstalledByPack((current) => ({
         ...current,
         [selectedPackDetail.name]: {
           name: selectedPackDetail.name,
-          version: result.version || selectedVersion || selectedPackDetail.latest_version,
+          version: installedVersion,
           description: selectedPackDetail.description,
           author: selectedPackDetail.author,
           tags: selectedPackDetail.tags,
           category: selectedPackDetail.category,
-          skills_count: selectedPackDetail.versions.find((item) => item.version === selectedVersion)
-            ?.skills_count ?? 0,
+          skills_count:
+            selectedPackDetail.versions.find((item) => item.version === installedVersion)
+              ?.skills_count ?? 0,
           status: "installed"
         }
       }));
 
-      setInstallFeedback(
-        `Installed ${result.pack_name} ${result.version || selectedVersion || selectedPackDetail.latest_version}`
-      );
+      setInstallFeedback(`Installed ${result.pack_name} ${installedVersion}`);
     } catch (err) {
       setInstallFeedback(err instanceof Error ? err.message : "Install failed");
     } finally {
@@ -517,6 +539,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
             <button
               type="button"
               className={selectedCategory === null ? "active" : ""}
+              aria-pressed={selectedCategory === null}
               onClick={() => setSelectedCategory(null)}
             >
               <span>All</span>
@@ -527,6 +550,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
                 key={category.slug}
                 type="button"
                 className={selectedCategory === category.slug ? "active" : ""}
+                aria-pressed={selectedCategory === category.slug}
                 onClick={() =>
                   setSelectedCategory((current) => (current === category.slug ? null : category.slug))
                 }
