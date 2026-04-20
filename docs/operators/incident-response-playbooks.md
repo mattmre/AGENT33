@@ -177,7 +177,7 @@ If the degraded dependency is Ollama model availability, restore the pinned
 model:
 
 ```bash
-kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2
+kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2:3b
 ```
 
 ### Exit Criteria

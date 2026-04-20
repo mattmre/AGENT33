@@ -38,7 +38,7 @@ python -m agent33.cli.main wizard
 Manual fallback:
 
 ```bash
-docker compose exec ollama ollama pull llama3.2
+docker compose exec ollama ollama pull llama3.2:3b
 ```
 
 If your Ollama is running in another compose project/network (for example OpenClaw),

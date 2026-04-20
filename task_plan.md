@@ -8,12 +8,15 @@ updated `origin/main`.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-18` after merging `#409`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (409 PRs merged).
+- There are no open GitHub PRs as of `2026-04-20` after merging `#411`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (411 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
-- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, but merged review feedback
-  left follow-up hardening work before the pack marketplace slice should start.
+- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
+  fixes merged in PR `#410`.
+- Session 129 P-PACK remediation is COMPLETE in PR `#411`.
+- The only remaining pre-marketplace remediation is the operator/docs follow-up
+  slice.
 - POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - Treat the root checkout as disposable and always implement from fresh
   `origin/main` worktrees.
@@ -30,13 +33,13 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 128
-- Current slice: R2 follow-up PR for P-ENV v2 and launch-doc reliability
-- Resume artifact: `docs/research/session128-r2-penv2-hardening-scope.md`
+- Active queue owner: Session 129
+- Current slice: operator/docs follow-up PR for the remaining review debt
+- Resume artifact: `docs/research/session129-s2-operator-docs-review-debt.md`
 
 ---
 
-# Task Plan - Session 128 (Active)
+# Task Plan - Session 128 (Historical queue state)
 
 ## 2026-04-18 Session 128: Post-Merge Hardening And Remaining POST-CLUSTER Work
 
@@ -52,9 +55,10 @@ roadmap slices in sequence.
 |---|---|---|
 | T1 | Reset planning and session tracking to the real merged baseline through `#408` | complete |
 | T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | complete (merged as PR `#409`, fresh-main verified) |
-| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | PR open as `#410`, awaiting review |
-| T4 | POST-CLUSTER - Pack marketplace web UI | queued after T3 |
-| T5 | POST-CLUSTER - Community submissions | queued after T4 |
+| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | complete (merged as PR `#410`, fresh-main verified) |
+| T4 | Follow-up PR: remaining operator/docs remediation from `#407`/`#408`/`#411` drift | in_progress |
+| T5 | POST-CLUSTER - Pack marketplace web UI | queued after T4 |
+| T6 | POST-CLUSTER - Community submissions | queued after T5 |
 
 ### Session 128 Rules
 

@@ -68,7 +68,7 @@ its `P1.2` follow-up work.
    first admin:
    - `AUTH_BOOTSTRAP_ENABLED=false`
 5. Confirm the Ollama runtime has the required model:
-   - `llama3.2`
+   - `llama3.2:3b`
 6. Ensure your monitoring stack is ready to scrape `/metrics` before you rely on
    the checked-in alerting assets.
 
