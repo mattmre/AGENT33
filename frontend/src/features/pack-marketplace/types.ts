@@ -39,10 +39,19 @@ export interface MarketplaceCategory {
   parent_slug: string;
 }
 
+export interface QualityCheck {
+  name: string;
+  passed: boolean;
+  score: number;
+  reason: string;
+}
+
 export interface QualityAssessment {
   overall_score: number;
   label: string;
   passed: boolean;
+  checks?: QualityCheck[];
+  assessed_at?: string;
 }
 
 export interface CurationRecord {

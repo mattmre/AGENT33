@@ -7,6 +7,7 @@ import type {
   MarketplaceInstallResponse,
   MarketplacePackDetail,
   MarketplacePackSummary,
+  QualityAssessment,
   PackTrustResponse
 } from "./types";
 
@@ -132,6 +133,31 @@ export async function fetchCurationRecords(
   });
   const data = await parseJson<{ records: CurationRecord[] }>(response, "Curation list failed");
   return data.records;
+}
+
+export async function fetchPackQualityAssessment(
+  token: string | null,
+  apiKey: string | null,
+  name: string
+): Promise<QualityAssessment> {
+  const response = await fetch(`${baseUrl()}/v1/marketplace/quality/${encodeURIComponent(name)}`, {
+    headers: headers(token, apiKey)
+  });
+  return parseJson<QualityAssessment>(response, "Quality assessment failed");
+}
+
+export async function submitPackForCuration(
+  token: string | null,
+  apiKey: string | null,
+  name: string,
+  version: string
+): Promise<CurationRecord> {
+  const response = await fetch(`${baseUrl()}/v1/marketplace/curation/submit`, {
+    method: "POST",
+    headers: { ...headers(token, apiKey), "Content-Type": "application/json" },
+    body: JSON.stringify({ pack_name: name, version })
+  });
+  return parseJson<CurationRecord>(response, "Curation submit failed");
 }
 
 export async function fetchInstalledPacks(

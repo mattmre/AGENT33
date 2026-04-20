@@ -8,8 +8,10 @@ import {
   fetchMarketplaceCategories,
   fetchMarketplacePackDetail,
   fetchMarketplacePacks,
+  fetchPackQualityAssessment,
   fetchPackTrust,
-  installMarketplacePack
+  installMarketplacePack,
+  submitPackForCuration
 } from "./api";
 import type {
   CurationRecord,
@@ -19,6 +21,7 @@ import type {
   MarketplacePackDetail,
   MarketplacePackSummary,
   MarketplacePackVersionInfo,
+  QualityAssessment,
   PackTrustResponse
 } from "./types";
 
@@ -105,31 +108,65 @@ function qualityLabel(record: CurationRecord | null): string | null {
   return `${record.quality.label} quality · ${Math.round(record.quality.overall_score * 100)}%`;
 }
 
+function assessmentLabel(assessment: QualityAssessment | null): string | null {
+  if (!assessment) {
+    return null;
+  }
+  return `${assessment.label} quality · ${Math.round(assessment.overall_score * 100)}%`;
+}
+
+function canSubmitForCuration(curation: CurationRecord | null): boolean {
+  if (!curation) {
+    return true;
+  }
+  return curation.status === "changes_requested" || curation.status === "unlisted";
+}
+
+function submissionActionLabel(curation: CurationRecord | null): string {
+  return curation ? "Resubmit for curation" : "Submit for curation";
+}
+
+function formatCheckName(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
 function PackDetailPanel({
   pack,
   installed,
   trust,
   curation,
+  quality,
   selectedVersion,
   detailLoading,
   detailError,
   installPending,
   installFeedback,
+  submissionPending,
+  submissionFeedback,
+  qualityLoading,
+  qualityError,
   onVersionChange,
   onInstall,
+  onSubmitForCuration,
   onClose
 }: {
   pack: MarketplacePackDetail | null;
   installed: InstalledPackDetail | null;
   trust: PackTrustResponse | null;
   curation: CurationRecord | null;
+  quality: QualityAssessment | null;
   selectedVersion: string;
   detailLoading: boolean;
   detailError: string | null;
   installPending: boolean;
   installFeedback: string | null;
+  submissionPending: boolean;
+  submissionFeedback: string | null;
+  qualityLoading: boolean;
+  qualityError: string | null;
   onVersionChange: (value: string) => void;
   onInstall: () => void;
+  onSubmitForCuration: () => void;
   onClose: () => void;
 }): JSX.Element | null {
   if (!pack) {
@@ -137,7 +174,9 @@ function PackDetailPanel({
   }
 
   const installedSameVersion = installed?.version === selectedVersion;
-  const quality = qualityLabel(curation);
+  const curationQuality = qualityLabel(curation);
+  const canSubmit = Boolean(installed) && canSubmitForCuration(curation);
+  const previewQuality = assessmentLabel(quality);
 
   return (
     <aside className="pack-marketplace-detail" aria-label={`Details for ${pack.name}`}>
@@ -183,10 +222,10 @@ function PackDetailPanel({
               </>
             )}
 
-            {quality && (
+            {curationQuality && (
               <>
                 <dt>Quality</dt>
-                <dd>{quality}</dd>
+                <dd>{curationQuality}</dd>
               </>
             )}
 
@@ -282,6 +321,77 @@ function PackDetailPanel({
             </button>
             {installFeedback && <p className="pack-marketplace-feedback">{installFeedback}</p>}
           </div>
+
+          <section className="pack-marketplace-submission-section">
+            <div className="pack-marketplace-submission-header">
+              <h3>Community submission</h3>
+              {curation ? (
+                <span className="marketplace-pill verified">{formatStatus(curation.status)}</span>
+              ) : (
+                <span className="marketplace-pill neutral">Not submitted</span>
+              )}
+            </div>
+
+            {!installed && (
+              <p className="pack-marketplace-submission-note">
+                Install this pack before submitting it for marketplace curation.
+              </p>
+            )}
+
+            {installed && (
+              <>
+                {previewQuality && (
+                  <p className="pack-marketplace-submission-note">
+                    Quality preview: <strong>{previewQuality}</strong>
+                    {!quality?.passed && " — improvements are recommended before review."}
+                  </p>
+                )}
+                {qualityLoading && (
+                  <p className="pack-marketplace-submission-note">Loading quality assessment...</p>
+                )}
+                {qualityError && <p className="pack-marketplace-error">{qualityError}</p>}
+
+                {quality && (quality.checks?.length ?? 0) > 0 && (
+                  <ul className="pack-marketplace-quality-list">
+                    {(quality.checks ?? []).map((check) => (
+                      <li key={check.name}>
+                        <span>{formatCheckName(check.name)}</span>
+                        <span>{check.passed ? "Pass" : check.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {curation?.review_notes && (
+                  <div className="pack-marketplace-review-notes">
+                    <strong>Reviewer notes</strong>
+                    <p>{curation.review_notes}</p>
+                  </div>
+                )}
+
+                {submissionFeedback && (
+                  <p className="pack-marketplace-feedback">{submissionFeedback}</p>
+                )}
+
+                {canSubmit && (
+                  <button
+                    type="button"
+                    className="pack-marketplace-secondary"
+                    disabled={submissionPending}
+                    onClick={onSubmitForCuration}
+                  >
+                    {submissionPending ? "Submitting..." : submissionActionLabel(curation)}
+                  </button>
+                )}
+
+                {!canSubmit && curation && (
+                  <p className="pack-marketplace-submission-note">
+                    This pack is already in the curation pipeline. Track its current status here.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
         </div>
       )}
     </aside>
@@ -299,6 +409,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
   const [selectedPackDetail, setSelectedPackDetail] = useState<MarketplacePackDetail | null>(null);
   const [selectedInstalledDetail, setSelectedInstalledDetail] = useState<InstalledPackDetail | null>(null);
   const [selectedTrust, setSelectedTrust] = useState<PackTrustResponse | null>(null);
+  const [selectedQuality, setSelectedQuality] = useState<QualityAssessment | null>(null);
   const [selectedVersion, setSelectedVersion] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -306,6 +417,10 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
   const [detailError, setDetailError] = useState<string | null>(null);
   const [installPending, setInstallPending] = useState(false);
   const [installFeedback, setInstallFeedback] = useState<string | null>(null);
+  const [submissionPending, setSubmissionPending] = useState(false);
+  const [submissionFeedback, setSubmissionFeedback] = useState<string | null>(null);
+  const [qualityLoading, setQualityLoading] = useState(false);
+  const [qualityError, setQualityError] = useState<string | null>(null);
 
   const loadMarketplace = useCallback(async () => {
     setLoading(true);
@@ -368,8 +483,10 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       setSelectedPackDetail(null);
       setSelectedInstalledDetail(null);
       setSelectedTrust(null);
+      setSelectedQuality(null);
       setSelectedVersion("");
       setDetailError(null);
+      setQualityError(null);
       return;
     }
 
@@ -391,12 +508,17 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
         if (!installedByPack[packName]) {
           setSelectedInstalledDetail(null);
           setSelectedTrust(null);
+          setSelectedQuality(null);
+          setQualityLoading(false);
           return;
         }
 
-        const [installedResult, trustResult] = await Promise.allSettled([
+        setQualityLoading(true);
+        setQualityError(null);
+        const [installedResult, trustResult, qualityResult] = await Promise.allSettled([
           fetchInstalledPackDetail(token, apiKey, packName),
-          fetchPackTrust(token, apiKey, packName)
+          fetchPackTrust(token, apiKey, packName),
+          fetchPackQualityAssessment(token, apiKey, packName)
         ]);
 
         if (cancelled) {
@@ -405,6 +527,14 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
 
         setSelectedInstalledDetail(installedResult.status === "fulfilled" ? installedResult.value : null);
         setSelectedTrust(trustResult.status === "fulfilled" ? trustResult.value : null);
+        setSelectedQuality(qualityResult.status === "fulfilled" ? qualityResult.value : null);
+        setQualityError(
+          qualityResult.status === "rejected"
+            ? qualityResult.reason instanceof Error
+              ? qualityResult.reason.message
+              : "Quality assessment failed"
+            : null
+        );
       } catch (err) {
         if (!cancelled) {
           setDetailError(err instanceof Error ? err.message : "Failed to load pack detail");
@@ -412,6 +542,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       } finally {
         if (!cancelled) {
           setDetailLoading(false);
+          setQualityLoading(false);
         }
       }
     }
@@ -450,8 +581,11 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
     setSelectedPackDetail(null);
     setSelectedInstalledDetail(null);
     setSelectedTrust(null);
+    setSelectedQuality(null);
     setSelectedVersion("");
     setInstallFeedback(null);
+    setSubmissionFeedback(null);
+    setQualityError(null);
   };
 
   const handleInstall = async (): Promise<void> => {
@@ -492,6 +626,34 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       setInstallFeedback(err instanceof Error ? err.message : "Install failed");
     } finally {
       setInstallPending(false);
+    }
+  };
+
+  const handleSubmitForCuration = async (): Promise<void> => {
+    if (!selectedPackDetail || !selectedInstalledDetail) {
+      return;
+    }
+
+    setSubmissionPending(true);
+    setSubmissionFeedback(null);
+
+    try {
+      const submitted = await submitPackForCuration(
+        token,
+        apiKey,
+        selectedPackDetail.name,
+        selectedInstalledDetail.version || selectedVersion || selectedPackDetail.latest_version
+      );
+      setCurationByPack((current) => ({
+        ...current,
+        [submitted.pack_name]: submitted
+      }));
+      setSelectedQuality(submitted.quality ?? null);
+      setSubmissionFeedback(`Submitted ${submitted.pack_name} for marketplace curation.`);
+    } catch (err) {
+      setSubmissionFeedback(err instanceof Error ? err.message : "Curation submit failed");
+    } finally {
+      setSubmissionPending(false);
     }
   };
 
@@ -655,13 +817,19 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
           installed={selectedInstalledDetail}
           trust={selectedTrust}
           curation={selectedPackName ? curationByPack[selectedPackName] ?? null : null}
+          quality={selectedQuality}
           selectedVersion={selectedVersion}
           detailLoading={detailLoading}
           detailError={detailError}
           installPending={installPending}
           installFeedback={installFeedback}
+          submissionPending={submissionPending}
+          submissionFeedback={submissionFeedback}
+          qualityLoading={qualityLoading}
+          qualityError={qualityError}
           onVersionChange={setSelectedVersion}
           onInstall={() => void handleInstall()}
+          onSubmitForCuration={() => void handleSubmitForCuration()}
           onClose={() => setSelectedPackName(null)}
         />
       </div>

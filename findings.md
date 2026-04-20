@@ -1,5 +1,25 @@
 # Findings
 
+## 2026-04-20 (Session 130 community submissions)
+
+- The backend already exposes the essential community-submission contract on
+  `main`:
+  - `POST /v1/marketplace/curation/submit`
+  - `GET /v1/marketplace/curation/{name}`
+  - `GET /v1/marketplace/quality/{name}`
+- The admin review/feature/verify/deprecate routes also already exist, but they
+  are out of scope for the next slice because the roadmap item is community
+  submissions, not operator review tooling.
+- The smallest complete next slice is frontend submission/status UX layered into
+  the marketplace experience for already-installed packs.
+- The implemented shape keeps this as an extension of the marketplace detail
+  panel, which avoids introducing a second workflow surface while still exposing
+  submission, status, quality, and review feedback.
+- The older PackHub/community registry routes under `/v1/packs/hub/*` are
+  adjacent platform capability, not the core missing surface for this slice.
+- On this Windows host, the stable frontend test command remains the
+  single-fork Vitest invocation already recorded in `progress.md`.
+
 ## 2026-04-20 (Session 130 pack marketplace web UI)
 
 - The backend marketplace contract already exists on `main`; the missing user
