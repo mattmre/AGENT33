@@ -417,7 +417,7 @@ def test_ppack_assignment_sqlite_error_returns_503(
         json={"session_id": "session-error"},
     )
     assert response.status_code == 503
-    assert "persistence error" in response.json()["detail"].lower()
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
 
 
 def test_ppack_get_assignment_sqlite_error_returns_503(
@@ -438,7 +438,7 @@ def test_ppack_get_assignment_sqlite_error_returns_503(
 
     response = writer_client.get("/v1/outcomes/ppack-v3/assignments/session-test")
     assert response.status_code == 503
-    assert "persistence error" in response.json()["detail"].lower()
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
 
 
 def test_ppack_get_report_sqlite_error_returns_503(
@@ -459,4 +459,38 @@ def test_ppack_get_report_sqlite_error_returns_503(
 
     response = writer_client.get("/v1/outcomes/ppack-v3/reports/report-test")
     assert response.status_code == 503
-    assert "persistence error" in response.json()["detail"].lower()
+    assert response.json()["detail"] == "P-PACK v3 persistence error"
+
+
+def test_ppack_get_report_is_tenant_scoped(
+    writer_client: TestClient,
+    tenant_b_writer: TestClient,
+) -> None:
+    assign_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/assignments",
+        json={"session_id": "session-tenant-a"},
+    )
+    assert assign_response.status_code == 201
+    assignment = assign_response.json()
+    writer_client.post(
+        "/v1/outcomes/events",
+        json={
+            "domain": "delivery",
+            "event_type": "invoke",
+            "metric_type": "success_rate",
+            "value": 1.0,
+            "metadata": {
+                "session_id": "session-tenant-a",
+                "ppack_variant": assignment["variant"],
+            },
+        },
+    )
+    report_response = writer_client.post(
+        "/v1/outcomes/ppack-v3/report",
+        json={"domain": "delivery", "metric_types": ["success_rate"]},
+    )
+    assert report_response.status_code == 200
+    report_id = report_response.json()["report_id"]
+
+    response = tenant_b_writer.get(f"/v1/outcomes/ppack-v3/reports/{report_id}")
+    assert response.status_code == 404

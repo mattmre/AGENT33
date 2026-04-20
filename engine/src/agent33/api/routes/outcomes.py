@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     from agent33.packs.registry import PackRegistry
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
+logger = structlog.get_logger()
 
 # Module-level fallback; replaced by lifespan via set_outcomes_service().
 _service = OutcomesService()
@@ -67,6 +69,11 @@ def _tenant_id(request: Request) -> str:
     if user is None:
         return ""
     return getattr(user, "tenant_id", "")
+
+
+def _raise_ppack_persistence_error(operation: str, exc: sqlite3.Error) -> None:
+    logger.warning("ppack_persistence_error", operation=operation, exc_info=True)
+    raise HTTPException(status_code=503, detail="P-PACK v3 persistence error") from exc
 
 
 class PPackABAssignmentRequest(BaseModel):
@@ -248,7 +255,7 @@ async def assign_ppack_variant(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except sqlite3.Error as exc:
-        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
+        _raise_ppack_persistence_error("assign_ppack_variant", exc)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return assignment.model_dump(mode="json")
@@ -265,7 +272,7 @@ async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, A
             session_id=session_id,
         )
     except sqlite3.Error as exc:
-        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
+        _raise_ppack_persistence_error("get_ppack_assignment", exc)
     if assignment is None:
         raise HTTPException(status_code=404, detail="P-PACK v3 assignment not found")
     return assignment.model_dump(mode="json")
@@ -298,7 +305,7 @@ async def generate_ppack_report(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except sqlite3.Error as exc:
-        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
+        _raise_ppack_persistence_error("generate_ppack_report", exc)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     issue_result = GitHubIssuePublishResult(reason="GitHub alert not requested")
@@ -317,7 +324,7 @@ async def get_ppack_report(report_id: str, request: Request) -> dict[str, Any]:
     try:
         report = get_ppack_ab_service(request).get_report(report_id)
     except sqlite3.Error as exc:
-        raise HTTPException(status_code=503, detail=f"P-PACK v3 persistence error: {exc}") from exc
-    if report is None:
+        _raise_ppack_persistence_error("get_ppack_report", exc)
+    if report is None or report.tenant_id != _tenant_id(request):
         raise HTTPException(status_code=404, detail="P-PACK v3 report not found")
     return report.model_dump(mode="json")

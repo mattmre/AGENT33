@@ -42,8 +42,19 @@ in outcomes.py).
 cannot reliably distinguish transient SQLite issues from application bugs.
 
 **Fix:** Add explicit `sqlite3.Error` exception handling to the three affected
-endpoints, mapping them to 503 with a descriptive detail message matching the
-pattern used in the report endpoint.
+endpoints, log the underlying exception server-side, and return a stable
+`P-PACK v3 persistence error` 503 response without exposing raw SQLite details.
+
+### 1b. Report Retrieval Needs Tenant Guard
+
+**Issue:** `GET /ppack-v3/reports/{report_id}` returned a report by UUID without
+verifying that the record belonged to the requesting tenant.
+
+**Impact:** A leaked report ID could expose report data across tenants.
+
+**Fix:** Treat report existence and tenant ownership as a combined 404 check:
+return not found unless the loaded report exists and its `tenant_id` matches the
+request tenant.
 
 ### 2. Assignment/Report Variant Integrity
 
@@ -163,7 +174,8 @@ worded in the edge case.
 1. **`engine/src/agent33/api/routes/outcomes.py`**
    - Added `sqlite3.Error` exception handling to `assign_ppack_variant`,
      `get_ppack_assignment`, and `get_ppack_report` endpoints.
-   - Map SQLite errors to 503 with descriptive detail messages.
+   - Log SQLite failures server-side and return a stable 503 detail message.
+   - Added tenant ownership enforcement to `get_ppack_report`.
 
 2. **`engine/src/agent33/evaluation/ppack_ab_service.py`**
    - Removed caller-metadata fallback in `_resolve_event_variant`.
@@ -174,17 +186,19 @@ worded in the edge case.
    - Added `outcomes_mod._ppack_ab_service.close()` call in
      `reset_outcomes_service` fixture teardown.
    - Restored tenant-scoping assertion in `test_dashboard_contract`.
-   - Added four new regression tests for error handling and variant integrity.
+   - Added five new regression tests for error handling, tenant isolation, and
+     variant integrity.
 
 ### Review Findings Fixed
 
-1. ✅ Outcomes API hardening: SQLite errors now map to 503 consistently.
+1. ✅ Outcomes API hardening: SQLite errors now map to a consistent, non-leaky 503.
 2. ✅ Assignment/report integrity: Persisted assignment is the authority for
-   variant resolution.
-3. ✅ Test hygiene: P-PACK A/B service resources explicitly closed in teardown.
-4. ✅ Test coverage: Recent events tenant-scoping assertion restored.
-5. ✅ Test coverage: Regression tests added for new error-handling and
-   variant-integrity behavior.
+    variant resolution.
+3. ✅ Report isolation: fetched P-PACK reports now enforce tenant ownership.
+4. ✅ Test hygiene: P-PACK A/B service resources explicitly closed in teardown.
+5. ✅ Test coverage: Recent events tenant-scoping assertion restored.
+6. ✅ Test coverage: Regression tests added for new error-handling and
+    variant-integrity behavior.
 
 ### Intentionally Deferred
 
