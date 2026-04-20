@@ -1,5 +1,25 @@
 # Findings
 
+## 2026-04-20 (Session 130 pack marketplace web UI)
+
+- The backend marketplace contract already exists on `main`; the missing user
+  value was a frontend entry point that aggregates:
+  - marketplace summaries and versions from `/v1/marketplace/*`
+  - installed-pack state from `/v1/packs`
+  - trust posture from `/v1/packs/{name}/trust`
+  - curation / featured metadata from `/v1/marketplace/curation` and
+    `/v1/marketplace/featured`
+- The safest UI shape is client-side filtering over the marketplace list instead
+  of pushing search/category composition into new backend endpoints.
+- Featured and curation endpoints are useful enrichments, but the page must
+  degrade safely if those services are unavailable; the core hard dependency is
+  only the marketplace pack list.
+- Marketplace cards need native button semantics for accessibility and testing;
+  overriding the role breaks keyboard/query behavior.
+- On this Windows host, Vitest's default worker pool can hang on the marketplace
+  spec; use the single-fork invocation recorded in `progress.md` for reliable
+  reruns.
+
 ## 2026-04-20 (Session 129 operator/docs follow-up)
 
 - PR `#411` is merged on `main` as commit `8f1cbe3`; the remaining gate before
