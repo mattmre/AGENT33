@@ -1,15 +1,16 @@
 # Session 129 Slice 1: P-PACK A/B Review Hardening
 
-**Date:** 2026-04-19  
+**Date:** 2026-04-20  
 **Scope:** Post-merge remediation for still-valid P-PACK A/B hardening issues from
-PR #406 review feedback, on top of merged baseline commit 5de4f78 (PR #410).
+the merged review feedback on the POST-4.4 / POST-4.5 slices, on top of merged
+baseline commit 5de4f78 (PR #410).
 
 ## Decision
 
 This slice implements a focused set of hardening fixes for the P-PACK v3 A/B
-harness that were identified during PR #406 review but deferred to avoid
-expanding that PR's scope. These fixes improve API error handling, data
-integrity, and test coverage.
+harness that were identified in the merged review debt around the POST-4.4 /
+POST-4.5 slices and deferred to avoid widening those earlier PRs. These fixes
+improve API error handling, data integrity, and test coverage.
 
 ## Baseline Reviewed
 
