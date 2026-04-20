@@ -37,6 +37,7 @@ If execution stops mid-slice, resume in this order:
 - Current slice: `POST-CLUSTER` pack marketplace web UI
 - Worktree: `C:\GitHub\repos\AGENT33\worktrees\session130-s1-pack-marketplace`
 - Branch: `session130-s1-pack-marketplace`
+- Active PR: `#413` (`Session 130: add pack marketplace web UI`)
 - Resume artifact: `docs/research/session130-s1-pack-marketplace-scope.md`
 
 ---

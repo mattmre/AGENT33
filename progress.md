@@ -24,6 +24,8 @@
   - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
   - `npm run lint`
   - `npm run build`
+- Opened PR `#413` (`Session 130: add pack marketplace web UI`) from branch
+  `session130-s1-pack-marketplace`.
 - Validation caveat on this Windows host: the default Vitest worker pool hung
   for this spec, so the stable single-fork invocation above is the reliable
   command when re-running the marketplace tests locally.

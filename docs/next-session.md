@@ -50,7 +50,7 @@ Last updated: 2026-04-20 (PR `#412` merged, Session 130 marketplace UI active)
 | T1 | POST-CLUSTER — Pack marketplace web UI | ACTIVE locally in `worktrees/session130-s1-pack-marketplace` |
 | T2 | POST-CLUSTER — Community submissions | QUEUED after T1 |
 
-**T1 scope**:
+**T1 scope** (now open as PR `#413`):
 - add a first-class marketplace tab to the frontend app shell
 - browse/filter/search marketplace packs from the existing backend contract
 - surface featured/curation/installed/trust state in the UI
