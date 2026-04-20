@@ -28,6 +28,10 @@
   - `npm run build`
   - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions\engine\src pytest engine\tests\test_marketplace_curation.py --no-cov -q`
 - Opened PR `#414` (`Session 130: add community pack submission flow`).
+- Addressed the first automated PR review pass:
+  - allow `draft` curation records to remain submittable
+  - keep submission UX available when installed-pack detail fetch fails
+  - separate success/error submission messaging and neutralize status-pill styling
 
 ## 2026-04-20 (Session 130 pack marketplace web UI)
 
