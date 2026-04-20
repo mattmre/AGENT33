@@ -1,5 +1,21 @@
 # Findings
 
+## 2026-04-20 (Session 129 operator/docs follow-up)
+
+- PR `#411` is merged on `main` as commit `8f1cbe3`; the remaining gate before
+  marketplace work is docs/operator drift rather than runtime code.
+- The freshest queue authority must now be `docs/next-session.md`,
+  `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and the Session 129 scope note, not
+  the older Session 128 pre-merge handoff state.
+- This environment's editable Python install resolves `agent33` from the stale
+  root checkout unless `PYTHONPATH` is pinned to the active worktree's
+  `engine\src`, so fresh-main verification can produce false regressions if the
+  source path is not forced.
+- The remaining operator/docs debt is narrow and safe to isolate:
+  queue-state drift through `#411`, raw onboarding path references, clearer local
+  credential guidance for the frontend, and consistent Ollama default model
+  wording (`llama3.2:3b`) in operator docs.
+
 ## 2026-04-10 (POST-3.2)
 
 - The merged baseline already had the lightweight GitHub-backed registry client; the meaningful POST-3.2 gap was revocation semantics plus Sigstore-aware provenance verification.

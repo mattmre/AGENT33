@@ -79,22 +79,22 @@ Use when you want repeatable multi-step execution.
 
 Use when you need explicit signoff and gatekeeping.
 
-- `docs/walkthroughs.md`
-- `docs/operators/production-deployment-runbook.md`
+- [Walkthroughs](walkthroughs.md)
+- [Production Deployment Runbook](operators/production-deployment-runbook.md)
 
 ### Evaluations and regression handling
 
 Use when you need measured quality gates and baseline comparisons.
 
-- `docs/walkthroughs.md`
-- `docs/use-cases.md`
+- [Walkthroughs](walkthroughs.md)
+- [Use Cases](use-cases.md)
 
 ### Memory and recall
 
 Use when you need long-horizon context and retrieval-backed sessions.
 
-- `docs/walkthroughs.md`
-- `docs/use-cases.md`
+- [Walkthroughs](walkthroughs.md)
+- [Use Cases](use-cases.md)
 
 ## 6. What is local-only vs production-ready
 

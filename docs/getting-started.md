@@ -44,6 +44,12 @@ cd engine
 docker compose up -d
 ```
 
+By default, `engine/.env` points `OLLAMA_BASE_URL` at
+`http://host.docker.internal:11434` so the stack can reuse a host/shared Ollama
+daemon. If you want the repo-managed Ollama container instead, use the bundled
+profile below and set `OLLAMA_BASE_URL=http://ollama:11434` in `engine/.env`
+first.
+
 Alternative startup modes:
 
 - shared Ollama network:

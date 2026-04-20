@@ -1,5 +1,31 @@
 # Progress Log
 
+## 2026-04-20 (Session 129 PR #411 merge and operator/docs follow-up)
+
+- Squash-merged PR `#411` (`Session 129: harden P-PACK A/B review debt`) as
+  commit `8f1cbe3`.
+- Ran a fresh-main verification pass from
+  `C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify`.
+- Verified the merged result against the intended worktree source using:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src pytest engine/tests/test_outcomes_api.py engine/tests/test_ppack_ab_service.py engine/tests/test_p68_outcome_recording.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src ruff check engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py engine/tests/test_outcomes_api.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src ruff format --check engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py engine/tests/test_outcomes_api.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src mypy engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py --config-file engine/pyproject.toml`
+- Found and documented an environment caveat during verification: this machine's
+  editable install points Python at the stale root checkout by default, so
+  fresh-worktree validation must pin `PYTHONPATH` to the active worktree's
+  `engine\src`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session129-s2-operator-docs`
+  on branch `session129-s2-operator-docs` from merged `origin/main`.
+- Re-audited the remaining operator/docs review debt and confirmed the final
+  pre-marketplace remediation scope:
+  - stale queue/handoff docs still anchored to `#408`
+  - onboarding still contains raw `docs/...` references instead of proper links
+  - getting-started / frontend / operator runbooks still need small Ollama and
+    local credential wording fixes
+  - duplicate Session 129 note `docs/sessions/session-129-2026-04-19.md`
+    remains on `main`
+
 ## 2026-04-18 (Session 128 review-remediation audit and queue reset)
 
 - Verified there are `0` open PRs on `mattmre/AGENT33` and that `origin/main`

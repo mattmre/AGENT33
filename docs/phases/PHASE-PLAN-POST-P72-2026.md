@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#408` on 2026-04-18, execution posture updated in Session 128
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#411` on 2026-04-20, execution posture updated in Session 129
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,13 +15,13 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; merged-review remediation is active before the pack marketplace slice |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; remediation PRs `#409`-`#411` landed, and the final operator/docs cleanup slice is active before the pack marketplace slice |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | Post-merge review remediation (`#406`-`#408`) | Active | Clear actionable review feedback before the remaining roadmap slices continue |
+| 1 | Post-merge review remediation (`#406`-`#411`) | Active | Lifecycle cleanup, P-ENV/docs reliability, and P-PACK hardening are complete; remaining operator/docs polish is the last remediation slice before the remaining roadmap resumes |
 | 2 | POST-CLUSTER — Pack marketplace web UI | Pending | Starts after remediation PRs land and are verified |
 | 3 | POST-CLUSTER — Community submissions | Pending | Only after the marketplace slice and approval flow are proven |
 
@@ -74,7 +74,10 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 
 - Public launch preparation (README as product page, onboarding/getting-started/release-checklist docs) (**complete** in PR `#407`)
 - P-ENV v2 auto-install + automated model download (**complete** in PR `#408`)
-- Post-merge remediation for PRs `#406`-`#408` (**active** before the next roadmap slice)
+- Lifecycle cleanup follow-up (**complete** in PR `#409`)
+- P-ENV/docs reliability follow-up (**complete** in PR `#410`)
+- P-PACK review-debt hardening (**complete** in PR `#411`)
+- Remaining operator/docs remediation (**active** before the next roadmap slice)
 - Pack marketplace web UI (**next roadmap slice**)
 - Community submissions (only after pack signing + approval queue proven)
 
@@ -121,4 +124,4 @@ These decisions are final and must not be reopened without explicit user approva
 3. Open one PR per slice.
 4. Do not start a later slice before the current one is merged and verified from fresh `origin/main`.
 5. If research changes roadmap assumptions, write a memo under `docs/research/` before implementation.
-6. Always refresh `docs/next-session.md`, this file, `docs/sessions/session126-task-plan.md`, `progress.md`, and any active queue docs after major milestones.
+6. Always refresh `docs/next-session.md`, this file, `task_plan.md`, `progress.md`, and any active queue docs after major milestones.

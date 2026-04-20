@@ -9,16 +9,18 @@ POST-CLUSTER roadmap slices
 
 ## Current State
 
-- `origin/main` is at `943b683` after PR `#408`.
+- `origin/main` is at `8f1cbe3` after PR `#411`.
 - There are `0` open PRs on `mattmre/AGENT33`.
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
-- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`.
+- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
+  fixes merged in PR `#410`.
+- Session 129 P-PACK remediation is COMPLETE in PR `#411`.
 - The remaining roadmap slices are:
   - Pack marketplace web UI
   - Community submissions
-- Before those slices continue, the merged review feedback from PRs `#406`-`#408`
-  must be remediated in follow-up PRs.
+- Before those slices continue, the final operator/docs cleanup from the merged
+  remediation wave must land on `main`.
 
 ## Session 128 Execution Queue
 
@@ -26,9 +28,10 @@ POST-CLUSTER roadmap slices
 |---|------|------|-------------------|------------|--------|
 | R0 | Audit merged review feedback and planning drift | research/docs | `session128-s1-review-remediation` | — | complete |
 | R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | complete (merged as `#409`, fresh-main verified) |
-| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | PR open as `#410`, awaiting review |
-| R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | queued |
-| R4 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R3 merged | queued |
+| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | complete (merged as `#410`, fresh-main verified) |
+| R3 | Follow-up PR: remaining operator/docs remediation | docs/operators | `session129-s2-operator-docs` | R2 merged, `#411` merged | active |
+| R4 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R3 merged | queued |
+| R5 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R4 merged | queued |
 
 ## Resume Protocol
 
@@ -153,6 +156,14 @@ operator-facing correctness issues left by PRs `#407` and `#408`.
 
 ---
 
+## R2 Merge + Verification
+
+- Squash-merged PR `#410` (`Session 128: harden P-ENV v2 startup reliability`)
+  as commit `5de4f78`.
+- Fresh-main verification from
+  `C:\GitHub\repos\AGENT33\worktrees\session128-s2-postmerge-verify` stayed
+  green for the targeted P-ENV/docs validation stack.
+
 ## R3 — POST-CLUSTER Pack Marketplace Web UI
 
 **Goal:** implement the remaining marketplace UI slice from fresh `origin/main`
@@ -161,7 +172,8 @@ after the remediation PRs land.
 **Notes:**
 - the clean forward-looking baseline remains
   `worktrees/session127-s12-pack-marketplace`
-- start from a fresh worktree again after R2 merges
+- start from a fresh worktree again after the remaining Session 129 operator/docs
+  remediation merges
 
 ---
 

@@ -50,7 +50,8 @@ docker compose up -d
 Then:
 
 - open `http://localhost:3000`
-- sign in with local bootstrap credentials from `.env.example`
+- sign in with the bootstrap credentials from `engine/.env` (or the copied
+  defaults from `engine/.env.example`: `admin` / `admin`)
 - use the domain workspace to access agents, workflows, memory, reviews, evaluations, releases, and dashboard surfaces
 
 See:

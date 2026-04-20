@@ -27,7 +27,7 @@ spec:
               command:
                 - sh
                 - -c
-                - ollama list | grep -q '^llama3.2'
+                - ollama list | grep -q '^llama3.2:3b'
             initialDelaySeconds: 15
             periodSeconds: 20
             timeoutSeconds: 5
