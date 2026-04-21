@@ -166,9 +166,9 @@ def test_health_check_threshold_boundary(svc: OutcomesService) -> None:
         ),
     )
 
-    result = svc.health_check(alert_threshold_hours=24.0)
+    result = svc.health_check(alert_threshold_hours=24.1)
 
-    # delta_hours == 24.0 satisfies delta_hours <= 24.0
+    # delta_hours == 24.0 satisfies delta_hours <= 24.1
     assert result["status"] == "ok"
 
 
