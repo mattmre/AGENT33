@@ -263,6 +263,9 @@ class Settings(BaseSettings):
     # Ingestion persistence (Sprint 1)
     ingestion_db_path: str = "var/ingestion.db"
 
+    # Ingestion journal persistence (Sprint 4)
+    ingestion_journal_db_path: str = "var/ingestion_journal.db"
+
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
     ppack_v3_ab_db_path: str = "var/ppack_ab.db"
