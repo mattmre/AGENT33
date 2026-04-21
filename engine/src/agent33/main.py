@@ -535,12 +535,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    # -- P69b tool approval gate (POST-4.3) --------------------------------
+    # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
+    from agent33.autonomy.p69b_persistence import P69bPersistence
     from agent33.autonomy.p69b_service import P69bService
 
-    p69b_service = P69bService(timeout_seconds=300)
+    p69b_persistence = P69bPersistence(Path(settings.p69b_db_path))
+    p69b_service = P69bService(timeout_seconds=300, persistence=p69b_persistence)
+    app.state.p69b_persistence = p69b_persistence
     app.state.p69b_service = p69b_service
-    logger.info("p69b_service_initialized")
+    logger.info("p69b_service_initialized", db_path=settings.p69b_db_path)
 
     approval_token_manager = None
     if settings.approval_token_enabled:
@@ -2077,6 +2080,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("instance_deregistered")
         except Exception:
             logger.warning("instance_deregister_failed", exc_info=True)
+
+    _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
+    if _p69b_persistence is not None:
+        _p69b_persistence.close()
+        logger.info("p69b_persistence_closed")
 
     _outcomes_persistence: Any = getattr(app.state, "outcomes_persistence", None)
     if _outcomes_persistence is not None:
