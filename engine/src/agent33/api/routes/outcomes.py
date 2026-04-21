@@ -95,6 +95,21 @@ class PPackABReportRequest(BaseModel):
     open_github_issue: bool = False
 
 
+@router.get("/health")
+async def outcomes_health(request: Request) -> dict[str, object]:
+    """P68-Lite monitoring health check.
+
+    Returns ``{"status": "ok"}`` when events have been recorded in the last 24 h.
+    Returns ``{"status": "stale", "hours_since_last_event": N | null}`` when the
+    outcomes table has been empty (or silent) for more than 24 hours.
+
+    This endpoint is intentionally unauthenticated so that monitoring agents
+    can poll it without needing API credentials.
+    """
+    service = get_outcomes_service(request)
+    return service.health_check()
+
+
 @router.post("/events", status_code=201, dependencies=[require_scope("outcomes:write")])
 async def record_event(body: OutcomeEventCreate, request: Request) -> dict[str, Any]:
     service = get_outcomes_service(request)
