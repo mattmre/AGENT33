@@ -27,7 +27,6 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36,<3",
     "alembic>=1.14,<2",
     "jsonschema>=4.23,<5",
-    "langchain-core>=0.3,<1",
     "python-multipart>=0.0.18",
     "mcp>=1.0.0",
     "PyYAML>=6.0",
@@ -84,7 +83,7 @@ pdf = [
     "pdfplumber>=0.10",
 ]
 ocr = [
-    "pillow>=10.0",
+    "pillow>=12.2.0",
     "pytesseract>=0.3",
 ]
 tokenizer = [
@@ -185,8 +184,6 @@ module = [
     "apscheduler.*",
     "pgvector",
     "pgvector.*",
-    "langchain_core",
-    "langchain_core.*",
     "mcp",
     "mcp.*",
     "airllm",
