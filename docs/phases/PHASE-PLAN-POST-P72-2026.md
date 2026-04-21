@@ -116,6 +116,9 @@ These decisions are final and must not be reopened without explicit user approva
 14. **Pack revocation**: Registry JSON includes `revoked`; install checks revocation
 15. **P68-Lite monitoring**: Alert if outcomes table stays empty for >24h during rollout
 16. **SkillsBench regression alert**: Auto-open a GitHub issue if a weekly run shows >5% drop
+17. *(reserved)*
+18. *(reserved)*
+19. **SSE v2 migration contract**: See `docs/research/sse-schema-v2-migration-path.md` — v2 is not started until that document is published and reviewed.
 
 ## Execution Rules
 
