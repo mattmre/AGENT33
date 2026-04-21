@@ -561,6 +561,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         journal_db_path=settings.ingestion_journal_db_path,
     )
 
+    from agent33.ingestion.doctor import SkillsDoctor
     from agent33.ingestion.mailbox import IngestionMailbox
     from agent33.ingestion.metrics import TaskMetricsCollector
 
@@ -571,6 +572,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ingestion.set_ingestion_mailbox(ingestion_mailbox)
     ingestion.set_task_metrics(task_metrics)
     logger.info("ingestion_mailbox_initialized")
+
+    skills_doctor = SkillsDoctor(service=ingestion_service)
+    app.state.skills_doctor = skills_doctor
+    ingestion.set_skills_doctor(skills_doctor)
+    logger.info("skills_doctor_initialized")
 
     # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
     from agent33.autonomy.p69b_persistence import P69bPersistence
