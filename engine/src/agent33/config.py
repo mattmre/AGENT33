@@ -260,6 +260,9 @@ class Settings(BaseSettings):
     # P69b tool-approval persistence
     p69b_db_path: str = "var/p69b.db"
 
+    # Ingestion persistence (Sprint 1)
+    ingestion_db_path: str = "var/ingestion.db"
+
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
     ppack_v3_ab_db_path: str = "var/ppack_ab.db"

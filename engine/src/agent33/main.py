@@ -39,6 +39,7 @@ from agent33.api.routes import (
     health,
     hooks,
     improvements,
+    ingestion,
     insights,
     knowledge,
     marketplace,
@@ -534,6 +535,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tool_approval_service = ToolApprovalService(state_store=orchestration_state_store)
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
+
+    # -- Ingestion candidate lifecycle (Sprint 1) --------------------------------
+    from agent33.ingestion.persistence import IngestionPersistence
+    from agent33.ingestion.service import IngestionService
+
+    ingestion_persistence = IngestionPersistence(Path(settings.ingestion_db_path))
+    ingestion_service = IngestionService(persistence=ingestion_persistence)
+    app.state.ingestion_persistence = ingestion_persistence
+    app.state.ingestion_service = ingestion_service
+    ingestion.set_ingestion_service(ingestion_service)
+    logger.info("ingestion_service_initialized", db_path=settings.ingestion_db_path)
 
     # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
     from agent33.autonomy.p69b_persistence import P69bPersistence
@@ -2081,6 +2093,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("instance_deregister_failed", exc_info=True)
 
+    _ingestion_persistence: Any = getattr(app.state, "ingestion_persistence", None)
+    if _ingestion_persistence is not None:
+        _ingestion_persistence.close()
+        logger.info("ingestion_persistence_closed")
+
     _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
     if _p69b_persistence is not None:
         _p69b_persistence.close()
@@ -2316,6 +2333,7 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(p69b.router)
+app.include_router(ingestion.router)
 app.include_router(tool_approvals.router)
 app.include_router(tool_mutations.router)
 app.include_router(processes.router)
