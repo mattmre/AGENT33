@@ -16,6 +16,9 @@ Provides REST endpoints:
 - ``GET  /v1/ingestion/review-queue``                     — pending-review candidates
 - ``POST /v1/ingestion/review-queue/{id}/approve``        — approve a candidate
 - ``POST /v1/ingestion/review-queue/{id}/reject``         — reject a candidate
+- ``GET  /v1/ingestion/doctor/report``                    — summary report (warn/critical only)
+- ``GET  /v1/ingestion/doctor``                           — full tenant diagnostic report
+- ``GET  /v1/ingestion/doctor/{asset_id}``                — single-asset diagnostic report
 
 Auth: write endpoints require ``ingestion:write`` scope; read endpoints
 require ``ingestion:read`` scope.  Heartbeat is public.
@@ -33,6 +36,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from agent33.ingestion.doctor import SkillsDoctor
 from agent33.ingestion.intake import IntakePipeline
 from agent33.ingestion.mailbox import IngestionMailbox
 from agent33.ingestion.metrics import TaskMetricsCollector
@@ -45,11 +49,13 @@ router = APIRouter(prefix="/v1/ingestion", tags=["ingestion"])
 logger = structlog.get_logger()
 
 # Module-level fallbacks; replaced by lifespan via set_ingestion_service() /
-# set_intake_pipeline() / set_ingestion_mailbox() / set_task_metrics().
+# set_intake_pipeline() / set_ingestion_mailbox() / set_task_metrics() /
+# set_skills_doctor().
 _service = IngestionService()
 _intake_pipeline = IntakePipeline(_service)
 _ingestion_mailbox = IngestionMailbox(pipeline=_intake_pipeline)
 _task_metrics = TaskMetricsCollector()
+_skills_doctor = SkillsDoctor(service=_service)
 
 
 def set_ingestion_service(service: IngestionService) -> None:
@@ -76,6 +82,12 @@ def set_task_metrics(metrics: TaskMetricsCollector) -> None:
     _task_metrics = metrics
 
 
+def set_skills_doctor(doctor: SkillsDoctor) -> None:
+    """Swap the module-level skills doctor (called from lifespan)."""
+    global _skills_doctor
+    _skills_doctor = doctor
+
+
 def get_ingestion_service(request: Request) -> IngestionService:
     """Return the ingestion service from app.state, falling back to module-level."""
     svc: IngestionService | None = getattr(request.app.state, "ingestion_service", None)
@@ -98,6 +110,12 @@ def get_task_metrics(request: Request) -> TaskMetricsCollector:
     """Return the task metrics collector from app.state, falling back to module-level."""
     metrics: TaskMetricsCollector | None = getattr(request.app.state, "task_metrics", None)
     return metrics if metrics is not None else _task_metrics
+
+
+def get_skills_doctor(request: Request) -> SkillsDoctor:
+    """Return the skills doctor from app.state, falling back to module-level."""
+    doctor: SkillsDoctor | None = getattr(request.app.state, "skills_doctor", None)
+    return doctor if doctor is not None else _skills_doctor
 
 
 # ------------------------------------------------------------------
@@ -453,6 +471,57 @@ async def reject_candidate(
     except CandidateTransitionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return updated.model_dump(mode="json")
+
+
+# ------------------------------------------------------------------
+# Skills Doctor endpoints (detect-only)
+# ------------------------------------------------------------------
+
+# IMPORTANT: /doctor/report is registered before /doctor/{asset_id} so FastAPI
+# resolves the literal path before the wildcard parameter.
+
+
+@router.get(
+    "/doctor/report",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def doctor_summary_report(request: Request) -> dict[str, Any]:
+    """Return a summary diagnostic report for the authenticated tenant.
+
+    Only warning and critical assets are included in the ``assets`` list.
+    Healthy assets contribute to the counts but are omitted for brevity.
+    """
+    doctor = get_skills_doctor(request)
+    return doctor.summary_report(_resolve_tenant_id(request))
+
+
+@router.get(
+    "/doctor",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def doctor_tenant_report(request: Request) -> dict[str, Any]:
+    """Return a full diagnostic report for the authenticated tenant.
+
+    Runs all health checks on every asset in the tenant and returns
+    aggregate counts plus the full per-asset report list.
+    """
+    doctor = get_skills_doctor(request)
+    return doctor.diagnose_tenant(_resolve_tenant_id(request))
+
+
+@router.get(
+    "/doctor/{asset_id}",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def doctor_asset_report(asset_id: str, request: Request) -> dict[str, Any]:
+    """Return a diagnostic report for a single candidate asset.
+
+    Runs all health checks and returns the combined result with
+    ``status`` (``"healthy"`` | ``"warning"`` | ``"critical"``) and
+    an ordered list of ``checks``.
+    """
+    doctor = get_skills_doctor(request)
+    return doctor.diagnose_asset(asset_id, _resolve_tenant_id(request))
 
 
 # ------------------------------------------------------------------
