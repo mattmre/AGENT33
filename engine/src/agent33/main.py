@@ -536,20 +536,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    # -- Ingestion candidate lifecycle (Sprint 1 + Sprint 2) ---------------------
+    # -- Ingestion candidate lifecycle (Sprint 1 + Sprint 2 + Sprint 4) -----------
     from agent33.ingestion.intake import IntakePipeline
+    from agent33.ingestion.journal import TransitionJournal
     from agent33.ingestion.persistence import IngestionPersistence
     from agent33.ingestion.service import IngestionService
 
     ingestion_persistence = IngestionPersistence(Path(settings.ingestion_db_path))
-    ingestion_service = IngestionService(persistence=ingestion_persistence)
+    ingestion_journal = TransitionJournal(settings.ingestion_journal_db_path)
+    ingestion_service = IngestionService(
+        persistence=ingestion_persistence,
+        journal=ingestion_journal,
+    )
     intake_pipeline = IntakePipeline(ingestion_service)
     app.state.ingestion_persistence = ingestion_persistence
+    app.state.ingestion_journal = ingestion_journal
     app.state.ingestion_service = ingestion_service
     app.state.intake_pipeline = intake_pipeline
     ingestion.set_ingestion_service(ingestion_service)
     ingestion.set_intake_pipeline(intake_pipeline)
-    logger.info("ingestion_service_initialized", db_path=settings.ingestion_db_path)
+    logger.info(
+        "ingestion_service_initialized",
+        db_path=settings.ingestion_db_path,
+        journal_db_path=settings.ingestion_journal_db_path,
+    )
 
     from agent33.ingestion.mailbox import IngestionMailbox
     from agent33.ingestion.metrics import TaskMetricsCollector
@@ -2112,6 +2122,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _ingestion_persistence is not None:
         _ingestion_persistence.close()
         logger.info("ingestion_persistence_closed")
+
+    _ingestion_journal: Any = getattr(app.state, "ingestion_journal", None)
+    if _ingestion_journal is not None:
+        _ingestion_journal.close()
+        logger.info("ingestion_journal_closed")
 
     _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
     if _p69b_persistence is not None:

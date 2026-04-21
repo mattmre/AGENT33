@@ -25,6 +25,7 @@ from agent33.ingestion.models import CandidateAsset, CandidateStatus, Confidence
 from agent33.ingestion.state_machine import CandidateStateMachine
 
 if TYPE_CHECKING:
+    from agent33.ingestion.journal import TransitionJournal
     from agent33.ingestion.persistence import IngestionPersistence
 
 logger = structlog.get_logger()
@@ -39,6 +40,9 @@ class IngestionService:
     mutation to SQLite and re-hydrates its in-memory store from the DB on
     startup, so state survives process restarts.
 
+    When constructed with a ``journal`` argument every successful lifecycle
+    transition is appended to the audit journal.
+
     Without ``persistence`` the service is purely in-memory (backwards
     compatible with unit tests that do not need a DB).
     """
@@ -47,9 +51,11 @@ class IngestionService:
         self,
         *,
         persistence: IngestionPersistence | None = None,
+        journal: TransitionJournal | None = None,
     ) -> None:
         self._store: dict[str, CandidateAsset] = {}
         self._persistence = persistence
+        self._journal = journal
         if persistence is not None:
             self._hydrate_from_persistence()
 
@@ -127,6 +133,7 @@ class IngestionService:
         asset_id: str,
         *,
         operator: str | None = None,
+        reason: str = "validated",
     ) -> CandidateAsset:
         """Transition an asset from ``CANDIDATE`` to ``VALIDATED``.
 
@@ -135,6 +142,7 @@ class IngestionService:
             CandidateTransitionError: Asset is not in ``CANDIDATE`` status.
         """
         asset = self._require(asset_id)
+        old_status = asset.status
         updated = _state_machine.transition(
             asset,
             CandidateStatus.VALIDATED,
@@ -143,6 +151,13 @@ class IngestionService:
         self._store[asset_id] = updated
         if self._persistence is not None:
             self._persistence.save(updated)
+        if self._journal is not None:
+            self._journal.record(
+                updated,
+                old_status,
+                operator=operator or "system",
+                reason=reason,
+            )
         logger.info("ingestion_asset_validated", asset_id=asset_id, operator=operator)
         return updated
 
@@ -151,6 +166,7 @@ class IngestionService:
         asset_id: str,
         *,
         operator: str | None = None,
+        reason: str = "promoted",
     ) -> CandidateAsset:
         """Transition an asset from ``VALIDATED`` to ``PUBLISHED``.
 
@@ -159,6 +175,7 @@ class IngestionService:
             CandidateTransitionError: Asset is not in ``VALIDATED`` status.
         """
         asset = self._require(asset_id)
+        old_status = asset.status
         updated = _state_machine.transition(
             asset,
             CandidateStatus.PUBLISHED,
@@ -167,6 +184,13 @@ class IngestionService:
         self._store[asset_id] = updated
         if self._persistence is not None:
             self._persistence.save(updated)
+        if self._journal is not None:
+            self._journal.record(
+                updated,
+                old_status,
+                operator=operator or "system",
+                reason=reason,
+            )
         logger.info("ingestion_asset_promoted", asset_id=asset_id, operator=operator)
         return updated
 
@@ -187,6 +211,7 @@ class IngestionService:
             CandidateTransitionError: Asset is already in ``REVOKED`` status (terminal).
         """
         asset = self._require(asset_id)
+        old_status = asset.status
         updated = _state_machine.transition(
             asset,
             CandidateStatus.REVOKED,
@@ -196,6 +221,13 @@ class IngestionService:
         self._store[asset_id] = updated
         if self._persistence is not None:
             self._persistence.save(updated)
+        if self._journal is not None:
+            self._journal.record(
+                updated,
+                old_status,
+                operator=operator or "system",
+                reason=reason,
+            )
         logger.info("ingestion_asset_revoked", asset_id=asset_id, operator=operator)
         return updated
 
@@ -244,6 +276,75 @@ class IngestionService:
     def list_by_tenant(self, tenant_id: str) -> list[CandidateAsset]:
         """Return all assets belonging to the given tenant."""
         return [a for a in self._store.values() if a.tenant_id == tenant_id]
+
+    def get_journal(self, asset_id: str) -> list[dict[str, Any]]:
+        """Return all journal entries for the given asset, or empty list if no journal."""
+        if self._journal is None:
+            return []
+        return self._journal.entries_for(asset_id)
+
+    def get_tenant_journal(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Return the most-recent ``limit`` journal entries for the given tenant."""
+        if self._journal is None:
+            return []
+        return self._journal.entries_for_tenant(tenant_id, limit=limit)
+
+    # ------------------------------------------------------------------
+    # Operator review queue
+    # ------------------------------------------------------------------
+
+    def list_pending_review(self, tenant_id: str) -> list[CandidateAsset]:
+        """Return CANDIDATE assets that require operator review for the given tenant.
+
+        An asset is pending review when its metadata contains
+        ``review_required == True`` and its status is ``CANDIDATE``.
+        """
+        return [
+            a
+            for a in self.list_by_tenant(tenant_id)
+            if a.status == CandidateStatus.CANDIDATE and a.metadata.get("review_required") is True
+        ]
+
+    def approve(
+        self,
+        asset_id: str,
+        *,
+        operator: str,
+        reason: str,
+    ) -> CandidateAsset:
+        """Approve a candidate asset: validate it and clear review/quarantine flags.
+
+        Calls ``validate()`` to advance to VALIDATED, then clears
+        ``review_required`` and ``quarantine`` from metadata.
+
+        Raises:
+            KeyError: Asset not found.
+            CandidateTransitionError: Asset is not in ``CANDIDATE`` status.
+        """
+        self.validate(asset_id, operator=operator, reason=reason)
+        cleared = self.patch_metadata(
+            asset_id,
+            {"review_required": False, "quarantine": False},
+        )
+        logger.info("ingestion_asset_approved", asset_id=asset_id, operator=operator)
+        return cleared
+
+    def reject(
+        self,
+        asset_id: str,
+        *,
+        operator: str,
+        reason: str,
+    ) -> CandidateAsset:
+        """Reject a candidate asset by revoking it.
+
+        Raises:
+            KeyError: Asset not found.
+            CandidateTransitionError: Asset is in a terminal state.
+        """
+        revoked = self.revoke(asset_id, reason=reason, operator=operator)
+        logger.info("ingestion_asset_rejected", asset_id=asset_id, operator=operator)
+        return revoked
 
     # ------------------------------------------------------------------
     # Internal helpers

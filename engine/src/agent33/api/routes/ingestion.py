@@ -1,16 +1,21 @@
 """FastAPI routes for the candidate asset ingestion lifecycle.
 
 Provides REST endpoints:
-- ``POST /v1/ingestion/candidates``                     — ingest a new candidate
-- ``GET  /v1/ingestion/candidates/{id}``                — get by ID
-- ``GET  /v1/ingestion/candidates``                     — list (by status or tenant)
-- ``POST /v1/ingestion/candidates/{id}/transition``     — apply a lifecycle transition
-- ``POST /v1/ingestion/intake``                         — batch intake via pipeline
-- ``GET  /v1/ingestion/intake/stats``                   — pipeline stats for tenant
-- ``POST /v1/ingestion/mailbox``                        — post an operator event
-- ``GET  /v1/ingestion/mailbox/drain``                  — drain inbox for tenant
-- ``GET  /v1/ingestion/heartbeat``                      — unauthenticated liveness check
-- ``GET  /v1/ingestion/metrics``                        — task metrics summary
+- ``POST /v1/ingestion/candidates``                       — ingest a new candidate
+- ``GET  /v1/ingestion/candidates/{id}``                  — get by ID
+- ``GET  /v1/ingestion/candidates``                       — list (by status or tenant)
+- ``POST /v1/ingestion/candidates/{id}/transition``       — apply a lifecycle transition
+- ``GET  /v1/ingestion/candidates/{id}/journal``          — audit journal for asset
+- ``POST /v1/ingestion/intake``                           — batch intake via pipeline
+- ``GET  /v1/ingestion/intake/stats``                     — pipeline stats for tenant
+- ``POST /v1/ingestion/mailbox``                          — post an operator event
+- ``GET  /v1/ingestion/mailbox/drain``                    — drain inbox for tenant
+- ``GET  /v1/ingestion/heartbeat``                        — unauthenticated liveness check
+- ``GET  /v1/ingestion/metrics``                          — task metrics summary
+- ``GET  /v1/ingestion/journal``                          — tenant journal (last 100)
+- ``GET  /v1/ingestion/review-queue``                     — pending-review candidates
+- ``POST /v1/ingestion/review-queue/{id}/approve``        — approve a candidate
+- ``POST /v1/ingestion/review-queue/{id}/reject``         — reject a candidate
 
 Auth: write endpoints require ``ingestion:write`` scope; read endpoints
 require ``ingestion:read`` scope.  Heartbeat is public.
@@ -133,6 +138,13 @@ class MailboxPostRequest(BaseModel):
     event_type: str = Field(..., min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
     sender: str = Field(..., min_length=1)
+
+
+class ReviewActionRequest(BaseModel):
+    """Request body for approve/reject review-queue actions."""
+
+    operator: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
 
 
 # ------------------------------------------------------------------
@@ -353,6 +365,94 @@ async def task_metrics(request: Request) -> dict[str, Any]:
     """Return the task metrics summary for the authenticated tenant."""
     metrics = get_task_metrics(request)
     return metrics.summary(_resolve_tenant_id(request))
+
+
+@router.get(
+    "/candidates/{asset_id}/journal",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def get_asset_journal(asset_id: str, request: Request) -> list[dict[str, Any]]:
+    """Return the audit journal entries for the given candidate asset.
+
+    Entries are ordered ascending by ``occurred_at``.
+    Returns 404 if the asset does not exist.
+    """
+    svc = get_ingestion_service(request)
+    asset = svc.get(asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=f"Candidate asset {asset_id!r} not found.")
+    return svc.get_journal(asset_id)
+
+
+@router.get(
+    "/journal",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def get_tenant_journal(request: Request) -> list[dict[str, Any]]:
+    """Return the last 100 journal entries for the authenticated tenant."""
+    svc = get_ingestion_service(request)
+    return svc.get_tenant_journal(_resolve_tenant_id(request))
+
+
+@router.get(
+    "/review-queue",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def list_review_queue(request: Request) -> list[dict[str, Any]]:
+    """Return all CANDIDATE assets that require operator review for the authenticated tenant."""
+    svc = get_ingestion_service(request)
+    assets = svc.list_pending_review(_resolve_tenant_id(request))
+    return [a.model_dump(mode="json") for a in assets]
+
+
+@router.post(
+    "/review-queue/{asset_id}/approve",
+    dependencies=[require_scope("ingestion:write")],
+)
+async def approve_candidate(
+    asset_id: str,
+    body: ReviewActionRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Approve a pending-review candidate: advance to VALIDATED and clear flags.
+
+    Returns 404 if the asset does not exist.
+    Returns 422 if the transition is not permitted.
+    """
+    svc = get_ingestion_service(request)
+    asset = svc.get(asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=f"Candidate asset {asset_id!r} not found.")
+    try:
+        updated = svc.approve(asset_id, operator=body.operator, reason=body.reason)
+    except CandidateTransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return updated.model_dump(mode="json")
+
+
+@router.post(
+    "/review-queue/{asset_id}/reject",
+    dependencies=[require_scope("ingestion:write")],
+)
+async def reject_candidate(
+    asset_id: str,
+    body: ReviewActionRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Reject a pending-review candidate: revoke it.
+
+    Returns 404 if the asset does not exist.
+    Returns 422 if the transition is not permitted.
+    """
+    svc = get_ingestion_service(request)
+    asset = svc.get(asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=f"Candidate asset {asset_id!r} not found.")
+    try:
+        updated = svc.reject(asset_id, operator=body.operator, reason=body.reason)
+    except CandidateTransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return updated.model_dump(mode="json")
 
 
 # ------------------------------------------------------------------
