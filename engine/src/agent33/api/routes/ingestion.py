@@ -16,19 +16,16 @@ No code in this file may originate from the EvoMap/Evolver project.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from agent33.ingestion.models import CandidateAsset, CandidateStatus, ConfidenceLevel
+from agent33.ingestion.models import CandidateStatus, ConfidenceLevel
 from agent33.ingestion.service import IngestionService
 from agent33.ingestion.state_machine import CandidateTransitionError
 from agent33.security.permissions import require_scope
-
-if TYPE_CHECKING:
-    pass
 
 router = APIRouter(prefix="/v1/ingestion", tags=["ingestion"])
 logger = structlog.get_logger()
