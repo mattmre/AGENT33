@@ -1,9 +1,17 @@
-"""P69b: Human-in-the-loop tool approval — in-memory service."""
+"""P69b: Human-in-the-loop tool approval — service layer.
+
+Persistence is optional: pass a P69bPersistence instance at construction to
+enable SQLite-backed storage so PausedInvocation records survive process
+restarts.  Without it the service operates purely in-memory (backwards
+compatible with the original PR #401 behaviour).
+"""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import structlog
 
 from agent33.autonomy.p69b_models import (
     PausedInvocation,
@@ -13,17 +21,54 @@ from agent33.autonomy.p69b_models import (
     ToolApprovalTimeout,
 )
 
+if TYPE_CHECKING:
+    from agent33.autonomy.p69b_persistence import P69bPersistence
+
+logger = structlog.get_logger()
+
 
 class P69bService:
-    """In-memory service for P69b tool approval pause/resume operations.
+    """Service for P69b tool approval pause/resume operations.
 
-    Uses a dict store keyed by PausedInvocation.id (approval_id). No DB
-    migration is required for this slice — persistence is in-process only.
+    When constructed with a ``persistence`` argument the service:
+    - Saves every new PausedInvocation to SQLite after adding it to ``_store``.
+    - Saves every update (approve / deny / timeout) to SQLite.
+    - Re-hydrates ``_store`` from the DB on startup via
+      ``_load_from_persistence()`` so state survives process restarts.
+
+    Without ``persistence`` the service is purely in-memory, which keeps
+    existing tests working without any modification.
     """
 
-    def __init__(self, *, timeout_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        *,
+        timeout_seconds: int = 300,
+        persistence: P69bPersistence | None = None,
+    ) -> None:
         self._store: dict[str, PausedInvocation] = {}
         self._timeout_seconds = timeout_seconds
+        self._persistence = persistence
+        if persistence is not None:
+            self._load_from_persistence()
+
+    # ------------------------------------------------------------------
+    # Startup hydration
+    # ------------------------------------------------------------------
+
+    def _load_from_persistence(self) -> None:
+        """Re-hydrate _store with PENDING records loaded from the DB.
+
+        Only PENDING records that have not yet expired are loaded; resolved or
+        timed-out records are left in the DB for audit purposes but are not
+        put back into the live in-memory store.
+        """
+        if self._persistence is None:
+            return
+        records = self._persistence.load_pending()
+        for record in records:
+            self._store[record.id] = record
+        logger.info("p69b_store_hydrated", count=len(records))
 
     # ------------------------------------------------------------------
     # Feature flag / headless mode
@@ -85,6 +130,8 @@ class P69bService:
             expires_at=expires_at,
         )
         self._store[record.id] = record
+        if self._persistence is not None:
+            self._persistence.save(record)
         return record
 
     def resume(
@@ -113,6 +160,8 @@ class P69bService:
                 }
             )
             self._store[approval_id] = updated
+            if self._persistence is not None:
+                self._persistence.save(updated)
             raise ToolApprovalTimeout(f"Approval expired at {record.expires_at}")
 
         new_status = PausedInvocationStatus.APPROVED if approved else PausedInvocationStatus.DENIED
@@ -124,6 +173,8 @@ class P69bService:
             }
         )
         self._store[approval_id] = updated
+        if self._persistence is not None:
+            self._persistence.save(updated)
         return updated
 
     # ------------------------------------------------------------------

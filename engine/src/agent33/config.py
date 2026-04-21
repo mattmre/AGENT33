@@ -257,6 +257,9 @@ class Settings(BaseSettings):
     skillsbench_context_manager_enabled: bool = True
     skillsbench_storage_path: str = "var/skillsbench_runs"
 
+    # P69b tool-approval persistence
+    p69b_db_path: str = "var/p69b.db"
+
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
     ppack_v3_ab_db_path: str = "var/ppack_ab.db"
