@@ -309,6 +309,28 @@ class OutcomesService:
             events = [item for item in events if item.metric_type == metric_type]
         return events
 
+    def health_check(self, *, alert_threshold_hours: float = 24.0) -> dict[str, object]:
+        """Return P68-Lite monitoring health status.
+
+        Returns ``{"status": "ok"}`` when at least one event exists whose
+        ``occurred_at`` is within *alert_threshold_hours* of now.  Returns
+        ``{"status": "stale", "hours_since_last_event": N}`` when the most
+        recent event across **all** tenants is older than the threshold, and
+        ``{"status": "stale", "hours_since_last_event": null}`` when the
+        table has never received any events.
+        """
+        now = datetime.now(UTC)
+        all_events = list(self._events.values())
+        if not all_events:
+            return {"status": "stale", "hours_since_last_event": None}
+
+        most_recent = max(all_events, key=lambda ev: ev.occurred_at)
+        delta_hours = (now - most_recent.occurred_at).total_seconds() / 3600.0
+
+        if delta_hours <= alert_threshold_hours:
+            return {"status": "ok"}
+        return {"status": "stale", "hours_since_last_event": round(delta_hours, 2)}
+
     @staticmethod
     def _compute_direction(
         metric_type: OutcomeMetricType, previous_avg: float, current_avg: float

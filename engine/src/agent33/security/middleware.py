@@ -27,6 +27,7 @@ _PUBLIC_PATHS: set[str] = {
     "/openapi.json",
     "/v1/auth/token",
     "/v1/dashboard/",
+    "/v1/outcomes/health",
 }
 
 
