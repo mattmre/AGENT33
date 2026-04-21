@@ -7,9 +7,13 @@ Provides REST endpoints:
 - ``POST /v1/ingestion/candidates/{id}/transition``     — apply a lifecycle transition
 - ``POST /v1/ingestion/intake``                         — batch intake via pipeline
 - ``GET  /v1/ingestion/intake/stats``                   — pipeline stats for tenant
+- ``POST /v1/ingestion/mailbox``                        — post an operator event
+- ``GET  /v1/ingestion/mailbox/drain``                  — drain inbox for tenant
+- ``GET  /v1/ingestion/heartbeat``                      — unauthenticated liveness check
+- ``GET  /v1/ingestion/metrics``                        — task metrics summary
 
 Auth: write endpoints require ``ingestion:write`` scope; read endpoints
-require ``ingestion:read`` scope.
+require ``ingestion:read`` scope.  Heartbeat is public.
 
 CLEAN-ROOM RESTRICTION
 =======================
@@ -25,6 +29,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agent33.ingestion.intake import IntakePipeline
+from agent33.ingestion.mailbox import IngestionMailbox
+from agent33.ingestion.metrics import TaskMetricsCollector
 from agent33.ingestion.models import CandidateStatus, ConfidenceLevel
 from agent33.ingestion.service import IngestionService
 from agent33.ingestion.state_machine import CandidateTransitionError
@@ -34,9 +40,11 @@ router = APIRouter(prefix="/v1/ingestion", tags=["ingestion"])
 logger = structlog.get_logger()
 
 # Module-level fallbacks; replaced by lifespan via set_ingestion_service() /
-# set_intake_pipeline().
+# set_intake_pipeline() / set_ingestion_mailbox() / set_task_metrics().
 _service = IngestionService()
 _intake_pipeline = IntakePipeline(_service)
+_ingestion_mailbox = IngestionMailbox(pipeline=_intake_pipeline)
+_task_metrics = TaskMetricsCollector()
 
 
 def set_ingestion_service(service: IngestionService) -> None:
@@ -51,6 +59,18 @@ def set_intake_pipeline(pipeline: IntakePipeline) -> None:
     _intake_pipeline = pipeline
 
 
+def set_ingestion_mailbox(mailbox: IngestionMailbox) -> None:
+    """Swap the module-level ingestion mailbox (called from lifespan)."""
+    global _ingestion_mailbox
+    _ingestion_mailbox = mailbox
+
+
+def set_task_metrics(metrics: TaskMetricsCollector) -> None:
+    """Swap the module-level task metrics collector (called from lifespan)."""
+    global _task_metrics
+    _task_metrics = metrics
+
+
 def get_ingestion_service(request: Request) -> IngestionService:
     """Return the ingestion service from app.state, falling back to module-level."""
     svc: IngestionService | None = getattr(request.app.state, "ingestion_service", None)
@@ -61,6 +81,18 @@ def get_intake_pipeline(request: Request) -> IntakePipeline:
     """Return the intake pipeline from app.state, falling back to module-level."""
     pipeline: IntakePipeline | None = getattr(request.app.state, "intake_pipeline", None)
     return pipeline if pipeline is not None else _intake_pipeline
+
+
+def get_ingestion_mailbox(request: Request) -> IngestionMailbox:
+    """Return the ingestion mailbox from app.state, falling back to module-level."""
+    mailbox: IngestionMailbox | None = getattr(request.app.state, "ingestion_mailbox", None)
+    return mailbox if mailbox is not None else _ingestion_mailbox
+
+
+def get_task_metrics(request: Request) -> TaskMetricsCollector:
+    """Return the task metrics collector from app.state, falling back to module-level."""
+    metrics: TaskMetricsCollector | None = getattr(request.app.state, "task_metrics", None)
+    return metrics if metrics is not None else _task_metrics
 
 
 # ------------------------------------------------------------------
@@ -93,6 +125,14 @@ class IntakeRequest(BaseModel):
     assets: list[dict[str, Any]] = Field(..., min_length=1)
     source: str = Field(..., min_length=1)
     tenant_id: str = Field(..., min_length=1)
+
+
+class MailboxPostRequest(BaseModel):
+    """Request body for posting an event to the ingestion mailbox."""
+
+    event_type: str = Field(..., min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    sender: str = Field(..., min_length=1)
 
 
 # ------------------------------------------------------------------
@@ -235,3 +275,94 @@ async def intake_stats(request: Request, tenant_id: str) -> dict[str, Any]:
     """
     pipeline = get_intake_pipeline(request)
     return pipeline.get_pipeline_stats(tenant_id)
+
+
+@router.post(
+    "/mailbox",
+    status_code=202,
+    dependencies=[require_scope("ingestion:write")],
+)
+async def post_mailbox_event(body: MailboxPostRequest, request: Request) -> dict[str, str]:
+    """Deposit an operator event into the ingestion mailbox.
+
+    ``candidate_asset`` events are forwarded immediately to the intake pipeline.
+    All other event types are held in the in-memory inbox until drained.
+
+    Returns ``{"status": "accepted", "event_id": "<uuid4>"}`` on success.
+    Returns 422 if the event fails validation.
+    """
+    mailbox = get_ingestion_mailbox(request)
+    metrics = get_task_metrics(request)
+
+    import time
+
+    start = time.monotonic()
+    try:
+        result = mailbox.post(
+            {"event_type": body.event_type, "payload": body.payload},
+            sender=body.sender,
+            tenant_id=_resolve_tenant_id(request),
+        )
+        latency_ms = (time.monotonic() - start) * 1000
+        metrics.record(
+            body.event_type,
+            _resolve_tenant_id(request),
+            success=True,
+            latency_ms=latency_ms,
+        )
+    except ValueError as exc:
+        metrics.record(body.event_type, _resolve_tenant_id(request), success=False)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return result
+
+
+@router.get(
+    "/mailbox/drain",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def drain_mailbox(request: Request) -> list[dict[str, Any]]:
+    """Drain and return all queued inbox events for the authenticated tenant.
+
+    Events that were routed to the intake pipeline are not returned here.
+    """
+    mailbox = get_ingestion_mailbox(request)
+    return mailbox.drain(_resolve_tenant_id(request))
+
+
+@router.get("/heartbeat")
+async def heartbeat(request: Request) -> dict[str, Any]:
+    """Return a combined liveness snapshot.  This endpoint is unauthenticated.
+
+    Merges :meth:`IngestionMailbox.heartbeat` with
+    :meth:`IntakePipeline.get_pipeline_stats` using the ``"system"`` tenant
+    to provide a broad operational view.
+    """
+    mailbox = get_ingestion_mailbox(request)
+    pipeline = get_intake_pipeline(request)
+    hb = mailbox.heartbeat()
+    pipeline_stats = pipeline.get_pipeline_stats("system")
+    return {**hb, "pipeline_stats": pipeline_stats}
+
+
+@router.get(
+    "/metrics",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def task_metrics(request: Request) -> dict[str, Any]:
+    """Return the task metrics summary for the authenticated tenant."""
+    metrics = get_task_metrics(request)
+    return metrics.summary(_resolve_tenant_id(request))
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+
+def _resolve_tenant_id(request: Request) -> str:
+    """Extract tenant_id from the authenticated request state, or use 'unknown'."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return "unknown"
+    return str(getattr(user, "tenant_id", None) or getattr(user, "sub", "unknown"))

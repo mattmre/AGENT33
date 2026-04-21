@@ -28,6 +28,7 @@ _PUBLIC_PATHS: set[str] = {
     "/v1/auth/token",
     "/v1/dashboard/",
     "/v1/outcomes/health",
+    "/v1/ingestion/heartbeat",
 }
 
 

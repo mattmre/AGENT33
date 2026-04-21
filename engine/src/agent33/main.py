@@ -551,6 +551,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ingestion.set_intake_pipeline(intake_pipeline)
     logger.info("ingestion_service_initialized", db_path=settings.ingestion_db_path)
 
+    from agent33.ingestion.mailbox import IngestionMailbox
+    from agent33.ingestion.metrics import TaskMetricsCollector
+
+    ingestion_mailbox = IngestionMailbox(pipeline=intake_pipeline)
+    task_metrics = TaskMetricsCollector()
+    app.state.ingestion_mailbox = ingestion_mailbox
+    app.state.task_metrics = task_metrics
+    ingestion.set_ingestion_mailbox(ingestion_mailbox)
+    ingestion.set_task_metrics(task_metrics)
+    logger.info("ingestion_mailbox_initialized")
+
     # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
     from agent33.autonomy.p69b_persistence import P69bPersistence
     from agent33.autonomy.p69b_service import P69bService
