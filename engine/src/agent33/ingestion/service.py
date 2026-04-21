@@ -199,6 +199,36 @@ class IngestionService:
         logger.info("ingestion_asset_revoked", asset_id=asset_id, operator=operator)
         return updated
 
+    def patch_metadata(
+        self,
+        asset_id: str,
+        updates: dict[str, Any],
+    ) -> CandidateAsset:
+        """Merge *updates* into the asset's metadata and persist the result.
+
+        Existing keys not present in *updates* are preserved.  This is used
+        by the intake pipeline to attach routing flags (``review_required``,
+        ``quarantine``) without going through a lifecycle transition.
+
+        Args:
+            asset_id: ID of the asset to update.
+            updates: Key/value pairs to merge into the existing metadata.
+
+        Returns:
+            The updated ``CandidateAsset``.
+
+        Raises:
+            KeyError: Asset not found.
+        """
+        asset = self._require(asset_id)
+        merged = {**asset.metadata, **updates}
+        updated = asset.model_copy(update={"metadata": merged})
+        self._store[asset_id] = updated
+        if self._persistence is not None:
+            self._persistence.save(updated)
+        logger.info("ingestion_asset_metadata_patched", asset_id=asset_id)
+        return updated
+
     # ------------------------------------------------------------------
     # Queries
     # ------------------------------------------------------------------

@@ -536,15 +536,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    # -- Ingestion candidate lifecycle (Sprint 1) --------------------------------
+    # -- Ingestion candidate lifecycle (Sprint 1 + Sprint 2) ---------------------
+    from agent33.ingestion.intake import IntakePipeline
     from agent33.ingestion.persistence import IngestionPersistence
     from agent33.ingestion.service import IngestionService
 
     ingestion_persistence = IngestionPersistence(Path(settings.ingestion_db_path))
     ingestion_service = IngestionService(persistence=ingestion_persistence)
+    intake_pipeline = IntakePipeline(ingestion_service)
     app.state.ingestion_persistence = ingestion_persistence
     app.state.ingestion_service = ingestion_service
+    app.state.intake_pipeline = intake_pipeline
     ingestion.set_ingestion_service(ingestion_service)
+    ingestion.set_intake_pipeline(intake_pipeline)
     logger.info("ingestion_service_initialized", db_path=settings.ingestion_db_path)
 
     # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
