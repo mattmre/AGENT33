@@ -1,4 +1,4 @@
-"""Embedding provider using Ollama /api/embeddings endpoint."""
+"""Embedding provider using Ollama's batched embedding API."""
 
 from __future__ import annotations
 
@@ -49,36 +49,8 @@ class EmbeddingProvider:
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding vector for a single text."""
-        connector = "memory:ollama_embeddings"
-        operation = "POST /api/embeddings"
-        payload = {"model": self._model, "prompt": text}
-
-        async def _perform_embed() -> list[float]:
-            response = await self._client.post(
-                f"{self._base_url}/api/embeddings",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return cast("list[float]", data["embedding"])
-
-        async def _execute_embed(_request: ConnectorRequest) -> list[float]:
-            return await _perform_embed()
-
-        if self._boundary_executor is None:
-            return await _perform_embed()
-
-        request = ConnectorRequest(
-            connector=connector,
-            operation=operation,
-            payload=payload,
-            metadata={"base_url": self._base_url},
-        )
-        try:
-            result = await self._boundary_executor.execute(request, _execute_embed)
-            return cast("list[float]", result)
-        except Exception as exc:
-            raise map_connector_exception(exc, connector, operation) from exc
+        embeddings = await self.embed_batch([text])
+        return embeddings[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts in a single batched request."""

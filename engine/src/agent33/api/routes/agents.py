@@ -31,8 +31,8 @@ from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.evaluation.ppack_ab_models import PPackABAssignment
-from agent33.llm.ollama import OllamaProvider
 from agent33.llm.router import ModelRouter
+from agent33.llm.runtime_config import build_model_router, resolve_default_model
 from agent33.observability.effort_telemetry import (
     EffortTelemetryExporter,
     EffortTelemetryExportError,
@@ -49,46 +49,12 @@ logger = logging.getLogger(__name__)
 # -- singletons ----------------------------------------------------------
 
 
-def _llamacpp_enabled() -> bool:
-    """Return True when the local orchestration engine is llama.cpp."""
-    return settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
-
-
 def _default_agent_model() -> str:
     """Return the default model name for agent invocations."""
-    if _llamacpp_enabled():
-        return settings.local_orchestration_model
-    return settings.ollama_default_model
+    return resolve_default_model()
 
 
-_model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
-_model_router.register(
-    "ollama",
-    OllamaProvider(
-        base_url=settings.ollama_base_url,
-        default_model=settings.ollama_default_model,
-    ),
-)
-
-if _llamacpp_enabled():
-    from agent33.llm.openai import OpenAIProvider as _LlamaCppProvider
-
-    _model_router.register(
-        "llamacpp",
-        _LlamaCppProvider(
-            api_key="local",
-            base_url=settings.local_orchestration_base_url,
-            default_model=settings.local_orchestration_model,
-        ),
-    )
-
-if settings.openai_api_key.get_secret_value():
-    from agent33.llm.openai import OpenAIProvider
-
-    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key.get_secret_value()}
-    if settings.openai_base_url:
-        _openai_kwargs["base_url"] = settings.openai_base_url
-    _model_router.register("openai", OpenAIProvider(**_openai_kwargs))
+_model_router = build_model_router()
 
 
 def _parse_effort_policy(raw: str) -> dict[str, str]:
@@ -159,7 +125,7 @@ async def _resolve_active_skills(
         skill_matcher = SkillMatcher(
             registry=skill_registry,
             router=model_router,
-            model=settings.skillsbench_skill_matcher_model or settings.ollama_default_model,
+            model=settings.skillsbench_skill_matcher_model or resolve_default_model(),
             top_k=settings.skillsbench_skill_matcher_top_k,
             skip_llm_below=settings.skillsbench_skill_matcher_skip_llm_below,
         )
@@ -959,7 +925,7 @@ async def invoke_agent_iterative(
     if context_manager is None and settings.skillsbench_context_manager_enabled:
         from agent33.agents.context_manager import ContextManager, budget_for_model
 
-        selected_model = body.model or settings.ollama_default_model
+        selected_model = body.model or resolve_default_model()
         context_manager = ContextManager(
             budget=budget_for_model(selected_model),
             router=model_router,

@@ -13,6 +13,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from agent33.backup.manifest import BackupSummary
+from pydantic import SecretStr
+
 from agent33.config import Settings
 from agent33.operator.models import CheckStatus, ResetTarget
 from agent33.operator.service import OperatorService, _mask_db_url
@@ -153,6 +155,12 @@ class TestGetConfig:
         for key, value in config.feature_flags.items():
             assert isinstance(value, bool), f"Flag {key} is not bool: {value}"
 
+    def test_openrouter_key_present_and_redacted_when_set(self) -> None:
+        svc = _build_service()
+        object.__setattr__(svc._settings, "openrouter_api_key", SecretStr("sk-or-test"))
+        config = svc.get_config()
+        assert config.groups["llm"]["openrouter_api_key"] == "***"
+
     def test_has_expected_groups(self) -> None:
         svc = _build_service()
         config = svc.get_config()
@@ -161,6 +169,7 @@ class TestGetConfig:
             "redis",
             "nats",
             "ollama",
+            "llm",
             "agents",
             "skills",
             "plugins",

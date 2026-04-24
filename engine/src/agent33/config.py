@@ -4,14 +4,38 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import string
 from typing import Literal
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 _logger = logging.getLogger(__name__)
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def resolve_runtime_service_url(url: str) -> str:
+    """Rewrite loopback service URLs when the engine runs inside Docker."""
+    normalized = url.strip()
+    if not normalized or not os.path.exists("/.dockerenv"):
+        return normalized
+
+    parsed = urlparse(normalized)
+    if parsed.hostname not in _LOOPBACK_HOSTS:
+        return normalized
+
+    credentials = ""
+    if parsed.username:
+        credentials = parsed.username
+        if parsed.password:
+            credentials += f":{parsed.password}"
+        credentials += "@"
+
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return urlunparse(parsed._replace(netloc=f"{credentials}host.docker.internal{port}"))
 
 
 class Settings(BaseSettings):
@@ -31,6 +55,7 @@ class Settings(BaseSettings):
     max_request_size_bytes: int = 10 * 1024 * 1024  # 10 MB default
 
     # Ollama
+    default_model: str = ""
     ollama_base_url: str = "http://ollama:11434"
     ollama_default_model: str = "llama3.2:3b"
 
@@ -94,6 +119,12 @@ class Settings(BaseSettings):
     # Optional cloud LLM
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_site_url: str = "http://localhost"
+    openrouter_app_name: str = "AGENT-33"
+    openrouter_app_category: str = "cli-agent"
+    openrouter_default_fallback_models: str = ""
     elevenlabs_api_key: SecretStr = SecretStr("")
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     voice_daemon_enabled: bool = True
@@ -568,6 +599,11 @@ class Settings(BaseSettings):
     ptc_max_calls: int = 50
     ptc_max_stdout_bytes: int = 51200  # 50 KB
     ptc_allowed_tools: str = ""  # comma-separated override; empty = default list
+
+    @property
+    def runtime_ollama_base_url(self) -> str:
+        """Return the Ollama URL that runtime code should use."""
+        return resolve_runtime_service_url(self.ollama_base_url)
 
     @field_validator("control_plane_backend")
     @classmethod

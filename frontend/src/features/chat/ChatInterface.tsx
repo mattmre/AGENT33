@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { getRuntimeConfig, apiRequest } from "../../lib/api";
+import {
+    OPENROUTER_RECOMMENDED_MODELS,
+    type OpenRouterModelEntry,
+    filterOpenRouterModels,
+    formatOpenRouterNumber,
+    getOpenRouterRecommendedModel,
+    parseOpenRouterModels
+} from "../../lib/openrouterModels";
 
 interface Message {
     id?: string;
@@ -9,8 +17,47 @@ interface Message {
     isTranslating?: boolean;
 }
 
+type StatusTone = "info" | "success" | "warning" | "error";
+
+interface StatusMessage {
+    tone: StatusTone;
+    message: string;
+}
+
 // Browser API fallbacks
 const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+const CHAT_MODEL_STORAGE_KEY = "agent33.chatModel";
+const INITIAL_MODEL_CATALOG_STATUS: StatusMessage = {
+    tone: "info",
+    message: "Use a known-working model below or browse the live catalog."
+};
+
+function getInitialChatModel(): string {
+    if (typeof window === "undefined") {
+        return "";
+    }
+    return window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || "";
+}
+
+function extractResultMessage(payload: unknown, fallback: string): string {
+    if (!payload || typeof payload !== "object") {
+        return fallback;
+    }
+
+    const data = payload as Record<string, unknown>;
+    const directMessage = [data.message, data.detail, data.error, data.status].find(
+        (value) => typeof value === "string" && value.trim() !== ""
+    );
+    if (typeof directMessage === "string") {
+        return directMessage;
+    }
+
+    const validationErrors = Array.isArray(data.validation_errors)
+        ? data.validation_errors.filter((item): item is string => typeof item === "string" && item.trim() !== "")
+        : [];
+
+    return validationErrors.length > 0 ? validationErrors.join(" ") : fallback;
+}
 
 interface ChatInterfaceProps {
     token: string;
@@ -39,7 +86,13 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
 
     // Settings Modal State
     const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [activeSettingsTab, setActiveSettingsTab] = useState<'translation' | 'audio'>('translation');
+    const [activeSettingsTab, setActiveSettingsTab] = useState<'translation' | 'audio' | 'model'>('translation');
+    const [selectedModel, setSelectedModel] = useState<string>(getInitialChatModel);
+    const [modelCatalogStatus, setModelCatalogStatus] = useState<StatusMessage>(INITIAL_MODEL_CATALOG_STATUS);
+    const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
+    const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
+    const [modelCatalog, setModelCatalog] = useState<OpenRouterModelEntry[]>([]);
+    const [modelSearch, setModelSearch] = useState("");
 
     // Voice Dictation (STT) State
     const [isRecording, setIsRecording] = useState(false);
@@ -129,6 +182,38 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
         scrollToBottom();
     }, [messages]);
 
+    useEffect(() => {
+        window.localStorage.setItem(CHAT_MODEL_STORAGE_KEY, selectedModel);
+    }, [selectedModel]);
+
+    const filteredModelCatalog = useMemo(
+        () => filterOpenRouterModels(modelCatalog, modelSearch),
+        [modelCatalog, modelSearch]
+    );
+    const visibleModelCatalog = filteredModelCatalog.slice(0, 8);
+    const trimmedSelectedModel = selectedModel.trim();
+    const selectedCatalogModel = useMemo(
+        () => modelCatalog.find((model) => model.id === trimmedSelectedModel) || null,
+        [modelCatalog, trimmedSelectedModel]
+    );
+    const selectedRecommendedModel = useMemo(
+        () => getOpenRouterRecommendedModel(trimmedSelectedModel),
+        [trimmedSelectedModel]
+    );
+
+    useEffect(() => {
+        if (showSettingsModal && activeSettingsTab === "model" && !modelCatalogLoaded && !modelCatalogLoading) {
+            void loadModelCatalog();
+        }
+    }, [activeSettingsTab, modelCatalogLoaded, modelCatalogLoading, showSettingsModal, token, apiKey]);
+
+    const modelCatalogEmptyMessage =
+        modelCatalogStatus.tone === "error"
+            ? "Catalog unavailable right now. Type a model ID manually or refresh the catalog."
+            : modelSearch.trim() !== ""
+                ? "No OpenRouter models match your current search."
+                : "No OpenRouter models are currently available.";
+
     const speakText = (text: string) => {
         if (!voiceEnabled || !window.speechSynthesis) return;
 
@@ -146,6 +231,78 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
 
         utterance.rate = playbackRate;
         window.speechSynthesis.speak(utterance);
+    };
+
+    const buildChatRequestBody = (
+        chatMessages: Array<{ role: string; content: string }>,
+        temperature: number
+    ) => {
+        const body: {
+            model?: string;
+            messages: Array<{ role: string; content: string }>;
+            temperature: number;
+        } = {
+            messages: chatMessages,
+            temperature
+        };
+        const model = selectedModel.trim();
+        if (model) {
+            body.model = model;
+        }
+        return body;
+    };
+
+    const loadModelCatalog = async (force = false) => {
+        if (modelCatalogLoading || (modelCatalogLoaded && !force)) {
+            return;
+        }
+
+        setModelCatalogLoading(true);
+        setModelCatalogStatus({
+            tone: "info",
+            message: "Loading OpenRouter model catalog..."
+        });
+
+        try {
+            const res = await apiRequest({
+                method: "GET",
+                path: "/v1/openrouter/models",
+                token,
+                apiKey
+            });
+
+            if (!res.ok) {
+                throw new Error(
+                    extractResultMessage(
+                        res.data,
+                        "Could not load the OpenRouter model catalog. Manual entry is still available."
+                    )
+                );
+            }
+
+            const parsedModels = parseOpenRouterModels(res.data);
+            setModelCatalog(parsedModels);
+            setModelCatalogLoaded(true);
+            setModelCatalogStatus({
+                tone: parsedModels.length > 0 ? "success" : "warning",
+                message:
+                    parsedModels.length > 0
+                        ? `Loaded ${parsedModels.length} models from the live catalog.`
+                        : "The OpenRouter catalog is currently empty. Manual entry is still available."
+            });
+        } catch (error: any) {
+            setModelCatalog([]);
+            setModelCatalogLoaded(true);
+            setModelCatalogStatus({
+                tone: "error",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Could not load the OpenRouter model catalog. Manual entry is still available."
+            });
+        } finally {
+            setModelCatalogLoading(false);
+        }
     };
 
     const handleSend = async () => {
@@ -168,11 +325,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                 path: "/v1/chat/completions",
                 token: token,
                 apiKey: apiKey,
-                body: JSON.stringify({
-                    model: "qwen3-coder:30b", // Default fallback model
-                    messages: [...messages, userMsg],
-                    temperature: 0.2
-                })
+                body: JSON.stringify(buildChatRequestBody([...messages, userMsg], 0.2))
             });
 
             if (!res.ok) {
@@ -199,14 +352,10 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                             path: "/v1/chat/completions",
                             token: token,
                             apiKey: apiKey,
-                            body: JSON.stringify({
-                                model: "qwen3-coder:30b",
-                                messages: [
+                            body: JSON.stringify(buildChatRequestBody([
                                     { role: "system", content: `You are a professional translator. Translate the following text from ${translateFrom} to ${translateTo}. Return ONLY the direct translation, nothing else, no quotes, no markdown.` },
                                     { role: "user", content: reply }
-                                ],
-                                temperature: 0.1
-                            })
+                                ], 0.1))
                         });
 
                         if (transRes.ok) {
@@ -246,14 +395,10 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                 path: "/v1/chat/completions",
                 token: token,
                 apiKey: apiKey,
-                body: JSON.stringify({
-                    model: "qwen3-coder:30b",
-                    messages: [
+                body: JSON.stringify(buildChatRequestBody([
                         { role: "system", content: `You are a professional translator. Translate the following text from ${translateFrom} to ${translateTo}. Return ONLY the direct translation, nothing else, no quotes, no markdown.` },
                         { role: "user", content: msgToTranslate.content }
-                    ],
-                    temperature: 0.1
-                })
+                    ], 0.1))
             });
 
             if (!res.ok) {
@@ -422,6 +567,12 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                             >
                                 Audio Response
                             </button>
+                            <button
+                                className={`chat-tab-btn ${activeSettingsTab === 'model' ? "active" : ""}`}
+                                onClick={() => setActiveSettingsTab('model')}
+                            >
+                                Model & Provider
+                            </button>
                         </div>
 
                         <div className="chat-tab-panel compact">
@@ -551,6 +702,232 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                             >
                                                 <span aria-hidden="true">⏹️</span>
                                             </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeSettingsTab === 'model' && (
+                                <div className="audio-panel-grid">
+                                    <div className="setting-row chat-model-summary">
+                                        <div className="chat-model-summary__body">
+                                            <span className="setting-label">Current selection</span>
+                                            <strong className="chat-model-summary__value">
+                                                {trimmedSelectedModel
+                                                    ? selectedCatalogModel?.name || trimmedSelectedModel
+                                                    : "Server default"}
+                                            </strong>
+                                            <span className="openrouter-model-id">
+                                                {trimmedSelectedModel
+                                                    ? trimmedSelectedModel
+                                                    : "Uses the server default model configured for AGENT-33."}
+                                            </span>
+                                            {trimmedSelectedModel ? (
+                                                <div className="openrouter-model-capabilities openrouter-selection-tags">
+                                                    <span
+                                                        className={`model-pill ${selectedRecommendedModel ? "model-pill--recommended" : "model-pill--warning"}`}
+                                                    >
+                                                        {selectedRecommendedModel
+                                                            ? selectedRecommendedModel.badgeLabel
+                                                            : "Catalog/manual model"}
+                                                    </span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="setup-button-secondary chat-model-default-btn"
+                                            onClick={() => setSelectedModel("")}
+                                            disabled={!trimmedSelectedModel}
+                                        >
+                                            Use server default
+                                        </button>
+                                    </div>
+
+                                    <label className="setting-label" htmlFor="chat-model-input">Model override</label>
+                                    <input
+                                        id="chat-model-input"
+                                        className="voice-select"
+                                        type="text"
+                                        value={selectedModel}
+                                        onChange={(e) => setSelectedModel(e.target.value)}
+                                        placeholder="Server default (e.g. openrouter/qwen/qwen3-coder-flash)"
+                                        aria-describedby="chat-model-help"
+                                    />
+                                    <div id="chat-model-help" className="openrouter-inline-help">
+                                        Pick a known-working ref below, browse the public catalog, or type any
+                                        OpenRouter model ID manually. Leave the field blank to use the server
+                                        default for this browser.
+                                    </div>
+
+                                    <div className="integration-status integration-status--warning openrouter-advisory">
+                                        Catalog results can still fail for your OpenRouter account or provider
+                                        route. If an override fails, clear it or switch to one of the
+                                        known-working refs below.
+                                    </div>
+
+                                    <div
+                                        className="openrouter-recommendations"
+                                        role="group"
+                                        aria-labelledby="chat-recommended-models-heading"
+                                    >
+                                        <div className="openrouter-recommendations__header">
+                                            <h4 id="chat-recommended-models-heading">Known working models</h4>
+                                            <p>Explicit OpenRouter-ready refs verified with this setup.</p>
+                                        </div>
+                                        <div className="openrouter-recommendation-list">
+                                            {OPENROUTER_RECOMMENDED_MODELS.map((model) => {
+                                                const isSelected = trimmedSelectedModel === model.id;
+                                                return (
+                                                    <button
+                                                        key={model.id}
+                                                        type="button"
+                                                        className={`openrouter-recommendation-button${isSelected ? " is-selected" : ""}`}
+                                                        onClick={() => setSelectedModel(model.id)}
+                                                        aria-pressed={isSelected}
+                                                        aria-label={`Use ${model.id} as chat model override`}
+                                                    >
+                                                        <div className="openrouter-recommendation-button__top">
+                                                            <strong className="openrouter-recommendation-button__name">
+                                                                {model.name}
+                                                            </strong>
+                                                            <span className="model-pill model-pill--recommended">
+                                                                {model.badgeLabel}
+                                                            </span>
+                                                        </div>
+                                                        <span className="openrouter-model-id openrouter-recommendation-id">
+                                                            {model.id}
+                                                        </span>
+                                                        <p className="openrouter-recommendation-button__description">
+                                                            {model.description}
+                                                        </p>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {trimmedSelectedModel && !selectedRecommendedModel ? (
+                                        <div className="integration-status integration-status--warning openrouter-selection-warning">
+                                            This override is still catalog/manual only. Catalog presence does not
+                                            guarantee your account/provider can route it. If chat fails, clear the
+                                            override or switch to openrouter/qwen/qwen3-coder-flash.
+                                        </div>
+                                    ) : null}
+
+                                    <div className="chat-model-toolbar">
+                                        <label htmlFor="chat-model-search" className="openrouter-search-field">
+                                            <span>Search model catalog</span>
+                                            <input
+                                                id="chat-model-search"
+                                                type="search"
+                                                value={modelSearch}
+                                                onChange={(e) => setModelSearch(e.target.value)}
+                                                placeholder="Search models, vendors, or capabilities"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            className="setup-button-secondary chat-model-refresh-btn"
+                                            onClick={() => void loadModelCatalog(true)}
+                                            disabled={modelCatalogLoading}
+                                        >
+                                            {modelCatalogLoading ? "Loading..." : "Refresh catalog"}
+                                        </button>
+                                    </div>
+
+                                    <div
+                                        className={`integration-status integration-status--${modelCatalogStatus.tone}`}
+                                        role={modelCatalogStatus.tone === "error" ? "alert" : "status"}
+                                        aria-live="polite"
+                                    >
+                                        {modelCatalogStatus.message}
+                                    </div>
+
+                                    <p className="openrouter-catalog-count">
+                                        {modelCatalogLoading
+                                            ? "Loading models..."
+                                            : modelCatalog.length > 0
+                                                ? `${filteredModelCatalog.length} of ${modelCatalog.length} model${modelCatalog.length === 1 ? "" : "s"} match${filteredModelCatalog.length === 1 ? "es" : ""} your search. Catalog-listed models can still be unavailable for this account/provider.`
+                                                : "Manual entry remains available even when the catalog is empty or unavailable."}
+                                    </p>
+
+                                    {visibleModelCatalog.length > 0 ? (
+                                        <ul className="openrouter-model-list chat-model-list" aria-label="OpenRouter chat model results">
+                                            {visibleModelCatalog.map((model) => {
+                                                const isSelected = trimmedSelectedModel === model.id;
+                                                const recommendedModel = getOpenRouterRecommendedModel(model.id);
+                                                return (
+                                                    <li
+                                                        key={model.id}
+                                                        className={`openrouter-model-item${isSelected ? " is-selected" : ""}`}
+                                                    >
+                                                        <div className="openrouter-model-item__top">
+                                                            <div>
+                                                                <h5>{model.name}</h5>
+                                                                <p className="openrouter-model-id">{model.id}</p>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                className="setup-button-secondary"
+                                                                onClick={() => setSelectedModel(model.id)}
+                                                                aria-pressed={isSelected}
+                                                                aria-label={isSelected ? `${model.name} selected` : `Use ${model.name}`}
+                                                            >
+                                                                {isSelected ? "Selected" : "Use model"}
+                                                            </button>
+                                                        </div>
+
+                                                        {model.description ? <p>{model.description}</p> : null}
+
+                                                        <div className="openrouter-model-metadata">
+                                                            {recommendedModel ? (
+                                                                <span className="model-pill model-pill--recommended">
+                                                                    {recommendedModel.badgeLabel}
+                                                                </span>
+                                                            ) : null}
+                                                            {model.vendor ? (
+                                                                <span className="model-pill">{model.vendor}</span>
+                                                            ) : null}
+                                                            {model.provider && model.provider !== model.vendor ? (
+                                                                <span className="model-pill">{model.provider}</span>
+                                                            ) : null}
+                                                            {model.contextLength !== null ? (
+                                                                <span className="model-pill">
+                                                                    Context {formatOpenRouterNumber(model.contextLength)}
+                                                                </span>
+                                                            ) : null}
+                                                            {model.maxCompletionTokens !== null ? (
+                                                                <span className="model-pill">
+                                                                    Max output {formatOpenRouterNumber(model.maxCompletionTokens)}
+                                                                </span>
+                                                            ) : null}
+                                                            {model.promptPrice ? (
+                                                                <span className="model-pill">Prompt {model.promptPrice}</span>
+                                                            ) : model.isFree ? (
+                                                                <span className="model-pill">Free</span>
+                                                            ) : null}
+                                                            {model.moderated ? (
+                                                                <span className="model-pill">Moderated</span>
+                                                            ) : null}
+                                                        </div>
+
+                                                        {model.capabilities.length > 0 ? (
+                                                            <div className="openrouter-model-capabilities">
+                                                                {model.capabilities.slice(0, 4).map((capability) => (
+                                                                    <span key={capability} className="model-capability-pill">
+                                                                        {capability}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    ) : (
+                                        <div className="openrouter-empty-state" role="status" aria-live="polite">
+                                            {modelCatalogLoaded ? modelCatalogEmptyMessage : "Load the catalog to browse available models."}
                                         </div>
                                     )}
                                 </div>

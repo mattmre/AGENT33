@@ -20,6 +20,10 @@ docker compose up -d
 curl http://localhost:8000/health
 ```
 
+`/health` reports the dependencies required by the current runtime configuration.
+Inactive providers stay visible as `configured`/`unconfigured`, while `/readyz`
+only gates on the services the running stack actually needs.
+
 By default, AGENT-33 expects Ollama to be available at `http://host.docker.internal:11434`
 so one shared Ollama instance can be reused across repos.
 
@@ -27,18 +31,7 @@ If you want a bundled Ollama service for this stack instead:
 
 ```bash
 docker compose --profile local-ollama up -d ollama
-```
-
-Then run the first-run wizard from `engine/` to detect your hardware and auto-download the recommended model:
-
-```bash
-python -m agent33.cli.main wizard
-```
-
-Manual fallback:
-
-```bash
-docker compose exec ollama ollama pull llama3.2:3b
+docker compose exec ollama ollama pull llama3.2
 ```
 
 If your Ollama is running in another compose project/network (for example OpenClaw),
@@ -49,6 +42,10 @@ docker compose -f docker-compose.yml -f docker-compose.shared-ollama.yml up -d
 ```
 
 This points API calls at `openclaw-ollama:11434` on `openclaw_local_default` by default.
+
+If `EMBEDDING_PROVIDER=ollama`, make sure the configured embedding model is
+available in Ollama (for example `ollama pull nomic-embed-text`) or `/health`
+and `/readyz` will stay degraded.
 
 ## Frontend (Control Plane UI)
 
@@ -99,14 +96,11 @@ ruff check src/ tests/
 
 Canonical docs are in the repository root `docs/` directory:
 
-- `../docs/getting-started.md`
-- `../docs/ONBOARDING.md`
 - `../docs/setup-guide.md`
 - `../docs/walkthroughs.md`
 - `../docs/use-cases.md`
 - `../docs/functionality-and-workflows.md`
 - `../docs/api-surface.md`
-- `../docs/RELEASE_CHECKLIST.md`
 
 ## Operational Notes
 
@@ -114,15 +108,3 @@ Canonical docs are in the repository root `docs/` directory:
 - Several services are in-memory and reset on restart (workflow/review/evaluation/release/autonomy/improvement/traces).
 - Webhook adapters must be registered in-process before `/v1/webhooks/*` endpoints are usable.
 - Training routes exist, but full runtime wiring for `training_runner` and `agent_optimizer` is partial by default.
-
-## Troubleshooting
-
-- `curl http://localhost:8000/health` fails:
-  - check that `docker compose up -d` completed successfully
-  - inspect `docker compose logs api`
-- `401` or `403` on `/v1/*` routes:
-  - verify your bearer token and scopes against `../docs/api-surface.md`
-- frontend loads but calls fail:
-  - verify `API_BASE_URL` and that the API is healthy on `http://localhost:8000`
-- public/shared deployment prep:
-  - do **not** rely on bootstrap auth; use `../docs/RELEASE_CHECKLIST.md` before exposing the stack

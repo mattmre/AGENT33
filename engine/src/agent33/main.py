@@ -53,6 +53,7 @@ from agent33.api.routes import (
     operations,
     operations_hub,
     operator,
+    openrouter,
     outcomes,
     p69b,
     packs,
@@ -460,45 +461,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     _llamacpp_active = settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
-    model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_active else "ollama")
+    from agent33.llm.runtime_config import build_model_router
 
-    # Register LLM providers on the shared model router
-    from agent33.llm.ollama import OllamaProvider
-
-    model_router.register(
-        "ollama",
-        OllamaProvider(
-            base_url=settings.ollama_base_url,
-            default_model=settings.ollama_default_model,
-        ),
-    )
+    model_router = build_model_router()
 
     if _llamacpp_active:
-        from agent33.llm.openai import OpenAIProvider as _OpenAICompatProvider
-
-        model_router.register(
-            "llamacpp",
-            _OpenAICompatProvider(
-                api_key="local",
-                base_url=settings.local_orchestration_base_url,
-                default_model=settings.local_orchestration_model,
-            ),
-        )
         logger.info(
             "llamacpp_provider_registered",
             base_url=settings.local_orchestration_base_url,
             model=settings.local_orchestration_model,
         )
-
-    if settings.openai_api_key.get_secret_value():
-        from agent33.llm.openai import OpenAIProvider
-
-        _openai_kwargs: dict[str, Any] = {
-            "api_key": settings.openai_api_key.get_secret_value(),
-        }
-        if settings.openai_base_url:
-            _openai_kwargs["base_url"] = settings.openai_base_url
-        model_router.register("openai", OpenAIProvider(**_openai_kwargs))
 
     app.state.model_router = model_router
     logger.info("model_router_initialized")
@@ -701,7 +673,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.memory.embeddings import EmbeddingProvider
 
     embedding_provider = EmbeddingProvider(
-        base_url=settings.ollama_base_url,
+        base_url=settings.runtime_ollama_base_url,
+        model=settings.embedding_default_model,
         max_connections=settings.http_max_connections,
         max_keepalive_connections=settings.http_max_keepalive,
     )
@@ -2377,6 +2350,7 @@ app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(context.router)
 app.include_router(operator.router)
+app.include_router(openrouter.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)

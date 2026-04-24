@@ -14,8 +14,6 @@ import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDa
 import { SessionAnalyticsDashboard } from "./features/session-analytics/SessionAnalyticsDashboard";
 import AgentBuilderPage from "./features/agent-builder/AgentBuilderPage";
 import "./features/agent-builder/AgentBuilderPage.css";
-import { PackMarketplacePage } from "./features/pack-marketplace";
-import "./features/pack-marketplace/PackMarketplacePage.css";
 import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
@@ -24,19 +22,7 @@ import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
-type AppTab =
-  | "chat"
-  | "voice"
-  | "setup"
-  | "operations"
-  | "outcomes"
-  | "analytics"
-  | "impact"
-  | "tools"
-  | "marketplace"
-  | "builder"
-  | "spawner"
-  | "advanced";
+type AppTab = "chat" | "voice" | "setup" | "operations" | "outcomes" | "analytics" | "impact" | "tools" | "builder" | "spawner" | "advanced";
 
 interface ActivityItem {
   id: string;
@@ -56,7 +42,6 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "analytics", label: "Analytics" },
   { id: "impact", label: "Impact" },
   { id: "tools", label: "Tools" },
-  { id: "marketplace", label: "Marketplace" },
   { id: "builder", label: "Builder" },
   { id: "spawner", label: "Spawner" },
   { id: "advanced", label: "⚙️ Advanced Settings" }
@@ -195,7 +180,7 @@ export default function App(): JSX.Element {
         {/* Integrations Setup -> Render new MessagingSetup component */}
         {activeTab === "setup" && (
           <div className="consumer-setup-layout">
-            <MessagingSetup />
+            <MessagingSetup token={token} apiKey={apiKey} />
             <div className="auth-settings-card">
               <h3>Agent API Access</h3>
               <p>Configure internal tokens to securely access the AGENT-33 engine.</p>
@@ -241,13 +226,6 @@ export default function App(): JSX.Element {
         {activeTab === "tools" && (
           <div className="consumer-tools-layout">
             <ToolCatalogPage token={token || null} apiKey={apiKey || null} />
-          </div>
-        )}
-
-        {/* Pack Marketplace -> Marketplace browsing, curation state, install flow */}
-        {activeTab === "marketplace" && (
-          <div className="consumer-marketplace-layout">
-            <PackMarketplacePage token={token || null} apiKey={apiKey || null} />
           </div>
         )}
 

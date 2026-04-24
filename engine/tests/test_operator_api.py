@@ -391,6 +391,16 @@ class TestOperatorConfig:
         # Default encryption_key is empty string, so redact returns ""
         assert data["groups"]["security"]["encryption_key"] == ""
 
+    def test_openrouter_key_presence_is_redacted(self, operator_read_client: TestClient) -> None:
+        from pydantic import SecretStr
+
+        svc = _make_operator_service()
+        object.__setattr__(svc._settings, "openrouter_api_key", SecretStr("sk-or-test"))
+        app.state.operator_service = svc
+        resp = operator_read_client.get("/v1/operator/config")
+        data = resp.json()
+        assert data["groups"]["llm"]["openrouter_api_key"] == "***"
+
 
 # ============================================================================
 # GET /v1/operator/doctor
