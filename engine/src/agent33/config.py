@@ -294,6 +294,9 @@ class Settings(BaseSettings):
     # Ingestion persistence (Sprint 1)
     ingestion_db_path: str = "var/ingestion.db"
 
+    # Ingestion mailbox inbox persistence (Session 132)
+    ingestion_mailbox_db_path: str = "var/ingestion_mailbox.db"
+
     # Ingestion journal persistence (Sprint 4)
     ingestion_journal_db_path: str = "var/ingestion_journal.db"
 

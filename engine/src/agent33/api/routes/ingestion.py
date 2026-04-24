@@ -316,7 +316,7 @@ async def post_mailbox_event(body: MailboxPostRequest, request: Request) -> dict
     """Deposit an operator event into the ingestion mailbox.
 
     ``candidate_asset`` events are forwarded immediately to the intake pipeline.
-    All other event types are held in the in-memory inbox until drained.
+    All other event types are durably queued in the mailbox inbox until drained.
 
     Returns ``{"status": "accepted", "event_id": "<uuid4>"}`` on success.
     Returns 422 if the event fails validation.

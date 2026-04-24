@@ -2,7 +2,7 @@
 
 External operators post events here; ``candidate_asset`` events are forwarded
 directly to :class:`IntakePipeline`; all other event types are held in an
-in-memory per-tenant inbox until drained.
+inbox until drained, using a durable backing store when configured.
 
 CLEAN-ROOM RESTRICTION
 =======================
@@ -19,6 +19,7 @@ import structlog
 
 if TYPE_CHECKING:
     from agent33.ingestion.intake import IntakePipeline
+    from agent33.ingestion.mailbox_persistence import MailboxInboxPersistence
 
 logger = structlog.get_logger()
 
@@ -29,10 +30,18 @@ class IngestionMailbox:
     Args:
         pipeline: The :class:`IntakePipeline` that receives ``candidate_asset``
             events.  Injected at construction so tests can supply a mock.
+        persistence: Optional durable queue backing store for non-candidate
+            events. When omitted, the inbox remains in-memory only.
     """
 
-    def __init__(self, pipeline: IntakePipeline) -> None:
+    def __init__(
+        self,
+        pipeline: IntakePipeline,
+        *,
+        persistence: MailboxInboxPersistence | None = None,
+    ) -> None:
         self._pipeline = pipeline
+        self._persistence = persistence
         self._inbox: dict[str, list[dict[str, Any]]] = {}
 
     # ------------------------------------------------------------------
@@ -48,8 +57,8 @@ class IngestionMailbox:
 
         ``candidate_asset`` events are forwarded to
         :meth:`IntakePipeline.submit` with the sender stored as the intake
-        source.  Other event types are appended to the in-memory inbox for
-        ``tenant_id``.
+        source. Other event types are appended to the tenant inbox and
+        persisted when a mailbox backing store is configured.
 
         Args:
             event: Raw event dict from the caller.
@@ -88,7 +97,10 @@ class IngestionMailbox:
                 tenant_id=tenant_id,
             )
         else:
-            self._inbox.setdefault(tenant_id, []).append(stamped)
+            if self._persistence is not None:
+                self._persistence.enqueue(stamped)
+            else:
+                self._inbox.setdefault(tenant_id, []).append(stamped)
             logger.info(
                 "mailbox_event_queued",
                 event_type=event_type,
@@ -107,9 +119,11 @@ class IngestionMailbox:
             tenant_id: Tenant whose inbox should be drained.
 
         Returns:
-            List of stamped event dicts, oldest first.  Empty list if the inbox
-            had no entries for this tenant.
+        List of stamped event dicts, oldest first.  Empty list if the inbox
+        had no entries for this tenant.
         """
+        if self._persistence is not None:
+            return self._persistence.drain(tenant_id)
         events = self._inbox.pop(tenant_id, [])
         return events
 
@@ -119,5 +133,8 @@ class IngestionMailbox:
         Returns:
             ``{"status": "ok", "inbox_depth": <int>, "pipeline_healthy": True}``
         """
-        depth = sum(len(v) for v in self._inbox.values())
+        if self._persistence is not None:
+            depth = self._persistence.depth()
+        else:
+            depth = sum(len(v) for v in self._inbox.values())
         return {"status": "ok", "inbox_depth": depth, "pipeline_healthy": True}
