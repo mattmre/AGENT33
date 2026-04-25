@@ -95,6 +95,7 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - Research corpus preservation (**complete** in PR `#425`)
 - OpenRouter runtime/config/operator/frontend integration (**complete** in PR `#426`)
 - Persisted ingestion mailbox inbox events (**complete** in PR `#427`)
+- Ingestion hardening follow-up scope: journal retention/expiry plus persistent task metrics durability/query support
 - Next queue: ingestion hardening follow-up → operator UX depth → SSE schema v2 → skills-system integration → SkillsBench follow-up
 
 ## Dependency Graph

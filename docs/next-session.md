@@ -70,7 +70,10 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#425`, `#426`, and `#42
 - `docs/research/sse-schema-v2-migration-path.md` - required migration contract before any v2 stream work starts
 - `docs/research/research-corpus-index-2026-04-21.md` - preserved research corpus index added in PR `#425`
 - `docs/research/panel-output-ledger-2026-04-21.md` - preserved panel-output ledger added in PR `#425`
+- `engine/src/agent33/ingestion/journal.py` - durable journal retention/expiry implementation surface
 - `engine/src/agent33/ingestion/mailbox.py` - merged mailbox/runtime behavior
 - `engine/src/agent33/ingestion/mailbox_persistence.py` - persisted mailbox store added in PR `#427`
+- `engine/src/agent33/ingestion/metrics.py` - persisted task-metrics storage and history queries
+- `engine/tests/test_ingestion_journal.py` - focused retention and tenant-journal coverage
 - `engine/tests/test_ingestion_mailbox.py` - focused regression coverage for the ingestion mailbox stack
 - `engine/src/agent33/services/openrouter_catalog.py` - OpenRouter catalog/runtime integration surface

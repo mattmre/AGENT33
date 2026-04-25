@@ -12,6 +12,8 @@ Test plan:
   TM-03  reset() with tenant_id clears only that tenant's records
   TM-04  reset() without tenant_id clears all records
   TM-05  summary() avg_latency_ms is None when no latency values recorded
+  TM-06  persisted metrics survive collector re-instantiation
+  TM-07  cleanup_expired() removes expired persisted metrics
   API-01 POST /v1/ingestion/mailbox returns {"status": "accepted", "event_id": ...}
   API-02 POST /v1/ingestion/mailbox with candidate_asset event returns accepted and routes asset
   API-03 GET /v1/ingestion/mailbox/drain returns list (may be empty)
@@ -21,6 +23,7 @@ Test plan:
   API-07 POST /v1/ingestion/mailbox requires ingestion:write scope
   API-08 GET /v1/ingestion/mailbox/drain requires ingestion:read scope
   API-09 GET /v1/ingestion/metrics requires ingestion:read scope
+  API-10 GET /v1/ingestion/metrics/history returns recent records
 """
 
 from __future__ import annotations
@@ -452,6 +455,41 @@ class TestTaskMetricsCollector:
         # Should parse without error
         datetime.fromisoformat(ts)
 
+    def test_persisted_records_survive_reinstantiation(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "task-metrics.db"
+        with closing(TaskMetricsCollector(db_path)) as collector:
+            collector.record("persisted", _TENANT, success=True, latency_ms=12.5)
+
+        with closing(TaskMetricsCollector(db_path)) as rehydrated:
+            summary = rehydrated.summary(_TENANT)
+            assert summary["total"] == 1
+            history = rehydrated.history(_TENANT)
+            assert len(history) == 1
+            assert history[0]["event_type"] == "persisted"
+
+    def test_cleanup_expired_removes_old_persisted_metrics(self, tmp_path: Path) -> None:
+        import sqlite3
+        from datetime import UTC, datetime, timedelta
+
+        db_path = tmp_path / "task-metrics.db"
+        with closing(TaskMetricsCollector(db_path, retention_days=30)) as collector:
+            collector.record("expired-event", _TENANT, success=False)
+            collector.record("recent-event", _TENANT, success=True)
+
+        expired_ts = (datetime.now(UTC) - timedelta(days=45)).isoformat()
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "UPDATE ingestion_task_metrics SET recorded_at = ? WHERE event_type = ?",
+                (expired_ts, "expired-event"),
+            )
+            conn.commit()
+
+        with closing(TaskMetricsCollector(db_path, retention_days=30)) as collector:
+            deleted = collector.cleanup_expired()
+            assert deleted == 1
+            history = collector.history(_TENANT)
+            assert [record["event_type"] for record in history] == ["recent-event"]
+
 
 # ---------------------------------------------------------------------------
 # API-01: POST /v1/ingestion/mailbox returns {"status": "accepted", "event_id": ...}
@@ -620,7 +658,7 @@ class TestHeartbeatEndpoint:
 
 
 class TestMetricsEndpoint:
-    """API-05/API-09: GET /v1/ingestion/metrics."""
+    """API-05/API-09/API-10: ingestion task metrics endpoints."""
 
     def test_metrics_returns_summary_shape(self) -> None:
         client = _client(["ingestion:read"])
@@ -651,3 +689,22 @@ class TestMetricsEndpoint:
         resp = reader.get("/v1/ingestion/metrics")
         assert resp.status_code == 200
         assert resp.json()["total"] >= 1
+
+    def test_metrics_history_returns_recent_records(self) -> None:
+        writer = _client(["ingestion:write"])
+        reader = _client(["ingestion:read"])
+
+        writer.post(
+            "/v1/ingestion/mailbox",
+            json={"event_type": "first-event", "payload": {}, "sender": "op"},
+        )
+        writer.post(
+            "/v1/ingestion/mailbox",
+            json={"event_type": "second-event", "payload": {}, "sender": "op"},
+        )
+
+        resp = reader.get("/v1/ingestion/metrics/history?limit=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["event_type"] == "second-event"
