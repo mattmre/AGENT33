@@ -161,12 +161,13 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
 
 
-def _detect_environment() -> object:
-    """Run environment detection with a fresh probe when supported."""
+def _detect_environment(*, force_refresh: bool = False) -> object:
+    """Run environment detection, forcing a fresh probe when supported."""
     try:
-        return detect_env(force_refresh=True)
+        return detect_env(force_refresh=force_refresh)
     except TypeError:
         return detect_env()
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -250,7 +251,7 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         try:
-            env = _detect_environment()
+            env = _detect_environment(force_refresh=True)
             hw = env.hardware
             tools = env.tools
             rec = env.selected_model

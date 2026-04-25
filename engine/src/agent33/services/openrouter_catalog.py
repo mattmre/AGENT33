@@ -236,17 +236,13 @@ class OpenRouterCatalogService:
                 authenticated=OpenRouterProbeCheck(
                     status="unconfigured" if not configured else "error",
                     ok=False,
-                    detail=(
-                        "Authenticated check skipped because the public catalog probe failed"
-                    ),
+                    detail=("Authenticated check skipped because the public catalog probe failed"),
                 ),
                 message="OpenRouter catalog is unreachable",
             )
 
         items = (
-            public_result.payload.get("data")
-            if isinstance(public_result.payload, dict)
-            else None
+            public_result.payload.get("data") if isinstance(public_result.payload, dict) else None
         )
         catalog_count = len(items) if isinstance(items, list) else 0
         catalog_check = OpenRouterProbeCheck(

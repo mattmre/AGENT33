@@ -200,11 +200,7 @@ def test_chat_completions_server_default_openrouter_falls_back(
     upstream_error.status_code = 503
     upstream_error.headers = {"content-type": "application/json"}
     upstream_error.content = json.dumps(
-        {
-            "error": {
-                "message": "No allowed providers are available for the selected model."
-            }
-        }
+        {"error": {"message": "No allowed providers are available for the selected model."}}
     ).encode("utf-8")
     upstream_error.json.return_value = {
         "error": {"message": "No allowed providers are available for the selected model."}
@@ -292,11 +288,7 @@ def test_chat_completions_explicit_openrouter_model_does_not_fallback(
     upstream_error.status_code = 503
     upstream_error.headers = {"content-type": "application/json"}
     upstream_error.content = json.dumps(
-        {
-            "error": {
-                "message": "No allowed providers are available for the selected model."
-            }
-        }
+        {"error": {"message": "No allowed providers are available for the selected model."}}
     ).encode("utf-8")
     upstream_error.json.return_value = {
         "error": {"message": "No allowed providers are available for the selected model."}

@@ -75,6 +75,7 @@ class MockIO:
         except StopIteration:
             return ""
 
+
 @pytest.fixture(autouse=True)
 def _restore_llm_api_keys() -> Generator[None, None, None]:
     openai_api_key = os.environ.get("OPENAI_API_KEY")
@@ -161,6 +162,31 @@ def test_wizard_forces_fresh_environment_detection(
     )
 
     assert captured == [True]
+    assert result.profile == "developer"
+
+
+def test_wizard_retries_environment_detection_without_force_refresh_kwarg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[str] = []
+
+    def _legacy_detect() -> object:
+        captured.append("retried-without-kwarg")
+        return SimpleNamespace(
+            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
+            tools=SimpleNamespace(ollama_available=True, docker_available=True),
+            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
+            mode="standard",
+        )
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _legacy_detect, raising=False)
+
+    result = _wizard(
+        answers=["developer", "skip", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+
+    assert captured == ["retried-without-kwarg"]
     assert result.profile == "developer"
 
 

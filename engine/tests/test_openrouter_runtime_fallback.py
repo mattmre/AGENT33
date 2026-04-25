@@ -81,13 +81,17 @@ async def test_model_router_does_not_fallback_without_opt_in() -> None:
         prefix_map=[],
     )
 
-    with patch(
-        "agent33.config.settings.default_model",
-        "openrouter/qwen/qwen3-coder-flash",
-    ), patch(
-        "agent33.config.settings.openrouter_default_fallback_models",
-        "ollama/qwen3-coder",
-    ), pytest.raises(httpx.HTTPStatusError):
+    with (
+        patch(
+            "agent33.config.settings.default_model",
+            "openrouter/qwen/qwen3-coder-flash",
+        ),
+        patch(
+            "agent33.config.settings.openrouter_default_fallback_models",
+            "ollama/qwen3-coder",
+        ),
+        pytest.raises(httpx.HTTPStatusError),
+    ):
         await router.complete(
             [ChatMessage(role="user", content="hello")],
             model="openrouter/qwen/qwen3-coder-flash",

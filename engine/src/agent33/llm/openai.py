@@ -174,10 +174,9 @@ class OpenAIProvider:
                 return cast("dict[str, Any]", result)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
-                if (
-                    isinstance(exc, httpx.HTTPStatusError)
-                    and is_openrouter_provider_unavailable_response(exc.response)
-                ):
+                if isinstance(
+                    exc, httpx.HTTPStatusError
+                ) and is_openrouter_provider_unavailable_response(exc.response):
                     break
                 if attempt < _MAX_ATTEMPTS - 1:
                     delay = _BACKOFF_BASE * (2**attempt)
