@@ -403,7 +403,9 @@ class TestOperatorConfig:
         assert data["groups"]["llm"]["openai_api_key"] == "***"
         assert data["groups"]["llm"]["openrouter_api_key"] == "***"
 
-    def test_default_model_is_exposed_via_llm_group(self, operator_read_client: TestClient) -> None:
+    def test_default_model_is_exposed_via_llm_group(
+        self, operator_read_client: TestClient
+    ) -> None:
         svc = _make_operator_service()
         object.__setattr__(svc._settings, "default_model", "openrouter/auto")
         app.state.operator_service = svc
