@@ -312,6 +312,17 @@ class TestSkillRegistry:
         assert skill.version == "2.0.0"
         assert registry.count == 1
 
+    def test_register_notifies_change_listeners(self) -> None:
+        from agent33.skills.registry import SkillRegistry
+
+        registry = SkillRegistry()
+        observed: list[str] = []
+
+        registry.add_change_listener(lambda: observed.append("changed"))
+        registry.register(SkillDefinition(name="test"))
+
+        assert observed == ["changed"]
+
     def test_find_by_tag(self) -> None:
         from agent33.skills.registry import SkillRegistry
 

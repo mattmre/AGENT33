@@ -13,6 +13,7 @@ from agent33.skills.loader import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from agent33.skills.definition import SkillDefinition
@@ -26,6 +27,7 @@ class SkillRegistry:
 
     def __init__(self) -> None:
         self._skills: dict[str, SkillDefinition] = {}
+        self._change_listeners: list[Callable[[], None]] = []
 
     # ------------------------------------------------------------------
     # Discovery
@@ -96,6 +98,11 @@ class SkillRegistry:
                 skill.version,
             )
         self._skills[skill.name] = skill
+        self._notify_change_listeners()
+
+    def add_change_listener(self, listener: Callable[[], None]) -> None:
+        """Register a callback that runs after successful registry mutations."""
+        self._change_listeners.append(listener)
 
     def get(self, name: str) -> SkillDefinition | None:
         """Look up a skill by name."""
@@ -103,7 +110,10 @@ class SkillRegistry:
 
     def remove(self, name: str) -> bool:
         """Remove a skill from the registry. Returns True if it existed."""
-        return self._skills.pop(name, None) is not None
+        removed = self._skills.pop(name, None) is not None
+        if removed:
+            self._notify_change_listeners()
+        return removed
 
     def list_all(self) -> list[SkillDefinition]:
         """Return all registered skills sorted by name."""
@@ -248,3 +258,10 @@ class SkillRegistry:
             return target.read_text(encoding="utf-8")
         except OSError:
             return None
+
+    def _notify_change_listeners(self) -> None:
+        for listener in self._change_listeners:
+            try:
+                listener()
+            except Exception:
+                logger.warning("Skill registry change listener failed", exc_info=True)

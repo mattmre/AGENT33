@@ -25,6 +25,7 @@ from agent33.ingestion.models import CandidateAsset, CandidateStatus, Confidence
 from agent33.ingestion.persistence import IngestionPersistence
 from agent33.ingestion.service import IngestionService
 from agent33.ingestion.state_machine import CandidateStateMachine, CandidateTransitionError
+from agent33.skills.registry import SkillRegistry
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -170,6 +171,70 @@ class TestPromote:
         asset = _ingest(svc)
         with pytest.raises(CandidateTransitionError):
             svc.promote(asset.id)
+
+    def test_promote_registers_skill_assets_into_registry(self) -> None:
+        registry = SkillRegistry()
+        service = IngestionService(skill_registry=registry)
+        asset = service.ingest(
+            name="runtime-skill",
+            asset_type="skill",
+            source_uri=None,
+            tenant_id=_TENANT,
+            metadata={
+                "skill_definition": {
+                    "name": "runtime-skill",
+                    "description": "Promoted skill",
+                    "instructions": "Use the promoted runtime skill.",
+                    "allowed_tools": ["shell"],
+                }
+            },
+        )
+
+        service.validate(asset.id)
+        service.promote(asset.id)
+
+        registered = registry.get("runtime-skill")
+        assert registered is not None
+        assert registered.description == "Promoted skill"
+        assert registered.allowed_tools == ["shell"]
+
+    def test_promote_skips_malformed_skill_assets_without_failing(self) -> None:
+        registry = SkillRegistry()
+        service = IngestionService(skill_registry=registry)
+        asset = service.ingest(
+            name="broken-skill",
+            asset_type="skill",
+            source_uri=None,
+            tenant_id=_TENANT,
+            metadata={"skill_definition": "not-a-mapping"},
+        )
+
+        service.validate(asset.id)
+        promoted = service.promote(asset.id)
+
+        assert promoted.status == CandidateStatus.PUBLISHED
+        assert registry.count == 0
+
+    def test_promote_skips_non_skill_assets_even_with_skill_metadata(self) -> None:
+        registry = SkillRegistry()
+        service = IngestionService(skill_registry=registry)
+        asset = service.ingest(
+            name="workflow-asset",
+            asset_type="workflow",
+            source_uri=None,
+            tenant_id=_TENANT,
+            metadata={
+                "skill_definition": {
+                    "name": "workflow-asset",
+                    "description": "Should not register.",
+                }
+            },
+        )
+
+        service.validate(asset.id)
+        service.promote(asset.id)
+
+        assert registry.count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +442,38 @@ class TestRestartHydration:
         assert retrieved is not None
         assert retrieved.status == CandidateStatus.PUBLISHED
         assert retrieved.published_at is not None
+        p2.close()
+
+    def test_published_skill_rehydrates_into_registry_on_restart(self, db_path: Path) -> None:
+        """Published skill assets should repopulate the runtime registry after restart."""
+        p1 = IngestionPersistence(db_path)
+        registry1 = SkillRegistry()
+        svc1 = IngestionService(persistence=p1, skill_registry=registry1)
+        asset = svc1.ingest(
+            name="rehydrated-skill",
+            asset_type="skill",
+            source_uri=None,
+            tenant_id=_TENANT,
+            metadata={
+                "skill_definition": {
+                    "name": "rehydrated-skill",
+                    "description": "Survives restart.",
+                    "instructions": "Hydrated from persistence.",
+                }
+            },
+        )
+        svc1.validate(asset.id)
+        svc1.promote(asset.id)
+        p1.close()
+
+        p2 = IngestionPersistence(db_path)
+        registry2 = SkillRegistry()
+        svc2 = IngestionService(persistence=p2, skill_registry=registry2)
+
+        assert svc2.get(asset.id) is not None
+        registered = registry2.get("rehydrated-skill")
+        assert registered is not None
+        assert registered.description == "Survives restart."
         p2.close()
 
     def test_list_by_status_works_after_restart(self, db_path: Path) -> None:
