@@ -507,6 +507,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
+    # -- Skill registry bootstrap -----------------------------------------
+    from agent33.skills.registry import SkillRegistry
+
+    skill_registry = SkillRegistry()
+    skills_dir = Path(settings.skill_definitions_dir)
+    if skills_dir.is_dir():
+        skill_count = skill_registry.discover(skills_dir)
+        logger.info("skill_registry_loaded", count=skill_count, path=str(skills_dir))
+    app.state.skill_registry = skill_registry
+
     # -- Ingestion candidate lifecycle (Sprint 1 + Sprint 2 + Sprint 4) -----------
     from agent33.ingestion.intake import IntakePipeline
     from agent33.ingestion.journal import TransitionJournal
@@ -542,6 +552,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         persistence=ingestion_persistence,
         journal=ingestion_journal,
         notifications=ingestion_notification_service,
+        skill_registry=skill_registry,
     )
     intake_pipeline = IntakePipeline(ingestion_service)
     app.state.ingestion_persistence = ingestion_persistence
@@ -864,16 +875,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_service = knowledge_service
     logger.info("knowledge_ingestion_service_initialized")
 
-    # -- Skill registry + injector -----------------------------------------
+    # -- Skill injector -----------------------------------------------------
     from agent33.skills.injection import SkillInjector
-    from agent33.skills.registry import SkillRegistry
-
-    skill_registry = SkillRegistry()
-    skills_dir = Path(settings.skill_definitions_dir)
-    if skills_dir.is_dir():
-        skill_count = skill_registry.discover(skills_dir)
-        logger.info("skill_registry_loaded", count=skill_count, path=str(skills_dir))
-    app.state.skill_registry = skill_registry
 
     skill_injector = SkillInjector(skill_registry)
     app.state.skill_injector = skill_injector
@@ -883,6 +886,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.skills.slash_commands import CommandRegistry
 
     command_registry = CommandRegistry(skill_registry)
+    skill_registry.add_change_listener(command_registry.refresh)
     app.state.command_registry = command_registry
     logger.info("command_registry_initialized", count=command_registry.count)
 

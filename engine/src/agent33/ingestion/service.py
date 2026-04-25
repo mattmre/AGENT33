@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from agent33.ingestion.journal import TransitionJournal
     from agent33.ingestion.notifications import IngestionNotificationService
     from agent33.ingestion.persistence import IngestionPersistence
+    from agent33.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 
@@ -54,11 +55,13 @@ class IngestionService:
         persistence: IngestionPersistence | None = None,
         journal: TransitionJournal | None = None,
         notifications: IngestionNotificationService | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self._store: dict[str, CandidateAsset] = {}
         self._persistence = persistence
         self._journal = journal
         self._notifications = notifications
+        self._skill_registry = skill_registry
         if persistence is not None:
             self._hydrate_from_persistence()
 
@@ -78,6 +81,7 @@ class IngestionService:
         for status in CandidateStatus:
             for asset in self._persistence.load_by_status(status):
                 self._store[asset.id] = asset
+                self._register_published_skill(asset, source="hydrate")
         logger.info("ingestion_store_hydrated", count=len(self._store))
 
     # ------------------------------------------------------------------
@@ -244,6 +248,7 @@ class IngestionService:
                 operator=operator or "system",
                 reason=reason,
             )
+        self._register_published_skill(updated, source="promote")
         logger.info("ingestion_asset_promoted", asset_id=asset_id, operator=operator)
         return updated
 
@@ -483,3 +488,40 @@ class IngestionService:
         if asset is None:
             raise KeyError(asset_id)
         return asset
+
+    def _register_published_skill(self, asset: CandidateAsset, *, source: str) -> None:
+        if self._skill_registry is None or asset.asset_type != "skill":
+            return
+
+        from agent33.skills.ingestion import skill_definition_from_candidate_asset
+
+        try:
+            skill = skill_definition_from_candidate_asset(asset)
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "ingestion_skill_registration_failed",
+                asset_id=asset.id,
+                asset_name=asset.name,
+                source=source,
+                error=str(exc),
+            )
+            return
+
+        if skill is None:
+            logger.info(
+                "ingestion_skill_registration_skipped",
+                asset_id=asset.id,
+                asset_name=asset.name,
+                source=source,
+                reason="no loadable skill definition",
+            )
+            return
+
+        self._skill_registry.register(skill)
+        logger.info(
+            "ingestion_skill_registered",
+            asset_id=asset.id,
+            asset_name=asset.name,
+            source=source,
+            skill_name=skill.name,
+        )
