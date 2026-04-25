@@ -23,7 +23,7 @@ This document is intentionally **not** a roadmap. It is a research extension for
 
 ## Inputs used
 
-- `C:\Users\mattm\.copilot\session-state\00d3a405-8501-4e95-9e95-2614f9b754a1\plan.md`
+- Session-local `plan.md`
 - `docs/research/loop3-cross-batch-capability-synthesis-2026-04-21.md`
 - `docs/research/loop4-initial-architecture-phase-proposal-2026-04-21.md`
 - Supporting baseline and evidence references:

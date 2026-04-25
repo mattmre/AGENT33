@@ -22,7 +22,7 @@ Panel convergence was strong on one core point: **Loop 4 over-centered governanc
 
 ## Inputs used
 
-- Research program: `C:\Users\mattm\.copilot\session-state\00d3a405-8501-4e95-9e95-2614f9b754a1\plan.md`
+- Research program: session-local `plan.md`
 - Loop 3 synthesis: `docs/research/loop3-cross-batch-capability-synthesis-2026-04-21.md`
 - Loop 4 draft: `docs/research/loop4-initial-architecture-phase-proposal-2026-04-21.md`
 

@@ -25,7 +25,7 @@ Its purpose is to turn the Loop 3 synthesis into a **coherent draft architecture
 
 ## Inputs used
 
-- Research program document: `C:\Users\mattm\.copilot\session-state\00d3a405-8501-4e95-9e95-2614f9b754a1\plan.md`
+- Research program document: session-local `plan.md`
 - Loop 3 synthesis: `docs/research/loop3-cross-batch-capability-synthesis-2026-04-21.md`
 - Current baseline cross-checks used to preserve AGENT-33 strengths:
   - `docs/functionality-and-workflows.md`
