@@ -163,9 +163,7 @@ async def chat_completions(request: Request) -> Response:
         attempted = ", ".join(attempted_models) if attempted_models else model
         raise HTTPException(
             status_code=503,
-            detail=(
-                f"{resolution.provider_name} unavailable after attempts [{attempted}]"
-            ),
+            detail=(f"{resolution.provider_name} unavailable after attempts [{attempted}]"),
         )
 
     except HTTPException:
