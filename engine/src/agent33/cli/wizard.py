@@ -164,7 +164,7 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
 
 
-def _detect_environment(*, force_refresh: bool = False) -> "EnvProfile":
+def _detect_environment(*, force_refresh: bool = False) -> EnvProfile:
     """Run environment detection, forcing a fresh probe when supported."""
     try:
         return detect_env(force_refresh=force_refresh)
