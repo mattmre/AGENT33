@@ -39,10 +39,18 @@ class MailboxInboxPersistence:
 
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
+        path_text = str(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(path_text, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._configure_connection(path_text)
         self._init_schema()
+
+    def _configure_connection(self, path_text: str) -> None:
+        """Apply SQLite pragmas that reduce lock contention for persisted queues."""
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        if path_text != ":memory:":
+            self._conn.execute("PRAGMA journal_mode = WAL")
 
     def _init_schema(self) -> None:
         """Create the mailbox queue table and indexes if not present."""

@@ -119,8 +119,8 @@ class IngestionMailbox:
             tenant_id: Tenant whose inbox should be drained.
 
         Returns:
-        List of stamped event dicts, oldest first.  Empty list if the inbox
-        had no entries for this tenant.
+            List of stamped event dicts, oldest first. Empty list if the inbox
+            had no entries for this tenant.
         """
         if self._persistence is not None:
             return self._persistence.drain(tenant_id)

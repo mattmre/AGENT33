@@ -25,6 +25,7 @@ Test plan:
 
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -209,28 +210,26 @@ class TestMailboxUnknownEventType:
         uuid.UUID(result["event_id"])  # raises ValueError if not valid UUID
 
     def test_persisted_events_survive_mailbox_reinstantiation(self, mailbox_db_path: Path) -> None:
-        persistence = MailboxInboxPersistence(mailbox_db_path)
-        mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=persistence,
-        )
-        mailbox.post(
-            {"event_type": "custom_metric", "payload": {"value": 42}},
-            sender="system",
-            tenant_id=_TENANT,
-        )
-        persistence.close()
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as persistence:
+            mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=persistence,
+            )
+            mailbox.post(
+                {"event_type": "custom_metric", "payload": {"value": 42}},
+                sender="system",
+                tenant_id=_TENANT,
+            )
 
-        rehydrated_persistence = MailboxInboxPersistence(mailbox_db_path)
-        rehydrated_mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=rehydrated_persistence,
-        )
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as rehydrated_persistence:
+            rehydrated_mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=rehydrated_persistence,
+            )
 
-        assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 1
-        drained = rehydrated_mailbox.drain(_TENANT)
-        assert [event["event_type"] for event in drained] == ["custom_metric"]
-        rehydrated_persistence.close()
+            assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 1
+            drained = rehydrated_mailbox.drain(_TENANT)
+            assert [event["event_type"] for event in drained] == ["custom_metric"]
 
 
 # ---------------------------------------------------------------------------
@@ -267,28 +266,40 @@ class TestMailboxDrain:
         self,
         mailbox_db_path: Path,
     ) -> None:
-        persistence = MailboxInboxPersistence(mailbox_db_path)
-        mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=persistence,
-        )
-        mailbox.post({"event_type": "first", "payload": {"n": 1}}, sender="s", tenant_id=_TENANT)
-        mailbox.post({"event_type": "second", "payload": {"n": 2}}, sender="s", tenant_id=_TENANT)
-        mailbox.post({"event_type": "other", "payload": {"n": 3}}, sender="s", tenant_id="t-other")
-        persistence.close()
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as persistence:
+            mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=persistence,
+            )
+            mailbox.post(
+                {"event_type": "first", "payload": {"n": 1}},
+                sender="s",
+                tenant_id=_TENANT,
+            )
+            mailbox.post(
+                {"event_type": "second", "payload": {"n": 2}},
+                sender="s",
+                tenant_id=_TENANT,
+            )
+            mailbox.post(
+                {"event_type": "other", "payload": {"n": 3}},
+                sender="s",
+                tenant_id="t-other",
+            )
 
-        rehydrated_persistence = MailboxInboxPersistence(mailbox_db_path)
-        rehydrated_mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=rehydrated_persistence,
-        )
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as rehydrated_persistence:
+            rehydrated_mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=rehydrated_persistence,
+            )
 
-        drained = rehydrated_mailbox.drain(_TENANT)
-        assert [event["event_type"] for event in drained] == ["first", "second"]
-        assert rehydrated_mailbox.drain(_TENANT) == []
-        assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 1
-        assert [event["event_type"] for event in rehydrated_mailbox.drain("t-other")] == ["other"]
-        rehydrated_persistence.close()
+            drained = rehydrated_mailbox.drain(_TENANT)
+            assert [event["event_type"] for event in drained] == ["first", "second"]
+            assert rehydrated_mailbox.drain(_TENANT) == []
+            assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 1
+            assert [event["event_type"] for event in rehydrated_mailbox.drain("t-other")] == [
+                "other"
+            ]
 
 
 # ---------------------------------------------------------------------------
@@ -320,57 +331,53 @@ class TestMailboxHeartbeat:
             mailbox.post({"event_type": "ok", "payload": "not-a-dict"}, sender="s", tenant_id="t")  # type: ignore[arg-type]
 
     def test_heartbeat_depth_reads_from_persisted_inbox(self, mailbox_db_path: Path) -> None:
-        persistence = MailboxInboxPersistence(mailbox_db_path)
-        mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=persistence,
-        )
-        mailbox.post({"event_type": "x", "payload": {}}, sender="s", tenant_id="t1")
-        mailbox.post({"event_type": "y", "payload": {}}, sender="s", tenant_id="t2")
-        persistence.close()
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as persistence:
+            mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=persistence,
+            )
+            mailbox.post({"event_type": "x", "payload": {}}, sender="s", tenant_id="t1")
+            mailbox.post({"event_type": "y", "payload": {}}, sender="s", tenant_id="t2")
 
-        rehydrated_persistence = MailboxInboxPersistence(mailbox_db_path)
-        rehydrated_mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=rehydrated_persistence,
-        )
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as rehydrated_persistence:
+            rehydrated_mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=rehydrated_persistence,
+            )
 
-        assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 2
-        rehydrated_persistence.close()
+            assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 2
 
     def test_candidate_asset_does_not_accumulate_in_persisted_inbox(
         self,
         mailbox_db_path: Path,
     ) -> None:
         mock_pipeline = MagicMock(spec=IntakePipeline)
-        persistence = MailboxInboxPersistence(mailbox_db_path)
-        mailbox = IngestionMailbox(pipeline=mock_pipeline, persistence=persistence)
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as persistence:
+            mailbox = IngestionMailbox(pipeline=mock_pipeline, persistence=persistence)
 
-        mailbox.post(
-            {
-                "event_type": "candidate_asset",
-                "payload": {
-                    "name": "persisted-route-skill",
-                    "source_uri": "https://example.com/skill",
-                    "confidence": "high",
-                    "asset_type": "skill",
+            mailbox.post(
+                {
+                    "event_type": "candidate_asset",
+                    "payload": {
+                        "name": "persisted-route-skill",
+                        "source_uri": "https://example.com/skill",
+                        "confidence": "high",
+                        "asset_type": "skill",
+                    },
                 },
-            },
-            sender="operator-1",
-            tenant_id=_TENANT,
-        )
-        persistence.close()
+                sender="operator-1",
+                tenant_id=_TENANT,
+            )
 
-        rehydrated_persistence = MailboxInboxPersistence(mailbox_db_path)
-        rehydrated_mailbox = IngestionMailbox(
-            pipeline=MagicMock(spec=IntakePipeline),
-            persistence=rehydrated_persistence,
-        )
+        with closing(MailboxInboxPersistence(mailbox_db_path)) as rehydrated_persistence:
+            rehydrated_mailbox = IngestionMailbox(
+                pipeline=MagicMock(spec=IntakePipeline),
+                persistence=rehydrated_persistence,
+            )
 
-        mock_pipeline.submit.assert_called_once()
-        assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 0
-        assert rehydrated_mailbox.drain(_TENANT) == []
-        rehydrated_persistence.close()
+            mock_pipeline.submit.assert_called_once()
+            assert rehydrated_mailbox.heartbeat()["inbox_depth"] == 0
+            assert rehydrated_mailbox.drain(_TENANT) == []
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +612,6 @@ class TestHeartbeatEndpoint:
         # Each CandidateStatus value should appear in stats
         for key in ("candidate", "validated", "published", "revoked"):
             assert key in stats
-
 
 
 # ---------------------------------------------------------------------------
