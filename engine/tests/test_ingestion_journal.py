@@ -14,6 +14,7 @@ Test plan:
   TJ-9   reject() revokes the asset
   TJ-10  get_journal() returns [] when no journal is wired
   TJ-11  get_tenant_journal() returns [] when no journal is wired
+  TJ-12  cleanup_expired() removes expired persisted journal entries
   API-1  GET /v1/ingestion/candidates/{id}/journal returns correct shape
   API-2  GET /v1/ingestion/journal returns a list
   API-3  GET /v1/ingestion/review-queue returns only pending-review assets
@@ -23,9 +24,12 @@ Test plan:
   API-7  approve on non-existent asset returns 404
   API-8  reject on non-existent asset returns 404
   API-9  review-queue approve/reject require ingestion:write scope
+  API-10 GET /v1/ingestion/journal accepts an additive limit query parameter
 """
 
 from __future__ import annotations
+
+from contextlib import closing
 
 import pytest
 from fastapi.testclient import TestClient
@@ -167,6 +171,32 @@ class TestTransitionJournalTenantLimit:
         assert all(e["tenant_id"] == "tenant-A" for e in entries_a)
         assert all(e["tenant_id"] == "tenant-B" for e in entries_b)
         journal.close()
+
+    def test_cleanup_expired_removes_old_entries(self, tmp_path) -> None:
+        import sqlite3
+        from datetime import UTC, datetime, timedelta
+
+        db_path = tmp_path / "j.db"
+        with closing(TransitionJournal(db_path, retention_days=30)) as journal:
+            stale_asset = _make_asset()
+            recent_asset = _make_asset()
+            journal.record(stale_asset, CandidateStatus.CANDIDATE, operator="op", reason="stale")
+            journal.record(recent_asset, CandidateStatus.CANDIDATE, operator="op", reason="recent")
+
+        stale_occurred_at = (datetime.now(UTC) - timedelta(days=45)).isoformat()
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "UPDATE ingestion_journal SET occurred_at = ? WHERE asset_id = ?",
+                (stale_occurred_at, stale_asset.id),
+            )
+            conn.commit()
+
+        with closing(TransitionJournal(db_path, retention_days=30)) as journal:
+            deleted = journal.cleanup_expired()
+            assert deleted == 1
+            assert journal.entries_for(stale_asset.id) == []
+            tenant_entries = journal.entries_for_tenant(_TENANT, limit=10)
+            assert [entry["reason"] for entry in tenant_entries] == ["recent"]
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +494,31 @@ class TestTenantJournalEndpoint:
         resp = writer_client.get("/v1/ingestion/journal")
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
+
+    def test_tenant_journal_limit_query_param(self, writer_client: TestClient) -> None:
+        create_resp = writer_client.post(
+            "/v1/ingestion/candidates",
+            json={"name": "tenant-limit", "asset_type": "skill", "tenant_id": _TENANT},
+        )
+        asset_id = create_resp.json()["id"]
+        writer_client.post(
+            f"/v1/ingestion/candidates/{asset_id}/transition",
+            json={"target_status": "validated", "operator": "op-limit"},
+        )
+        writer_client.post(
+            f"/v1/ingestion/candidates/{asset_id}/transition",
+            json={
+                "target_status": "revoked",
+                "operator": "op-limit",
+                "reason": "limit-test",
+            },
+        )
+
+        resp = writer_client.get("/v1/ingestion/journal?limit=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["to_status"] == "revoked"
 
 
 # ---------------------------------------------------------------------------

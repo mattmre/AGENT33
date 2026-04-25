@@ -513,8 +513,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.ingestion.persistence import IngestionPersistence
     from agent33.ingestion.service import IngestionService
 
-    ingestion_persistence = IngestionPersistence(Path(settings.ingestion_db_path))
-    ingestion_journal = TransitionJournal(settings.ingestion_journal_db_path)
+    ingestion_db_path = state_paths.resolve_approved(settings.ingestion_db_path)
+    ingestion_journal_db_path = state_paths.resolve_approved(settings.ingestion_journal_db_path)
+    ingestion_mailbox_db_path = state_paths.resolve_approved(settings.ingestion_mailbox_db_path)
+    ingestion_task_metrics_db_path = state_paths.resolve_approved(
+        settings.ingestion_task_metrics_db_path
+    )
+    ingestion_persistence = IngestionPersistence(ingestion_db_path)
+    ingestion_journal = TransitionJournal(
+        ingestion_journal_db_path,
+        retention_days=settings.ingestion_journal_retention_days,
+    )
+    expired_journal_entries = ingestion_journal.cleanup_expired()
     ingestion_service = IngestionService(
         persistence=ingestion_persistence,
         journal=ingestion_journal,
@@ -528,8 +538,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ingestion.set_intake_pipeline(intake_pipeline)
     logger.info(
         "ingestion_service_initialized",
-        db_path=settings.ingestion_db_path,
-        journal_db_path=settings.ingestion_journal_db_path,
+        db_path=str(ingestion_db_path),
+        journal_db_path=str(ingestion_journal_db_path),
+        journal_retention_days=settings.ingestion_journal_retention_days,
+        expired_journal_entries=expired_journal_entries,
     )
 
     from agent33.ingestion.doctor import SkillsDoctor
@@ -537,14 +549,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.ingestion.mailbox_persistence import MailboxInboxPersistence
     from agent33.ingestion.metrics import TaskMetricsCollector
 
-    ingestion_mailbox_persistence = MailboxInboxPersistence(
-        Path(settings.ingestion_mailbox_db_path)
-    )
+    ingestion_mailbox_persistence = MailboxInboxPersistence(ingestion_mailbox_db_path)
     ingestion_mailbox = IngestionMailbox(
         pipeline=intake_pipeline,
         persistence=ingestion_mailbox_persistence,
     )
-    task_metrics = TaskMetricsCollector()
+    task_metrics = TaskMetricsCollector(
+        ingestion_task_metrics_db_path,
+        retention_days=settings.ingestion_task_metrics_retention_days,
+    )
+    expired_task_metrics = task_metrics.cleanup_expired()
     app.state.ingestion_mailbox_persistence = ingestion_mailbox_persistence
     app.state.ingestion_mailbox = ingestion_mailbox
     app.state.task_metrics = task_metrics
@@ -552,7 +566,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ingestion.set_task_metrics(task_metrics)
     logger.info(
         "ingestion_mailbox_initialized",
-        mailbox_db_path=settings.ingestion_mailbox_db_path,
+        mailbox_db_path=str(ingestion_mailbox_db_path),
+    )
+    logger.info(
+        "ingestion_task_metrics_initialized",
+        metrics_db_path=str(ingestion_task_metrics_db_path),
+        retention_days=settings.ingestion_task_metrics_retention_days,
+        expired_task_metrics=expired_task_metrics,
     )
 
     skills_doctor = SkillsDoctor(service=ingestion_service)
@@ -2121,6 +2141,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _ingestion_mailbox_persistence is not None:
         _ingestion_mailbox_persistence.close()
         logger.info("ingestion_mailbox_persistence_closed")
+
+    _task_metrics: Any = getattr(app.state, "task_metrics", None)
+    if _task_metrics is not None:
+        _task_metrics.close()
+        logger.info("ingestion_task_metrics_closed")
 
     _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
     if _p69b_persistence is not None:

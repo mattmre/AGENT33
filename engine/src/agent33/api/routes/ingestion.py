@@ -12,7 +12,8 @@ Provides REST endpoints:
 - ``GET  /v1/ingestion/mailbox/drain``                    — drain inbox for tenant
 - ``GET  /v1/ingestion/heartbeat``                        — unauthenticated liveness check
 - ``GET  /v1/ingestion/metrics``                          — task metrics summary
-- ``GET  /v1/ingestion/journal``                          — tenant journal (last 100)
+- ``GET  /v1/ingestion/metrics/history``                  — recent task metrics
+- ``GET  /v1/ingestion/journal``                          — tenant journal (default last 100)
 - ``GET  /v1/ingestion/review-queue``                     — pending-review candidates
 - ``POST /v1/ingestion/review-queue/{id}/approve``        — approve a candidate
 - ``POST /v1/ingestion/review-queue/{id}/reject``         — reject a candidate
@@ -33,7 +34,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from agent33.ingestion.doctor import SkillsDoctor
@@ -386,6 +387,19 @@ async def task_metrics(request: Request) -> dict[str, Any]:
 
 
 @router.get(
+    "/metrics/history",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def task_metrics_history(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[dict[str, Any]]:
+    """Return recent task metrics for the authenticated tenant."""
+    metrics = get_task_metrics(request)
+    return metrics.history(_resolve_tenant_id(request), limit=limit)
+
+
+@router.get(
     "/candidates/{asset_id}/journal",
     dependencies=[require_scope("ingestion:read")],
 )
@@ -406,10 +420,13 @@ async def get_asset_journal(asset_id: str, request: Request) -> list[dict[str, A
     "/journal",
     dependencies=[require_scope("ingestion:read")],
 )
-async def get_tenant_journal(request: Request) -> list[dict[str, Any]]:
-    """Return the last 100 journal entries for the authenticated tenant."""
+async def get_tenant_journal(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[dict[str, Any]]:
+    """Return recent journal entries for the authenticated tenant."""
     svc = get_ingestion_service(request)
-    return svc.get_tenant_journal(_resolve_tenant_id(request))
+    return svc.get_tenant_journal(_resolve_tenant_id(request), limit=limit)
 
 
 @router.get(

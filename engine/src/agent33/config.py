@@ -299,6 +299,9 @@ class Settings(BaseSettings):
 
     # Ingestion journal persistence (Sprint 4)
     ingestion_journal_db_path: str = "var/ingestion_journal.db"
+    ingestion_journal_retention_days: int = 90  # 0 disables journal expiry
+    ingestion_task_metrics_db_path: str = "var/ingestion_task_metrics.db"
+    ingestion_task_metrics_retention_days: int = 30  # 0 disables task-metrics expiry
 
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
@@ -685,6 +688,8 @@ class Settings(BaseSettings):
 
     @field_validator(
         "component_security_scan_store_retention_days",
+        "ingestion_journal_retention_days",
+        "ingestion_task_metrics_retention_days",
         "improvement_learning_dedupe_window_minutes",
         "improvement_learning_retention_days",
         "improvement_learning_max_signals",

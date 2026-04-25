@@ -12,7 +12,8 @@ No code in this file may originate from the EvoMap/Evolver project.
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from agent33.ingestion.models import CandidateAsset, CandidateStatus
 
 logger = structlog.get_logger()
+_CLEANUP_INTERVAL_SECONDS = 300.0
 
 _SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS ingestion_journal (
@@ -48,15 +50,30 @@ class TransitionJournal:
     restarts.
     """
 
-    def __init__(self, db_path: str) -> None:
-        import os
-
-        os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        retention_days: int | None = None,
+    ) -> None:
+        path_text = str(db_path)
+        if path_text != ":memory:":
+            Path(path_text).parent.mkdir(parents=True, exist_ok=True)
+        self._db_path = path_text
+        self._retention_days = retention_days
+        self._last_cleanup_at: datetime | None = None
+        self._conn = sqlite3.connect(path_text, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._entries: list[dict[str, Any]] = []
+        self._configure_connection(path_text)
         self._init_schema()
         self._hydrate()
+
+    def _configure_connection(self, path_text: str) -> None:
+        """Apply SQLite pragmas that reduce lock contention for persisted journals."""
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        if path_text != ":memory:":
+            self._conn.execute("PRAGMA journal_mode = WAL")
 
     def _init_schema(self) -> None:
         self._conn.executescript(_SCHEMA_SQL)
@@ -85,6 +102,7 @@ class TransitionJournal:
         ``asset.status`` at the time of this call is used as ``to_status``.
         The entry is written to SQLite and appended to the in-memory list.
         """
+        self._cleanup_expired_if_due()
         occurred_at = datetime.now(UTC).isoformat()
         entry: dict[str, Any] = {
             "asset_id": asset.id,
@@ -124,14 +142,50 @@ class TransitionJournal:
 
     def entries_for(self, asset_id: str) -> list[dict[str, Any]]:
         """Return all journal entries for the given asset, ascending by occurred_at."""
+        self._cleanup_expired_if_due()
         return [e for e in self._entries if e["asset_id"] == asset_id]
 
     def entries_for_tenant(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         """Return the most-recent ``limit`` entries for the given tenant, descending."""
+        self._cleanup_expired_if_due()
         tenant_entries = [e for e in self._entries if e["tenant_id"] == tenant_id]
-        # Sort descending and take the last `limit` items
         sorted_entries = sorted(tenant_entries, key=lambda e: e["occurred_at"], reverse=True)
         return sorted_entries[:limit]
+
+    def cleanup_expired(self, retention_days: int | None = None) -> int:
+        """Delete expired journal entries and return the number removed."""
+        effective_retention_days = self._resolve_retention_days(retention_days)
+        if effective_retention_days is None or effective_retention_days <= 0:
+            return 0
+
+        cutoff = datetime.now(UTC) - timedelta(days=effective_retention_days)
+        cutoff_str = cutoff.isoformat()
+        try:
+            cursor = self._conn.execute(
+                "DELETE FROM ingestion_journal WHERE occurred_at < ?",
+                (cutoff_str,),
+            )
+            self._conn.commit()
+            self._last_cleanup_at = datetime.now(UTC)
+        except sqlite3.ProgrammingError:
+            logger.debug(
+                "ingestion_journal_cleanup_skipped",
+                reason="connection_closed",
+                retention_days=effective_retention_days,
+            )
+            return 0
+
+        deleted = max(cursor.rowcount, 0)
+        if deleted:
+            self._entries = [
+                entry for entry in self._entries if entry["occurred_at"] >= cutoff_str
+            ]
+            logger.info(
+                "ingestion_journal_expired_entries_cleaned",
+                deleted=deleted,
+                retention_days=effective_retention_days,
+            )
+        return deleted
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""
@@ -151,3 +205,18 @@ class TransitionJournal:
             "reason": row["reason"],
             "occurred_at": row["occurred_at"],
         }
+
+    def _resolve_retention_days(self, retention_days: int | None) -> int | None:
+        """Return the active retention policy for this journal."""
+        return retention_days if retention_days is not None else self._retention_days
+
+    def _cleanup_expired_if_due(self) -> None:
+        """Run retention cleanup at most once per cleanup interval."""
+        effective_retention_days = self._resolve_retention_days(None)
+        if effective_retention_days is None or effective_retention_days <= 0:
+            return
+        if self._last_cleanup_at is not None:
+            elapsed = (datetime.now(UTC) - self._last_cleanup_at).total_seconds()
+            if elapsed < _CLEANUP_INTERVAL_SECONDS:
+                return
+        self.cleanup_expired()
