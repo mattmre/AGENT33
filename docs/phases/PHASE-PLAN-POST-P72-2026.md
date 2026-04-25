@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#413` on 2026-04-20, execution posture updated in Session 130
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#427` on 2026-04-25, execution posture updated after the Sessions 130-132 merge wave
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,21 +15,28 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation and P-ENV v2 are complete in `#407` and `#408`; remediation PRs `#409`-`#412` and the marketplace UI in `#413` are merged, and community submissions are the active remaining slice |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation, P-ENV v2, remediation, marketplace/community submissions, and the Sessions 131-132 follow-up wave are merged through `#427`; the next queue is post-merge hardening and integration work |
 
 ## Current Execution Queue
 
 | Order | Slice | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | Post-merge review remediation (`#406`-`#412`) | Complete | Lifecycle cleanup, P-ENV/docs reliability, P-PACK hardening, and operator/docs queue sync are now merged on `main` |
-| 2 | POST-CLUSTER — Pack marketplace web UI | Complete | Delivered in PR `#413`, fresh-main verified |
-| 3 | POST-CLUSTER — Community submissions | Active | Current Session 130 slice in fresh worktree `session130-s2-community-submissions` |
+| 1 | Post-merge review remediation (`#406`-`#412`) | Complete | Lifecycle cleanup, P-ENV/docs reliability, P-PACK hardening, and operator/docs queue sync are merged on `main` |
+| 2 | POST-CLUSTER — Marketplace + community submissions (`#413`-`#414`) | Complete | UI browse/install flow plus community submission/resubmission are merged and no longer the active queue |
+| 3 | Sessions 131-132 merge wave (`#415`-`#427`) | Complete | P68-Lite monitoring, P69b persistence, SSE v2 migration prep, security scan hardening, ingestion sprints 0-5, research preservation, OpenRouter integration, and mailbox persistence are merged on `main` |
+| 4 | Ingestion hardening follow-up | Active next slice | Start from fresh `origin/main` after this verification pass |
+| 5 | Operator UX depth | Queued | Follows the ingestion hardening slice |
+| 6 | SSE schema v2 | Queued | Must respect the published migration contract before implementation |
+| 7 | Skills-system integration | Queued | Resume after the SSE planning/hardening queue |
+| 8 | SkillsBench follow-up | Queued | Resume after the skills-system integration slice |
 
-## Parallel Follow-up Work During POST-CLUSTER Execution
+## Next Follow-up Themes After The Merge Wave
 
-- Verify P68-Lite monitoring remains healthy (`outcomes` table not empty during rollout)
-- Reconcile P69b persistence design intent versus the current in-memory implementation
-- Document the future SSE schema upgrade path before any version 2 work begins
+- ingestion hardening on top of the merged Evolver/mailbox baseline
+- deeper operator UX work building on the lifecycle/operator surfaces from `#423`
+- SSE schema v2 work only after the migration-path contract in `docs/research/sse-schema-v2-migration-path.md`
+- skills-system integration on top of the merged OpenRouter + ingestion work
+- SkillsBench follow-up after the integration surfaces settle
 
 ## Cluster Plans
 
@@ -79,7 +86,16 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - P-PACK review-debt hardening (**complete** in PR `#411`)
 - Remaining operator/docs remediation (**complete** in PR `#412`)
 - Pack marketplace web UI (**complete** in PR `#413`)
-- Community submissions (**active current slice**)
+- Community submissions (**complete** in PR `#414`)
+- P68-Lite outcomes monitoring verification (**complete** in PR `#415`)
+- P69b persistence hardening (**complete** in PR `#416`)
+- SSE schema-v2 migration contract (**complete** in PR `#417`)
+- Security scan/admin-override remediation (**complete** in PR `#418`)
+- Evolver ingestion sprints 0-5 (**complete** in PRs `#419`-`#424`)
+- Research corpus preservation (**complete** in PR `#425`)
+- OpenRouter runtime/config/operator/frontend integration (**complete** in PR `#426`)
+- Persisted ingestion mailbox inbox events (**complete** in PR `#427`)
+- Next queue: ingestion hardening follow-up → operator UX depth → SSE schema v2 → skills-system integration → SkillsBench follow-up
 
 ## Dependency Graph
 

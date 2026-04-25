@@ -1,5 +1,25 @@
 # Progress Log
 
+## 2026-04-25 (fresh-main verification after PRs #425-#427)
+
+- Fetched `origin/main` to `860daf0` and created fresh verification worktree
+  `C:\GitHub\repos\AGENT33\worktrees\main-baseline-verify`.
+- Verified the merged baseline from that clean worktree with practical coverage
+  across the merge wave:
+  - backend: `uv run pytest --override-ini addopts='' tests/test_chat.py tests/test_openrouter_runtime_fallback.py tests/test_tool_loop.py tests/test_health.py tests/test_openrouter_api.py tests/test_openrouter_service.py tests/test_operator_api.py tests/test_operator_service.py tests/test_diagnose.py tests/test_wizard.py tests/test_provider_catalog.py tests/test_config_runtime_urls.py tests/test_status_line.py tests/test_ingestion_mailbox.py -q`
+  - backend lint: `uv run ruff check src/agent33/api/routes/chat.py src/agent33/api/routes/health.py src/agent33/api/routes/openrouter.py src/agent33/cli/diagnose.py src/agent33/cli/wizard.py src/agent33/config.py src/agent33/llm/default_models.py src/agent33/llm/openai.py src/agent33/llm/router.py src/agent33/llm/runtime_config.py src/agent33/main.py src/agent33/operator/service.py src/agent33/operator/status_line.py src/agent33/services/openrouter_catalog.py src/agent33/ingestion/mailbox.py src/agent33/ingestion/mailbox_persistence.py tests/test_chat.py tests/test_openrouter_runtime_fallback.py tests/test_health.py tests/test_openrouter_api.py tests/test_openrouter_service.py tests/test_operator_api.py tests/test_operator_service.py tests/test_diagnose.py tests/test_wizard.py tests/test_provider_catalog.py tests/test_config_runtime_urls.py tests/test_status_line.py tests/test_ingestion_mailbox.py`
+  - frontend install/checks: `npm ci`, `.\node_modules\.bin\tsc.cmd --noEmit`, `.\node_modules\.bin\vitest.cmd run src/features/integrations/MessagingSetup.test.tsx src/features/chat/ChatInterface.test.tsx src/components/__tests__/Accessibility.test.tsx`, `.\node_modules\.bin\vite.cmd build`
+- Refreshed the stale queue/handoff layer for the new merged reality:
+  - `docs/next-session.md`
+  - `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+  - `task_plan.md`
+- The next roadmap queue is now explicitly reset to:
+  1. ingestion hardening follow-up
+  2. operator UX depth
+  3. SSE schema v2
+  4. skills-system integration
+  5. SkillsBench follow-up
+
 ## 2026-04-20 (Session 130 community submissions scoping)
 
 - Squash-merged PR `#413` (`Session 130: add pack marketplace web UI`) as
