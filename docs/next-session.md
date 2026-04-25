@@ -53,7 +53,7 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with 
 | Priority | Task | Status |
 |----------|------|--------|
 | T1 | Operator UX depth | NEXT |
-| T2 | SSE schema v2 | QUEUED (after the published migration-path contract) |
+| T2 | SSE schema v2 | IN PROGRESS (backend foundation: flag + kill switch + pinned run schema; frontend/client rollout still queued) |
 | T3 | Skills-system integration | QUEUED |
 | T4 | SkillsBench follow-up | QUEUED |
 

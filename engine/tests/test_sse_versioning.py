@@ -13,13 +13,18 @@ import json
 
 import pytest
 
+from agent33.config import settings
 from agent33.workflows.events import (
     CURRENT_SCHEMA_VERSION,
+    SCHEMA_VERSION_V1,
+    SCHEMA_VERSION_V2,
     SchemaVersionMismatchError,
     WorkflowEvent,
     WorkflowEventType,
     check_schema_version,
+    resolve_active_schema_version,
 )
+from agent33.workflows.ws_manager import WorkflowWSManager
 
 
 class TestVersionMatchStreamProceedsNormally:
@@ -70,6 +75,96 @@ class TestVersionMatchStreamProceedsNormally:
             workflow_name="wf-default",
         )
         assert event.schema_version == CURRENT_SCHEMA_VERSION
+
+
+class TestActiveSchemaVersionResolution:
+    """Backend rollout foundation keeps v1 default and allows explicit v2 opt-in."""
+
+    def test_default_resolver_keeps_v1_when_flag_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", False)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: False,
+        )
+
+        assert resolve_active_schema_version() == SCHEMA_VERSION_V1
+        event = WorkflowEvent(
+            event_type=WorkflowEventType.WORKFLOW_STARTED,
+            run_id="run-default-v1",
+            workflow_name="wf-default-v1",
+        )
+        assert event.schema_version == SCHEMA_VERSION_V1
+
+    def test_resolver_emits_v2_when_flag_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", True)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: False,
+        )
+
+        assert resolve_active_schema_version() == SCHEMA_VERSION_V2
+        event = WorkflowEvent(
+            event_type=WorkflowEventType.WORKFLOW_STARTED,
+            run_id="run-v2",
+            workflow_name="wf-v2",
+        )
+        assert event.schema_version == SCHEMA_VERSION_V2
+
+    def test_kill_switch_forces_v1_even_when_flag_enabled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", True)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: True,
+        )
+
+        assert resolve_active_schema_version() == SCHEMA_VERSION_V1
+        event = WorkflowEvent(
+            event_type=WorkflowEventType.WORKFLOW_STARTED,
+            run_id="run-kill-switch",
+            workflow_name="wf-kill-switch",
+        )
+        assert event.schema_version == SCHEMA_VERSION_V1
+
+    @pytest.mark.asyncio
+    async def test_registered_run_keeps_single_schema_version_across_flag_changes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", True)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: False,
+        )
+        manager = WorkflowWSManager()
+        await manager.register_run("run-sticky-version", "wf-sticky-version")
+
+        sync_event = await manager.build_sync_event("run-sticky-version")
+        assert sync_event is not None
+        assert sync_event.schema_version == SCHEMA_VERSION_V2
+
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", False)
+        event = WorkflowEvent(
+            event_type=WorkflowEventType.STEP_STARTED,
+            run_id="run-sticky-version",
+            workflow_name="wf-sticky-version",
+            step_id="step-a",
+        )
+        assert event.schema_version == SCHEMA_VERSION_V1
+
+        await manager.publish_event(event)
+        replay_events = await manager.replay_sse_events("run-sticky-version", after_event_id="0")
+        heartbeat_event = await manager.build_heartbeat_event("run-sticky-version")
+
+        assert [replay_event.schema_version for replay_event in replay_events] == [
+            SCHEMA_VERSION_V2
+        ]
+        assert heartbeat_event is not None
+        assert heartbeat_event.schema_version == SCHEMA_VERSION_V2
 
 
 class TestVersionMismatchRaisesError:

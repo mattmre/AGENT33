@@ -584,6 +584,9 @@ class Settings(BaseSettings):
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
     workflow_ws_ping_timeout: float = 10.0
+    # SSE schema v2 rollout (backend foundation only; v1 remains the default).
+    # Kill switch: /tmp/agent33_disable_sse_v2
+    sse_schema_v2_enabled: bool = False
 
     # Session trajectory capture (Phase 59)
     trajectory_capture_enabled: bool = False  # opt-in

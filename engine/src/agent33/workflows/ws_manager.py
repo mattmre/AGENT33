@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from agent33.security.permissions import check_permission
-from agent33.workflows.events import WorkflowEvent, WorkflowEventType
+from agent33.workflows.events import (
+    WorkflowEvent,
+    WorkflowEventType,
+    resolve_active_schema_version,
+)
 
 if TYPE_CHECKING:
     from starlette.websockets import WebSocket
@@ -36,6 +40,7 @@ class WorkflowRunSnapshot:
     error: str | None = None
     duration_ms: float | None = None
     last_event_id: int = 0
+    schema_version: int = field(default_factory=resolve_active_schema_version)
 
     def to_event_data(self) -> dict[str, Any]:
         """Return the transport payload used by sync events."""
@@ -92,6 +97,7 @@ class WorkflowWSManager:
         *,
         owner_subject: str | None = None,
         tenant_id: str = "",
+        schema_version: int | None = None,
     ) -> None:
         """Ensure a snapshot exists for *run_id*."""
         async with self._lock:
@@ -102,6 +108,7 @@ class WorkflowWSManager:
                     workflow_name=workflow_name,
                     owner_subject=owner_subject,
                     tenant_id=tenant_id or None,
+                    schema_version=schema_version or resolve_active_schema_version(),
                 ),
             )
             snapshot.workflow_name = workflow_name
@@ -265,8 +272,10 @@ class WorkflowWSManager:
                 WorkflowRunSnapshot(
                     run_id=event.run_id,
                     workflow_name=event.workflow_name,
+                    schema_version=event.schema_version,
                 ),
             )
+            event = self._coerce_event_schema_version(snapshot, event)
             event = self._assign_event_id(snapshot, event)
             self._apply_event(snapshot, event)
             self._sse_replay_buffers.setdefault(
@@ -304,12 +313,14 @@ class WorkflowWSManager:
                 return None
             data = snapshot.to_event_data()
             workflow_name = snapshot.workflow_name
+            schema_version = snapshot.schema_version
 
         return WorkflowEvent(
             event_type=WorkflowEventType.SYNC,
             run_id=run_id,
             workflow_name=workflow_name,
             data=data,
+            schema_version=schema_version,
         )
 
     async def send_sync(self, ws: WebSocket, run_id: str) -> bool:
@@ -328,12 +339,14 @@ class WorkflowWSManager:
             workflow_name = snapshot.workflow_name
             status = snapshot.status
             terminal = snapshot.terminal
+            schema_version = snapshot.schema_version
 
         return WorkflowEvent(
             event_type=WorkflowEventType.HEARTBEAT,
             run_id=run_id,
             workflow_name=workflow_name,
             data={"status": status, "terminal": terminal},
+            schema_version=schema_version,
         )
 
     async def replay_sse_events(
@@ -413,6 +426,15 @@ class WorkflowWSManager:
             snapshot.duration_ms = _coerce_float(event.data.get("duration_ms"))
             snapshot.error = event.data.get("error")
             snapshot.terminal = True
+
+    def _coerce_event_schema_version(
+        self,
+        snapshot: WorkflowRunSnapshot,
+        event: WorkflowEvent,
+    ) -> WorkflowEvent:
+        if event.schema_version == snapshot.schema_version:
+            return event
+        return replace(event, schema_version=snapshot.schema_version)
 
     def _remove_ws_unlocked(self, ws: Any) -> None:
         run_ids = list(self._reverse.pop(ws, set()))
