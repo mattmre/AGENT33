@@ -2,22 +2,28 @@
 
 ## Goal
 
-Execute the remaining post-merge hardening work plus the remaining POST-CLUSTER
-roadmap slices sequentially, one fresh worktree and one PR at a time from
-updated `origin/main`.
+Execute the post-merge follow-up queue sequentially from updated `origin/main`,
+starting from the fresh-main baseline verified after the Sessions 130-132 merge
+wave (`#414`-`#427`).
 
 ## Current Baseline
 
-- There is 1 open GitHub PR as of `2026-04-20`: `#414` (`Session 130: add community pack submission flow`).
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (413 PRs merged).
+- There are 0 open GitHub PRs as of `2026-04-25`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (427 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
 - POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
   fixes merged in PR `#410`.
 - Session 129 P-PACK remediation is COMPLETE in PR `#411`.
 - Session 129 operator/docs remediation is COMPLETE in PR `#412`.
-- Session 130 marketplace web UI is COMPLETE in PR `#413`.
-- The active remaining roadmap slice is community submissions.
+- Session 130 marketplace web UI and community submissions are COMPLETE in PRs
+  `#413` and `#414`.
+- Sessions 131-132 follow-up work is merged through PR `#427`, including
+  monitoring, persistence, SSE migration prep, security hardening, ingestion
+  sprints, research preservation, OpenRouter integration, and mailbox
+  persistence.
+- The next queue is: ingestion hardening follow-up, operator UX depth, SSE
+  schema v2, skills-system integration, then SkillsBench follow-up.
 - POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - Treat the root checkout as disposable and always implement from fresh
   `origin/main` worktrees.
@@ -34,12 +40,12 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 130
-- Current slice: `POST-CLUSTER` community submissions
-- Worktree: `C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions`
-- Branch: `session130-s2-community-submissions`
-- Active PR: `#414` (`Session 130: add community pack submission flow`)
-- Resume artifact: `docs/research/session130-s2-community-submissions-scope.md`
+- Active queue owner: post-merge queue
+- Current slice: ingestion hardening follow-up
+- Worktree: create a fresh worktree from updated `origin/main` when the slice starts
+- Branch: TBD (new branch from verified `main`)
+- Active PR: none
+- Resume artifacts: `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and `progress.md`
 
 ---
 
