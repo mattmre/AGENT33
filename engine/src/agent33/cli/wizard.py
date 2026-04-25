@@ -595,9 +595,9 @@ def _stream_test_response(result: WizardResult, io: WizardIO) -> None:
     elif result.llm_provider == "ollama":
         import httpx
 
-        base_url = (
-            result.ollama_base_url or _resolve_ollama_base_url(result.env_path)
-        ).rstrip("/")
+        base_url = (result.ollama_base_url or _resolve_ollama_base_url(result.env_path)).rstrip(
+            "/"
+        )
         model = result.llm_model or "llama3.2:3b"
         with httpx.Client(timeout=60) as client:
             resp = client.post(

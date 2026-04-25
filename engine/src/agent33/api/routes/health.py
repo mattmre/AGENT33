@@ -309,8 +309,13 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
         for service_name, service_status in checks.items()
         if service_name not in required_services and service_status in {"degraded", "unavailable"}
     }
+    channel_failures = {
+        service_name: service_status
+        for service_name, service_status in warnings.items()
+        if service_name.startswith("channel:")
+    }
     health_result: dict[str, Any] = {
-        "status": "healthy" if not failures else "degraded",
+        "status": "healthy" if not failures and not channel_failures else "degraded",
         "services": checks,
         "required_services": required_snapshot,
     }
