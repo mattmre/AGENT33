@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -22,6 +23,9 @@ from agent33.llm.openai import (
 from agent33.llm.runtime_config import build_model_router, resolve_default_model
 from agent33.security.injection import scan_input
 
+if TYPE_CHECKING:
+    from agent33.llm.router import ModelRouter
+
 router = APIRouter(prefix="/v1", tags=["chat"])
 logger = logging.getLogger(__name__)
 
@@ -39,11 +43,11 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
-def _resolve_model_router(request: Request):
+def _resolve_model_router(request: Request) -> ModelRouter:
     """Return the app router when it exposes the required route API."""
     model_router = getattr(request.app.state, "model_router", None)
     if callable(getattr(model_router, "resolve", None)):
-        return model_router
+        return cast("ModelRouter", model_router)
     return build_model_router()
 
 
