@@ -11,6 +11,7 @@ No code in this file may originate from the EvoMap/Evolver project.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -31,8 +32,10 @@ CREATE TABLE IF NOT EXISTS ingestion_journal (
     tenant_id   TEXT    NOT NULL,
     from_status TEXT    NOT NULL,
     to_status   TEXT    NOT NULL,
+    event_type  TEXT    NOT NULL DEFAULT 'transition',
     operator    TEXT    NOT NULL,
     reason      TEXT    NOT NULL,
+    details_json TEXT   NOT NULL DEFAULT '{}',
     occurred_at TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_journal_asset_id
@@ -77,7 +80,24 @@ class TransitionJournal:
 
     def _init_schema(self) -> None:
         self._conn.executescript(_SCHEMA_SQL)
+        self._ensure_column(
+            "event_type",
+            (
+                "ALTER TABLE ingestion_journal "
+                "ADD COLUMN event_type TEXT NOT NULL DEFAULT 'transition'"
+            ),
+        )
+        self._ensure_column(
+            "details_json",
+            "ALTER TABLE ingestion_journal ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}'",
+        )
         self._conn.commit()
+
+    def _ensure_column(self, column_name: str, statement: str) -> None:
+        cursor = self._conn.execute("PRAGMA table_info(ingestion_journal)")
+        columns = {row["name"] for row in cursor.fetchall()}
+        if column_name not in columns:
+            self._conn.execute(statement)
 
     def _hydrate(self) -> None:
         """Load existing journal entries from SQLite into the in-memory list."""
@@ -96,6 +116,8 @@ class TransitionJournal:
         *,
         operator: str,
         reason: str,
+        event_type: str = "transition",
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Append one transition entry.
 
@@ -109,22 +131,36 @@ class TransitionJournal:
             "tenant_id": asset.tenant_id,
             "from_status": from_status.value,
             "to_status": asset.status.value,
+            "event_type": event_type,
             "operator": operator,
             "reason": reason,
+            "details": details or {},
             "occurred_at": occurred_at,
         }
         try:
             self._conn.execute(
                 """INSERT INTO ingestion_journal
-                   (asset_id, tenant_id, from_status, to_status, operator, reason, occurred_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (
+                       asset_id,
+                       tenant_id,
+                       from_status,
+                       to_status,
+                       event_type,
+                       operator,
+                       reason,
+                       details_json,
+                       occurred_at
+                   )
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     entry["asset_id"],
                     entry["tenant_id"],
                     entry["from_status"],
                     entry["to_status"],
+                    entry["event_type"],
                     entry["operator"],
                     entry["reason"],
+                    json.dumps(entry["details"], sort_keys=True),
                     entry["occurred_at"],
                 ),
             )
@@ -135,9 +171,29 @@ class TransitionJournal:
         logger.info(
             "ingestion_journal_recorded",
             asset_id=asset.id,
+            event_type=event_type,
             from_status=from_status.value,
             to_status=asset.status.value,
             operator=operator,
+        )
+
+    def record_event(
+        self,
+        asset: CandidateAsset,
+        *,
+        event_type: str,
+        operator: str,
+        reason: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Append a non-transition event for an asset history timeline."""
+        self.record(
+            asset,
+            asset.status,
+            operator=operator,
+            reason=reason,
+            event_type=event_type,
+            details=details,
         )
 
     def entries_for(self, asset_id: str) -> list[dict[str, Any]]:
@@ -201,8 +257,10 @@ class TransitionJournal:
             "tenant_id": row["tenant_id"],
             "from_status": row["from_status"],
             "to_status": row["to_status"],
+            "event_type": row["event_type"],
             "operator": row["operator"],
             "reason": row["reason"],
+            "details": json.loads(row["details_json"]),
             "occurred_at": row["occurred_at"],
         }
 

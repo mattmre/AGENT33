@@ -519,27 +519,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ingestion_task_metrics_db_path = state_paths.resolve_approved(
         settings.ingestion_task_metrics_db_path
     )
+    ingestion_notification_hooks_db_path = state_paths.resolve_approved(
+        settings.ingestion_notification_hooks_db_path
+    )
     ingestion_persistence = IngestionPersistence(ingestion_db_path)
     ingestion_journal = TransitionJournal(
         ingestion_journal_db_path,
         retention_days=settings.ingestion_journal_retention_days,
     )
     expired_journal_entries = ingestion_journal.cleanup_expired()
+    from agent33.ingestion.notifications import (
+        IngestionNotificationService,
+        NotificationHookStore,
+    )
+
+    ingestion_notification_store = NotificationHookStore(ingestion_notification_hooks_db_path)
+    ingestion_notification_service = IngestionNotificationService(
+        ingestion_notification_store,
+        timeout_seconds=settings.ingestion_notification_timeout_seconds,
+    )
     ingestion_service = IngestionService(
         persistence=ingestion_persistence,
         journal=ingestion_journal,
+        notifications=ingestion_notification_service,
     )
     intake_pipeline = IntakePipeline(ingestion_service)
     app.state.ingestion_persistence = ingestion_persistence
     app.state.ingestion_journal = ingestion_journal
+    app.state.ingestion_notification_service = ingestion_notification_service
     app.state.ingestion_service = ingestion_service
     app.state.intake_pipeline = intake_pipeline
     ingestion.set_ingestion_service(ingestion_service)
     ingestion.set_intake_pipeline(intake_pipeline)
+    ingestion.set_ingestion_notification_service(ingestion_notification_service)
     logger.info(
         "ingestion_service_initialized",
         db_path=str(ingestion_db_path),
         journal_db_path=str(ingestion_journal_db_path),
+        notification_hooks_db_path=str(ingestion_notification_hooks_db_path),
         journal_retention_days=settings.ingestion_journal_retention_days,
         expired_journal_entries=expired_journal_entries,
     )
@@ -2136,6 +2153,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _ingestion_journal is not None:
         _ingestion_journal.close()
         logger.info("ingestion_journal_closed")
+
+    _ingestion_notification_service: Any = getattr(
+        app.state,
+        "ingestion_notification_service",
+        None,
+    )
+    if _ingestion_notification_service is not None:
+        _ingestion_notification_service.close()
+        logger.info("ingestion_notification_service_closed")
 
     _ingestion_mailbox_persistence: Any = getattr(app.state, "ingestion_mailbox_persistence", None)
     if _ingestion_mailbox_persistence is not None:

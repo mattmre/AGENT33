@@ -1,15 +1,15 @@
 # Next Session Briefing
 
-Last updated: 2026-04-25 (fresh-main verified after PRs `#425`, `#426`, and `#427`)
+Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with operator UX depth in progress)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#427` (`feat: persist ingestion mailbox inbox events`)
-- **Latest merged implementation PR**: `#427` (`feat: persist ingestion mailbox inbox events`)
-- **Latest commit on main**: `860daf0`
-- **Cumulative PRs merged**: 427
+- **Latest merged PR**: `#429` (`feat: harden ingestion retention and metrics`)
+- **Latest merged implementation PR**: `#429` (`feat: harden ingestion retention and metrics`)
+- **Latest commit on main**: `5e2e241`
+- **Cumulative PRs merged**: 429
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
@@ -37,6 +37,8 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#425`, `#426`, and `#42
 | #425 | `a1670d3` | research preservation | durable research corpus index and panel-output ledger |
 | #426 | `729d9ca` | OpenRouter | runtime/config/operator/frontend integration and hardening |
 | #427 | `860daf0` | ingestion | persisted mailbox inbox events |
+| #428 | `6e327ae` | planning | refresh post-merge handoff queue |
+| #429 | `5e2e241` | ingestion | harden journal retention and task-metrics durability |
 
 ## Current Roadmap Posture
 
@@ -44,23 +46,22 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#425`, `#426`, and `#42
 - **Current execution queue**: this file plus `docs/phases/PHASE-PLAN-POST-P72-2026.md` and `task_plan.md`
 - **Current merged session log**: `docs/sessions/session-129-2026-04-20.md` (newer work is currently summarized through queue/handoff docs plus `progress.md`)
 - **Recovery note**: stale root checkouts may still have out-of-date planning docs; recover from a fresh `origin/main` worktree, then read this file, `task_plan.md`, and `progress.md`
-- **Immediate implementation focus**: start the post-merge queue with ingestion hardening follow-up, then operator UX depth, SSE schema v2, skills-system integration, and SkillsBench follow-up
+- **Immediate implementation focus**: operator UX depth slice — per-asset history UI plus webhook-style notification hooks on top of the merged ingestion journal/backend/frontend surfaces
 
 ## Next Session Priority Queue
 
 | Priority | Task | Status |
 |----------|------|--------|
-| T1 | Ingestion hardening follow-up | NEXT |
-| T2 | Operator UX depth | QUEUED |
-| T3 | SSE schema v2 | QUEUED (after the published migration-path contract) |
-| T4 | Skills-system integration | QUEUED |
-| T5 | SkillsBench follow-up | QUEUED |
+| T1 | Operator UX depth | NEXT |
+| T2 | SSE schema v2 | QUEUED (after the published migration-path contract) |
+| T3 | Skills-system integration | QUEUED |
+| T4 | SkillsBench follow-up | QUEUED |
 
 **T1 scope guardrails**:
 - build from a fresh `origin/main` worktree only
-- keep scope on post-merge ingestion hardening, not a new feature cluster
-- preserve the merged mailbox persistence + candidate lifecycle contracts from `#419`-`#427`
-- treat operator UX depth as the next slice unless hardening finds a blocker that must be closed first
+- keep scope on operator UX depth only: per-asset history/detail UX and webhook-style notification hooks
+- preserve the merged ingestion lifecycle, mailbox persistence, journal retention, and task-metrics contracts from `#419`-`#429`
+- defer bulk approve/reject and provider-specific Slack/email delivery matrices to later slices unless a tiny helper is strictly required
 
 ## Key References
 
@@ -74,6 +75,7 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#425`, `#426`, and `#42
 - `engine/src/agent33/ingestion/mailbox.py` - merged mailbox/runtime behavior
 - `engine/src/agent33/ingestion/mailbox_persistence.py` - persisted mailbox store added in PR `#427`
 - `engine/src/agent33/ingestion/metrics.py` - persisted task-metrics storage and history queries
+- `engine/src/agent33/ingestion/notifications.py` - webhook-style operator notification hooks for ingestion events
 - `engine/tests/test_ingestion_journal.py` - focused retention and tenant-journal coverage
 - `engine/tests/test_ingestion_mailbox.py` - focused regression coverage for the ingestion mailbox stack
 - `engine/src/agent33/services/openrouter_catalog.py` - OpenRouter catalog/runtime integration surface

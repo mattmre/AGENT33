@@ -12,8 +12,8 @@ describe("operationsHubDomain", () => {
     expect(operationsHubDomain.description).toBeDefined();
   });
 
-  it("should have exactly 3 operations", () => {
-    expect(operationsHubDomain.operations.length).toBe(3);
+  it("should include process and ingestion operator operations", () => {
+    expect(operationsHubDomain.operations.length).toBe(8);
   });
 
   it("should have all required operation fields", () => {
@@ -22,7 +22,7 @@ describe("operationsHubDomain", () => {
       expect(op.title).toBeDefined();
       expect(op.description).toBeDefined();
       expect(op.method).toMatch(/^(GET|POST)$/);
-      expect(op.path).toMatch(/^\/v1\/operations\//);
+      expect(op.path).toMatch(/^\/v1\/(operations|ingestion)\//);
     });
   });
 
@@ -75,12 +75,22 @@ describe("operationsHubDomain", () => {
   });
 
   it("should have path params for operations requiring process_id", () => {
-    const opsWithProcessId = ["operations-process-detail", "operations-process-control"];
+    const opsWithProcessId = [
+      "operations-process-detail",
+      "operations-process-control",
+      "ingestion-asset-history",
+      "ingestion-review-approve",
+      "ingestion-review-reject"
+    ];
 
     opsWithProcessId.forEach((opId) => {
       const op = operationsHubDomain.operations.find((o) => o.id === opId);
       expect(op?.defaultPathParams).toBeDefined();
-      expect(op?.defaultPathParams?.process_id).toBe("replace-with-process-id");
+      if (opId.startsWith("operations-")) {
+        expect(op?.defaultPathParams?.process_id).toBe("replace-with-process-id");
+      } else {
+        expect(op?.defaultPathParams?.asset_id).toBe("replace-with-asset-id");
+      }
     });
   });
 
@@ -91,5 +101,17 @@ describe("operationsHubDomain", () => {
       // Old lifecycle path replaced by /control
       expect(op.path).not.toContain("/lifecycle");
     });
+  });
+
+  it("should expose ingestion review queue and history endpoints", () => {
+    const queueOperation = operationsHubDomain.operations.find(
+      (op) => op.id === "ingestion-review-queue"
+    );
+    const historyOperation = operationsHubDomain.operations.find(
+      (op) => op.id === "ingestion-asset-history"
+    );
+
+    expect(queueOperation?.path).toBe("/v1/ingestion/review-queue");
+    expect(historyOperation?.path).toBe("/v1/ingestion/candidates/{asset_id}/history");
   });
 });

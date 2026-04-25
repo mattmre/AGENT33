@@ -17,6 +17,7 @@ import {
   getStatusClass,
   getStatusLabel
 } from "./helpers";
+import { IngestionReviewPanel } from "./IngestionReviewPanel";
 import type {
   OperationsHubControlAction,
   OperationsHubProcessDetail,
@@ -308,6 +309,7 @@ export function OperationsHubPanel({
           ) : null}
         </div>
       </div>
+      <IngestionReviewPanel token={token} apiKey={apiKey} onResult={onResult} />
     </section>
   );
 }

@@ -95,8 +95,10 @@ class TestTransitionJournalRecordAndQuery:
         assert entry["tenant_id"] == _TENANT
         assert entry["from_status"] == "candidate"
         assert entry["to_status"] == "candidate"  # asset.status was not changed
+        assert entry["event_type"] == "transition"
         assert entry["operator"] == "op-alice"
         assert entry["reason"] == "test validate"
+        assert entry["details"] == {}
         assert "occurred_at" in entry
         journal.close()
 
@@ -224,10 +226,11 @@ class TestServiceJournalIntegration:
         )
         svc.validate(asset.id, operator="op-validate", reason="manual review passed")
         entries = journal.entries_for(asset.id)
-        assert len(entries) == 1
-        e = entries[0]
+        assert len(entries) == 2
+        e = entries[-1]
         assert e["from_status"] == "candidate"
         assert e["to_status"] == "validated"
+        assert e["event_type"] == "transition"
         assert e["operator"] == "op-validate"
         assert e["reason"] == "manual review passed"
 
@@ -242,10 +245,11 @@ class TestServiceJournalIntegration:
         svc.validate(asset.id, operator="op", reason="validated")
         svc.promote(asset.id, operator="op-promote", reason="promoting to prod")
         entries = journal.entries_for(asset.id)
-        assert len(entries) == 2
-        promote_entry = entries[1]
+        assert len(entries) == 3
+        promote_entry = entries[-1]
         assert promote_entry["from_status"] == "validated"
         assert promote_entry["to_status"] == "published"
+        assert promote_entry["event_type"] == "transition"
         assert promote_entry["operator"] == "op-promote"
         assert promote_entry["reason"] == "promoting to prod"
 
@@ -259,10 +263,11 @@ class TestServiceJournalIntegration:
         )
         svc.revoke(asset.id, reason="policy violation", operator="op-revoke")
         entries = journal.entries_for(asset.id)
-        assert len(entries) == 1
-        e = entries[0]
+        assert len(entries) == 2
+        e = entries[-1]
         assert e["from_status"] == "candidate"
         assert e["to_status"] == "revoked"
+        assert e["event_type"] == "transition"
         assert e["operator"] == "op-revoke"
         assert e["reason"] == "policy violation"
 
@@ -404,7 +409,9 @@ def reader_client() -> TestClient:
 class TestAssetJournalEndpoint:
     """API-1: GET /v1/ingestion/candidates/{id}/journal returns correct shape."""
 
-    def test_journal_empty_for_newly_created_asset(self, writer_client: TestClient) -> None:
+    def test_journal_includes_ingested_event_for_new_asset(
+        self, writer_client: TestClient
+    ) -> None:
         create_resp = writer_client.post(
             "/v1/ingestion/candidates",
             json={"name": "j-skill", "asset_type": "skill", "tenant_id": _TENANT},
@@ -412,7 +419,8 @@ class TestAssetJournalEndpoint:
         asset_id = create_resp.json()["id"]
         resp = writer_client.get(f"/v1/ingestion/candidates/{asset_id}/journal")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["event_type"] == "ingested"
 
     def test_journal_has_entry_after_transition(self, writer_client: TestClient) -> None:
         create_resp = writer_client.post(
@@ -427,11 +435,11 @@ class TestAssetJournalEndpoint:
         resp = writer_client.get(f"/v1/ingestion/candidates/{asset_id}/journal")
         assert resp.status_code == 200
         entries = resp.json()
-        assert len(entries) == 1
-        assert entries[0]["from_status"] == "candidate"
-        assert entries[0]["to_status"] == "validated"
-        assert entries[0]["asset_id"] == asset_id
-        assert "occurred_at" in entries[0]
+        transition_entry = next(entry for entry in entries if entry["event_type"] == "transition")
+        assert transition_entry["from_status"] == "candidate"
+        assert transition_entry["to_status"] == "validated"
+        assert transition_entry["asset_id"] == asset_id
+        assert "occurred_at" in transition_entry
 
     def test_journal_entries_have_required_fields(self, writer_client: TestClient) -> None:
         create_resp = writer_client.post(
@@ -451,8 +459,10 @@ class TestAssetJournalEndpoint:
             "tenant_id",
             "from_status",
             "to_status",
+            "event_type",
             "operator",
             "reason",
+            "details",
             "occurred_at",
         ):
             assert field in entry, f"Missing field: {field}"
