@@ -88,6 +88,18 @@ const catalogResponse = {
   ]
 }
 
+function buildCatalogModel(index: number) {
+  return {
+    id: `provider/model-${index}`,
+    name: `Model ${index}`,
+    description: `Catalog model ${index}`,
+    context_length: 128000 + index,
+    pricing: { prompt: "0.000001", completion: "0.000002" },
+    supported_parameters: ["tools"],
+    top_provider: { max_completion_tokens: 4096 }
+  }
+}
+
 function mockApiRoutes(): void {
   apiRequestMock.mockReset()
   apiRequestMock.mockImplementation(async (args: { path: string }) => {
@@ -186,6 +198,78 @@ describe("MessagingSetup", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Prompt $0.5000/M")).toBeInTheDocument()
     expect(screen.getByText("Completion $1.50/M")).toBeInTheDocument()
+  })
+
+  it("uses assertive alert semantics for errors while keeping polite status updates", async () => {
+    apiRequestMock.mockReset()
+    apiRequestMock.mockImplementation(async (args: { path: string }) => {
+      if (args.path === "/v1/operator/config") {
+        return buildApiResult({ message: "Config unavailable" }, false, 500)
+      }
+
+      if (args.path === "/v1/openrouter/models") {
+        return buildApiResult(catalogResponse)
+      }
+
+      throw new Error(`Unhandled path: ${args.path}`)
+    })
+
+    render(<MessagingSetup />)
+
+    const configAlert = await screen.findByRole("alert")
+    expect(configAlert).toHaveTextContent("Config unavailable")
+    expect(configAlert).not.toHaveAttribute("aria-live")
+    expect(await screen.findByText("Loaded 5 OpenRouter models.")).toBeInTheDocument()
+    expect(screen.getByText("Loaded 5 OpenRouter models.").closest('[role="status"]')).toHaveAttribute(
+      "aria-live",
+      "polite"
+    )
+  })
+
+  it("limits default-model datalist options and narrows them as the input changes", async () => {
+    const user = userEvent.setup()
+    const blankConfigResponse = {
+      groups: {
+        llm: {
+          ...configResponse.groups.llm,
+          default_model: ""
+        },
+        ollama: {
+          ...configResponse.groups.ollama,
+          default_model: ""
+        }
+      }
+    }
+    const largeCatalogResponse = {
+      data: Array.from({ length: 75 }, (_, index) => buildCatalogModel(index))
+    }
+
+    apiRequestMock.mockReset()
+    apiRequestMock.mockImplementation(async (args: { path: string }) => {
+      if (args.path === "/v1/operator/config") {
+        return buildApiResult(blankConfigResponse)
+      }
+
+      if (args.path === "/v1/openrouter/models") {
+        return buildApiResult(largeCatalogResponse)
+      }
+
+      throw new Error(`Unhandled path: ${args.path}`)
+    })
+
+    render(<MessagingSetup />)
+
+    expect(await screen.findByText("Loaded 75 OpenRouter models.")).toBeInTheDocument()
+    const getOptions = () => Array.from(document.querySelectorAll("#openrouter-model-options option"))
+
+    expect(getOptions()).toHaveLength(50)
+
+    await user.type(screen.getByLabelText("Default model"), "model-59")
+
+    await waitFor(() => {
+      expect(getOptions()).toHaveLength(1)
+    })
+    expect(getOptions()[0]).toHaveAttribute("value", "openrouter/provider/model-59")
   })
 
   it("saves OpenRouter settings through config apply without using browser storage", async () => {

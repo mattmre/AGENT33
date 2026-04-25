@@ -68,6 +68,9 @@ const INITIAL_OPENROUTER_FORM: OpenRouterFormState = {
   removeStoredKey: false
 }
 
+const OPENROUTER_CATALOG_PREVIEW_LIMIT = 12
+const OPENROUTER_MODEL_OPTION_LIMIT = 50
+
 const PLACEHOLDER_PLATFORM_CARDS: PlaceholderPlatformCard[] = [
   {
     icon: "📱",
@@ -186,13 +189,14 @@ function extractResultMessage(payload: unknown, fallback: string): string {
 
 function renderStatusMessage(id: string, status: StatusMessage): JSX.Element {
   const role = status.tone === "error" ? "alert" : "status"
+  const ariaLive = status.tone === "error" ? undefined : "polite"
 
   return (
     <div
       id={id}
       className={`integration-status integration-status--${status.tone}`}
       role={role}
-      aria-live="polite"
+      aria-live={ariaLive}
     >
       {status.message}
     </div>
@@ -319,7 +323,13 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
     return filterOpenRouterModels(models, modelSearch)
   }, [modelSearch, models])
 
-  const visibleModels = filteredModels.slice(0, 12)
+  const visibleModels = filteredModels.slice(0, OPENROUTER_CATALOG_PREVIEW_LIMIT)
+  const datalistModelOptions = useMemo(() => {
+    const query = openRouterForm.defaultModel.trim()
+    const optionSource = query ? filterOpenRouterModels(models, query) : models
+
+    return optionSource.slice(0, OPENROUTER_MODEL_OPTION_LIMIT)
+  }, [models, openRouterForm.defaultModel])
   const trimmedDefaultModel = openRouterForm.defaultModel.trim()
   const normalizedDefaultModel = normalizeLikelyOpenRouterModelRef(trimmedDefaultModel)
   const selectedRecommendedModel = useMemo(() => {
@@ -694,7 +704,7 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
           </div>
 
           <datalist id="openrouter-model-options">
-            {models.map((model) => (
+            {datalistModelOptions.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.name}
               </option>
@@ -711,7 +721,8 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
             OpenRouter model ID manually, such as
             <code> openrouter/qwen/qwen3-coder-flash </code>
             or
-            <code> openrouter/qwen/qwen3-coder-30b-a3b-instruct</code>.
+            <code> openrouter/qwen/qwen3-coder-30b-a3b-instruct</code>. Suggestions
+            are limited to the first 50 catalog matches to keep this input responsive.
           </div>
 
           <div className="integration-status integration-status--warning openrouter-advisory">

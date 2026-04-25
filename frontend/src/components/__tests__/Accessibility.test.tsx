@@ -6,8 +6,8 @@
  * accessibility, form labels, and heading hierarchy.
  */
 
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
 
 import { SkipLink } from "../SkipLink";
 import { VisuallyHidden } from "../VisuallyHidden";
@@ -15,6 +15,13 @@ import { VisuallyHidden } from "../VisuallyHidden";
 // jsdom does not implement scrollIntoView; stub it globally for all tests
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  cleanup();
+  delete (window as any).__AGENT33_CONFIG__;
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /**

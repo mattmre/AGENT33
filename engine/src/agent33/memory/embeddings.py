@@ -17,6 +17,20 @@ _DEFAULT_MODEL = "nomic-embed-text"
 _DEFAULT_TIMEOUT = 60.0
 
 
+def _normalize_embed_response(data: object, expected_count: int) -> list[list[float]]:
+    """Support both batched and legacy single-embedding response shapes."""
+    if isinstance(data, dict):
+        embeddings = data.get("embeddings")
+        if isinstance(embeddings, list):
+            return cast("list[list[float]]", embeddings)
+
+        embedding = data.get("embedding")
+        if expected_count == 1 and isinstance(embedding, list):
+            return [cast("list[float]", embedding)]
+
+    raise KeyError("embeddings")
+
+
 class EmbeddingProvider:
     """Generates text embeddings via Ollama."""
 
@@ -66,8 +80,7 @@ class EmbeddingProvider:
                 json=payload,
             )
             response.raise_for_status()
-            data = response.json()
-            return cast("list[list[float]]", data["embeddings"])
+            return _normalize_embed_response(response.json(), len(texts))
 
         async def _execute_embed_batch(_request: ConnectorRequest) -> list[list[float]]:
             return await _perform_embed_batch()
