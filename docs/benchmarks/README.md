@@ -26,15 +26,17 @@ agent33 bench run --skillsbench-root ./skillsbench --output ctrf-report.json --m
 # Quick smoke suite (deterministic, no LLM required)
 agent33 bench smoke --output ctrf-smoke.json
 
-# Compare against baseline
-agent33 bench report ctrf-report.json --baseline ctrf-baseline.json
+# Compare against baseline and emit a GitHub job summary when running in CI
+agent33 bench report ctrf-report.json --baseline ctrf-baseline.json --github-step-summary
 ```
 
 ### CI Integration
 
 - **Smoke suite**: Runs on every PR via `benchmark-smoke` CI job (`continue-on-error: true`)
+- **Baseline comparison**: Current CTRF artifacts embed overall/task/category regression details in `results.extra.skillsbench.baseline_comparison`
+- **PR/check visibility**: `agent33 bench report --github-step-summary` writes a markdown summary for smoke and weekly benchmark jobs
+- **Thresholds**: overall pass-rate drop >5pp, task pass-rate drop ≥20pp (one failed trial on the standard 5-trial suite), category drop ≥5pp
 - **Full run**: Runs weekly via scheduled workflow; results committed to `benchmarks` branch
-- **Regression alert**: GitHub issue opened automatically if any category drops >5% vs baseline
 
 ### Baseline Files
 

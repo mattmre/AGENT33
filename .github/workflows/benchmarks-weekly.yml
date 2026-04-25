@@ -80,6 +80,23 @@ jobs:
             --model "${MODEL}"
           cp ../bench-results/ctrf-run-${DATE}.json ../bench-results/ctrf-run-latest.json
 
+      - name: Summarize SkillsBench report
+        if: always()
+        working-directory: engine
+        run: |
+          if [ -f "../bench-results/ctrf-run-latest.json" ]; then
+            if [ "${HAVE_BASELINE}" = "true" ]; then
+              agent33 bench report \
+                ../bench-results/ctrf-run-latest.json \
+                --baseline ../bench-results/ctrf-baseline.json \
+                --github-step-summary
+            else
+              agent33 bench report \
+                ../bench-results/ctrf-run-latest.json \
+                --github-step-summary
+            fi
+          fi
+
       - name: Detect regression vs baseline
         id: regression
         if: env.HAVE_BASELINE == 'true'

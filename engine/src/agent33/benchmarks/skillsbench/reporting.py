@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent33.benchmarks.skillsbench.models import BenchmarkRunResult, TrialOutcome
+from agent33.benchmarks.skillsbench.regression import attach_baseline_comparison
 
 
 class SkillsBenchCTRFGenerator:
@@ -13,7 +14,11 @@ class SkillsBenchCTRFGenerator:
     TOOL_NAME = "agent33-skillsbench"
     TOOL_VERSION = "1.0.0"
 
-    def generate_report(self, run: BenchmarkRunResult) -> dict[str, Any]:
+    def generate_report(
+        self,
+        run: BenchmarkRunResult,
+        baseline_report: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Generate a CTRF-compatible JSON structure for a benchmark run."""
         tests: list[dict[str, Any]] = []
         passed = 0
@@ -52,6 +57,9 @@ class SkillsBenchCTRFGenerator:
                         "skillsbench": {
                             "trial_outcome": trial.outcome,
                             "task_id": trial.task_id,
+                            "category": (
+                                trial.task_id.split("/", 1)[0] if "/" in trial.task_id else ""
+                            ),
                         },
                     },
                 }
@@ -60,7 +68,7 @@ class SkillsBenchCTRFGenerator:
         start_ms = int(run.started_at.timestamp() * 1000)
         stop_ms = int(run.completed_at.timestamp() * 1000) if run.completed_at else start_ms
 
-        return {
+        report = {
             "results": {
                 "tool": {
                     "name": self.TOOL_NAME,
@@ -82,8 +90,14 @@ class SkillsBenchCTRFGenerator:
                         "total_tasks": run.total_tasks,
                         "total_trials": run.total_trials,
                         "pass_rate": run.pass_rate,
+                        "task_summaries": [
+                            summary.model_dump(mode="json") for summary in run.task_summaries
+                        ],
                     },
                 },
                 "tests": tests,
             },
         }
+        if baseline_report is not None:
+            attach_baseline_comparison(report, baseline_report)
+        return report

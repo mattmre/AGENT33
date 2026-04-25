@@ -6,7 +6,7 @@
 
 ## Architecture Overview
 
-Minimal smoke benchmark infrastructure that validates SkillsBench evaluation framework integration. Uses existing CTRF schema and pytest framework, adds non-blocking CI job with artifact reporting.
+Minimal smoke benchmark infrastructure that validates SkillsBench evaluation framework integration. Uses existing CTRF schema and pytest framework, adds non-blocking CI job with artifact reporting plus baseline regression summaries.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -52,7 +52,8 @@ Minimal smoke benchmark infrastructure that validates SkillsBench evaluation fra
               ┌────────────────────────────────┐
               │  GitHub Actions Artifact       │
               │  Name: benchmark-smoke-results │
-              │  Retention: 30 days            │
+│  Retention: 30 days            │
+│  + regression step summary     │
               └────────────────────────────────┘
 ```
 
