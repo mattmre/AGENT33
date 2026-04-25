@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_ingestion_notification_hooks_tenant
     ON ingestion_notification_hooks(tenant_id, enabled);
 """
 
+
 class IngestionNotificationEvent(StrEnum):
     """Webhook event types emitted by the ingestion subsystem."""
 
@@ -338,8 +339,7 @@ class NotificationHookStore:
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> NotificationHookRecord:
         event_types = [
-            IngestionNotificationEvent(value)
-            for value in json.loads(row["event_types"])
+            IngestionNotificationEvent(value) for value in json.loads(row["event_types"])
         ]
         return NotificationHookRecord(
             id=row["id"],
