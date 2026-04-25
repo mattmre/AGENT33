@@ -1,25 +1,25 @@
 # Next Session Briefing
 
-Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with operator UX depth in progress)
+Last updated: 2026-04-25 (final wrap-up verification after PRs `#425`-`#433`)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#429` (`feat: harden ingestion retention and metrics`)
-- **Latest merged implementation PR**: `#429` (`feat: harden ingestion retention and metrics`)
-- **Latest commit on main**: `5e2e241`
-- **Cumulative PRs merged**: 429
+- **Latest merged PR**: `#433` (`feat: report SkillsBench smoke regressions`)
+- **Latest merged implementation PR**: `#433` (`feat: report SkillsBench smoke regressions`)
+- **Latest commit on main**: `cc4845a`
+- **Cumulative PRs merged**: 433
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
 - **POST-3 (Pack Ecosystem)**: COMPLETE
 - **POST-4 (Interruption & Self-Improvement)**: COMPLETE through PR `#406`
-- **POST-CLUSTER (Distribution & Ecosystem Growth)**: ACTIVE, with marketplace/community submissions complete and the Sessions 130-132 merge wave now landed through `#427`
+- **POST-CLUSTER (Distribution & Ecosystem Growth)**: ACTIVE, with the tracked follow-up wave now merged through `#433`
 - **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
 - **Security scan posture**: the Trivy/admin-override burden was removed in PR `#418`; treat any new repo-level scan failures as regressions, not accepted baseline drift
 
-## What Sessions 130-132 Delivered
+## What Sessions 130-132 And The Final Follow-up Wave Delivered
 
 | PR | Commit | Slice | Description |
 |----|--------|-------|-------------|
@@ -39,6 +39,10 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with 
 | #427 | `860daf0` | ingestion | persisted mailbox inbox events |
 | #428 | `6e327ae` | planning | refresh post-merge handoff queue |
 | #429 | `5e2e241` | ingestion | harden journal retention and task-metrics durability |
+| #430 | `48626e2` | operator UX | deepen ingestion review/history UX and notification hooks |
+| #431 | `f11b9ae` | SSE v2 | add backend schema-v2 foundation with version gating |
+| #432 | `ee7461a` | skills integration | register published ingestion skills into runtime discovery |
+| #433 | `cc4845a` | SkillsBench | report smoke regressions in CTRF/CI summaries |
 
 ## Current Roadmap Posture
 
@@ -46,22 +50,13 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with 
 - **Current execution queue**: this file plus `docs/phases/PHASE-PLAN-POST-P72-2026.md` and `task_plan.md`
 - **Current merged session log**: `docs/sessions/session-129-2026-04-20.md` (newer work is currently summarized through queue/handoff docs plus `progress.md`)
 - **Recovery note**: stale root checkouts may still have out-of-date planning docs; recover from a fresh `origin/main` worktree, then read this file, `task_plan.md`, and `progress.md`
-- **Immediate implementation focus**: operator UX depth slice — per-asset history UI plus webhook-style notification hooks on top of the merged ingestion journal/backend/frontend surfaces
+- **Immediate implementation focus**: none from this closed wave — PRs `#425`-`#433` are merged and fresh-main verified; start any new work from a new scope lock on updated `origin/main`
 
-## Next Session Priority Queue
+## Queue Status
 
-| Priority | Task | Status |
-|----------|------|--------|
-| T1 | Operator UX depth | NEXT |
-| T2 | SSE schema v2 | IN PROGRESS (backend foundation: flag + kill switch + pinned run schema; frontend/client rollout still queued) |
-| T3 | Skills-system integration | QUEUED |
-| T4 | SkillsBench follow-up | QUEUED |
-
-**T1 scope guardrails**:
-- build from a fresh `origin/main` worktree only
-- keep scope on operator UX depth only: per-asset history/detail UX and webhook-style notification hooks
-- preserve the merged ingestion lifecycle, mailbox persistence, journal retention, and task-metrics contracts from `#419`-`#429`
-- defer bulk approve/reject and provider-specific Slack/email delivery matrices to later slices unless a tiny helper is strictly required
+- The prior queue (`ingestion hardening -> operator UX depth -> SSE schema v2 -> skills-system integration -> SkillsBench follow-up`) is **COMPLETE** on `main`.
+- Queue/handoff docs were stale through `#429`; they now need to be read as closed-wave references rather than an open implementation prompt.
+- If implementation resumes, start from a fresh `origin/main` worktree and create a new scoped plan instead of reopening the completed queue above.
 
 ## Key References
 
@@ -78,4 +73,8 @@ Last updated: 2026-04-25 (fresh-main verified after PRs `#428` and `#429`, with 
 - `engine/src/agent33/ingestion/notifications.py` - webhook-style operator notification hooks for ingestion events
 - `engine/tests/test_ingestion_journal.py` - focused retention and tenant-journal coverage
 - `engine/tests/test_ingestion_mailbox.py` - focused regression coverage for the ingestion mailbox stack
-- `engine/src/agent33/services/openrouter_catalog.py` - OpenRouter catalog/runtime integration surface
+- `engine/tests/test_sse_versioning.py` - SSE version-gating and pinned-schema coverage
+- `engine/tests/test_workflow_sse.py` - workflow stream payload compatibility coverage
+- `engine/tests/test_skills.py` - runtime skill-registry ingestion coverage
+- `engine/tests/test_bench_cli.py` - SkillsBench CLI reporting coverage
+- `engine/tests/test_skillsbench_regression.py` - regression-threshold and comparison coverage
