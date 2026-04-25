@@ -255,11 +255,12 @@ class OperatorService:
                 "nats_url": s.nats_url,
             },
             "ollama": {
-                "default_model": s.default_model,
                 "ollama_base_url": s.ollama_base_url,
                 "ollama_default_model": s.ollama_default_model,
             },
             "llm": {
+                "default_model": s.default_model,
+                "openai_api_key": _redact(s.openai_api_key),
                 "openai_base_url": s.openai_base_url,
                 "openrouter_api_key": _redact(s.openrouter_api_key),
                 "openrouter_base_url": s.openrouter_base_url,

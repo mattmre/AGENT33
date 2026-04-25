@@ -161,6 +161,19 @@ class TestGetConfig:
         config = svc.get_config()
         assert config.groups["llm"]["openrouter_api_key"] == "***"
 
+    def test_openai_key_present_and_redacted_when_set(self) -> None:
+        svc = _build_service()
+        object.__setattr__(svc._settings, "openai_api_key", SecretStr("sk-openai-test"))
+        config = svc.get_config()
+        assert config.groups["llm"]["openai_api_key"] == "***"
+
+    def test_default_model_is_reported_only_under_llm_group(self) -> None:
+        svc = _build_service()
+        object.__setattr__(svc._settings, "default_model", "openrouter/auto")
+        config = svc.get_config()
+        assert config.groups["llm"]["default_model"] == "openrouter/auto"
+        assert "default_model" not in config.groups["ollama"]
+
     def test_has_expected_groups(self) -> None:
         svc = _build_service()
         config = svc.get_config()
