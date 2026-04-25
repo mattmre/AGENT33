@@ -268,6 +268,7 @@ class AgentRuntime:
         cost_tracker: CostTracker | None = None,
         metrics_collector: Any | None = None,
         pack_registry: PackRegistry | None = None,
+        ppack_variant: str | None = None,
         evaluation_mode: bool = False,
     ) -> None:
         self._definition = definition
@@ -307,6 +308,7 @@ class AgentRuntime:
         self._cost_tracker = cost_tracker
         self._metrics_collector = metrics_collector
         self._pack_registry = pack_registry
+        self._ppack_variant = ppack_variant
         self._evaluation_mode = evaluation_mode
 
     @property
@@ -483,7 +485,10 @@ class AgentRuntime:
         if not session_id:
             return system_prompt
         try:
-            addenda = self._pack_registry.get_session_prompt_addenda(session_id)
+            addenda = self._pack_registry.get_session_prompt_addenda(
+                session_id,
+                ppack_variant=self._ppack_variant,
+            )
         except Exception:
             logger.debug("failed to retrieve pack addenda", exc_info=True)
             return system_prompt
@@ -501,7 +506,10 @@ class AgentRuntime:
         if self._pack_registry is None or not self._session_id:
             return {}
         try:
-            return self._pack_registry.get_session_tool_config(self._session_id)
+            return self._pack_registry.get_session_tool_config(
+                self._session_id,
+                ppack_variant=self._ppack_variant,
+            )
         except Exception:
             logger.debug("failed to retrieve pack tool config", exc_info=True)
             return {}

@@ -73,12 +73,16 @@ def build_model_router() -> ModelRouter:
         )
 
     if settings.openai_api_key.get_secret_value():
-        openai_kwargs: dict[str, str] = {
-            "api_key": settings.openai_api_key.get_secret_value(),
-        }
-        if settings.openai_base_url:
-            openai_kwargs["base_url"] = settings.openai_base_url
-        router.register("openai", OpenAIProvider(**openai_kwargs))
+        openai_api_key = settings.openai_api_key.get_secret_value()
+        openai_provider = (
+            OpenAIProvider(
+                api_key=openai_api_key,
+                base_url=settings.openai_base_url,
+            )
+            if settings.openai_base_url
+            else OpenAIProvider(api_key=openai_api_key)
+        )
+        router.register("openai", openai_provider)
 
     if settings.openrouter_api_key.get_secret_value():
         router.register(

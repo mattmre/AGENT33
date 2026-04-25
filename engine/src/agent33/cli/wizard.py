@@ -34,7 +34,10 @@ except ImportError:  # pragma: no cover
 
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from agent33.env.detect import EnvProfile
 
 # ---------------------------------------------------------------------------
 # I/O protocol — the only thing tests need to replace
@@ -161,7 +164,7 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
 
 
-def _detect_environment(*, force_refresh: bool = False) -> object:
+def _detect_environment(*, force_refresh: bool = False) -> "EnvProfile":
     """Run environment detection, forcing a fresh probe when supported."""
     try:
         return detect_env(force_refresh=force_refresh)

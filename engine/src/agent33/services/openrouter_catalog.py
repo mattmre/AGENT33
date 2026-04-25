@@ -417,14 +417,18 @@ class OpenRouterCatalogService:
     def _normalize_model(self, raw: dict[str, Any]) -> OpenRouterModelSummary:
         model_id = self._as_str(raw.get("id")) or ""
         vendor = model_id.split("/", 1)[0] if "/" in model_id else None
-        architecture = raw.get("architecture") if isinstance(raw.get("architecture"), dict) else {}
+        architecture_raw = raw.get("architecture")
+        architecture: dict[str, Any] = (
+            architecture_raw if isinstance(architecture_raw, dict) else {}
+        )
         supported_parameters = [
             str(value) for value in raw.get("supported_parameters", []) if value is not None
         ]
         input_modalities = self._as_str_list(architecture.get("input_modalities"))
         output_modalities = self._as_str_list(architecture.get("output_modalities"))
-        top_provider_raw = (
-            raw.get("top_provider") if isinstance(raw.get("top_provider"), dict) else {}
+        top_provider_raw_raw = raw.get("top_provider")
+        top_provider_raw: dict[str, Any] = (
+            top_provider_raw_raw if isinstance(top_provider_raw_raw, dict) else {}
         )
         top_provider = OpenRouterTopProvider(
             context_length=self._as_int(top_provider_raw.get("context_length")),
