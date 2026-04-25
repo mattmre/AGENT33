@@ -2474,6 +2474,8 @@ button:disabled {
   border-radius: 14px;
   padding: 0.95rem;
   box-shadow: 0 18px 34px rgba(5, 13, 17, 0.45);
+  display: grid;
+  gap: 1rem;
 }
 
 .ops-hub-head {
@@ -2555,7 +2557,8 @@ button:disabled {
   margin-bottom: 0.4rem;
 }
 
-.process-item-header h3 {
+.process-item-header h3,
+.process-item-header h4 {
   margin: 0;
   font-size: 0.92rem;
   color: var(--text-main);
@@ -2718,6 +2721,110 @@ button:disabled {
   background: linear-gradient(120deg, #6a3030, #8a3535);
 }
 
+.ingestion-review-panel {
+  border-top: 1px solid var(--border);
+  padding-top: 0.95rem;
+}
+
+.review-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.review-panel-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.review-panel-head p,
+.review-panel-meta {
+  margin: 0.3rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+.review-panel-content {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.85rem;
+}
+
+.review-asset-list {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  max-height: 720px;
+  overflow-y: auto;
+}
+
+.review-detail {
+  max-height: 720px;
+}
+
+.review-asset-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.review-asset-flag {
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  background: rgba(48, 213, 200, 0.12);
+  border: 1px solid rgba(48, 213, 200, 0.25);
+  color: #b7f3ee;
+  font-size: 0.7rem;
+}
+
+.review-asset-flag-danger {
+  background: rgba(240, 91, 91, 0.12);
+  border-color: rgba(240, 91, 91, 0.25);
+  color: #ffb4b4;
+}
+
+.review-action-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.review-action-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.review-action-form textarea {
+  resize: vertical;
+  min-height: 86px;
+}
+
+.review-action-success {
+  margin: 0 0 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(80, 196, 144, 0.35);
+  border-radius: 8px;
+  background: rgba(80, 196, 144, 0.12);
+  color: #b8f0d0;
+}
+
+.review-timeline-title {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-main);
+}
+
+.review-timeline-meta {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
 @media (max-width: 1100px) {
   .ops-hub-content {
     grid-template-columns: 1fr;
@@ -2729,6 +2836,10 @@ button:disabled {
 
   .ops-hub-detail {
     max-height: 500px;
+  }
+
+  .review-panel-content {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2744,6 +2855,10 @@ button:disabled {
 
   .ops-hub-filters label {
     width: 100%;
+  }
+
+  .review-panel-head {
+    flex-direction: column;
   }
 }
 

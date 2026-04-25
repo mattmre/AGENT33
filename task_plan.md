@@ -4,7 +4,7 @@
 
 Execute the post-merge follow-up queue sequentially from updated `origin/main`,
 starting from the fresh-main baseline verified after the Sessions 130-132 merge
-wave (`#414`-`#427`).
+wave and the post-merge hardening/docs refresh (`#414`-`#429`).
 
 ## Current Baseline
 
@@ -18,12 +18,12 @@ wave (`#414`-`#427`).
 - Session 129 operator/docs remediation is COMPLETE in PR `#412`.
 - Session 130 marketplace web UI and community submissions are COMPLETE in PRs
   `#413` and `#414`.
-- Sessions 131-132 follow-up work is merged through PR `#427`, including
+- Sessions 131-132 follow-up work is merged through PR `#429`, including
   monitoring, persistence, SSE migration prep, security hardening, ingestion
-  sprints, research preservation, OpenRouter integration, and mailbox
-  persistence.
-- The next queue is: ingestion hardening follow-up, operator UX depth, SSE
-  schema v2, skills-system integration, then SkillsBench follow-up.
+  sprints, research preservation, OpenRouter integration, mailbox persistence,
+  and ingestion hardening follow-up.
+- The next queue is: operator UX depth, SSE schema v2, skills-system
+  integration, then SkillsBench follow-up.
 - POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - Treat the root checkout as disposable and always implement from fresh
   `origin/main` worktrees.
@@ -41,7 +41,7 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: post-merge queue
-- Current slice: ingestion hardening follow-up
+- Current slice: operator UX depth
 - Worktree: create a fresh worktree from updated `origin/main` when the slice starts
 - Branch: TBD (new branch from verified `main`)
 - Active PR: none

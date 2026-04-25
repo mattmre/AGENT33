@@ -26,6 +26,7 @@ from agent33.ingestion.state_machine import CandidateStateMachine
 
 if TYPE_CHECKING:
     from agent33.ingestion.journal import TransitionJournal
+    from agent33.ingestion.notifications import IngestionNotificationService
     from agent33.ingestion.persistence import IngestionPersistence
 
 logger = structlog.get_logger()
@@ -52,10 +53,12 @@ class IngestionService:
         *,
         persistence: IngestionPersistence | None = None,
         journal: TransitionJournal | None = None,
+        notifications: IngestionNotificationService | None = None,
     ) -> None:
         self._store: dict[str, CandidateAsset] = {}
         self._persistence = persistence
         self._journal = journal
+        self._notifications = notifications
         if persistence is not None:
             self._hydrate_from_persistence()
 
@@ -125,6 +128,56 @@ class IngestionService:
         self._store[asset.id] = asset
         if self._persistence is not None:
             self._persistence.save(asset)
+        if self._journal is not None:
+            self._journal.record_event(
+                asset,
+                event_type="ingested",
+                operator="system",
+                reason="Asset entered the ingestion lifecycle.",
+                details={
+                    "asset_type": asset.asset_type,
+                    "confidence": asset.confidence.value,
+                    "source_uri": asset.source_uri,
+                },
+            )
+        if asset.metadata.get("review_required") is True:
+            if self._journal is not None:
+                self._journal.record_event(
+                    asset,
+                    event_type="review_required",
+                    operator="intake_pipeline",
+                    reason="Asset requires operator review before promotion.",
+                    details={"review_required": True},
+                )
+            if self._notifications is not None:
+                from agent33.ingestion.notifications import IngestionNotificationEvent
+
+                self._notifications.emit(
+                    asset,
+                    event_type=IngestionNotificationEvent.REVIEW_REQUIRED,
+                    operator="intake_pipeline",
+                    reason="Asset requires operator review before promotion.",
+                    details={"review_required": True},
+                )
+        if asset.metadata.get("quarantine") is True:
+            if self._journal is not None:
+                self._journal.record_event(
+                    asset,
+                    event_type="quarantined",
+                    operator="intake_pipeline",
+                    reason="Asset was quarantined for manual inspection.",
+                    details={"quarantine": True},
+                )
+            if self._notifications is not None:
+                from agent33.ingestion.notifications import IngestionNotificationEvent
+
+                self._notifications.emit(
+                    asset,
+                    event_type=IngestionNotificationEvent.QUARANTINED,
+                    operator="intake_pipeline",
+                    reason="Asset was quarantined for manual inspection.",
+                    details={"quarantine": True},
+                )
         logger.info("ingestion_asset_ingested", asset_id=asset.id, tenant_id=tenant_id)
         return asset
 
@@ -254,10 +307,50 @@ class IngestionService:
         """
         asset = self._require(asset_id)
         merged = {**asset.metadata, **updates}
-        updated = asset.model_copy(update={"metadata": merged})
+        updated = asset.model_copy(update={"metadata": merged, "updated_at": datetime.now(UTC)})
         self._store[asset_id] = updated
         if self._persistence is not None:
             self._persistence.save(updated)
+        prior_review_required = asset.metadata.get("review_required") is True
+        review_required = merged.get("review_required") is True
+        prior_quarantine = asset.metadata.get("quarantine") is True
+        quarantine = merged.get("quarantine") is True
+        if self._journal is not None and not prior_review_required and review_required:
+            self._journal.record_event(
+                updated,
+                event_type="review_required",
+                operator="intake_pipeline",
+                reason="Asset requires operator review before promotion.",
+                details={"review_required": True},
+            )
+        if self._notifications is not None and not prior_review_required and review_required:
+            from agent33.ingestion.notifications import IngestionNotificationEvent
+
+            self._notifications.emit(
+                updated,
+                event_type=IngestionNotificationEvent.REVIEW_REQUIRED,
+                operator="intake_pipeline",
+                reason="Asset requires operator review before promotion.",
+                details={"review_required": True},
+            )
+        if self._journal is not None and not prior_quarantine and quarantine:
+            self._journal.record_event(
+                updated,
+                event_type="quarantined",
+                operator="intake_pipeline",
+                reason="Asset was quarantined for manual inspection.",
+                details={"quarantine": True},
+            )
+        if self._notifications is not None and not prior_quarantine and quarantine:
+            from agent33.ingestion.notifications import IngestionNotificationEvent
+
+            self._notifications.emit(
+                updated,
+                event_type=IngestionNotificationEvent.QUARANTINED,
+                operator="intake_pipeline",
+                reason="Asset was quarantined for manual inspection.",
+                details={"quarantine": True},
+            )
         logger.info("ingestion_asset_metadata_patched", asset_id=asset_id)
         return updated
 
@@ -326,6 +419,24 @@ class IngestionService:
             asset_id,
             {"review_required": False, "quarantine": False},
         )
+        if self._journal is not None:
+            self._journal.record_event(
+                cleared,
+                event_type="approved",
+                operator=operator,
+                reason=reason,
+                details={"review_required": False, "quarantine": False},
+            )
+        if self._notifications is not None:
+            from agent33.ingestion.notifications import IngestionNotificationEvent
+
+            self._notifications.emit(
+                cleared,
+                event_type=IngestionNotificationEvent.APPROVED,
+                operator=operator,
+                reason=reason,
+                details={"review_required": False, "quarantine": False},
+            )
         logger.info("ingestion_asset_approved", asset_id=asset_id, operator=operator)
         return cleared
 
@@ -343,6 +454,22 @@ class IngestionService:
             CandidateTransitionError: Asset is in a terminal state.
         """
         revoked = self.revoke(asset_id, reason=reason, operator=operator)
+        if self._journal is not None:
+            self._journal.record_event(
+                revoked,
+                event_type="rejected",
+                operator=operator,
+                reason=reason,
+            )
+        if self._notifications is not None:
+            from agent33.ingestion.notifications import IngestionNotificationEvent
+
+            self._notifications.emit(
+                revoked,
+                event_type=IngestionNotificationEvent.REJECTED,
+                operator=operator,
+                reason=reason,
+            )
         logger.info("ingestion_asset_rejected", asset_id=asset_id, operator=operator)
         return revoked
 

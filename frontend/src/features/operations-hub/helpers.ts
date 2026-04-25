@@ -9,10 +9,16 @@ export function getStatusClass(status: string): string {
   if (normalized === "running" || normalized === "active") {
     return "status-running";
   }
+  if (normalized === "validated" || normalized === "published") {
+    return "status-ok";
+  }
   if (normalized === "paused" || normalized === "suspended") {
     return "status-paused";
   }
   if (normalized === "pending" || normalized === "draft") {
+    return "status-pending";
+  }
+  if (normalized === "candidate") {
     return "status-pending";
   }
   if (normalized === "cancelled" || normalized === "expired") {
@@ -21,7 +27,12 @@ export function getStatusClass(status: string): string {
   if (normalized === "completed" || normalized === "success" || normalized === "verified") {
     return "status-ok";
   }
-  if (normalized === "failed" || normalized === "error" || normalized === "rejected") {
+  if (
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "rejected" ||
+    normalized === "revoked"
+  ) {
     return "status-error";
   }
   return "status-pending";

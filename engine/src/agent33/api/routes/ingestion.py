@@ -6,6 +6,7 @@ Provides REST endpoints:
 - ``GET  /v1/ingestion/candidates``                       — list (by status or tenant)
 - ``POST /v1/ingestion/candidates/{id}/transition``       — apply a lifecycle transition
 - ``GET  /v1/ingestion/candidates/{id}/journal``          — audit journal for asset
+- ``GET  /v1/ingestion/candidates/{id}/history``          — asset detail plus timeline history
 - ``POST /v1/ingestion/intake``                           — batch intake via pipeline
 - ``GET  /v1/ingestion/intake/stats``                     — pipeline stats for tenant
 - ``POST /v1/ingestion/mailbox``                          — post an operator event
@@ -17,6 +18,9 @@ Provides REST endpoints:
 - ``GET  /v1/ingestion/review-queue``                     — pending-review candidates
 - ``POST /v1/ingestion/review-queue/{id}/approve``        — approve a candidate
 - ``POST /v1/ingestion/review-queue/{id}/reject``         — reject a candidate
+- ``GET  /v1/ingestion/notification-hooks``               — list tenant notification hooks
+- ``POST /v1/ingestion/notification-hooks``               — create a notification hook
+- ``PATCH /v1/ingestion/notification-hooks/{id}``         — update a notification hook
 - ``GET  /v1/ingestion/doctor/report``                    — summary report (warn/critical only)
 - ``GET  /v1/ingestion/doctor``                           — full tenant diagnostic report
 - ``GET  /v1/ingestion/doctor/{asset_id}``                — single-asset diagnostic report
@@ -42,6 +46,11 @@ from agent33.ingestion.intake import IntakePipeline
 from agent33.ingestion.mailbox import IngestionMailbox
 from agent33.ingestion.metrics import TaskMetricsCollector
 from agent33.ingestion.models import CandidateStatus, ConfidenceLevel
+from agent33.ingestion.notifications import (
+    IngestionNotificationEvent,
+    IngestionNotificationService,
+    NotificationHookStore,
+)
 from agent33.ingestion.service import IngestionService
 from agent33.ingestion.state_machine import CandidateTransitionError
 from agent33.security.permissions import require_scope
@@ -57,6 +66,7 @@ _intake_pipeline = IntakePipeline(_service)
 _ingestion_mailbox = IngestionMailbox(pipeline=_intake_pipeline)
 _task_metrics = TaskMetricsCollector()
 _skills_doctor = SkillsDoctor(service=_service)
+_notification_service = IngestionNotificationService(NotificationHookStore(":memory:"))
 
 
 def set_ingestion_service(service: IngestionService) -> None:
@@ -89,6 +99,12 @@ def set_skills_doctor(doctor: SkillsDoctor) -> None:
     _skills_doctor = doctor
 
 
+def set_ingestion_notification_service(service: IngestionNotificationService) -> None:
+    """Swap the module-level ingestion notification service (called from lifespan)."""
+    global _notification_service
+    _notification_service = service
+
+
 def get_ingestion_service(request: Request) -> IngestionService:
     """Return the ingestion service from app.state, falling back to module-level."""
     svc: IngestionService | None = getattr(request.app.state, "ingestion_service", None)
@@ -117,6 +133,14 @@ def get_skills_doctor(request: Request) -> SkillsDoctor:
     """Return the skills doctor from app.state, falling back to module-level."""
     doctor: SkillsDoctor | None = getattr(request.app.state, "skills_doctor", None)
     return doctor if doctor is not None else _skills_doctor
+
+
+def get_notification_service(request: Request) -> IngestionNotificationService:
+    """Return the notification service from app.state, falling back to module-level."""
+    service: IngestionNotificationService | None = getattr(
+        request.app.state, "ingestion_notification_service", None
+    )
+    return service if service is not None else _notification_service
 
 
 # ------------------------------------------------------------------
@@ -164,6 +188,26 @@ class ReviewActionRequest(BaseModel):
 
     operator: str = Field(..., min_length=1)
     reason: str = Field(..., min_length=1)
+
+
+class NotificationHookRequest(BaseModel):
+    """Request body for creating a notification hook."""
+
+    name: str = Field(..., min_length=1, max_length=128)
+    target_url: str = Field(..., min_length=1)
+    event_types: list[IngestionNotificationEvent] = Field(..., min_length=1)
+    signing_secret: str | None = None
+    enabled: bool = True
+
+
+class NotificationHookUpdateRequest(BaseModel):
+    """Request body for updating a notification hook."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    target_url: str | None = Field(default=None, min_length=1)
+    event_types: list[IngestionNotificationEvent] | None = None
+    signing_secret: str | None = None
+    enabled: bool | None = None
 
 
 # ------------------------------------------------------------------
@@ -417,6 +461,22 @@ async def get_asset_journal(asset_id: str, request: Request) -> list[dict[str, A
 
 
 @router.get(
+    "/candidates/{asset_id}/history",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def get_asset_history(asset_id: str, request: Request) -> dict[str, Any]:
+    """Return the current asset plus its timeline history."""
+    svc = get_ingestion_service(request)
+    asset = svc.get(asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=f"Candidate asset {asset_id!r} not found.")
+    return {
+        "asset": asset.model_dump(mode="json"),
+        "history": svc.get_journal(asset_id),
+    }
+
+
+@router.get(
     "/journal",
     dependencies=[require_scope("ingestion:read")],
 )
@@ -488,6 +548,66 @@ async def reject_candidate(
     except CandidateTransitionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return updated.model_dump(mode="json")
+
+
+@router.get(
+    "/notification-hooks",
+    dependencies=[require_scope("ingestion:read")],
+)
+async def list_notification_hooks(request: Request) -> list[dict[str, Any]]:
+    """List configured notification hooks for the authenticated tenant."""
+    service = get_notification_service(request)
+    hooks = service.list_hooks(_resolve_tenant_id(request))
+    return [hook.model_dump(mode="json") for hook in hooks]
+
+
+@router.post(
+    "/notification-hooks",
+    status_code=201,
+    dependencies=[require_scope("ingestion:write")],
+)
+async def create_notification_hook(
+    body: NotificationHookRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Create a webhook-style notification hook for operator-relevant events."""
+    service = get_notification_service(request)
+    hook = service.create_hook(
+        tenant_id=_resolve_tenant_id(request),
+        name=body.name,
+        target_url=body.target_url,
+        event_types=body.event_types,
+        signing_secret=body.signing_secret,
+        enabled=body.enabled,
+    )
+    return hook.model_dump(mode="json")
+
+
+@router.patch(
+    "/notification-hooks/{hook_id}",
+    dependencies=[require_scope("ingestion:write")],
+)
+async def update_notification_hook(
+    hook_id: str,
+    body: NotificationHookUpdateRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Update an existing notification hook."""
+    service = get_notification_service(request)
+    tenant_id = _resolve_tenant_id(request)
+    hook = service.update_hook(
+        hook_id,
+        tenant_id=tenant_id,
+        name=body.name,
+        target_url=body.target_url,
+        event_types=body.event_types,
+        signing_secret=body.signing_secret,
+        replace_signing_secret="signing_secret" in body.model_fields_set,
+        enabled=body.enabled,
+    )
+    if hook is None:
+        raise HTTPException(status_code=404, detail=f"Notification hook {hook_id!r} not found.")
+    return hook.model_dump(mode="json")
 
 
 # ------------------------------------------------------------------

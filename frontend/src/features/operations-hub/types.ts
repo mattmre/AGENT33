@@ -24,3 +24,37 @@ export interface OperationsHubProcessDetail extends OperationsHubProcessSummary 
 }
 
 export type OperationsHubControlAction = "pause" | "resume" | "cancel";
+
+export interface IngestionAssetSummary {
+  id: string;
+  name: string;
+  asset_type: string;
+  status: string;
+  confidence: string;
+  source_uri: string | null;
+  tenant_id: string;
+  created_at: string;
+  updated_at: string;
+  validated_at: string | null;
+  published_at: string | null;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface IngestionAssetHistoryEntry {
+  asset_id: string;
+  tenant_id: string;
+  from_status: string;
+  to_status: string;
+  event_type: string;
+  operator: string;
+  reason: string;
+  details: Record<string, unknown>;
+  occurred_at: string;
+}
+
+export interface IngestionAssetHistoryResponse {
+  asset: IngestionAssetSummary;
+  history: IngestionAssetHistoryEntry[];
+}
