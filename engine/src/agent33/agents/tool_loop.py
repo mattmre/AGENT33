@@ -147,6 +147,7 @@ class ToolLoop:
         metrics_collector: MetricsCollector | None = None,
         *,
         redact_secrets: bool = True,
+        allow_model_fallback: bool = False,
     ) -> None:
         self._router = router
         self._tool_registry = tool_registry
@@ -166,6 +167,7 @@ class ToolLoop:
         self._model_context_window = model_context_window
         self._metrics = metrics_collector
         self._redact_secrets = redact_secrets
+        self._allow_model_fallback = allow_model_fallback
         self._last_accumulated_messages: list[ChatMessage] | None = None
         self._last_relay_results: list[ToolResult] = []
 
@@ -262,6 +264,7 @@ class ToolLoop:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     tools=tool_descriptions if tool_descriptions else None,
+                    allow_fallback=self._allow_model_fallback,
                 )
             except Exception:
                 state.consecutive_errors += 1
@@ -1090,6 +1093,7 @@ class ToolLoop:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
+                allow_fallback=self._allow_model_fallback,
             )
             return
 
@@ -1110,6 +1114,7 @@ class ToolLoop:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
+                allow_fallback=self._allow_model_fallback,
             )
         result_holder["response"] = response
 

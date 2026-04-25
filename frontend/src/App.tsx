@@ -195,7 +195,7 @@ export default function App(): JSX.Element {
         {/* Integrations Setup -> Render new MessagingSetup component */}
         {activeTab === "setup" && (
           <div className="consumer-setup-layout">
-            <MessagingSetup />
+            <MessagingSetup token={token} apiKey={apiKey} />
             <div className="auth-settings-card">
               <h3>Agent API Access</h3>
               <p>Configure internal tokens to securely access the AGENT-33 engine.</p>
@@ -244,7 +244,6 @@ export default function App(): JSX.Element {
           </div>
         )}
 
-        {/* Pack Marketplace -> Marketplace browsing, curation state, install flow */}
         {activeTab === "marketplace" && (
           <div className="consumer-marketplace-layout">
             <PackMarketplacePage token={token || null} apiKey={apiKey || null} />

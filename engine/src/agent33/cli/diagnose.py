@@ -170,11 +170,15 @@ def _check_llm_config() -> CheckResult:
     """Check that some LLM provider is configured."""
     import urllib.request
 
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    model = os.environ.get("OLLAMA_DEFAULT_MODEL") or os.environ.get("DEFAULT_MODEL", "")
+    model = os.environ.get("DEFAULT_MODEL", "")
 
+    if openrouter_key:
+        model_info = f" (model: {model})" if model else ""
+        return CheckResult("LLM provider", Status.OK, f"OpenRouter API key configured{model_info}")
     if openai_key:
         return CheckResult("LLM provider", Status.OK, "OpenAI API key configured")
     if anthropic_key:
@@ -193,7 +197,7 @@ def _check_llm_config() -> CheckResult:
         Status.FAIL,
         "No LLM provider configured or reachable",
         fix_hint=(
-            "Either: set OPENAI_API_KEY or ANTHROPIC_API_KEY, "
+            "Either: set OPENROUTER_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY, "
             "or install+start Ollama (https://ollama.ai/download)"
         ),
     )

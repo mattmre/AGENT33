@@ -1285,13 +1285,13 @@ button:disabled {
   color: var(--accent);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
-  font-family: var(--font-mono);
+  font-family: var(--mono);
 }
 
 .schema-type {
   color: #f7768e;
   /* Subtle pink/red for types */
-  font-family: var(--font-mono);
+  font-family: var(--mono);
 }
 
 .req-badge {
@@ -1344,7 +1344,7 @@ button:disabled {
 
 .schema-body-info code {
   color: #e2f1f8;
-  font-family: var(--font-mono);
+  font-family: var(--mono);
   font-size: 0.75rem;
 }
 
@@ -1393,7 +1393,7 @@ button:disabled {
 }
 
 .health-state {
-  font-family: var(--font-mono);
+  font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -1564,6 +1564,339 @@ button:disabled {
   color: #9dc3cf;
   margin: 0 0 1.5rem 0;
   font-size: 0.9rem;
+}
+
+.openrouter-card {
+  grid-column: 1 / -1;
+  gap: 1.2rem;
+}
+
+.openrouter-card__header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.setup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.setup-links a {
+  color: #8de5db;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.setup-links a:hover,
+.setup-links a:focus-visible {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.integration-status {
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(47, 90, 108, 0.6);
+  background: rgba(4, 12, 18, 0.5);
+  color: #d9edf4;
+  font-size: 0.9rem;
+}
+
+.integration-status--success {
+  border-color: rgba(30, 215, 96, 0.45);
+  background: rgba(30, 215, 96, 0.12);
+}
+
+.integration-status--warning {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.integration-status--error {
+  border-color: rgba(247, 118, 142, 0.45);
+  background: rgba(247, 118, 142, 0.12);
+}
+
+.openrouter-form-grid,
+.openrouter-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.openrouter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.openrouter-field span,
+.openrouter-search-field span {
+  color: #d8edf7;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.openrouter-inline-help {
+  color: #9dc3cf;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.openrouter-inline-help code {
+  color: #8de5db;
+  font-family: var(--mono);
+}
+
+.openrouter-advisory,
+.openrouter-selection-warning {
+  margin: 0;
+}
+
+.openrouter-recommendations {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(47, 90, 108, 0.45);
+  background: rgba(4, 12, 18, 0.45);
+}
+
+.openrouter-recommendations__header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.openrouter-recommendations__header h4 {
+  margin: 0;
+  color: #fff;
+  font-size: 0.98rem;
+}
+
+.openrouter-recommendations__header p {
+  margin: 0;
+  color: #9dc3cf;
+  font-size: 0.84rem;
+}
+
+.openrouter-recommendation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.openrouter-recommendation-button {
+  width: 100%;
+  padding: 0.9rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(47, 90, 108, 0.55);
+  background: rgba(4, 12, 18, 0.42);
+  display: grid;
+  gap: 0.55rem;
+  text-align: left;
+}
+
+.openrouter-recommendation-button:hover,
+.openrouter-recommendation-button:focus-visible,
+.openrouter-recommendation-button.is-selected {
+  border-color: rgba(48, 213, 200, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(48, 213, 200, 0.16);
+}
+
+.openrouter-recommendation-button__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.openrouter-recommendation-button__name {
+  color: #fff;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.openrouter-recommendation-id {
+  font-family: var(--mono);
+  word-break: break-word;
+}
+
+.openrouter-recommendation-button__description {
+  margin: 0;
+  color: #9dc3cf;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.setup-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #d8edf7;
+  font-size: 0.85rem;
+}
+
+.setup-checkbox input {
+  appearance: auto;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  accent-color: #30d5c8;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.setup-button-secondary {
+  background: rgba(11, 30, 39, 0.85) !important;
+  border-color: rgba(141, 229, 219, 0.5) !important;
+  color: #d8edf7 !important;
+}
+
+.setup-button-secondary:hover {
+  background: rgba(48, 213, 200, 0.15) !important;
+  color: #fff !important;
+}
+
+.openrouter-catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-top: 1px solid rgba(47, 90, 108, 0.45);
+  padding-top: 1.25rem;
+}
+
+.openrouter-catalog-header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.openrouter-catalog-header h4 {
+  margin: 0 0 0.35rem 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.openrouter-catalog-header p,
+.openrouter-catalog-count,
+.openrouter-model-id {
+  margin: 0;
+  color: #9dc3cf;
+  font-size: 0.84rem;
+}
+
+.openrouter-search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: min(100%, 320px);
+}
+
+.openrouter-model-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.openrouter-model-item {
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(47, 90, 108, 0.45);
+  background: rgba(4, 12, 18, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.openrouter-model-item__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.openrouter-model-item h5 {
+  margin: 0 0 0.25rem 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.openrouter-model-item p {
+  margin: 0;
+  flex: unset;
+}
+
+.openrouter-model-metadata,
+.openrouter-model-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.model-pill,
+.model-capability-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.model-pill {
+  background: rgba(48, 213, 200, 0.12);
+  border: 1px solid rgba(48, 213, 200, 0.2);
+  color: #d8edf7;
+}
+
+.model-pill--recommended {
+  background: rgba(246, 189, 96, 0.14);
+  border-color: rgba(246, 189, 96, 0.32);
+  color: #fde7b2;
+}
+
+.model-pill--warning {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #f6d28f;
+}
+
+.model-capability-pill {
+  background: rgba(125, 182, 202, 0.12);
+  border: 1px solid rgba(125, 182, 202, 0.18);
+  color: #b8d9e5;
+}
+
+.openrouter-empty-state {
+  border: 1px dashed rgba(141, 170, 182, 0.45);
+  border-radius: 12px;
+  padding: 1rem;
+  color: #9dc3cf;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .openrouter-card__header,
+  .openrouter-catalog-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* =========================================================================
@@ -1897,6 +2230,57 @@ button:disabled {
   font-size: 0.85rem;
   color: var(--text-soft);
   font-weight: bold;
+}
+
+.chat-model-summary {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.chat-model-summary__body {
+  display: grid;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-model-summary__value {
+  color: var(--text-main);
+  font-size: 0.98rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.openrouter-selection-tags {
+  gap: 0.4rem;
+}
+
+.chat-model-default-btn,
+.chat-model-refresh-btn {
+  flex-shrink: 0;
+}
+
+.chat-model-toolbar {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.chat-model-toolbar .openrouter-search-field {
+  flex: 1;
+  min-width: min(100%, 220px);
+}
+
+.chat-model-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.openrouter-model-item.is-selected {
+  border-color: rgba(48, 213, 200, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(48, 213, 200, 0.2);
 }
 
 /* Toggle Switch Styled like the Mockup */

@@ -4,15 +4,32 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Request, Response
 
 from agent33.config import settings
+from agent33.llm.runtime_config import llamacpp_enabled, resolve_default_model
 
 router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
+_HEALTHY_REQUIRED_STATES = {"ok", "configured"}
+_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+_ANTHROPIC_HEADERS = {"anthropic-version": "2023-06-01"}
+_MODEL_PREFIX_PROVIDER_MAP: tuple[tuple[str, str], ...] = (
+    ("openrouter/", "openrouter"),
+    ("openai/", "openai"),
+    ("ollama/", "ollama"),
+    ("llamacpp/", "llamacpp"),
+    ("gpt-", "openai"),
+    ("o1", "openai"),
+    ("o3", "openai"),
+    ("claude-", "anthropic"),
+    ("ft:gpt-", "openai"),
+    ("airllm-", "airllm"),
+)
 
 
 def _get_adapters() -> dict[str, Any]:
@@ -22,16 +39,94 @@ def _get_adapters() -> dict[str, Any]:
     return _adapters
 
 
-async def _core_dependency_checks() -> dict[str, str]:
-    """Probe the in-cluster dependencies required for normal API operation."""
-    checks: dict[str, str] = {}
+def _default_provider_name() -> str:
+    """Resolve the provider backing the default chat model."""
+    default_model = resolve_default_model().strip()
+    if not default_model:
+        return "llamacpp" if llamacpp_enabled() else "ollama"
 
+    if "/" in default_model:
+        provider_name, _model_name = default_model.split("/", 1)
+        if provider_name in {"anthropic", "openai", "openrouter", "ollama", "llamacpp", "airllm"}:
+            return provider_name
+
+    for prefix, provider_name in _MODEL_PREFIX_PROVIDER_MAP:
+        if default_model.startswith(prefix):
+            return provider_name
+
+    return "llamacpp" if llamacpp_enabled() else "ollama"
+
+
+def _required_runtime_services() -> set[str]:
+    """Return the services the current runtime configuration actually depends on."""
+    required = {"redis", "postgres", "nats"}
+    provider_name = _default_provider_name()
+
+    if provider_name in {"anthropic", "ollama", "openai", "openrouter"}:
+        required.add(provider_name)
+
+    if settings.embedding_provider == "ollama":
+        required.add("ollama")
+    elif settings.embedding_provider == "jina":
+        required.add("jina")
+
+    if settings.voice_daemon_transport == "sidecar" or settings.voice_sidecar_url.strip():
+        required.add("voice_sidecar")
+
+    if settings.voice_tts_provider == "elevenlabs" or settings.voice_elevenlabs_enabled:
+        required.add("elevenlabs")
+
+    return required
+
+
+async def _probe_catalog(base_url: str, headers: dict[str, str]) -> str:
+    """Check a provider's model catalog endpoint."""
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            response = await client.get(f"{settings.ollama_base_url}/api/version")
-            checks["ollama"] = "ok" if response.status_code == 200 else "degraded"
+            response = await client.get(f"{base_url.rstrip('/')}/models", headers=headers)
+            return "ok" if response.status_code == 200 else "degraded"
     except Exception:
-        checks["ollama"] = "unavailable"
+        return "unavailable"
+
+
+async def _probe_ollama(required_services: set[str]) -> str:
+    """Check the Ollama dependency required by the active runtime."""
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            if settings.embedding_provider == "ollama" and "ollama" in required_services:
+                response = await client.post(
+                    f"{settings.runtime_ollama_base_url}/api/embed",
+                    json={
+                        "model": settings.embedding_default_model,
+                        "input": ["health probe"],
+                    },
+                )
+            else:
+                response = await client.get(f"{settings.runtime_ollama_base_url}/api/version")
+            return "ok" if response.status_code == 200 else "degraded"
+    except Exception:
+        return "unavailable"
+
+
+def _required_service_healthy(status: str) -> bool:
+    """Return True when a required dependency is in an acceptable state."""
+    return status in _HEALTHY_REQUIRED_STATES
+
+
+def _anthropic_api_key() -> str:
+    """Return the Anthropic key when present in the process environment."""
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+
+async def _core_dependency_checks(required_services: set[str] | None = None) -> dict[str, str]:
+    """Probe the dependencies required for normal API operation."""
+    checks: dict[str, str] = {}
+    required = required_services or _required_runtime_services()
+
+    if "ollama" in required:
+        checks["ollama"] = await _probe_ollama(required)
+    else:
+        checks["ollama"] = "configured" if settings.runtime_ollama_base_url else "unconfigured"
 
     try:
         import redis.asyncio as aioredis
@@ -75,38 +170,68 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
     """Aggregate health check for all services."""
     checks: dict[str, str] = {}
     include_external_checks = request is not None
+    required_services = _required_runtime_services()
 
     if include_external_checks:
         # Route requests get the full dependency probe set. Direct test calls
         # without a Request object only exercise channel aggregation.
-        checks.update(await _core_dependency_checks())
+        checks.update(await _core_dependency_checks(required_services))
 
         # External Integrations
         if settings.openai_api_key.get_secret_value():
-            try:
-                async with httpx.AsyncClient(timeout=3) as client:
-                    r = await client.get(
-                        "https://api.openai.com/v1/models",
-                        headers={
-                            "Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"
-                        },
-                    )
-                    checks["openai"] = "ok" if r.status_code == 200 else "degraded"
-            except Exception:
-                checks["openai"] = "unavailable"
+            if "openai" in required_services:
+                openai_base_url = settings.openai_base_url.strip() or "https://api.openai.com/v1"
+                checks["openai"] = await _probe_catalog(
+                    openai_base_url,
+                    {
+                        "Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}",
+                    },
+                )
+            else:
+                checks["openai"] = "configured"
         else:
             checks["openai"] = "unconfigured"
 
+        if settings.openrouter_api_key.get_secret_value():
+            if "openrouter" in required_services:
+                checks["openrouter"] = await _probe_catalog(
+                    settings.openrouter_base_url,
+                    {
+                        "Authorization": (
+                            f"Bearer {settings.openrouter_api_key.get_secret_value()}"
+                        ),
+                        "HTTP-Referer": settings.openrouter_site_url,
+                        "X-OpenRouter-Title": settings.openrouter_app_name,
+                    },
+                )
+            else:
+                checks["openrouter"] = "configured"
+        else:
+            checks["openrouter"] = "unconfigured"
+
+        anthropic_api_key = _anthropic_api_key()
+        if anthropic_api_key:
+            if "anthropic" in required_services:
+                checks["anthropic"] = await _probe_catalog(
+                    _ANTHROPIC_BASE_URL,
+                    {
+                        **_ANTHROPIC_HEADERS,
+                        "x-api-key": anthropic_api_key,
+                    },
+                )
+            else:
+                checks["anthropic"] = "configured"
+        else:
+            checks["anthropic"] = "unconfigured"
+
         if settings.elevenlabs_api_key.get_secret_value():
-            try:
-                async with httpx.AsyncClient(timeout=3) as client:
-                    r = await client.get(
-                        "https://api.elevenlabs.io/v1/models",
-                        headers={"xi-api-key": settings.elevenlabs_api_key.get_secret_value()},
-                    )
-                    checks["elevenlabs"] = "ok" if r.status_code == 200 else "degraded"
-            except Exception:
-                checks["elevenlabs"] = "unavailable"
+            if "elevenlabs" in required_services:
+                checks["elevenlabs"] = await _probe_catalog(
+                    "https://api.elevenlabs.io/v1",
+                    {"xi-api-key": settings.elevenlabs_api_key.get_secret_value()},
+                )
+            else:
+                checks["elevenlabs"] = "configured"
         else:
             checks["elevenlabs"] = "unconfigured"
 
@@ -169,11 +294,33 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
                 {"service": svc_name},
             )
 
-    all_ok = all(v == "ok" for v in checks.values())
-    health_result: dict[str, Any] = {
-        "status": "healthy" if all_ok else "degraded",
-        "services": checks,
+    required_snapshot = {
+        service_name: checks[service_name]
+        for service_name in sorted(required_services)
+        if service_name in checks
     }
+    failures = {
+        service_name: service_status
+        for service_name, service_status in required_snapshot.items()
+        if not _required_service_healthy(service_status)
+    }
+    warnings = {
+        service_name: service_status
+        for service_name, service_status in checks.items()
+        if service_name not in required_services and service_status in {"degraded", "unavailable"}
+    }
+    channel_failures = {
+        service_name: service_status
+        for service_name, service_status in warnings.items()
+        if service_name.startswith("channel:")
+    }
+    health_result: dict[str, Any] = {
+        "status": "healthy" if not failures and not channel_failures else "degraded",
+        "services": checks,
+        "required_services": required_snapshot,
+    }
+    if warnings:
+        health_result["warnings"] = warnings
 
     # Attach runtime version info if available
     runtime_info = getattr(app_state, "runtime_version_info", None)
@@ -191,14 +338,70 @@ async def healthz() -> dict[str, str]:
 
 
 @router.get("/readyz")
-async def readyz(response: Response) -> dict[str, Any]:
-    """Kubernetes readiness probe for core in-cluster dependencies."""
-    checks = await _core_dependency_checks()
-    healthy = all(status == "ok" for status in checks.values())
+async def readyz(request: Request, response: Response) -> dict[str, Any]:
+    """Kubernetes readiness probe for active runtime dependencies."""
+    required_services = _required_runtime_services()
+    checks = await _core_dependency_checks(required_services)
+
+    if "openai" in required_services:
+        if settings.openai_api_key.get_secret_value():
+            openai_base_url = settings.openai_base_url.strip() or "https://api.openai.com/v1"
+            checks["openai"] = await _probe_catalog(
+                openai_base_url,
+                {"Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"},
+            )
+        else:
+            checks["openai"] = "unconfigured"
+
+    if "openrouter" in required_services:
+        if settings.openrouter_api_key.get_secret_value():
+            checks["openrouter"] = await _probe_catalog(
+                settings.openrouter_base_url,
+                {
+                    "Authorization": f"Bearer {settings.openrouter_api_key.get_secret_value()}",
+                    "HTTP-Referer": settings.openrouter_site_url,
+                    "X-OpenRouter-Title": settings.openrouter_app_name,
+                },
+            )
+        else:
+            checks["openrouter"] = "unconfigured"
+
+    if "anthropic" in required_services:
+        anthropic_api_key = _anthropic_api_key()
+        if anthropic_api_key:
+            checks["anthropic"] = await _probe_catalog(
+                _ANTHROPIC_BASE_URL,
+                {
+                    **_ANTHROPIC_HEADERS,
+                    "x-api-key": anthropic_api_key,
+                },
+            )
+        else:
+            checks["anthropic"] = "unconfigured"
+
+    if "jina" in required_services:
+        checks["jina"] = (
+            "configured" if settings.jina_api_key.get_secret_value() else "unconfigured"
+        )
+
+    if "voice_sidecar" in required_services:
+        voice_probe = getattr(request.app.state, "voice_sidecar_probe", None)
+        if voice_probe is None:
+            checks["voice_sidecar"] = "unconfigured"
+        else:
+            voice_snapshot = await voice_probe.health_snapshot()
+            checks["voice_sidecar"] = str(voice_snapshot.get("status", "unavailable"))
+
+    ready_checks = {
+        service_name: checks[service_name]
+        for service_name in sorted(required_services)
+        if service_name in checks
+    }
+    healthy = all(_required_service_healthy(status) for status in ready_checks.values())
     response.status_code = 200 if healthy else 503
     return {
         "status": "healthy" if healthy else "degraded",
-        "services": checks,
+        "services": ready_checks,
     }
 
 

@@ -39,9 +39,14 @@ AGENT33_DEV_API_KEY={api_key}
 
 # LLM provider -- set ONE of the following:
 # OPENAI_API_KEY=sk-...
+# OPENROUTER_API_KEY=sk-or-...
 # ANTHROPIC_API_KEY=sk-ant-...
-# Or use Ollama (the wizard can auto-start bundled Ollama and pull a model)
+# Or use Ollama (start with: ollama serve)
 OLLAMA_BASE_URL=http://localhost:11434
+# Leave blank to use the server-side default. Examples:
+# DEFAULT_MODEL=openrouter/auto
+# DEFAULT_MODEL=openrouter/openai/gpt-5.2
+DEFAULT_MODEL=llama3.2:3b
 OLLAMA_DEFAULT_MODEL=llama3.2:3b
 
 # Server
@@ -71,8 +76,7 @@ def _bootstrap_generate(*, output: Path, force: bool) -> None:
     typer.echo()
     typer.echo("  Next steps:")
     typer.echo("    1. Review .env.local and set your LLM provider key")
-    typer.echo("    2. Optional: run `agent33 wizard` for guided Ollama setup")
-    typer.echo("    3. Run: agent33 start")
+    typer.echo("    2. Run: agent33 start")
     typer.echo()
     typer.echo("  WARNING: Never commit .env.local to version control.")
     typer.echo("  WARNING: Never use auto-generated secrets in production.\n")

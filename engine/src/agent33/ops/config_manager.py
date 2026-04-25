@@ -28,6 +28,8 @@ _CATEGORY_PREFIXES: list[tuple[str, str]] = [
     ("ollama_", "llm"),
     ("local_orchestration_", "llm"),
     ("openai_", "llm"),
+    ("openrouter_", "llm"),
+    ("default_model", "llm"),
     ("jwt_", "security"),
     ("auth_", "security"),
     ("api_secret", "security"),

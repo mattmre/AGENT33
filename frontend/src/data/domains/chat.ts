@@ -15,12 +15,12 @@ export const chatDomain: DomainConfig = {
       schemaInfo: {
         body: {
           description: "An array of conversation messages identical to the standard OpenAI API format requesting a model response.",
-          example: '{\n  "model": "qwen3-coder:30b",\n  "messages": [\n    { "role": "system", "content": "You are a helpful assistant." },\n    { "role": "user", "content": "Hello, how are you?" }\n  ],\n  "temperature": 0.2\n}'
+          example: '{\n  "model": "openrouter/auto",\n  "messages": [\n    { "role": "system", "content": "You are a helpful assistant." },\n    { "role": "user", "content": "Hello, how are you?" }\n  ],\n  "temperature": 0.2\n}'
         }
       },
       defaultBody: JSON.stringify(
         {
-          model: "qwen3-coder:30b",
+          model: "openrouter/auto",
           messages: [{ role: "user", content: "Summarize AGENT-33 status." }],
           temperature: 0.2
         },

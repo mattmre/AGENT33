@@ -116,7 +116,7 @@ export const agentsDomain: DomainConfig = {
         ],
         body: {
           description: "A JSON specifying the task inputs and optionally overriding the model constraints.",
-          example: '{\n  "inputs": {\n    "task": "Quickly research the weather in Tokyo."\n  },\n  "model": "qwen3-coder:30b",\n  "temperature": 0.4\n}'
+          example: '{\n  "inputs": {\n    "task": "Quickly research the weather in Tokyo."\n  },\n  "model": "openrouter/auto",\n  "temperature": 0.4\n}'
         }
       },
       defaultPathParams: {
@@ -127,7 +127,7 @@ export const agentsDomain: DomainConfig = {
           inputs: {
             task: "Generate a short implementation plan."
           },
-          model: "qwen3-coder:30b",
+          model: "openrouter/auto",
           temperature: 0.2
         },
         null,
@@ -158,7 +158,7 @@ export const agentsDomain: DomainConfig = {
           inputs: {
             task: "Iteratively solve and validate a workflow execution plan."
           },
-          model: "qwen3-coder:30b",
+          model: "openrouter/auto",
           temperature: 0.2,
           max_iterations: 8,
           max_tool_calls_per_iteration: 4,

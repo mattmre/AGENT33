@@ -6,6 +6,8 @@ map generation, auto-registration logic, and router integration.
 
 from __future__ import annotations
 
+import pytest
+
 from agent33.llm.providers import (
     PROVIDER_CATALOG,
     ProviderInfo,
@@ -198,3 +200,36 @@ class TestAutoRegister:
         router = ModelRouter()
         registered = auto_register(router, env={"AZURE_OPENAI_API_KEY": "test"})
         assert "azure_openai" not in registered
+
+
+class _DummyProvider:
+    async def complete(self, *args, **kwargs):  # pragma: no cover - not used in these tests
+        raise NotImplementedError
+
+    async def stream_complete(self, *args, **kwargs):  # pragma: no cover - not used here
+        raise NotImplementedError
+
+
+class TestExplicitProviderRefs:
+    def test_explicit_openai_ref_strips_provider_prefix(self) -> None:
+        router = ModelRouter(providers={"openai": _DummyProvider()}, prefix_map=[])
+        resolved = router.resolve("openai/gpt-4o")
+        assert resolved.provider_name == "openai"
+        assert resolved.model_name == "gpt-4o"
+
+    def test_explicit_openrouter_auto_preserves_special_model(self) -> None:
+        router = ModelRouter(providers={"openrouter": _DummyProvider()}, prefix_map=[])
+        resolved = router.resolve("openrouter/auto")
+        assert resolved.provider_name == "openrouter"
+        assert resolved.model_name == "openrouter/auto"
+
+    def test_explicit_openrouter_concrete_model_strips_internal_prefix(self) -> None:
+        router = ModelRouter(providers={"openrouter": _DummyProvider()}, prefix_map=[])
+        resolved = router.resolve("openrouter/openai/gpt-5.2")
+        assert resolved.provider_name == "openrouter"
+        assert resolved.model_name == "openai/gpt-5.2"
+
+    def test_unregistered_explicit_provider_ref_errors(self) -> None:
+        router = ModelRouter(providers={"ollama": _DummyProvider()}, prefix_map=[])
+        with pytest.raises(ValueError, match="explicitly targets provider 'openrouter'"):
+            router.resolve("openrouter/auto")
