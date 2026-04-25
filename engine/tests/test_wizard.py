@@ -293,6 +293,20 @@ def test_wizard_ollama_provider_without_binary(
     assert result.llm_model is None
 
 
+def test_wizard_ollama_without_binary_skips_test_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    result = _wizard(
+        answers=["developer", "ollama", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.template is None
+    assert "test_invocation_skipped" in result.steps_completed
+    assert "test_invocation" not in result.steps_completed
+
+
 def test_wizard_ollama_provider_with_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -336,6 +350,25 @@ def test_wizard_skips_test_invocation_when_user_declines(
     )
     # "no" answers confirm=False for test invocation
     assert "test_invocation_skipped" in result.steps_completed
+
+
+def test_wizard_skips_test_invocation_when_ollama_model_detection_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
+    monkeypatch.setattr(
+        "agent33.cli.wizard._pick_ollama_model",
+        lambda: (_ for _ in ()).throw(RuntimeError("no local models")),
+    )
+    result = _wizard(
+        answers=["developer", "ollama", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_model == "llama3.2:3b"
+    assert result.template is None
+    assert "test_invocation_skipped" in result.steps_completed
+    assert "test_invocation" not in result.steps_completed
 
 
 def test_wizard_test_invocation_failure_is_graceful(

@@ -448,7 +448,7 @@ class OpenRouterCatalogService:
             context_length=top_provider.context_length or self._as_int(raw.get("context_length")),
             max_completion_tokens=top_provider.max_completion_tokens,
             moderated=top_provider.is_moderated,
-            is_free=(pricing.prompt or 0.0) == 0.0 and (pricing.completion or 0.0) == 0.0,
+            is_free=pricing.prompt == 0.0 and pricing.completion == 0.0,
             pricing=pricing,
             supported_parameters=supported_parameters,
             capabilities=OpenRouterCapabilities(

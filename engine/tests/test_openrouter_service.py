@@ -130,6 +130,38 @@ class TestOpenRouterCatalogService:
         assert first.details_path == "/api/v1/models/openai/gpt-5.5/endpoints"
         assert result.models[1].is_free is True
 
+    async def test_missing_pricing_is_not_marked_free(self) -> None:
+        fetcher = _SequenceFetcher(
+            [
+                _FetchResult(
+                    status_code=200,
+                    payload={
+                        "data": [
+                            {
+                                "id": "meta/unknown-pricing",
+                                "name": "Unknown Pricing",
+                                "description": "Pricing fields are unavailable",
+                                "pricing": {},
+                                "top_provider": {
+                                    "context_length": 8192,
+                                    "max_completion_tokens": 1024,
+                                    "is_moderated": False,
+                                },
+                            }
+                        ]
+                    },
+                )
+            ]
+        )
+        svc = OpenRouterCatalogService(_settings(), fetcher=fetcher, ttl_seconds=60)
+
+        result = await svc.list_models()
+
+        assert result.count == 1
+        assert result.models[0].pricing.prompt is None
+        assert result.models[0].pricing.completion is None
+        assert result.models[0].is_free is False
+
     async def test_catalog_uses_ttl_cache(self) -> None:
         now = 100.0
 

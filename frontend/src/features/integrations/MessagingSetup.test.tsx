@@ -195,10 +195,7 @@ describe("MessagingSetup", () => {
 
     await screen.findByDisplayValue("openrouter/qwen/qwen3-coder-flash")
     await user.clear(screen.getByLabelText("Default model"))
-    await user.type(
-      screen.getByLabelText("Default model"),
-      "openrouter/qwen/qwen3-32b"
-    )
+    await user.type(screen.getByLabelText("Default model"), "qwen/qwen3-32b")
     await user.type(screen.getByLabelText("API key"), "sk-or-test-123")
     await user.click(
       screen.getByLabelText("Persist these settings to the server .env file for restarts")
@@ -227,6 +224,7 @@ describe("MessagingSetup", () => {
       default_model: "openrouter/qwen/qwen3-32b",
       openrouter_api_key: "sk-or-test-123"
     })
+    expect(screen.getByLabelText("Default model")).toHaveValue("openrouter/qwen/qwen3-32b")
 
     expect(
       await screen.findByText(
@@ -244,6 +242,8 @@ describe("MessagingSetup", () => {
     await user.click(screen.getByRole("button", { name: "Show advanced settings" }))
     await user.clear(screen.getByLabelText("Base URL"))
     await user.type(screen.getByLabelText("Base URL"), "https://example.com/api/v1")
+    await user.clear(screen.getByLabelText("Default model"))
+    await user.type(screen.getByLabelText("Default model"), "qwen/qwen3-32b")
     await user.type(screen.getByLabelText("API key"), "sk-or-probe-123")
     await user.click(screen.getByRole("button", { name: "Test connection" }))
 
@@ -268,7 +268,7 @@ describe("MessagingSetup", () => {
 
     expect(probeBody.openrouter_api_key).toBe("sk-or-probe-123")
     expect(probeBody.openrouter_base_url).toBe("https://example.com/api/v1")
-    expect(probeBody.default_model).toBe("openrouter/qwen/qwen3-coder-flash")
+    expect(probeBody.default_model).toBe("openrouter/qwen/qwen3-32b")
 
     expect(
       await screen.findByText(

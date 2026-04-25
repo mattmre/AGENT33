@@ -6,6 +6,7 @@ import {
     filterOpenRouterModels,
     formatOpenRouterNumber,
     getOpenRouterRecommendedModel,
+    normalizeLikelyOpenRouterModelRef,
     parseOpenRouterModels
 } from "../../lib/openrouterModels";
 
@@ -36,7 +37,9 @@ function getInitialChatModel(): string {
     if (typeof window === "undefined") {
         return "";
     }
-    return window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || "";
+    return normalizeLikelyOpenRouterModelRef(
+        window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || ""
+    );
 }
 
 function extractResultMessage(payload: unknown, fallback: string): string {
@@ -182,24 +185,25 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
         scrollToBottom();
     }, [messages]);
 
-    useEffect(() => {
-        window.localStorage.setItem(CHAT_MODEL_STORAGE_KEY, selectedModel);
-    }, [selectedModel]);
-
     const filteredModelCatalog = useMemo(
         () => filterOpenRouterModels(modelCatalog, modelSearch),
         [modelCatalog, modelSearch]
     );
     const visibleModelCatalog = filteredModelCatalog.slice(0, 8);
     const trimmedSelectedModel = selectedModel.trim();
+    const normalizedSelectedModel = normalizeLikelyOpenRouterModelRef(trimmedSelectedModel);
     const selectedCatalogModel = useMemo(
-        () => modelCatalog.find((model) => model.id === trimmedSelectedModel) || null,
-        [modelCatalog, trimmedSelectedModel]
+        () => modelCatalog.find((model) => model.id === normalizedSelectedModel) || null,
+        [modelCatalog, normalizedSelectedModel]
     );
     const selectedRecommendedModel = useMemo(
-        () => getOpenRouterRecommendedModel(trimmedSelectedModel),
-        [trimmedSelectedModel]
+        () => getOpenRouterRecommendedModel(normalizedSelectedModel),
+        [normalizedSelectedModel]
     );
+
+    useEffect(() => {
+        window.localStorage.setItem(CHAT_MODEL_STORAGE_KEY, normalizedSelectedModel);
+    }, [normalizedSelectedModel]);
 
     useEffect(() => {
         if (showSettingsModal && activeSettingsTab === "model" && !modelCatalogLoaded && !modelCatalogLoading) {
@@ -245,7 +249,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
             messages: chatMessages,
             temperature
         };
-        const model = selectedModel.trim();
+        const model = normalizeLikelyOpenRouterModelRef(selectedModel);
         if (model) {
             body.model = model;
         }
@@ -714,12 +718,12 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                             <span className="setting-label">Current selection</span>
                                             <strong className="chat-model-summary__value">
                                                 {trimmedSelectedModel
-                                                    ? selectedCatalogModel?.name || trimmedSelectedModel
+                                                    ? selectedCatalogModel?.name || normalizedSelectedModel
                                                     : "Server default"}
                                             </strong>
                                             <span className="openrouter-model-id">
                                                 {trimmedSelectedModel
-                                                    ? trimmedSelectedModel
+                                                    ? normalizedSelectedModel
                                                     : "Uses the server default model configured for AGENT-33."}
                                             </span>
                                             {trimmedSelectedModel ? (
@@ -751,6 +755,11 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         type="text"
                                         value={selectedModel}
                                         onChange={(e) => setSelectedModel(e.target.value)}
+                                        onBlur={(e) =>
+                                            setSelectedModel(
+                                                normalizeLikelyOpenRouterModelRef(e.target.value)
+                                            )
+                                        }
                                         placeholder="Server default (e.g. openrouter/qwen/qwen3-coder-flash)"
                                         aria-describedby="chat-model-help"
                                     />
@@ -777,7 +786,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                         </div>
                                         <div className="openrouter-recommendation-list">
                                             {OPENROUTER_RECOMMENDED_MODELS.map((model) => {
-                                                const isSelected = trimmedSelectedModel === model.id;
+                                                const isSelected = normalizedSelectedModel === model.id;
                                                 return (
                                                     <button
                                                         key={model.id}
@@ -855,7 +864,7 @@ export function ChatInterface({ token, apiKey }: ChatInterfaceProps): JSX.Elemen
                                     {visibleModelCatalog.length > 0 ? (
                                         <ul className="openrouter-model-list chat-model-list" aria-label="OpenRouter chat model results">
                                             {visibleModelCatalog.map((model) => {
-                                                const isSelected = trimmedSelectedModel === model.id;
+                                                const isSelected = normalizedSelectedModel === model.id;
                                                 const recommendedModel = getOpenRouterRecommendedModel(model.id);
                                                 return (
                                                     <li

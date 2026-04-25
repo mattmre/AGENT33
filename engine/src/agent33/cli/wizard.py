@@ -218,6 +218,7 @@ class WizardResult:
     ollama_base_url: str | None = None
     api_key_set: bool = False
     entered_api_key: str | None = None  # key user explicitly typed (not from env)
+    llm_test_ready: bool = False
     template: str | None = None
     env_path: Path = field(default_factory=lambda: Path(".env.local"))
     env_written: bool = False
@@ -353,6 +354,7 @@ class FirstRunWizard:
             key = self._io.secret("  Paste your OpenRouter API key").strip()
             effective_key = key or existing_key
             result.api_key_set = bool(effective_key)
+            result.llm_test_ready = result.api_key_set
             if result.api_key_set:
                 result.llm_model = "openrouter/auto"
             if key:
@@ -369,6 +371,7 @@ class FirstRunWizard:
             key = self._io.secret("  Paste your OpenAI API key").strip()
             effective_key = key or existing_key
             result.api_key_set = bool(effective_key)
+            result.llm_test_ready = result.api_key_set
             if result.api_key_set:
                 result.llm_model = "gpt-4o-mini"
             if key:
@@ -392,11 +395,13 @@ class FirstRunWizard:
                     model = _pick_ollama_model()
                     self._io.info(f"  Using model: {model}")
                     result.llm_model = model
+                    result.llm_test_ready = True
                 except Exception:
                     self._io.info(
                         "  (Could not detect Ollama models — will use llama3.2:3b as default)"
                     )
                     result.llm_model = "llama3.2:3b"
+                    result.llm_test_ready = False
             result.llm_provider = "ollama"
 
         else:
@@ -423,6 +428,12 @@ class FirstRunWizard:
         )
         if no_provider or provider_needs_key:
             self._io.info("  Skipping test invocation (no LLM configured).")
+            result.steps_completed.append("test_invocation_skipped")
+            return
+        if result.llm_provider == "ollama" and not result.llm_test_ready:
+            self._io.info(
+                "  Skipping test invocation (no usable local Ollama runtime/model detected)."
+            )
             result.steps_completed.append("test_invocation_skipped")
             return
 
@@ -524,7 +535,7 @@ def _pick_ollama_model() -> str:
         timeout=10,
     )
     if proc.returncode != 0 or not proc.stdout.strip():
-        return "llama3.2:3b"
+        raise RuntimeError("Could not detect local Ollama models")
 
     lines = proc.stdout.strip().splitlines()[1:]  # skip header
     pulled = [ln.split()[0] for ln in lines if ln.strip()]
@@ -535,7 +546,10 @@ def _pick_ollama_model() -> str:
         if pref in pulled:
             return pref
 
-    return pulled[0] if pulled else "llama3.2:3b"
+    if pulled:
+        return pulled[0]
+
+    raise RuntimeError("No local Ollama models detected")
 
 
 def _stream_test_response(result: WizardResult, io: WizardIO) -> None:

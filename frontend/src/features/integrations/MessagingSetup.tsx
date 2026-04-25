@@ -7,6 +7,7 @@ import {
   filterOpenRouterModels,
   formatOpenRouterNumber,
   getOpenRouterRecommendedModel,
+  normalizeLikelyOpenRouterModelRef,
   parseOpenRouterModels
 } from "../../lib/openrouterModels"
 
@@ -144,7 +145,9 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
 
   return {
     baseline: {
-      defaultModel: readString(llm.default_model) || readString(ollama.default_model),
+      defaultModel: normalizeLikelyOpenRouterModelRef(
+        readString(llm.default_model) || readString(ollama.default_model)
+      ),
       baseUrl:
         readString(llm.openrouter_base_url) || DEFAULT_OPENROUTER_BASELINE.baseUrl,
       siteUrl:
@@ -318,9 +321,10 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
 
   const visibleModels = filteredModels.slice(0, 12)
   const trimmedDefaultModel = openRouterForm.defaultModel.trim()
+  const normalizedDefaultModel = normalizeLikelyOpenRouterModelRef(trimmedDefaultModel)
   const selectedRecommendedModel = useMemo(() => {
-    return getOpenRouterRecommendedModel(trimmedDefaultModel)
-  }, [trimmedDefaultModel])
+    return getOpenRouterRecommendedModel(normalizedDefaultModel)
+  }, [normalizedDefaultModel])
 
   function handlePlaceholderInputChange(platform: string, value: string): void {
     setPlaceholderInputs((currentValues) => ({
@@ -346,7 +350,7 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
 
   function buildConfigChanges(): Record<string, unknown> {
     const normalizedForm = {
-      defaultModel: openRouterForm.defaultModel.trim(),
+      defaultModel: normalizeLikelyOpenRouterModelRef(openRouterForm.defaultModel),
       baseUrl: normalizeConfiguredValue(
         openRouterForm.baseUrl,
         DEFAULT_OPENROUTER_BASELINE.baseUrl
@@ -366,7 +370,7 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
     }
 
     const normalizedBaseline = {
-      defaultModel: baseline.defaultModel.trim(),
+      defaultModel: normalizeLikelyOpenRouterModelRef(baseline.defaultModel),
       baseUrl: normalizeConfiguredValue(baseline.baseUrl, DEFAULT_OPENROUTER_BASELINE.baseUrl),
       siteUrl: normalizeConfiguredValue(baseline.siteUrl, DEFAULT_OPENROUTER_BASELINE.siteUrl),
       appName: normalizeConfiguredValue(baseline.appName, DEFAULT_OPENROUTER_BASELINE.appName),
@@ -424,9 +428,9 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
       )
     }
 
-    const trimmedModel = openRouterForm.defaultModel.trim()
-    if (trimmedModel) {
-      payload.default_model = trimmedModel
+    const normalizedModel = normalizeLikelyOpenRouterModelRef(openRouterForm.defaultModel)
+    if (normalizedModel) {
+      payload.default_model = normalizedModel
     }
 
     const trimmedApiKey = openRouterForm.apiKey.trim()
@@ -491,7 +495,7 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
       }
 
       const nextBaseline: OpenRouterBaseline = {
-        defaultModel: openRouterForm.defaultModel.trim(),
+        defaultModel: normalizeLikelyOpenRouterModelRef(openRouterForm.defaultModel),
         baseUrl: normalizeConfiguredValue(
           openRouterForm.baseUrl,
           DEFAULT_OPENROUTER_BASELINE.baseUrl
@@ -677,6 +681,12 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
                 onChange={(event) =>
                   handleOpenRouterFieldChange("defaultModel", event.target.value)
                 }
+                onBlur={(event) =>
+                  handleOpenRouterFieldChange(
+                    "defaultModel",
+                    normalizeLikelyOpenRouterModelRef(event.target.value)
+                  )
+                }
                 placeholder="openrouter/qwen/qwen3-coder-flash"
                 aria-describedby="openrouter-model-help"
               />
@@ -721,7 +731,7 @@ export function MessagingSetup({ token = "", apiKey = "" }: MessagingSetupProps)
             </div>
             <div className="openrouter-recommendation-list">
               {OPENROUTER_RECOMMENDED_MODELS.map((model) => {
-                const isSelected = trimmedDefaultModel === model.id
+                const isSelected = normalizedDefaultModel === model.id
                 return (
                   <button
                     key={model.id}

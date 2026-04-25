@@ -50,12 +50,36 @@ export const OPENROUTER_RECOMMENDED_MODELS: OpenRouterRecommendedModel[] = [
   }
 ]
 
+const EXPLICIT_PROVIDER_MODEL_PREFIXES = new Set([
+  "airllm",
+  "llamacpp",
+  "ollama",
+  "openai",
+  "openrouter"
+])
+
 export function toOpenRouterModelRef(modelId: string): string {
   const normalized = modelId.trim()
   if (!normalized) {
     return ""
   }
   return normalized.startsWith("openrouter/") ? normalized : `openrouter/${normalized}`
+}
+
+export function normalizeLikelyOpenRouterModelRef(modelId: string): string {
+  const normalized = modelId.trim()
+  if (!normalized) {
+    return ""
+  }
+  if (normalized === "auto") {
+    return "openrouter/auto"
+  }
+  if (!normalized.includes("/") || normalized.startsWith("openrouter/")) {
+    return normalized
+  }
+
+  const [prefix] = normalized.split("/", 1)
+  return EXPLICIT_PROVIDER_MODEL_PREFIXES.has(prefix) ? normalized : `openrouter/${normalized}`
 }
 
 const OPENROUTER_RECOMMENDED_MODELS_BY_ID = new Map(

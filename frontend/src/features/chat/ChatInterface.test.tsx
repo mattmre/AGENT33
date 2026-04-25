@@ -207,6 +207,50 @@ describe("ChatInterface", () => {
     expect(body.model).toBe("openrouter/auto")
   })
 
+  it("normalizes likely OpenRouter catalog ids before sending chat requests", async () => {
+    const user = userEvent.setup()
+
+    apiRequestMock.mockImplementation(async (args: { path: string }) => {
+      if (args.path === "/v1/openrouter/models") {
+        return {
+          ok: false,
+          status: 503,
+          data: { message: "Catalog unavailable" }
+        }
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        data: { choices: [{ message: { content: "Using the normalized model." } }] }
+      }
+    })
+
+    render(<ChatInterface token="jwt" apiKey="" />)
+
+    await user.click(screen.getByTitle("Chat Settings"))
+    await user.click(screen.getByText("Model & Provider"))
+    await screen.findByText("Catalog unavailable")
+    await user.type(screen.getByLabelText("Model override"), "qwen/qwen3-32b")
+
+    const textarea = screen.getByPlaceholderText(
+      "Message AGENT-33 (or click the mic to speak)..."
+    )
+    await user.type(textarea, "Use OpenRouter catalog id")
+    await user.click(screen.getByTitle("Send (Enter)"))
+
+    const chatCall = apiRequestMock.mock.calls.find(
+      ([args]) => args.path === "/v1/chat/completions"
+    )
+    if (!chatCall) {
+      throw new Error("Expected a chat completion request")
+    }
+
+    const body = JSON.parse(chatCall[0].body as string)
+    expect(body.model).toBe("openrouter/qwen/qwen3-32b")
+    expect(screen.getByLabelText("Model override")).toHaveValue("openrouter/qwen/qwen3-32b")
+  })
+
   it("loads the live model catalog and applies a selected model override", async () => {
     const user = userEvent.setup()
 

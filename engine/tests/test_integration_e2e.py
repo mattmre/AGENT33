@@ -1144,7 +1144,16 @@ class TestContextManagerInToolLoop:
 
         call_count = 0
 
-        async def mock_complete(messages, *, model, temperature=0.7, max_tokens=None, tools=None):
+        async def mock_complete(
+            messages,
+            *,
+            model,
+            temperature=0.7,
+            max_tokens=None,
+            tools=None,
+            allow_fallback=False,
+        ):
+            del allow_fallback
             nonlocal call_count
             call_count += 1
             if call_count <= 3:
