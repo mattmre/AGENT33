@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from agent33.evaluation.ppack_ab_service import PPackABService
+    from agent33.llm.router import ModelRouter
     from agent33.outcomes.service import OutcomesService
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -31,8 +32,13 @@ from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
 from agent33.config import settings
 from agent33.evaluation.ppack_ab_models import PPackABAssignment
-from agent33.llm.router import ModelRouter
-from agent33.llm.runtime_config import build_model_router, resolve_default_model
+from agent33.llm.runtime_config import (
+    build_model_router,
+    resolve_default_model,
+)
+from agent33.llm.runtime_config import (
+    llamacpp_enabled as _runtime_llamacpp_enabled,
+)
 from agent33.observability.effort_telemetry import (
     EffortTelemetryExporter,
     EffortTelemetryExportError,
@@ -52,6 +58,11 @@ logger = logging.getLogger(__name__)
 def _default_agent_model() -> str:
     """Return the default model name for agent invocations."""
     return resolve_default_model()
+
+
+def _llamacpp_enabled() -> bool:
+    """Backwards-compatible llama.cpp helper used by provider tests."""
+    return _runtime_llamacpp_enabled()
 
 
 _model_router = build_model_router()

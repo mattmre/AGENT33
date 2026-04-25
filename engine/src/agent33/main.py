@@ -50,10 +50,10 @@ from agent33.api.routes import (
     migrations,
     moa,
     multimodal,
+    openrouter,
     operations,
     operations_hub,
     operator,
-    openrouter,
     outcomes,
     p69b,
     packs,
@@ -394,7 +394,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("connector_metrics_and_registry_initialized")
 
     # -- Agent runtime / workflow integration ------------------------------
-    from agent33.llm.router import ModelRouter
     from agent33.workflows.actions.invoke_agent import (
         register_agent,
         set_definition_registry,

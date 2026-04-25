@@ -28,7 +28,8 @@ try:
     from agent33.env.detect import detect_env
 except ImportError:  # pragma: no cover
 
-    def detect_env() -> object:  # type: ignore[misc]
+    def detect_env(force_refresh: bool = False) -> object:  # type: ignore[misc]
+        del force_refresh
         raise ImportError("agent33.env.detect not available")
 
 
@@ -159,6 +160,14 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
 
+
+def _detect_environment() -> object:
+    """Run environment detection with a fresh probe when supported."""
+    try:
+        return detect_env(force_refresh=True)
+    except TypeError:
+        return detect_env()
+
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
@@ -241,7 +250,7 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         try:
-            env = detect_env()
+            env = _detect_environment()
             hw = env.hardware
             tools = env.tools
             rec = env.selected_model
@@ -372,7 +381,9 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         no_provider = result.llm_provider == "skip"
-        provider_needs_key = result.llm_provider in {"openai", "openrouter"} and not result.api_key_set
+        provider_needs_key = (
+            result.llm_provider in {"openai", "openrouter"} and not result.api_key_set
+        )
         if no_provider or provider_needs_key:
             self._io.info("  Skipping test invocation (no LLM configured).")
             result.steps_completed.append("test_invocation_skipped")

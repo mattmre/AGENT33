@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
 
-from agent33.config import Settings
+if TYPE_CHECKING:
+    from agent33.config import Settings
 
 
 class OpenRouterCatalogError(RuntimeError):
@@ -205,7 +207,10 @@ class OpenRouterCatalogService:
         )
         return response
 
-    async def probe(self, request: OpenRouterProbeRequest | None = None) -> OpenRouterProbeResponse:
+    async def probe(
+        self,
+        request: OpenRouterProbeRequest | None = None,
+    ) -> OpenRouterProbeResponse:
         """Run public and authenticated OpenRouter checks for setup UX."""
         checked_at = datetime.now(UTC)
         probe_config = self._effective_probe_config(request)
@@ -238,7 +243,11 @@ class OpenRouterCatalogService:
                 message="OpenRouter catalog is unreachable",
             )
 
-        items = public_result.payload.get("data") if isinstance(public_result.payload, dict) else None
+        items = (
+            public_result.payload.get("data")
+            if isinstance(public_result.payload, dict)
+            else None
+        )
         catalog_count = len(items) if isinstance(items, list) else 0
         catalog_check = OpenRouterProbeCheck(
             status="ok",
@@ -258,7 +267,10 @@ class OpenRouterCatalogService:
                     ok=False,
                     detail="OPENROUTER_API_KEY is not configured",
                 ),
-                message="OpenRouter catalog is reachable. Configure an API key to enable authenticated use.",
+                message=(
+                    "OpenRouter catalog is reachable. Configure an API key "
+                    "to enable authenticated use."
+                ),
             )
 
         result = await self._fetcher(
@@ -415,7 +427,9 @@ class OpenRouterCatalogService:
         ]
         input_modalities = self._as_str_list(architecture.get("input_modalities"))
         output_modalities = self._as_str_list(architecture.get("output_modalities"))
-        top_provider_raw = raw.get("top_provider") if isinstance(raw.get("top_provider"), dict) else {}
+        top_provider_raw = (
+            raw.get("top_provider") if isinstance(raw.get("top_provider"), dict) else {}
+        )
         top_provider = OpenRouterTopProvider(
             context_length=self._as_int(top_provider_raw.get("context_length")),
             max_completion_tokens=self._as_int(top_provider_raw.get("max_completion_tokens")),

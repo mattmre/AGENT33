@@ -13,7 +13,11 @@ Tests verify:
 
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
+
+import pytest
 
 from agent33.cli.wizard import (
     QUICK_TEMPLATES,
@@ -25,10 +29,8 @@ from agent33.cli.wizard import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
     from pathlib import Path
-
-    import pytest
 
 # ---------------------------------------------------------------------------
 # Mock I/O helper
@@ -73,12 +75,29 @@ class MockIO:
         except StopIteration:
             return ""
 
+@pytest.fixture(autouse=True)
+def _restore_llm_api_keys() -> Generator[None, None, None]:
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+    try:
+        yield
+    finally:
+        _restore_env_var("OPENAI_API_KEY", openai_api_key)
+        _restore_env_var("OPENROUTER_API_KEY", openrouter_api_key)
+
 
 def _wizard(answers: list[str], tmp_path: Path) -> WizardResult:
     """Convenience: run the wizard with scripted answers into a tmp env file."""
     io = MockIO(answers)
     w = FirstRunWizard(io=io, env_path=tmp_path / ".env.local")
     return w.run()
+
+
+def _restore_env_var(name: str, value: str | None) -> None:
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +137,31 @@ def test_wizard_chooses_minimal_profile(tmp_path: Path, monkeypatch: pytest.Monk
         tmp_path=tmp_path,
     )
     assert result.profile == "minimal"
+
+
+def test_wizard_forces_fresh_environment_detection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[bool] = []
+
+    def _record_detect(*, force_refresh: bool = False) -> object:
+        captured.append(force_refresh)
+        return SimpleNamespace(
+            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
+            tools=SimpleNamespace(ollama_available=True, docker_available=True),
+            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
+            mode="standard",
+        )
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _record_detect, raising=False)
+
+    result = _wizard(
+        answers=["developer", "skip", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+
+    assert captured == [True]
+    assert result.profile == "developer"
 
 
 # ---------------------------------------------------------------------------

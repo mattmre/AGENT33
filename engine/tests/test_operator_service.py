@@ -12,9 +12,9 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
-from agent33.backup.manifest import BackupSummary
 from pydantic import SecretStr
 
+from agent33.backup.manifest import BackupSummary
 from agent33.config import Settings
 from agent33.operator.models import CheckStatus, ResetTarget
 from agent33.operator.service import OperatorService, _mask_db_url

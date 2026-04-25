@@ -8,8 +8,8 @@ from pydantic import SecretStr
 
 from agent33.config import Settings
 from agent33.services.openrouter_catalog import (
-    OpenRouterCatalogService,
     OpenRouterCatalogError,
+    OpenRouterCatalogService,
     OpenRouterProbeRequest,
     _FetchResult,
 )
