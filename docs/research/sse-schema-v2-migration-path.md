@@ -4,7 +4,7 @@
 **Slice**: Session 131 T3  
 **Branch**: session131-t3-sse-docs  
 **Prepared**: 2026-04-20  
-**Status**: Authoritative pre-work — v2 MUST NOT begin before this document is published and reviewed
+**Status**: Authoritative migration contract — backend foundation may proceed only behind an opt-in flag + kill switch while strict rejection remains in force
 
 ---
 
@@ -17,6 +17,11 @@ single line of v2 code is written.
 
 **Gate**: v2 work is blocked until this document is reviewed. See locked decision #19 in
 `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+
+**Backend foundation note**: the initial implementation slice keeps v1 as the default, adds
+`SSE_SCHEMA_V2_ENABLED=false`, honors `/tmp/agent33_disable_sse_v2` as an emergency kill switch,
+and pins one schema version per workflow run so sync/replay/live/heartbeat events never mix v1
+and v2 payloads within the same stream.
 
 ---
 

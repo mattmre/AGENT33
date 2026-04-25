@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent33.api.routes.workflow_sse import stream_workflow_events
+from agent33.config import settings
 from agent33.main import app
 from agent33.security.auth import create_access_token
 from agent33.workflows.events import WorkflowEvent, WorkflowEventType
@@ -216,6 +217,60 @@ class TestWorkflowSSEEndpoint:
                 "updated_at": event["data"]["updated_at"],
             },
         }
+
+    @pytest.mark.asyncio
+    async def test_sse_endpoint_streams_v2_sync_event_when_enabled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", True)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: False,
+        )
+        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
+        await manager.register_run(
+            "run-v2-sync",
+            "wf-v2-sync",
+            owner_subject="workflow-sse-user",
+        )
+        _install_manager(manager)
+
+        request = _mock_request(manager)
+        sse_response = await stream_workflow_events("run-v2-sync", request)
+        try:
+            event = await _read_sse_chunk(sse_response)
+        finally:
+            await _close_sse_response(sse_response)
+
+        assert event["schema_version"] == 2
+
+    @pytest.mark.asyncio
+    async def test_sse_endpoint_kill_switch_forces_v1_when_flag_enabled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "sse_schema_v2_enabled", True)
+        monkeypatch.setattr(
+            "agent33.workflows.events.sse_schema_v2_kill_switch_active",
+            lambda: True,
+        )
+        manager = WorkflowWSManager(heartbeat_interval_seconds=60)
+        await manager.register_run(
+            "run-kill-switch-sync",
+            "wf-kill-switch-sync",
+            owner_subject="workflow-sse-user",
+        )
+        _install_manager(manager)
+
+        request = _mock_request(manager)
+        sse_response = await stream_workflow_events("run-kill-switch-sync", request)
+        try:
+            event = await _read_sse_chunk(sse_response)
+        finally:
+            await _close_sse_response(sse_response)
+
+        assert event["schema_version"] == 1
 
     @pytest.mark.asyncio
     async def test_sse_endpoint_streams_live_events_and_cleans_up_on_disconnect(self) -> None:

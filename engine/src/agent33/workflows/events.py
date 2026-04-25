@@ -6,19 +6,40 @@ import json
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
+
+from agent33.config import settings
 
 # ---------------------------------------------------------------------------
 # Schema versioning
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION: int = 1
-"""The schema version emitted in every SSE event payload.
+SCHEMA_VERSION_V1: int = 1
+SCHEMA_VERSION_V2: int = 2
+CURRENT_SCHEMA_VERSION: int = SCHEMA_VERSION_V1
+"""The default schema version expected by existing clients.
 
 Clients that receive an event with a different ``schema_version`` must
 immediately close the connection and raise :exc:`SchemaVersionMismatchError`.
 There is no graceful downgrade path.
 """
+
+SSE_SCHEMA_V2_KILL_SWITCH = Path("/tmp/agent33_disable_sse_v2")
+
+
+def sse_schema_v2_kill_switch_active() -> bool:
+    """Return ``True`` when the file-based SSE v2 kill switch is active."""
+    return SSE_SCHEMA_V2_KILL_SWITCH.exists()
+
+
+def resolve_active_schema_version() -> int:
+    """Resolve the schema version the backend should emit for new workflow runs."""
+    if sse_schema_v2_kill_switch_active():
+        return SCHEMA_VERSION_V1
+    if settings.sse_schema_v2_enabled:
+        return SCHEMA_VERSION_V2
+    return SCHEMA_VERSION_V1
 
 
 class SchemaVersionMismatchError(Exception):
@@ -85,7 +106,7 @@ class WorkflowEvent:
     step_id: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
     event_id: str | None = None
-    schema_version: int = CURRENT_SCHEMA_VERSION
+    schema_version: int = field(default_factory=resolve_active_schema_version)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dict suitable for JSON serialization."""
