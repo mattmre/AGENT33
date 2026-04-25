@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 import pytest
 from pydantic import SecretStr
 
+from agent33.api.routes import health as health_routes
 from agent33.config import settings
 from agent33.main import app
 
@@ -239,3 +240,32 @@ def test_health_degrades_when_required_embedding_model_is_missing(
 
     assert data["status"] == "degraded"
     assert data["required_services"]["ollama"] == "degraded"
+
+
+def test_default_provider_name_maps_claude_models_to_anthropic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(health_routes, "resolve_default_model", lambda: "claude-3-5-sonnet")
+    monkeypatch.setattr(health_routes, "llamacpp_enabled", lambda: False)
+
+    assert health_routes._default_provider_name() == "anthropic"
+
+
+def test_readyz_tracks_anthropic_runtime_dependencies(
+    client: TestClient,
+    health_http_state: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response_codes = health_http_state["response_codes"]
+    assert isinstance(response_codes, dict)
+    monkeypatch.setattr(health_routes, "resolve_default_model", lambda: "claude-3-5-sonnet")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    response_codes["https://api.anthropic.com/v1/models"] = 200
+    response_codes[f"{settings.runtime_ollama_base_url}/api/embed"] = 200
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert set(data["services"]) == {"anthropic", "ollama", "postgres", "redis", "nats"}

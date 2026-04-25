@@ -31,7 +31,7 @@ If you want a bundled Ollama service for this stack instead:
 
 ```bash
 docker compose --profile local-ollama up -d ollama
-docker compose exec ollama ollama pull llama3.2
+docker compose exec ollama ollama pull llama3.2:3b
 ```
 
 If your Ollama is running in another compose project/network (for example OpenClaw),

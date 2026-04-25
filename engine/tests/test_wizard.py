@@ -25,6 +25,7 @@ from agent33.cli.wizard import (
     FirstRunWizard,
     WizardResult,
     _build_env_lines,
+    _stream_test_response,
     _write_env,
 )
 
@@ -438,6 +439,21 @@ def test_wizard_env_contains_ollama_url_when_ollama_chosen(
     assert "DEFAULT_MODEL=llama3.2:3b" in content
 
 
+def test_wizard_env_preserves_custom_ollama_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
+    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
+    _wizard(
+        answers=["developer", "ollama", "no", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    content = (tmp_path / ".env.local").read_text()
+    assert "OLLAMA_BASE_URL=http://ollama.remote:11434" in content
+
+
 def test_wizard_env_contains_template_when_chosen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -570,6 +586,65 @@ def test_build_env_lines_ollama() -> None:
     joined = "\n".join(lines)
     assert "OLLAMA_BASE_URL=http://localhost:11434" in joined
     assert "DEFAULT_MODEL=llama3.1:8b" in joined
+
+
+def test_build_env_lines_ollama_reuses_existing_env_file_url(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env.local"
+    env_path.write_text("OLLAMA_BASE_URL=http://ollama.internal:11434\n", encoding="utf-8")
+    result = WizardResult(
+        profile="minimal",
+        llm_provider="ollama",
+        llm_model="llama3.2:3b",
+        env_path=env_path,
+    )
+    lines = _build_env_lines(result)
+    joined = "\n".join(lines)
+    assert "OLLAMA_BASE_URL=http://ollama.internal:11434" in joined
+
+
+def test_stream_test_response_ollama_uses_resolved_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"response": "hello"}
+
+    class FakeClient:
+        def __init__(self, *, timeout: int) -> None:
+            captured["timeout"] = timeout
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def post(self, url: str, json: dict[str, object]) -> FakeResponse:
+            captured["url"] = url
+            captured["json"] = json
+            return FakeResponse()
+
+    io = MockIO([])
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
+    monkeypatch.setattr("httpx.Client", FakeClient)
+
+    _stream_test_response(
+        WizardResult(llm_provider="ollama", llm_model="llama3.2:3b"),
+        io,
+    )
+
+    assert captured["url"] == "http://ollama.remote:11434/api/generate"
+    assert captured["json"] == {
+        "model": "llama3.2:3b",
+        "prompt": "What can you do? (answer in 2 sentences)",
+        "stream": False,
+    }
+    assert io.messages[-1] == "hello"
 
 
 def test_build_env_lines_with_template() -> None:

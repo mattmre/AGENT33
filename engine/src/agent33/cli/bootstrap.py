@@ -47,6 +47,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 # DEFAULT_MODEL=openrouter/auto
 # DEFAULT_MODEL=openrouter/openai/gpt-5.2
 DEFAULT_MODEL=llama3.2:3b
+OLLAMA_DEFAULT_MODEL=llama3.2:3b
 
 # Server
 HOST=0.0.0.0

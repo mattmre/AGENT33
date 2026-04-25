@@ -29,6 +29,8 @@ from agent33.cli.diagnose import (
 from agent33.cli.main import app
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pytest
 
 # ---------------------------------------------------------------------------
@@ -103,10 +105,10 @@ def test_check_port_in_use() -> None:
 
 
 def test_check_env_file_with_env_var(
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AGENT33_MODE", "lite")
     result = _check_env_file()
     assert result.status == Status.OK
@@ -114,24 +116,24 @@ def test_check_env_file_with_env_var(
 
 
 def test_check_env_file_with_dot_env(
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AGENT33_MODE", raising=False)
-    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.chdir(tmp_path)
     # Create a .env file in the cwd
-    (tmp_path / ".env").write_text("FOO=bar\n")  # type: ignore[operator]
+    (tmp_path / ".env").write_text("FOO=bar\n")
     result = _check_env_file()
     assert result.status == Status.OK
     assert ".env" in result.message
 
 
 def test_check_env_file_missing(
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AGENT33_MODE", raising=False)
-    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.chdir(tmp_path)
     result = _check_env_file()
     assert result.status == Status.WARN
     assert result.fix_hint != ""
@@ -213,14 +215,14 @@ def test_check_database_other_url() -> None:
 
 
 def test_check_pack_workspace_with_manifests(
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     packs_dir = tmp_path / "packs"
     pack_dir = packs_dir / "demo-pack"
     pack_dir.mkdir(parents=True)
     (pack_dir / "PACK.yaml").write_text("name: demo-pack\nversion: '1.0.0'\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
     monkeypatch.delenv("PACK_MARKETPLACE_REMOTE_SOURCES", raising=False)
 
@@ -230,12 +232,12 @@ def test_check_pack_workspace_with_manifests(
 
 
 def test_check_pack_workspace_invalid_remote_sources_warns(
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
-    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
     monkeypatch.setenv("PACK_MARKETPLACE_REMOTE_SOURCES", "{bad json")
 

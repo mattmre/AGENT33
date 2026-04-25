@@ -162,6 +162,7 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 ]
 
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 
 
 def _detect_environment(*, force_refresh: bool = False) -> EnvProfile:
@@ -170,6 +171,36 @@ def _detect_environment(*, force_refresh: bool = False) -> EnvProfile:
         return detect_env(force_refresh=force_refresh)
     except TypeError:
         return detect_env()
+
+
+def _existing_env_value(path: Path, key: str) -> str | None:
+    """Return the last assignment for ``key`` from an existing env file."""
+    if not path.exists():
+        return None
+
+    for raw_line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() == key:
+            return value.strip()
+
+    return None
+
+
+def _resolve_ollama_base_url(path: Path | None = None) -> str:
+    """Prefer explicit env/file Ollama URLs before falling back to localhost."""
+    env_value = os.environ.get("OLLAMA_BASE_URL", "").strip()
+    if env_value:
+        return env_value
+
+    if path is not None:
+        existing_value = _existing_env_value(path, "OLLAMA_BASE_URL")
+        if existing_value:
+            return existing_value
+
+    return _OLLAMA_DEFAULT_BASE_URL
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +215,7 @@ class WizardResult:
     profile: str = "developer"
     llm_provider: str = "skip"  # "openrouter" | "openai" | "ollama" | "skip"
     llm_model: str | None = None
+    ollama_base_url: str | None = None
     api_key_set: bool = False
     entered_api_key: str | None = None  # key user explicitly typed (not from env)
     template: str | None = None
@@ -347,6 +379,7 @@ class FirstRunWizard:
             result.llm_provider = "openai"
 
         elif choice == "ollama":
+            result.ollama_base_url = _resolve_ollama_base_url(self._env_path)
             ollama_ok = shutil.which("ollama") is not None
             if not ollama_ok:
                 self._io.info(
@@ -562,10 +595,13 @@ def _stream_test_response(result: WizardResult, io: WizardIO) -> None:
     elif result.llm_provider == "ollama":
         import httpx
 
+        base_url = (
+            result.ollama_base_url or _resolve_ollama_base_url(result.env_path)
+        ).rstrip("/")
         model = result.llm_model or "llama3.2:3b"
         with httpx.Client(timeout=60) as client:
             resp = client.post(
-                "http://localhost:11434/api/generate",
+                f"{base_url}/api/generate",
                 json={
                     "model": model,
                     "prompt": "What can you do? (answer in 2 sentences)",
@@ -598,7 +634,8 @@ def _build_env_lines(result: WizardResult) -> list[str]:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")
     elif result.llm_provider == "ollama":
-        lines.append("OLLAMA_BASE_URL=http://localhost:11434")
+        ollama_base_url = result.ollama_base_url or _resolve_ollama_base_url(result.env_path)
+        lines.append(f"OLLAMA_BASE_URL={ollama_base_url}")
         if result.llm_model:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")

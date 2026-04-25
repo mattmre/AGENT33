@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -15,6 +16,8 @@ from agent33.llm.runtime_config import llamacpp_enabled, resolve_default_model
 router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
 _HEALTHY_REQUIRED_STATES = {"ok", "configured"}
+_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+_ANTHROPIC_HEADERS = {"anthropic-version": "2023-06-01"}
 _MODEL_PREFIX_PROVIDER_MAP: tuple[tuple[str, str], ...] = (
     ("openrouter/", "openrouter"),
     ("openai/", "openai"),
@@ -23,7 +26,7 @@ _MODEL_PREFIX_PROVIDER_MAP: tuple[tuple[str, str], ...] = (
     ("gpt-", "openai"),
     ("o1", "openai"),
     ("o3", "openai"),
-    ("claude-", "openai"),
+    ("claude-", "anthropic"),
     ("ft:gpt-", "openai"),
     ("airllm-", "airllm"),
 )
@@ -44,7 +47,7 @@ def _default_provider_name() -> str:
 
     if "/" in default_model:
         provider_name, _model_name = default_model.split("/", 1)
-        if provider_name in {"openai", "openrouter", "ollama", "llamacpp", "airllm"}:
+        if provider_name in {"anthropic", "openai", "openrouter", "ollama", "llamacpp", "airllm"}:
             return provider_name
 
     for prefix, provider_name in _MODEL_PREFIX_PROVIDER_MAP:
@@ -59,7 +62,7 @@ def _required_runtime_services() -> set[str]:
     required = {"redis", "postgres", "nats"}
     provider_name = _default_provider_name()
 
-    if provider_name in {"ollama", "openai", "openrouter"}:
+    if provider_name in {"anthropic", "ollama", "openai", "openrouter"}:
         required.add(provider_name)
 
     if settings.embedding_provider == "ollama":
@@ -108,6 +111,11 @@ async def _probe_ollama(required_services: set[str]) -> str:
 def _required_service_healthy(status: str) -> bool:
     """Return True when a required dependency is in an acceptable state."""
     return status in _HEALTHY_REQUIRED_STATES
+
+
+def _anthropic_api_key() -> str:
+    """Return the Anthropic key when present in the process environment."""
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
 
 async def _core_dependency_checks(required_services: set[str] | None = None) -> dict[str, str]:
@@ -200,6 +208,21 @@ async def health(request: Request = None) -> dict[str, Any]:  # type: ignore[ass
                 checks["openrouter"] = "configured"
         else:
             checks["openrouter"] = "unconfigured"
+
+        anthropic_api_key = _anthropic_api_key()
+        if anthropic_api_key:
+            if "anthropic" in required_services:
+                checks["anthropic"] = await _probe_catalog(
+                    _ANTHROPIC_BASE_URL,
+                    {
+                        **_ANTHROPIC_HEADERS,
+                        "x-api-key": anthropic_api_key,
+                    },
+                )
+            else:
+                checks["anthropic"] = "configured"
+        else:
+            checks["anthropic"] = "unconfigured"
 
         if settings.elevenlabs_api_key.get_secret_value():
             if "elevenlabs" in required_services:
@@ -337,6 +360,19 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
             )
         else:
             checks["openrouter"] = "unconfigured"
+
+    if "anthropic" in required_services:
+        anthropic_api_key = _anthropic_api_key()
+        if anthropic_api_key:
+            checks["anthropic"] = await _probe_catalog(
+                _ANTHROPIC_BASE_URL,
+                {
+                    **_ANTHROPIC_HEADERS,
+                    "x-api-key": anthropic_api_key,
+                },
+            )
+        else:
+            checks["anthropic"] = "unconfigured"
 
     if "jina" in required_services:
         checks["jina"] = (
