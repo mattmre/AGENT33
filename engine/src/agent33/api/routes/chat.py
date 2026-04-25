@@ -39,6 +39,14 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
+def _resolve_model_router(request: Request):
+    """Return the app router when it exposes the required route API."""
+    model_router = getattr(request.app.state, "model_router", None)
+    if callable(getattr(model_router, "resolve", None)):
+        return model_router
+    return build_model_router()
+
+
 @router.post("/chat/completions")
 async def chat_completions(request: Request) -> Response:
     """Proxy chat completions to the locally configured orchestration engine."""
@@ -57,7 +65,7 @@ async def chat_completions(request: Request) -> Response:
                     detail=f"Input rejected: {', '.join(scan.threats)}",
                 )
 
-    model_router = getattr(request.app.state, "model_router", None) or build_model_router()
+    model_router = _resolve_model_router(request)
 
     try:
         resolution = model_router.resolve(model)

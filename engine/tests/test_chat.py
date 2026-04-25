@@ -338,3 +338,65 @@ def test_chat_completions_explicit_openrouter_model_does_not_fallback(
         r.json()["error"]["message"]
         == "No allowed providers are available for the selected model."
     )
+
+
+def test_chat_completions_rebuilds_invalid_state_model_router(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    upstream_payload = {
+        "id": "chatcmpl-rebuilt-router",
+        "object": "chat.completion",
+        "created": 1700000002,
+        "model": "qwen3-coder",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "Recovered router"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9},
+    }
+    mock_request = MagicMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.headers = {"content-type": "application/json"}
+    mock_response.content = json.dumps(upstream_payload).encode("utf-8")
+    mock_response.aread = AsyncMock(return_value=mock_response.content)
+
+    rebuilt_router = ModelRouter(default_provider="openai")
+    rebuilt_router.register(
+        "openai",
+        OpenAIProvider(
+            api_key="sk-test",
+            base_url="https://fallback.test/v1",
+            default_model="gpt-4o-mini",
+        ),
+    )
+    monkeypatch.setattr(client.app.state, "model_router", "mock-router", raising=False)
+
+    with (
+        patch(
+            "agent33.api.routes.chat.build_model_router",
+            return_value=rebuilt_router,
+        ) as mock_build_router,
+        patch("agent33.api.routes.chat.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_client = MagicMock()
+        mock_client.build_request.return_value = mock_request
+        mock_client.send = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_cls.return_value = mock_client
+
+        r = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+
+    assert r.status_code == 200
+    assert r.json() == upstream_payload
+    mock_build_router.assert_called_once()
+    build_call = mock_client.build_request.call_args
+    assert build_call.args[:2] == ("POST", "https://fallback.test/v1/chat/completions")
