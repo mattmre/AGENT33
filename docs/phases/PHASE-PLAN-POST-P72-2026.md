@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#427` on 2026-04-25, execution posture updated after the Sessions 130-132 merge wave
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#433` on 2026-04-25, with the tracked post-merge follow-up wave closed after final fresh-main verification
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,7 +15,7 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation, P-ENV v2, remediation, marketplace/community submissions, and the Sessions 131-132 follow-up wave are merged through `#427`; the next queue is post-merge hardening and integration work |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation, P-ENV v2, remediation, marketplace/community submissions, and the tracked follow-up wave are merged through `#433`; no queued slices remain in this plan |
 
 ## Current Execution Queue
 
@@ -24,19 +24,21 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | 1 | Post-merge review remediation (`#406`-`#412`) | Complete | Lifecycle cleanup, P-ENV/docs reliability, P-PACK hardening, and operator/docs queue sync are merged on `main` |
 | 2 | POST-CLUSTER — Marketplace + community submissions (`#413`-`#414`) | Complete | UI browse/install flow plus community submission/resubmission are merged and no longer the active queue |
 | 3 | Sessions 131-132 merge wave (`#415`-`#427`) | Complete | P68-Lite monitoring, P69b persistence, SSE v2 migration prep, security scan hardening, ingestion sprints 0-5, research preservation, OpenRouter integration, and mailbox persistence are merged on `main` |
-| 4 | Ingestion hardening follow-up | Active next slice | Start from fresh `origin/main` after this verification pass |
-| 5 | Operator UX depth | Queued | Follows the ingestion hardening slice |
-| 6 | SSE schema v2 | Queued | Must respect the published migration contract before implementation |
-| 7 | Skills-system integration | Queued | Resume after the SSE planning/hardening queue |
-| 8 | SkillsBench follow-up | Queued | Resume after the skills-system integration slice |
+| 4 | Ingestion hardening follow-up (`#429`) | Complete | Journal retention/expiry plus persistent task metrics are merged on `main` |
+| 5 | Operator UX depth (`#430`) | Complete | Review-history UI and notification hooks are merged on `main` |
+| 6 | SSE schema v2 backend foundation (`#431`) | Complete | Version gating, kill switch, and pinned schema scaffolding are merged on `main` |
+| 7 | Skills-system integration (`#432`) | Complete | Published ingestion skills register into the shared runtime registry on promote/hydration |
+| 8 | SkillsBench smoke regression reporting (`#433`) | Complete | CTRF comparison/reporting is merged into CI and benchmark workflows |
+| 9 | Final wrap-up verification | Complete | Fresh-main verification confirms the sequential roadmap wave landed cleanly on `main` |
 
-## Next Follow-up Themes After The Merge Wave
+## Post-Wave Posture
 
-- ingestion hardening on top of the merged Evolver/mailbox baseline
-- deeper operator UX work building on the lifecycle/operator surfaces from `#423`
-- SSE schema v2 work only after the migration-path contract in `docs/research/sse-schema-v2-migration-path.md`
-- skills-system integration on top of the merged OpenRouter + ingestion work
-- SkillsBench follow-up after the integration surfaces settle
+- ingestion hardening follow-up is complete in `#429`
+- deeper operator UX work is complete in `#430`
+- SSE schema v2 backend foundation is complete in `#431`
+- skills-system integration is complete in `#432`
+- SkillsBench smoke regression reporting is complete in `#433`
+- no remaining queued slices exist in this tracked post-merge wave; any new work should begin from a fresh planning refresh
 
 ## Cluster Plans
 
@@ -97,7 +99,11 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - Persisted ingestion mailbox inbox events (**complete** in PR `#427`)
 - Handoff/queue refresh after the Sessions 130-132 merge wave (**complete** in PR `#428`)
 - Ingestion hardening follow-up: journal retention/expiry plus persistent task metrics durability/query support (**complete** in PR `#429`)
-- Next queue: operator UX depth → SSE schema v2 → skills-system integration → SkillsBench follow-up
+- Operator ingestion UX depth: review history/details and notification hooks (**complete** in PR `#430`)
+- SSE schema v2 backend foundation (**complete** in PR `#431`)
+- Published-ingestion skills runtime registration (**complete** in PR `#432`)
+- SkillsBench smoke regression reporting in CLI/CI (**complete** in PR `#433`)
+- Tracked queue status: complete through `#433`; open a new roadmap slice before additional implementation
 
 ## Dependency Graph
 

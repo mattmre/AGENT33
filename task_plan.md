@@ -2,14 +2,15 @@
 
 ## Goal
 
-Execute the post-merge follow-up queue sequentially from updated `origin/main`,
-starting from the fresh-main baseline verified after the Sessions 130-132 merge
-wave and the post-merge hardening/docs refresh (`#414`-`#429`).
+Record and preserve the verified merged baseline after the Sessions 130-132
+follow-up wave and its closing roadmap slices (`#414`-`#433`), so any future
+work starts from a fresh `origin/main` worktree instead of reopening stale
+queue state.
 
 ## Current Baseline
 
 - There are 0 open GitHub PRs as of `2026-04-25`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (427 PRs merged).
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (433 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
 - POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
@@ -18,12 +19,13 @@ wave and the post-merge hardening/docs refresh (`#414`-`#429`).
 - Session 129 operator/docs remediation is COMPLETE in PR `#412`.
 - Session 130 marketplace web UI and community submissions are COMPLETE in PRs
   `#413` and `#414`.
-- Sessions 131-132 follow-up work is merged through PR `#429`, including
-  monitoring, persistence, SSE migration prep, security hardening, ingestion
-  sprints, research preservation, OpenRouter integration, mailbox persistence,
-  and ingestion hardening follow-up.
-- The next queue is: operator UX depth, SSE schema v2, skills-system
-  integration, then SkillsBench follow-up.
+- Sessions 131-132 follow-up work and its closeout slices are merged through PR
+  `#433`, including monitoring, persistence, SSE migration prep/foundation,
+  security hardening, ingestion sprints, research preservation, OpenRouter
+  integration, mailbox persistence, ingestion hardening, operator UX depth,
+  skills integration, and SkillsBench smoke-regression reporting.
+- The prior queue (ingestion hardening -> operator UX depth -> SSE schema v2 ->
+  skills-system integration -> SkillsBench follow-up) is complete on `main`.
 - POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - Treat the root checkout as disposable and always implement from fresh
   `origin/main` worktrees.
@@ -40,10 +42,10 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: post-merge queue
-- Current slice: operator UX depth
-- Worktree: create a fresh worktree from updated `origin/main` when the slice starts
-- Branch: TBD (new branch from verified `main`)
+- Active queue owner: post-merge queue (closed)
+- Current slice: none - queue complete through `#433`
+- Worktree: create a fresh worktree from updated `origin/main` when new scoped work starts
+- Branch: TBD (new branch from verified `main` for the next slice)
 - Active PR: none
 - Resume artifacts: `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and `progress.md`
 
