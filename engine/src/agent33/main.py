@@ -534,15 +534,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from agent33.ingestion.doctor import SkillsDoctor
     from agent33.ingestion.mailbox import IngestionMailbox
+    from agent33.ingestion.mailbox_persistence import MailboxInboxPersistence
     from agent33.ingestion.metrics import TaskMetricsCollector
 
-    ingestion_mailbox = IngestionMailbox(pipeline=intake_pipeline)
+    ingestion_mailbox_persistence = MailboxInboxPersistence(
+        Path(settings.ingestion_mailbox_db_path)
+    )
+    ingestion_mailbox = IngestionMailbox(
+        pipeline=intake_pipeline,
+        persistence=ingestion_mailbox_persistence,
+    )
     task_metrics = TaskMetricsCollector()
+    app.state.ingestion_mailbox_persistence = ingestion_mailbox_persistence
     app.state.ingestion_mailbox = ingestion_mailbox
     app.state.task_metrics = task_metrics
     ingestion.set_ingestion_mailbox(ingestion_mailbox)
     ingestion.set_task_metrics(task_metrics)
-    logger.info("ingestion_mailbox_initialized")
+    logger.info(
+        "ingestion_mailbox_initialized",
+        mailbox_db_path=settings.ingestion_mailbox_db_path,
+    )
 
     skills_doctor = SkillsDoctor(service=ingestion_service)
     app.state.skills_doctor = skills_doctor
@@ -2105,6 +2116,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if _ingestion_journal is not None:
         _ingestion_journal.close()
         logger.info("ingestion_journal_closed")
+
+    _ingestion_mailbox_persistence: Any = getattr(app.state, "ingestion_mailbox_persistence", None)
+    if _ingestion_mailbox_persistence is not None:
+        _ingestion_mailbox_persistence.close()
+        logger.info("ingestion_mailbox_persistence_closed")
 
     _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
     if _p69b_persistence is not None:
