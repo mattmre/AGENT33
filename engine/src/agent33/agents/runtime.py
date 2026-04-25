@@ -308,7 +308,7 @@ class AgentRuntime:
         self._cost_tracker = cost_tracker
         self._metrics_collector = metrics_collector
         self._pack_registry = pack_registry
-        self._ppack_variant = ppack_variant
+        self._ppack_variant = ppack_variant or ""
         self._evaluation_mode = evaluation_mode
 
     @property
