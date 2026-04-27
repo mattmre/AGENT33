@@ -20,17 +20,18 @@ import "./features/pack-marketplace/PackMarketplacePage.css";
 import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
-import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
+import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
+import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
   | "start"
@@ -129,6 +130,7 @@ export default function App(): JSX.Element {
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
 
   const selectedDomain = useMemo(
     () => domains.find((domain) => domain.id === selectedDomainId) ?? domains[0],
@@ -157,6 +159,13 @@ export default function App(): JSX.Element {
       url: result.url
     };
     setActivity((prev) => [item, ...prev].slice(0, 15));
+  }
+
+  function openWorkflowStarter(draft?: WorkflowStarterDraft): void {
+    if (draft !== undefined) {
+      setWorkflowStarterDraft(draft);
+    }
+    setActiveTab("starter");
   }
 
   return (
@@ -193,12 +202,16 @@ export default function App(): JSX.Element {
       <div className="consumer-content" id="main-content" role="main">
         {activeTab === "start" && (
           <div className="consumer-onboarding-layout">
-            <OnboardingPanel
+            <OutcomeHomePanel
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
               onOpenChat={() => setActiveTab("chat")}
               onOpenOperations={() => setActiveTab("operations")}
+              onOpenWorkflowStarter={openWorkflowStarter}
+              onOpenLoops={() => setActiveTab("loops")}
+              onOpenMcp={() => setActiveTab("mcp")}
+              onOpenAdvanced={() => setActiveTab("advanced")}
               onResult={onResult}
             />
           </div>
@@ -357,6 +370,7 @@ export default function App(): JSX.Element {
               onOpenSetup={() => setActiveTab("setup")}
               onOpenSpawner={() => setActiveTab("spawner")}
               onOpenOperations={() => setActiveTab("operations")}
+              initialDraft={workflowStarterDraft}
               onResult={onResult}
             />
           </div>
