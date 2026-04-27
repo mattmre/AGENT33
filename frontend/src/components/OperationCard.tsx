@@ -595,6 +595,16 @@ export function OperationCard({
         </div>
       )}
 
+      {showAdvanced ? (
+        <div className="raw-operation-warning" role="status">
+          <strong>Raw endpoint mode</strong>
+          <span>
+            Review path params, query params, and JSON body before running. Prefer guided screens for
+            routine workflows and settings changes.
+          </span>
+        </div>
+      ) : null}
+
       {showAdvanced && operation.schemaInfo && (
         <section className="schema-info-panel">
           <h4>Operation Schema</h4>
