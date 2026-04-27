@@ -1,5 +1,16 @@
 export type StarterKind = "research" | "improvement-loop" | "automation-loop";
 
+export interface WorkflowStarterDraft {
+  id: string;
+  name: string;
+  goal: string;
+  kind: StarterKind;
+  output: string;
+  schedule?: string;
+  author?: string;
+  sourceLabel?: string;
+}
+
 export interface WorkflowStarterRequest {
   name: string;
   version: string;

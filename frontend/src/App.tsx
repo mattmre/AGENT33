@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { DomainPanel } from "./components/DomainPanel";
@@ -20,17 +20,18 @@ import "./features/pack-marketplace/PackMarketplacePage.css";
 import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
-import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
+import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
+import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
   | "start"
@@ -129,6 +130,7 @@ export default function App(): JSX.Element {
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
 
   const selectedDomain = useMemo(
     () => domains.find((domain) => domain.id === selectedDomainId) ?? domains[0],
@@ -147,7 +149,7 @@ export default function App(): JSX.Element {
     saveApiKey(apiKeyValue);
   }
 
-  function onResult(label: string, result: ApiResult): void {
+  const onResult = useCallback((label: string, result: ApiResult): void => {
     const item: ActivityItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       at: new Date().toLocaleTimeString(),
@@ -157,7 +159,12 @@ export default function App(): JSX.Element {
       url: result.url
     };
     setActivity((prev) => [item, ...prev].slice(0, 15));
-  }
+  }, []);
+
+  const openWorkflowStarter = useCallback((draft?: WorkflowStarterDraft): void => {
+    setWorkflowStarterDraft(draft ?? null);
+    setActiveTab("starter");
+  }, []);
 
   return (
     <div className="consumer-app-shell">
@@ -193,12 +200,16 @@ export default function App(): JSX.Element {
       <div className="consumer-content" id="main-content" role="main">
         {activeTab === "start" && (
           <div className="consumer-onboarding-layout">
-            <OnboardingPanel
+            <OutcomeHomePanel
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
               onOpenChat={() => setActiveTab("chat")}
               onOpenOperations={() => setActiveTab("operations")}
+              onOpenWorkflowStarter={openWorkflowStarter}
+              onOpenLoops={() => setActiveTab("loops")}
+              onOpenMcp={() => setActiveTab("mcp")}
+              onOpenAdvanced={() => setActiveTab("advanced")}
               onResult={onResult}
             />
           </div>
@@ -328,7 +339,7 @@ export default function App(): JSX.Element {
               onOpenSetup={() => setActiveTab("setup")}
               onOpenTools={() => setActiveTab("tools")}
               onOpenSkills={() => setActiveTab("skills")}
-              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenWorkflowStarter={() => openWorkflowStarter()}
               onResult={onResult}
             />
           </div>
@@ -357,6 +368,7 @@ export default function App(): JSX.Element {
               onOpenSetup={() => setActiveTab("setup")}
               onOpenSpawner={() => setActiveTab("spawner")}
               onOpenOperations={() => setActiveTab("operations")}
+              initialDraft={workflowStarterDraft}
               onResult={onResult}
             />
           </div>
@@ -370,7 +382,7 @@ export default function App(): JSX.Element {
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
               onOpenOperations={() => setActiveTab("operations")}
-              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenWorkflowStarter={() => openWorkflowStarter()}
               onResult={onResult}
             />
           </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResult } from "../../types";
 import {
@@ -12,6 +12,7 @@ import {
 import type {
   SkillDiscoveryMatch,
   StarterKind,
+  WorkflowStarterDraft,
   WorkflowCreateResponse,
   WorkflowResolutionMatch,
   WorkflowStarterRequest
@@ -23,6 +24,7 @@ interface WorkflowStarterPanelProps {
   onOpenSetup: () => void;
   onOpenSpawner: () => void;
   onOpenOperations: () => void;
+  initialDraft?: WorkflowStarterDraft | null;
   onResult: (label: string, result: ApiResult) => void;
 }
 
@@ -201,6 +203,7 @@ export function WorkflowStarterPanel({
   onOpenSetup,
   onOpenSpawner,
   onOpenOperations,
+  initialDraft = null,
   onResult
 }: WorkflowStarterPanelProps): JSX.Element {
   const [form, setForm] = useState<StarterForm>(DEFAULT_FORM);
@@ -213,6 +216,31 @@ export function WorkflowStarterPanel({
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const canBuild = useMemo(() => form.goal.trim() !== "", [form.goal]);
+
+  useEffect(() => {
+    if (initialDraft === null) {
+      setForm(DEFAULT_FORM);
+      setWorkflowPreview(null);
+      setCreatedWorkflow(null);
+      setWorkflowMatches([]);
+      setSkillMatches([]);
+      setError("");
+      return;
+    }
+    setForm({
+      name: initialDraft.name,
+      goal: initialDraft.goal,
+      kind: initialDraft.kind,
+      output: initialDraft.output,
+      schedule: initialDraft.schedule ?? "",
+      author: initialDraft.author ?? "operator"
+    });
+    setWorkflowPreview(null);
+    setCreatedWorkflow(null);
+    setWorkflowMatches([]);
+    setSkillMatches([]);
+    setError("");
+  }, [initialDraft]);
 
   function updateField<K extends keyof StarterForm>(key: K, value: StarterForm[K]): void {
     setForm((current) => ({ ...current, [key]: value }));
@@ -301,6 +329,9 @@ export function WorkflowStarterPanel({
             Start research, improvement, and repeatable operator loops from a goal. AGENT-33 builds
             a validated workflow definition and points you to matching templates and skills.
           </p>
+          {initialDraft?.sourceLabel ? (
+            <p className="workflow-starter-source">Loaded from Outcome Home: {initialDraft.sourceLabel}</p>
+          ) : null}
         </div>
         <div className="workflow-starter-badge">Loop-ready</div>
       </header>
