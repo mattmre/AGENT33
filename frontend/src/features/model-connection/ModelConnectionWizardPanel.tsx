@@ -9,6 +9,13 @@ import {
   parseOpenRouterModels,
   type OpenRouterModelEntry
 } from "../../lib/openrouterModels";
+import {
+  asRecord,
+  extractResultMessage,
+  readNumber,
+  readString,
+  readStringArray
+} from "../../lib/valueReaders";
 import type { ApiResult } from "../../types";
 import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
@@ -39,40 +46,6 @@ interface ConfigSnapshot {
   baseline: ModelConnectionBaseline;
   hasStoredKey: boolean;
   storedKeyHint: string;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function readNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function extractResultMessage(payload: unknown, fallback: string): string {
-  const data = asRecord(payload);
-  return (
-    readString(data.message) ||
-    readString(data.detail) ||
-    readString(data.error) ||
-    readString(data.status) ||
-    fallback
-  );
 }
 
 function buildConfigSnapshot(data: unknown): ConfigSnapshot {
@@ -141,10 +114,11 @@ export function ModelConnectionWizardPanel({
   const [isProbing, setIsProbing] = useState(false);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
+  const effectiveHasKey = form.removeStoredKey ? false : hasStoredKey || form.apiKey.trim() !== "";
   const probeSucceeded = probeStatus?.tone === "success";
   const readinessLabel = getModelReadinessLabel(
     hasCredentials,
-    hasStoredKey || form.apiKey.trim() !== "",
+    effectiveHasKey,
     form.defaultModel,
     probeSucceeded
   );
@@ -212,7 +186,13 @@ export function ModelConnectionWizardPanel({
     key: K,
     value: ModelConnectionForm[K]
   ): void {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "apiKey" && String(value).trim() !== "") {
+        next.removeStoredKey = false;
+      }
+      return next;
+    });
   }
 
   async function saveSettings(): Promise<void> {
@@ -336,12 +316,14 @@ export function ModelConnectionWizardPanel({
           <span>Step 1</span>
           <h3>Choose a recommended default</h3>
           <p>These are known-good picks for coding and workflow automation.</p>
-          <div className="model-recommendation-list">
+          <div className="model-recommendation-list" role="group" aria-label="Recommended default models">
             {OPENROUTER_RECOMMENDED_MODELS.map((model) => (
               <button
                 type="button"
                 key={model.id}
                 className={normalizeLikelyOpenRouterModelRef(form.defaultModel) === model.id ? "active" : ""}
+                aria-pressed={normalizeLikelyOpenRouterModelRef(form.defaultModel) === model.id}
+                aria-label={`Use ${model.name} as the default model`}
                 onClick={() => updateField("defaultModel", model.id)}
               >
                 <strong>{model.name}</strong>
@@ -393,6 +375,7 @@ export function ModelConnectionWizardPanel({
               <input
                 type="checkbox"
                 checked={form.removeStoredKey}
+                disabled={form.apiKey.trim() !== ""}
                 onChange={(event) => updateField("removeStoredKey", event.target.checked)}
               />
               Remove stored OpenRouter key

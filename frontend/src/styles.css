@@ -1293,6 +1293,11 @@ button:disabled {
   color: #bbf7d0;
 }
 
+.model-wizard-status--info {
+  border-color: rgba(125, 211, 252, 0.28);
+  color: #bae6fd;
+}
+
 .model-wizard-status--warning {
   border-color: rgba(251, 191, 36, 0.42);
   color: #fde68a;

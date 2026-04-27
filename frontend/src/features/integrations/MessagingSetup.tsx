@@ -10,6 +10,12 @@ import {
   normalizeLikelyOpenRouterModelRef,
   parseOpenRouterModels
 } from "../../lib/openrouterModels"
+import {
+  asRecord,
+  extractResultMessage,
+  readNumber,
+  readString
+} from "../../lib/valueReaders"
 
 interface MessagingSetupProps {
   token?: string
@@ -110,29 +116,6 @@ const PLACEHOLDER_PLATFORM_CARDS: PlaceholderPlatformCard[] = [
   }
 ]
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value : ""
-}
-
-function readNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-
-  return null
-}
-
 function normalizeConfiguredValue(value: string, fallback: string): string {
   return value.trim() || fallback
 }
@@ -163,28 +146,6 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
     storedKeyHint,
     hasStoredKey: storedKeyHint.trim() !== ""
   }
-}
-
-function extractResultMessage(payload: unknown, fallback: string): string {
-  const data = asRecord(payload)
-  const directMessage =
-    readString(data.message) ||
-    readString(data.detail) ||
-    readString(data.error) ||
-    readString(data.status)
-
-  if (directMessage) {
-    return directMessage
-  }
-
-  const errors = Array.isArray(data.validation_errors)
-    ? data.validation_errors.filter((item): item is string => typeof item === "string")
-    : []
-  if (errors.length > 0) {
-    return errors.join(" ")
-  }
-
-  return fallback
 }
 
 function renderStatusMessage(id: string, status: StatusMessage): JSX.Element {
