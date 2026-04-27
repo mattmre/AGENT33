@@ -23,6 +23,7 @@ import { ImpactDashboardPanel } from "./features/impact-dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
+import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
@@ -37,6 +38,7 @@ type AppTab =
   | "review"
   | "safety"
   | "skills"
+  | "fabric"
   | "starter"
   | "operations"
   | "outcomes"
@@ -65,6 +67,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "review", label: "Review Queue" },
   { id: "safety", label: "Safety Center" },
   { id: "skills", label: "Skill Wizard" },
+  { id: "fabric", label: "Tool Fabric" },
   { id: "starter", label: "Workflow Starter" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
@@ -263,6 +266,21 @@ export default function App(): JSX.Element {
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* Tool Fabric -> adaptive tool/skill/workflow discovery */}
+        {activeTab === "fabric" && (
+          <div className="consumer-tool-fabric-layout">
+            <ToolFabricPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenTools={() => setActiveTab("tools")}
+              onOpenSkills={() => setActiveTab("skills")}
+              onOpenWorkflowStarter={() => setActiveTab("starter")}
               onResult={onResult}
             />
           </div>
