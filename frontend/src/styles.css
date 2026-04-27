@@ -1201,6 +1201,131 @@ button:disabled {
   color: #d9edf4;
 }
 
+/* Workflow Starter */
+.consumer-workflow-starter-layout {
+  display: grid;
+  gap: 2rem;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.workflow-starter-panel {
+  background: linear-gradient(170deg, rgba(22, 42, 58, 0.94), rgba(8, 24, 32, 0.96));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 22px 42px rgba(5, 13, 17, 0.45);
+  display: grid;
+  gap: 1rem;
+}
+
+.workflow-starter-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.workflow-starter-hero h2,
+.workflow-starter-card h3 {
+  margin: 0;
+}
+
+.workflow-starter-hero p {
+  margin: 0.45rem 0 0;
+  max-width: 790px;
+  color: var(--text-soft);
+}
+
+.workflow-starter-badge {
+  border: 1px solid rgba(48, 213, 200, 0.42);
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  color: var(--accent);
+  background: rgba(8, 24, 32, 0.72);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.workflow-starter-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.workflow-starter-form,
+.workflow-starter-results,
+.workflow-starter-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.workflow-starter-form,
+.workflow-starter-card {
+  border: 1px solid rgba(48, 213, 200, 0.22);
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(8, 24, 32, 0.7);
+}
+
+.workflow-starter-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.workflow-starter-form input,
+.workflow-starter-form textarea,
+.workflow-starter-form select {
+  width: 100%;
+  border: 1px solid rgba(48, 213, 200, 0.28);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  color: #d9edf4;
+  padding: 0.6rem 0.7rem;
+}
+
+.workflow-starter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.workflow-step-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.workflow-step-list li {
+  color: var(--text-soft);
+}
+
+.workflow-step-list strong {
+  display: block;
+  color: #d9edf4;
+}
+
+.workflow-step-list span,
+.workflow-match-card span {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.workflow-match-card {
+  border: 1px solid rgba(48, 213, 200, 0.18);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.workflow-match-card h4,
+.workflow-match-card p {
+  margin: 0;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
