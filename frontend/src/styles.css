@@ -1326,6 +1326,128 @@ button:disabled {
   margin: 0;
 }
 
+/* Tool Fabric */
+.consumer-tool-fabric-layout {
+  display: grid;
+  gap: 2rem;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.tool-fabric-panel {
+  background: linear-gradient(170deg, rgba(25, 39, 60, 0.94), rgba(8, 24, 32, 0.96));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 22px 42px rgba(5, 13, 17, 0.45);
+  display: grid;
+  gap: 1rem;
+}
+
+.tool-fabric-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.tool-fabric-hero h2,
+.tool-fabric-summary h3,
+.tool-fabric-column h3 {
+  margin: 0;
+}
+
+.tool-fabric-hero p {
+  margin: 0.45rem 0 0;
+  max-width: 800px;
+  color: var(--text-soft);
+}
+
+.tool-fabric-badge {
+  border: 1px solid rgba(166, 133, 255, 0.42);
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  color: #c7b8ff;
+  background: rgba(8, 24, 32, 0.72);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tool-fabric-query,
+.tool-fabric-summary,
+.tool-fabric-column {
+  border: 1px solid rgba(48, 213, 200, 0.22);
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(8, 24, 32, 0.7);
+  display: grid;
+  gap: 0.85rem;
+}
+
+.tool-fabric-query label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.tool-fabric-query textarea {
+  width: 100%;
+  border: 1px solid rgba(48, 213, 200, 0.28);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  color: #d9edf4;
+  padding: 0.6rem 0.7rem;
+}
+
+.tool-fabric-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.tool-fabric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.tool-fabric-summary {
+  grid-column: 1 / -1;
+}
+
+.tool-fabric-summary p {
+  color: var(--text-soft);
+  margin: 0;
+}
+
+.tool-fabric-summary strong {
+  color: var(--accent);
+}
+
+.tool-fabric-card {
+  border: 1px solid rgba(48, 213, 200, 0.18);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.18);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.tool-fabric-card h4,
+.tool-fabric-card p {
+  margin: 0;
+}
+
+.tool-fabric-card p {
+  color: var(--text-soft);
+}
+
+.tool-fabric-card span,
+.tool-fabric-card small {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
