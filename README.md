@@ -10,6 +10,7 @@ AGENT-33 is a local-first AI agent orchestration platform for teams that want **
 AGENT-33 combines an API runtime, workflow engine, memory stack, review/release controls, and a first-party frontend so you can run guarded automation from one system.
 
 - **Local-first runtime**: FastAPI backend, Docker Compose bootstrap, Ollama-friendly model routing
+- **Contained Agent OS**: optional Linux operator workspace with first-party tools, state, and stack connectivity
 - **Guardrailed automation**: scopes, approvals, autonomy budgets, and review/release workflows
 - **Agent + workflow orchestration**: invoke agents directly or compose repeatable workflows
 - **Operational visibility**: health, dashboard surfaces, traces, evaluations, and rollout telemetry
@@ -135,6 +136,7 @@ Before any shared, VPS, or production deployment:
 - [Setup Guide](docs/setup-guide.md)
 - [Walkthroughs](docs/walkthroughs.md)
 - [Use Cases](docs/use-cases.md)
+- [Agent OS Runtime](docs/operators/agent-os-runtime.md)
 - [API Surface](docs/api-surface.md)
 - [Release Checklist](docs/RELEASE_CHECKLIST.md)
 - [Documentation Index](docs/README.md)
