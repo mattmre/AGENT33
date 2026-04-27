@@ -1663,6 +1663,15 @@ button:disabled {
   gap: 0.65rem;
 }
 
+.mcp-action-success {
+  margin: 0;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  border-radius: 12px;
+  background: rgba(22, 163, 74, 0.14);
+  color: #bbf7d0;
+  padding: 0.75rem 0.9rem;
+}
+
 .mcp-health-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(180px, 1fr));

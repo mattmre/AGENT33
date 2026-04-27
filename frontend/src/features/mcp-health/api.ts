@@ -5,11 +5,15 @@ import type {
   McpHealthSnapshot,
   McpProxyServer,
   McpProxyServersResponse,
+  McpProxyReloadResponse,
   McpProxyTool,
   McpProxyToolsResponse,
+  McpProxyValidateResponse,
   McpStatus,
   McpSyncDiffResponse,
-  McpSyncEntry
+  McpSyncEntry,
+  McpSyncPushResponse,
+  McpSyncPushResult
 } from "./types";
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -171,6 +175,69 @@ export function asSyncDiffResponse(data: unknown): McpSyncDiffResponse | null {
   return { entries: entries as McpSyncEntry[] };
 }
 
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
+}
+
+function asSyncPushResult(data: unknown): McpSyncPushResult | null {
+  if (!isObject(data)) {
+    return null;
+  }
+  if (
+    typeof data.target !== "string" ||
+    typeof data.config_path !== "string" ||
+    typeof data.status !== "string"
+  ) {
+    return null;
+  }
+  return {
+    target: data.target,
+    config_path: data.config_path,
+    status: data.status,
+    message: typeof data.message === "string" ? data.message : "",
+    existing_entry: isObject(data.existing_entry) ? data.existing_entry : null
+  };
+}
+
+export function asSyncPushResponse(data: unknown): McpSyncPushResponse | null {
+  if (!isObject(data) || !Array.isArray(data.results)) {
+    return null;
+  }
+  const results = data.results.map(asSyncPushResult);
+  if (results.some((result) => result === null)) {
+    return null;
+  }
+  return { results: results as McpSyncPushResult[] };
+}
+
+export function asProxyValidateResponse(data: unknown): McpProxyValidateResponse | null {
+  if (!isObject(data)) {
+    return null;
+  }
+  if (typeof data.valid !== "boolean" || typeof data.server_count !== "number" || !Array.isArray(data.errors)) {
+    return null;
+  }
+  return {
+    valid: data.valid,
+    server_count: data.server_count,
+    errors: asStringArray(data.errors),
+    diff: isObject(data.diff) ? data.diff : {}
+  };
+}
+
+export function asProxyReloadResponse(data: unknown): McpProxyReloadResponse | null {
+  if (!isObject(data)) {
+    return null;
+  }
+  return {
+    added: asStringArray(data.added),
+    restarted: asStringArray(data.restarted),
+    removed: asStringArray(data.removed),
+    unchanged: asStringArray(data.unchanged),
+    errors: asStringArray(data.errors)
+  };
+}
+
 function endpointFromResult<T>(
   result: ApiResult,
   parser: (data: unknown) => T | null,
@@ -221,4 +288,37 @@ export async function fetchMcpHealthSnapshot(token: string, apiKey: string): Pro
       ["MCP Health - Sync Diff", syncDiff]
     ]
   };
+}
+
+export function validateProxyConfig(token: string, apiKey: string): Promise<ApiResult> {
+  return apiRequest({
+    method: "POST",
+    path: "/v1/mcp/proxy/validate-config",
+    token,
+    apiKey
+  });
+}
+
+export function reloadProxyConfig(token: string, apiKey: string): Promise<ApiResult> {
+  return apiRequest({
+    method: "POST",
+    path: "/v1/mcp/proxy/reload-config",
+    token,
+    apiKey
+  });
+}
+
+export function pushMcpSync(
+  targets: string[],
+  force: boolean,
+  token: string,
+  apiKey: string
+): Promise<ApiResult> {
+  return apiRequest({
+    method: "POST",
+    path: "/v1/mcp/sync/push",
+    token,
+    apiKey,
+    body: JSON.stringify({ targets, force })
+  });
 }

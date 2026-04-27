@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResult } from "../../types";
-import { fetchMcpHealthSnapshot } from "./api";
+import {
+  asProxyReloadResponse,
+  asProxyValidateResponse,
+  asSyncPushResponse,
+  fetchMcpHealthSnapshot,
+  pushMcpSync,
+  reloadProxyConfig,
+  validateProxyConfig
+} from "./api";
 import type { EndpointState, McpHealthSnapshot } from "./types";
 
 interface McpHealthPanelProps {
@@ -33,7 +41,9 @@ export function McpHealthPanel({
 }: McpHealthPanelProps): JSX.Element {
   const [snapshot, setSnapshot] = useState<McpHealthSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<"sync" | "validate" | "reload" | null>(null);
   const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const bridgeStatus = snapshot?.status.data;
@@ -66,6 +76,88 @@ export function McpHealthPanel({
       setError(message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSync(): Promise<void> {
+    const targets = syncEntries
+      .filter((entry) => !entry.matches)
+      .map((entry) => entry.target);
+    const selectedTargets = targets.length > 0 ? targets : syncEntries.map((entry) => entry.target);
+    if (selectedTargets.length === 0) {
+      setError("No MCP CLI targets are available to sync.");
+      return;
+    }
+    setError("");
+    setActionMessage("");
+    setActionLoading("sync");
+    try {
+      const result = await pushMcpSync(selectedTargets, false, token, apiKey);
+      onResult("MCP Health - Sync CLI Config", result);
+      const parsed = asSyncPushResponse(result.data);
+      if (!result.ok || parsed === null) {
+        setError(`MCP CLI sync failed (${result.status})`);
+        return;
+      }
+      const changed = parsed.results.filter((item) => ["added", "updated"].includes(item.status)).length;
+      const conflicts = parsed.results.filter((item) => item.status === "conflict").length;
+      setActionMessage(`MCP sync checked ${parsed.results.length} target(s): ${changed} changed, ${conflicts} conflict(s).`);
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown MCP sync error";
+      setError(message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleValidateProxyConfig(): Promise<void> {
+    setError("");
+    setActionMessage("");
+    setActionLoading("validate");
+    try {
+      const result = await validateProxyConfig(token, apiKey);
+      onResult("MCP Health - Validate Proxy Config", result);
+      const parsed = asProxyValidateResponse(result.data);
+      if (!result.ok || parsed === null) {
+        setError(`MCP proxy config validation failed (${result.status})`);
+        return;
+      }
+      setActionMessage(
+        parsed.valid
+          ? `Proxy config is valid with ${parsed.server_count} server(s).`
+          : `Proxy config is not valid: ${parsed.errors.join("; ") || "no details returned"}`
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown MCP proxy validation error";
+      setError(message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleReloadProxyConfig(): Promise<void> {
+    setError("");
+    setActionMessage("");
+    setActionLoading("reload");
+    try {
+      const result = await reloadProxyConfig(token, apiKey);
+      onResult("MCP Health - Reload Proxy Config", result);
+      const parsed = asProxyReloadResponse(result.data);
+      if (!result.ok || parsed === null) {
+        setError(`MCP proxy reload failed (${result.status})`);
+        return;
+      }
+      const errorCount = parsed.errors?.length ?? 0;
+      setActionMessage(
+        `Proxy reload applied: ${parsed.added?.length ?? 0} added, ${parsed.restarted?.length ?? 0} restarted, ${parsed.removed?.length ?? 0} removed, ${errorCount} error(s).`
+      );
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown MCP proxy reload error";
+      setError(message);
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -103,11 +195,21 @@ export function McpHealthPanel({
         <button type="button" onClick={() => void refresh()} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh health"}
         </button>
+        <button type="button" onClick={() => void handleSync()} disabled={actionLoading !== null || snapshot === null}>
+          {actionLoading === "sync" ? "Syncing..." : "Sync AGENT-33 to CLIs"}
+        </button>
+        <button type="button" onClick={() => void handleValidateProxyConfig()} disabled={actionLoading !== null}>
+          {actionLoading === "validate" ? "Validating..." : "Validate proxy config"}
+        </button>
+        <button type="button" onClick={() => void handleReloadProxyConfig()} disabled={actionLoading !== null}>
+          {actionLoading === "reload" ? "Reloading..." : "Reload proxy config"}
+        </button>
         <button type="button" onClick={onOpenToolFabric}>Open Tool Fabric</button>
         <button type="button" onClick={onOpenTools}>Browse tool catalog</button>
       </div>
 
       {error ? <p className="ops-hub-error" role="alert">{error}</p> : null}
+      {actionMessage ? <p className="mcp-action-success">{actionMessage}</p> : null}
 
       <div className="mcp-health-grid">
         <article className="mcp-health-card mcp-health-summary">
