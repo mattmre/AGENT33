@@ -219,6 +219,12 @@ export function WorkflowStarterPanel({
 
   useEffect(() => {
     if (initialDraft === null) {
+      setForm(DEFAULT_FORM);
+      setWorkflowPreview(null);
+      setCreatedWorkflow(null);
+      setWorkflowMatches([]);
+      setSkillMatches([]);
+      setError("");
       return;
     }
     setForm({

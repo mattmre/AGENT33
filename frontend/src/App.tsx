@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { DomainPanel } from "./components/DomainPanel";
@@ -149,7 +149,7 @@ export default function App(): JSX.Element {
     saveApiKey(apiKeyValue);
   }
 
-  function onResult(label: string, result: ApiResult): void {
+  const onResult = useCallback((label: string, result: ApiResult): void => {
     const item: ActivityItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       at: new Date().toLocaleTimeString(),
@@ -159,14 +159,12 @@ export default function App(): JSX.Element {
       url: result.url
     };
     setActivity((prev) => [item, ...prev].slice(0, 15));
-  }
+  }, []);
 
-  function openWorkflowStarter(draft?: WorkflowStarterDraft): void {
-    if (draft !== undefined) {
-      setWorkflowStarterDraft(draft);
-    }
+  const openWorkflowStarter = useCallback((draft?: WorkflowStarterDraft): void => {
+    setWorkflowStarterDraft(draft ?? null);
     setActiveTab("starter");
-  }
+  }, []);
 
   return (
     <div className="consumer-app-shell">
@@ -341,7 +339,7 @@ export default function App(): JSX.Element {
               onOpenSetup={() => setActiveTab("setup")}
               onOpenTools={() => setActiveTab("tools")}
               onOpenSkills={() => setActiveTab("skills")}
-              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenWorkflowStarter={() => openWorkflowStarter()}
               onResult={onResult}
             />
           </div>
@@ -384,7 +382,7 @@ export default function App(): JSX.Element {
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
               onOpenOperations={() => setActiveTab("operations")}
-              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenWorkflowStarter={() => openWorkflowStarter()}
               onResult={onResult}
             />
           </div>

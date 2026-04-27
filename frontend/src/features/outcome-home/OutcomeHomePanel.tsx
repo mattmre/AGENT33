@@ -118,7 +118,7 @@ export function OutcomeHomePanel({
     } finally {
       setLoadingStatus(false);
     }
-  }, [apiKey, hasCredentials, token]);
+  }, [apiKey, hasCredentials, onResult, token]);
 
   useEffect(() => {
     void loadStatus();
@@ -143,7 +143,9 @@ export function OutcomeHomePanel({
         detail:
           modelReady === true
             ? "A model provider is available for workflows."
-            : "Connect OpenRouter, Ollama, or another provider before building.",
+            : modelReady === false
+              ? "Connect OpenRouter, Ollama, or another provider before building."
+              : "Model provider readiness is still pending or unknown.",
         action: "Connect model",
         onAction: onOpenSetup
       },
@@ -270,7 +272,7 @@ export function OutcomeHomePanel({
             </p>
           </div>
           <div className="outcome-tag-filter" aria-label="Workflow category filter">
-            {tagOptions.slice(0, 10).map((tag) => (
+            {tagOptions.map((tag) => (
               <button
                 type="button"
                 key={tag}
