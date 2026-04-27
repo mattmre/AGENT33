@@ -25,6 +25,7 @@ import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
+import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
@@ -40,6 +41,7 @@ type AppTab =
   | "skills"
   | "fabric"
   | "starter"
+  | "loops"
   | "operations"
   | "outcomes"
   | "analytics"
@@ -69,6 +71,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "skills", label: "Skill Wizard" },
   { id: "fabric", label: "Tool Fabric" },
   { id: "starter", label: "Workflow Starter" },
+  { id: "loops", label: "Improvement Loops" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
@@ -295,6 +298,20 @@ export default function App(): JSX.Element {
               onOpenSetup={() => setActiveTab("setup")}
               onOpenSpawner={() => setActiveTab("spawner")}
               onOpenOperations={() => setActiveTab("operations")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* Improvement Loops -> recurring research and improvement workflows */}
+        {activeTab === "loops" && (
+          <div className="consumer-improvement-loops-layout">
+            <ImprovementLoopsPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenOperations={() => setActiveTab("operations")}
+              onOpenWorkflowStarter={() => setActiveTab("starter")}
               onResult={onResult}
             />
           </div>
