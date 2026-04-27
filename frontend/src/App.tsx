@@ -21,6 +21,7 @@ import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
+import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
@@ -32,6 +33,7 @@ type AppTab =
   | "voice"
   | "setup"
   | "review"
+  | "safety"
   | "operations"
   | "outcomes"
   | "analytics"
@@ -57,6 +59,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "voice", label: "🎙️ Voice Call" },
   { id: "setup", label: "🔌 Integrations" },
   { id: "review", label: "Review Queue" },
+  { id: "safety", label: "Safety Center" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
@@ -232,6 +235,18 @@ export default function App(): JSX.Element {
         {activeTab === "review" && (
           <div className="consumer-review-layout">
             <IngestionReviewPanel token={token} apiKey={apiKey} onResult={onResult} />
+          </div>
+        )}
+
+        {/* Safety Center -> direct HITL approval surface for governed tool calls */}
+        {activeTab === "safety" && (
+          <div className="consumer-safety-layout">
+            <SafetyCenterPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
           </div>
         )}
 

@@ -983,6 +983,92 @@ button:disabled {
   justify-self: start;
 }
 
+/* Safety Center */
+.consumer-safety-layout {
+  display: grid;
+  gap: 2rem;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.safety-center-panel {
+  background: linear-gradient(170deg, rgba(30, 36, 50, 0.94), rgba(8, 24, 32, 0.96));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 22px 42px rgba(5, 13, 17, 0.45);
+  display: grid;
+  gap: 1rem;
+}
+
+.safety-center-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.safety-center-hero h2 {
+  margin: 0;
+  font-size: 1.55rem;
+}
+
+.safety-center-hero p {
+  margin: 0.45rem 0 0;
+  max-width: 760px;
+  color: var(--text-soft);
+}
+
+.safety-center-score {
+  min-width: 170px;
+  border: 1px solid rgba(255, 190, 102, 0.38);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: rgba(8, 24, 32, 0.72);
+  text-align: right;
+}
+
+.safety-center-score strong {
+  display: block;
+  font-size: 1.8rem;
+  color: #ffbe66;
+}
+
+.safety-center-score span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.safety-center-content {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.2fr);
+  gap: 1rem;
+}
+
+.safety-approval-list {
+  min-height: 420px;
+}
+
+.safety-approval-detail {
+  min-height: 420px;
+}
+
+.safety-risk-summary {
+  margin: 0;
+  color: #ffbe66;
+  font-weight: 700;
+}
+
+.safety-command-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(255, 190, 102, 0.28);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.28);
+  color: #f3e4ce;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
