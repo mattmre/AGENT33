@@ -1521,6 +1521,63 @@ button:disabled {
   white-space: nowrap;
 }
 
+.research-launchers {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: rgba(8, 22, 31, 0.78);
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+.research-launchers-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.research-launchers-heading h3,
+.research-launcher-card h4 {
+  margin: 0 0 0.4rem;
+}
+
+.research-launchers-heading p,
+.research-launcher-card p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.research-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.research-launcher-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 0.9rem;
+}
+
+@media (max-width: 1200px) {
+  .research-launcher-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .research-launchers-heading {
+    flex-direction: column;
+  }
+}
+
 .improvement-loops-grid {
   display: grid;
   grid-template-columns: 260px minmax(320px, 1fr) minmax(320px, 0.9fr);

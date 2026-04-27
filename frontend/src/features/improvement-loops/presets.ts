@@ -2,7 +2,9 @@ import type {
   ImprovementLoopForm,
   ImprovementLoopPreset,
   ImprovementLoopPresetId,
-  LoopWorkflowRequest
+  LoopWorkflowRequest,
+  ResearchLaunchPlan,
+  ResearchLauncherId
 } from "./types";
 
 export const LOOP_PRESETS: ImprovementLoopPreset[] = [
@@ -47,8 +49,57 @@ export const LOOP_PRESETS: ImprovementLoopPreset[] = [
   }
 ];
 
+export const RESEARCH_LAUNCH_PLANS: ResearchLaunchPlan[] = [
+  {
+    id: "weekly-competitive-scan",
+    presetId: "competitive-research",
+    title: "Weekly competitive scan",
+    summary: "Track agent OS, MCP, workflow UX, and community agent momentum every Monday.",
+    workflowName: "weekly-competitive-agent-scan",
+    goal:
+      "Research OpenClaw/OpenHands-style agents, Hermes-like agents, MCP ecosystems, agent OS runtimes, and workflow UX changes. Compare the last six months of movement with AGENT-33 and identify likely competitor direction.",
+    output:
+      "Operator-ready competitive brief with source notes, feature gap severity, likely competitor direction, and ranked AGENT-33 implementation proposals.",
+    schedule: "0 9 * * 1",
+    cadenceLabel: "Every Monday at 09:00",
+    buttonLabel: "Schedule weekly scan"
+  },
+  {
+    id: "weekly-operator-ux-watch",
+    presetId: "operator-ux-review",
+    title: "Weekly layman UX watch",
+    summary: "Audit the non-technical operator path for confusing or destructive defaults every Wednesday.",
+    workflowName: "weekly-operator-ux-watch",
+    goal:
+      "Walk AGENT-33 like a first-time layman operator. Find JSON/API surfaces, risky actions, unclear choices, missing presets, and places where community agent tools feel easier.",
+    output:
+      "Ranked UX implementation queue with before/after wording, safe-default recommendations, validation steps, and destructive-use risk notes.",
+    schedule: "0 11 * * 3",
+    cadenceLabel: "Every Wednesday at 11:00",
+    buttonLabel: "Schedule UX watch"
+  },
+  {
+    id: "monthly-agent-os-horizon",
+    presetId: "competitive-research",
+    title: "Monthly Agent OS horizon scan",
+    summary: "Look ahead at containerized agent workspaces, adaptive tools, MCP servers, and agent operating systems.",
+    workflowName: "monthly-agent-os-horizon-scan",
+    goal:
+      "Research emerging agent operating systems, contained Linux agent workspaces, adaptive tool environments, MCP server trends, and tool-use efficiency techniques. Compare them with AGENT-33 Agent OS and propose durable advantages.",
+    output:
+      "Horizon report with architecture opportunities, toolchain recommendations, adoption risks, and a prioritized AGENT-33 Agent OS roadmap.",
+    schedule: "0 10 1 * *",
+    cadenceLabel: "First day of each month at 10:00",
+    buttonLabel: "Schedule horizon scan"
+  }
+];
+
 export function getPreset(id: ImprovementLoopPresetId): ImprovementLoopPreset {
   return LOOP_PRESETS.find((preset) => preset.id === id) ?? LOOP_PRESETS[0];
+}
+
+export function getResearchLaunchPlan(id: ResearchLauncherId): ResearchLaunchPlan {
+  return RESEARCH_LAUNCH_PLANS.find((plan) => plan.id === id) ?? RESEARCH_LAUNCH_PLANS[0];
 }
 
 export function slugify(value: string): string {
@@ -71,6 +122,16 @@ export function formFromPreset(preset: ImprovementLoopPreset): ImprovementLoopFo
     goal: preset.defaultGoal,
     output: preset.defaultOutput,
     schedule: preset.defaultCron,
+    author: "operator"
+  };
+}
+
+export function formFromResearchLaunchPlan(plan: ResearchLaunchPlan): ImprovementLoopForm {
+  return {
+    workflowName: plan.workflowName,
+    goal: plan.goal,
+    output: plan.output,
+    schedule: plan.schedule,
     author: "operator"
   };
 }

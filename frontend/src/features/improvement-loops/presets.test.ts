@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildLoopWorkflow,
   buildScheduleInputs,
+  formFromResearchLaunchPlan,
   formFromPreset,
+  getResearchLaunchPlan,
   getPreset,
   normalizeCron
 } from "./presets";
@@ -32,5 +34,18 @@ describe("improvement loop presets", () => {
     expect(inputs.goal).toContain("operator path");
     expect(inputs.focus_areas).toEqual(preset.focusAreas);
     expect(inputs.cadence).toBe(preset.cadenceLabel);
+  });
+
+  it("builds one-click research launcher payloads", () => {
+    const plan = getResearchLaunchPlan("monthly-agent-os-horizon");
+    const preset = getPreset(plan.presetId);
+    const form = formFromResearchLaunchPlan(plan);
+    const workflow = buildLoopWorkflow(preset, form);
+    const inputs = buildScheduleInputs(preset, form);
+
+    expect(workflow.name).toBe("monthly-agent-os-horizon-scan");
+    expect(workflow.triggers.schedule).toBe("0 10 1 * *");
+    expect(workflow.description).toContain("agent operating systems");
+    expect(inputs.expected_output).toContain("Horizon report");
   });
 });
