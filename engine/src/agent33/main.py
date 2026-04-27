@@ -107,6 +107,9 @@ from agent33.api.routes import (
     scheduled_gates as scheduled_gates_routes,
 )
 from agent33.api.routes import (
+    skill_authoring as skill_authoring_routes,
+)
+from agent33.api.routes import (
     skill_matching as skill_matching_routes,
 )
 from agent33.api.routes import (
@@ -2435,6 +2438,7 @@ app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(delegation.router)
 app.include_router(spawner.router)
+app.include_router(skill_authoring_routes.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(commands.router)
 app.include_router(execution_routes.router)
