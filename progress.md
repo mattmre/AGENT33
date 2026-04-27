@@ -1,5 +1,30 @@
 # Progress Log
 
+## 2026-04-27 (Operator UX / Agent OS expansion through PRs #435-#447)
+
+- Executed the Operator UX rescue and platform-advantage queue from fresh
+  `origin/main` worktrees, one PR per slice, and merged every PR after green CI.
+- Operator-facing UX surfaces:
+  - **PR #435** (`7837389`) — Start Here onboarding control plane
+  - **PR #436** (`53e77d1`) — top-level ingestion Review Queue
+  - **PR #437** (`71a8075`) — Safety Center tool approvals
+  - **PR #438** (`3a02c46`) — operator skill authoring wizard
+  - **PR #439** (`5bb283c`) — guided Workflow Starter
+  - **PR #440** (`8e08f6d`) — adaptive Tool Fabric resolver
+- Platform advantage / automation surfaces:
+  - **PR #441** (`61c5d16`) — contained Agent OS runtime
+  - **PR #442** (`990fcc7`) — governed Improvement Loops
+  - **PR #443** (`705e3d9`) — MCP Health Center
+  - **PR #444** (`4865c1c`) — grouped operator navigation
+  - **PR #445** (`99019e3`) — MCP operator actions for CLI sync and proxy validate/reload
+  - **PR #446** (`751933e`) — named Agent OS sessions and lifecycle controls
+  - **PR #447** (`cf8d68a`) — one-click scheduled competitive, UX, and Agent OS research launchers
+- Local validation highlights:
+  - MCP actions: `npm test -- --run src/features/mcp-health/api.test.ts`, `npm run lint`, `npm run build`
+  - Agent OS sessions: `git diff --check`, PowerShell parser validation, `bash -n scripts/agent-os.sh`, `docker compose -f engine/docker-compose.yml --profile agent-os config --quiet`
+  - Scheduled research launchers: `npm test -- --run src/features/improvement-loops/presets.test.ts`, `npm run lint`, `npm run build`
+- `origin/main` is now at `cf8d68a`.
+
 ## 2026-04-25 (final wrap-up verification after PRs #425-#433)
 
 - Fetched `origin/main` to `cc4845a` and created fresh verification worktree

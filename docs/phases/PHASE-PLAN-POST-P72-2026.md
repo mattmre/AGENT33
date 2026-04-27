@@ -1,6 +1,6 @@
 # POST-P72 Phase Plan (2026)
 
-**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#433` on 2026-04-25, with the tracked post-merge follow-up wave closed after final fresh-main verification
+**Status**: Approved in Session 122, restored in Session 124, synced to merged baseline through `#447` on 2026-04-27, with the tracked post-merge follow-up and Operator UX expansion waves closed after CI verification
 **Scope**: POST-1 through POST-4 plus post-cluster distribution work
 
 ## Purpose
@@ -15,7 +15,7 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | POST-2 — SkillsBench Competitiveness | Complete | PRs `#388`-`#392` |
 | POST-3 — Pack Ecosystem | Complete | PRs `#394`, `#395`, `#397`, `#398` (`#393` / `#396` were docs reconciliation and wrap) |
 | POST-4 — Interruption & Self-Improvement | Complete | `POST-4.1`-`POST-4.5` complete in PRs `#399`-`#406` |
-| POST-CLUSTER — Distribution & Ecosystem Growth | Active | Public launch preparation, P-ENV v2, remediation, marketplace/community submissions, and the tracked follow-up wave are merged through `#433`; no queued slices remain in this plan |
+| POST-CLUSTER — Distribution & Ecosystem Growth | Complete | Public launch preparation, P-ENV v2, remediation, marketplace/community submissions, tracked follow-up work, Operator UX expansion, Agent OS, MCP operator actions, and research launchers are merged through `#447`; no queued slices remain in this plan |
 
 ## Current Execution Queue
 
@@ -29,7 +29,10 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 | 6 | SSE schema v2 backend foundation (`#431`) | Complete | Version gating, kill switch, and pinned schema scaffolding are merged on `main` |
 | 7 | Skills-system integration (`#432`) | Complete | Published ingestion skills register into the shared runtime registry on promote/hydration |
 | 8 | SkillsBench smoke regression reporting (`#433`) | Complete | CTRF comparison/reporting is merged into CI and benchmark workflows |
-| 9 | Final wrap-up verification | Complete | Fresh-main verification confirms the sequential roadmap wave landed cleanly on `main` |
+| 9 | Operator UX rescue foundation (`#435`-`#440`) | Complete | Start Here, Review Queue, Safety Center, Skill Wizard, Workflow Starter, and Tool Fabric are merged on `main` |
+| 10 | Agent OS / improvement / MCP foundation (`#441`-`#444`) | Complete | Agent OS runtime, Improvement Loops, MCP Health Center, and grouped navigation are merged on `main` |
+| 11 | Operator actions and recurring research (`#445`-`#447`) | Complete | MCP sync/validate/reload actions, named Agent OS sessions, and one-click scheduled research launchers are merged on `main` |
+| 12 | Final wrap-up verification | Complete | CI verification confirms the sequential roadmap and Operator UX expansion waves landed cleanly on `main` |
 
 ## Post-Wave Posture
 
@@ -38,7 +41,10 @@ This file is the canonical roadmap for the post-P72 wave. It captures what is al
 - SSE schema v2 backend foundation is complete in `#431`
 - skills-system integration is complete in `#432`
 - SkillsBench smoke regression reporting is complete in `#433`
-- no remaining queued slices exist in this tracked post-merge wave; any new work should begin from a fresh planning refresh
+- Operator UX rescue surfaces are complete in `#435`-`#440`
+- Agent OS, Improvement Loops, MCP Health, and navigation foundations are complete in `#441`-`#444`
+- MCP operator actions, Agent OS sessions, and scheduled research launchers are complete in `#445`-`#447`
+- no remaining queued slices exist in this tracked post-merge / Operator UX expansion wave; any new work should begin from a fresh planning refresh
 
 ## Cluster Plans
 

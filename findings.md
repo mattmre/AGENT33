@@ -1,5 +1,26 @@
 # Findings
 
+## 2026-04-27 (Operator UX / Agent OS expansion)
+
+- The primary platform gap was not raw endpoint coverage; it was that layman
+  operators had to discover JSON/API-shaped actions instead of being guided by
+  plain-language, job-oriented surfaces.
+- The complete remediation wave replaced the flat, API-centric entry path with:
+  Start Here onboarding, Review Queue, Safety Center, Skill Wizard, Workflow
+  Starter, Tool Fabric, Improvement Loops, MCP Health/actions, and grouped
+  navigation by operator job.
+- Agent OS is now a productized operator runtime instead of an internal devbox:
+  it has a non-root contained Linux environment, helper commands, docs, and named
+  session workspaces mounted into `/agent-workspace`.
+- MCP/EVOKORE work is now visible and actionable from the operator UI: health,
+  proxy fleet status, tool inventory, CLI sync drift, sync push, config
+  validation, and proxy reload all live in MCP Health.
+- Recurring competitive/product research no longer requires hand-authored JSON or
+  cron tuning: Improvement Loops now include one-click scheduled launchers for
+  competitive scans, layman UX watch, and Agent OS horizon scanning.
+- Remaining future work should be treated as a new scoped planning cycle, not as
+  unfinished debt from the roadmap queues closed through `#447`.
+
 ## 2026-04-20 (Session 130 community submissions)
 
 - The backend already exposes the essential community-submission contract on
