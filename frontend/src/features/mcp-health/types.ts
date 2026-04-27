@@ -61,6 +61,33 @@ export interface McpSyncDiffResponse {
   entries: McpSyncEntry[];
 }
 
+export interface McpSyncPushResult {
+  target: string;
+  config_path: string;
+  status: string;
+  message: string;
+  existing_entry: Record<string, unknown> | null;
+}
+
+export interface McpSyncPushResponse {
+  results: McpSyncPushResult[];
+}
+
+export interface McpProxyValidateResponse {
+  valid: boolean;
+  server_count: number;
+  errors: string[];
+  diff: Record<string, unknown>;
+}
+
+export interface McpProxyReloadResponse {
+  added?: string[];
+  restarted?: string[];
+  removed?: string[];
+  unchanged?: string[];
+  errors?: string[];
+}
+
 export interface EndpointState<T> {
   ok: boolean;
   status: number;

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   asMcpStatus,
+  asProxyReloadResponse,
   asProxyServersResponse,
   asProxyToolsResponse,
+  asProxyValidateResponse,
+  asSyncPushResponse,
   asSyncDiffResponse
 } from "./api";
 
@@ -76,5 +79,36 @@ describe("mcp health api parsers", () => {
 
     expect(diff?.entries[0]?.target).toBe("claude_code");
     expect(diff?.entries[0]?.matches).toBe(false);
+  });
+
+  it("parses MCP action responses", () => {
+    const pushed = asSyncPushResponse({
+      results: [
+        {
+          target: "claude_code",
+          config_path: "/home/operator/.claude.json",
+          status: "updated",
+          message: "Updated agent33 entry",
+          existing_entry: { command: "old" }
+        }
+      ]
+    });
+    const validated = asProxyValidateResponse({
+      valid: true,
+      server_count: 1,
+      errors: [],
+      diff: { added: ["evokore"] }
+    });
+    const reloaded = asProxyReloadResponse({
+      added: ["evokore"],
+      restarted: [],
+      removed: [],
+      unchanged: [],
+      errors: []
+    });
+
+    expect(pushed?.results[0]?.status).toBe("updated");
+    expect(validated?.server_count).toBe(1);
+    expect(reloaded?.added).toEqual(["evokore"]);
   });
 });
