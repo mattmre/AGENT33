@@ -22,6 +22,7 @@ import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
+import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
@@ -34,6 +35,7 @@ type AppTab =
   | "setup"
   | "review"
   | "safety"
+  | "skills"
   | "operations"
   | "outcomes"
   | "analytics"
@@ -60,6 +62,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "setup", label: "🔌 Integrations" },
   { id: "review", label: "Review Queue" },
   { id: "safety", label: "Safety Center" },
+  { id: "skills", label: "Skill Wizard" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
@@ -242,6 +245,18 @@ export default function App(): JSX.Element {
         {activeTab === "safety" && (
           <div className="consumer-safety-layout">
             <SafetyCenterPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* Skill Wizard -> plain-language skill authoring and installation */}
+        {activeTab === "skills" && (
+          <div className="consumer-skill-wizard-layout">
+            <SkillWizardPanel
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
