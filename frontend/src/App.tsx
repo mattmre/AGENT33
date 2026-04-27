@@ -10,6 +10,7 @@ import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ChatInterface } from "./features/chat/ChatInterface";
 import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel";
+import { IngestionReviewPanel } from "./features/operations-hub/IngestionReviewPanel";
 import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDashboardPanel";
 import { SessionAnalyticsDashboard } from "./features/session-analytics/SessionAnalyticsDashboard";
 import AgentBuilderPage from "./features/agent-builder/AgentBuilderPage";
@@ -30,6 +31,7 @@ type AppTab =
   | "chat"
   | "voice"
   | "setup"
+  | "review"
   | "operations"
   | "outcomes"
   | "analytics"
@@ -54,6 +56,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "chat", label: "💬 Chat Central" },
   { id: "voice", label: "🎙️ Voice Call" },
   { id: "setup", label: "🔌 Integrations" },
+  { id: "review", label: "Review Queue" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
@@ -222,6 +225,13 @@ export default function App(): JSX.Element {
                 onApiKeyChange={setApiKey}
               />
             </div>
+          </div>
+        )}
+
+        {/* Review Queue -> direct operator surface for candidate assets */}
+        {activeTab === "review" && (
+          <div className="consumer-review-layout">
+            <IngestionReviewPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
 

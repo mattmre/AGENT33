@@ -2651,6 +2651,10 @@ button:disabled {
   padding: 0.5rem;
 }
 
+.consumer-review-layout {
+  padding: 0.5rem;
+}
+
 .operations-hub-panel {
   background: linear-gradient(170deg, rgba(22, 45, 58, 0.9), rgba(10, 27, 36, 0.92));
   border: 1px solid var(--border);
@@ -2928,6 +2932,27 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.review-panel-meta {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: end;
+}
+
+.review-panel-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(160px, 220px));
+  gap: 0.7rem;
+  align-items: end;
+  margin-bottom: 0.85rem;
+}
+
+.review-panel-toolbar label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
 .review-panel-content {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
@@ -3024,6 +3049,10 @@ button:disabled {
   .review-panel-content {
     grid-template-columns: 1fr;
   }
+
+  .review-panel-toolbar {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -3042,6 +3071,10 @@ button:disabled {
 
   .review-panel-head {
     flex-direction: column;
+  }
+
+  .review-panel-meta {
+    justify-items: start;
   }
 }
 
