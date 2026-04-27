@@ -792,12 +792,195 @@ button:disabled {
 .consumer-chat-layout,
 .consumer-voice-layout,
 .consumer-setup-layout,
+.consumer-onboarding-layout,
 .consumer-builder-layout {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2rem;
   animation: fade-in 0.4s ease-out forwards;
+}
+
+/* First-run onboarding */
+.onboarding-panel {
+  background: linear-gradient(170deg, rgba(22, 45, 58, 0.92), rgba(8, 24, 32, 0.94));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 22px 42px rgba(5, 13, 17, 0.45);
+  display: grid;
+  gap: 1rem;
+}
+
+.onboarding-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.onboarding-hero h2 {
+  margin: 0;
+  font-size: 1.55rem;
+}
+
+.onboarding-hero p {
+  margin: 0.45rem 0 0;
+  max-width: 760px;
+  color: var(--text-soft);
+}
+
+.onboarding-score {
+  min-width: 170px;
+  border: 1px solid rgba(48, 213, 200, 0.35);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: rgba(8, 24, 32, 0.72);
+  text-align: right;
+}
+
+.onboarding-score strong {
+  display: block;
+  font-size: 1.8rem;
+  color: var(--accent);
+}
+
+.onboarding-score span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.onboarding-progress {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(8, 24, 32, 0.9);
+  border: 1px solid rgba(48, 213, 200, 0.2);
+  overflow: hidden;
+}
+
+.onboarding-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #8cf4df);
+  transition: width 0.2s ease;
+}
+
+.onboarding-callout {
+  border: 1px solid rgba(48, 213, 200, 0.28);
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(8, 24, 32, 0.68);
+}
+
+.onboarding-callout h3,
+.onboarding-section h3,
+.onboarding-step-card h4 {
+  margin: 0;
+}
+
+.onboarding-callout p {
+  color: var(--text-soft);
+}
+
+.onboarding-callout-success {
+  border-color: rgba(82, 225, 166, 0.42);
+}
+
+.onboarding-callout-error {
+  border-color: rgba(255, 107, 107, 0.42);
+}
+
+.onboarding-actions,
+.onboarding-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.onboarding-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.onboarding-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.onboarding-section-head p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.onboarding-step-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.8rem;
+}
+
+.onboarding-step-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.onboarding-step-card {
+  border: 1px solid #315365;
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: rgba(8, 24, 32, 0.74);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.onboarding-step-card.pending {
+  border-color: rgba(255, 190, 102, 0.42);
+}
+
+.onboarding-step-card.complete {
+  border-color: rgba(82, 225, 166, 0.38);
+}
+
+.onboarding-step-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  color: #7db6ca;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.onboarding-step-badge {
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.onboarding-step-card p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.onboarding-guidance {
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.65rem;
+}
+
+.onboarding-guidance code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(48, 213, 200, 0.25);
+  border-radius: 8px;
+  padding: 0.55rem;
+  background: rgba(0, 0, 0, 0.28);
+  color: #d9edf4;
+}
+
+.onboarding-advanced-toggle {
+  justify-self: start;
 }
 
 @keyframes fade-in {
