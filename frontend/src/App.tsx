@@ -8,6 +8,7 @@ import { SkipLink } from "./components/SkipLink";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
 import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
+import { ModelConnectionWizardPanel } from "./features/model-connection/ModelConnectionWizardPanel";
 import { ChatInterface } from "./features/chat/ChatInterface";
 import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel";
 import { IngestionReviewPanel } from "./features/operations-hub/IngestionReviewPanel";
@@ -38,6 +39,7 @@ type AppTab =
   | "start"
   | "chat"
   | "voice"
+  | "models"
   | "setup"
   | "review"
   | "safety"
@@ -81,6 +83,7 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     label: "Start",
     tabs: [
       { id: "start", label: "Start Here" },
+      { id: "models", label: "Models" },
       { id: "chat", label: "Chat" },
       { id: "voice", label: "Voice" }
     ]
@@ -207,6 +210,7 @@ export default function App(): JSX.Element {
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
+              onOpenModels={() => setActiveTab("models")}
               onOpenChat={() => setActiveTab("chat")}
               onOpenOperations={() => setActiveTab("operations")}
               onOpenWorkflowStarter={openWorkflowStarter}
@@ -275,6 +279,19 @@ export default function App(): JSX.Element {
               </button>
             </div>
             <ChatInterface token={token} apiKey={apiKey} />
+          </div>
+        )}
+
+        {/* Model Connection -> plain-language provider setup and probe flow */}
+        {activeTab === "models" && (
+          <div className="consumer-model-wizard-layout">
+            <ModelConnectionWizardPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenWorkflowCatalog={() => setActiveTab("catalog")}
+              onResult={onResult}
+            />
           </div>
         )}
 
