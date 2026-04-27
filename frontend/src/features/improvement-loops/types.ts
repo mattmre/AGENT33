@@ -3,6 +3,11 @@ export type ImprovementLoopPresetId =
   | "platform-improvement"
   | "operator-ux-review";
 
+export type ResearchLauncherId =
+  | "weekly-competitive-scan"
+  | "weekly-operator-ux-watch"
+  | "monthly-agent-os-horizon";
+
 export interface ImprovementLoopPreset {
   id: ImprovementLoopPresetId;
   title: string;
@@ -13,6 +18,19 @@ export interface ImprovementLoopPreset {
   defaultCron: string;
   cadenceLabel: string;
   focusAreas: string[];
+}
+
+export interface ResearchLaunchPlan {
+  id: ResearchLauncherId;
+  presetId: ImprovementLoopPresetId;
+  title: string;
+  summary: string;
+  workflowName: string;
+  goal: string;
+  output: string;
+  schedule: string;
+  cadenceLabel: string;
+  buttonLabel: string;
 }
 
 export interface ImprovementLoopForm {

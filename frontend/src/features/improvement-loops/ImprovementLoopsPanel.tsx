@@ -10,15 +10,20 @@ import {
 import {
   buildLoopWorkflow,
   buildScheduleInputs,
+  formFromResearchLaunchPlan,
   formFromPreset,
   getPreset,
   LOOP_PRESETS,
-  normalizeCron
+  normalizeCron,
+  RESEARCH_LAUNCH_PLANS
 } from "./presets";
 import type {
   ImprovementLoopForm,
+  ImprovementLoopPreset,
   ImprovementLoopPresetId,
   LoopWorkflowRequest,
+  ResearchLaunchPlan,
+  ResearchLauncherId,
   WorkflowCreateResponse,
   WorkflowScheduleResponse
 } from "./types";
@@ -46,6 +51,7 @@ export function ImprovementLoopsPanel({
   const [createdWorkflow, setCreatedWorkflow] = useState<WorkflowCreateResponse | null>(null);
   const [scheduledWorkflow, setScheduledWorkflow] = useState<WorkflowScheduleResponse | null>(null);
   const [loadingAction, setLoadingAction] = useState<"create" | "schedule" | null>(null);
+  const [launchingPlan, setLaunchingPlan] = useState<ResearchLauncherId | null>(null);
   const [error, setError] = useState("");
 
   const preset = useMemo(() => getPreset(presetId), [presetId]);
@@ -76,17 +82,24 @@ export function ImprovementLoopsPanel({
     setPreview(buildLoopWorkflow(preset, form));
   }
 
-  async function handleCreate(alsoSchedule: boolean): Promise<void> {
-    if (!canCreate) {
+  async function createOrScheduleLoop(
+    targetPreset: ImprovementLoopPreset,
+    targetForm: ImprovementLoopForm,
+    alsoSchedule: boolean
+  ): Promise<void> {
+    const targetGoal = targetForm.goal.trim();
+    const targetSchedule = normalizeCron(targetForm.schedule);
+
+    if (targetGoal === "") {
       setError("Describe the improvement loop goal first.");
       return;
     }
-    if (alsoSchedule && !canSchedule) {
+    if (alsoSchedule && targetSchedule === "") {
       setError("Add a cron schedule before creating an automatic loop.");
       return;
     }
 
-    const workflow = preview ?? buildLoopWorkflow(preset, form);
+    const workflow = buildLoopWorkflow(targetPreset, targetForm);
     setPreview(workflow);
     setError("");
     setLoadingAction(alsoSchedule ? "schedule" : "create");
@@ -115,8 +128,8 @@ export function ImprovementLoopsPanel({
       if (alsoSchedule) {
         const scheduleResult = await scheduleLoopWorkflow(
           workflow.name,
-          normalizeCron(form.schedule),
-          buildScheduleInputs(preset, form),
+          targetSchedule,
+          buildScheduleInputs(targetPreset, targetForm),
           token,
           apiKey
         );
@@ -133,6 +146,24 @@ export function ImprovementLoopsPanel({
       setError(message);
     } finally {
       setLoadingAction(null);
+    }
+  }
+
+  async function handleCreate(alsoSchedule: boolean): Promise<void> {
+    await createOrScheduleLoop(preset, form, alsoSchedule);
+  }
+
+  async function handleLaunchPlan(plan: ResearchLaunchPlan): Promise<void> {
+    const launchPreset = getPreset(plan.presetId);
+    const launchForm = formFromResearchLaunchPlan(plan);
+
+    setPresetId(plan.presetId);
+    setForm(launchForm);
+    setLaunchingPlan(plan.id);
+    try {
+      await createOrScheduleLoop(launchPreset, launchForm, true);
+    } finally {
+      setLaunchingPlan(null);
     }
   }
 
@@ -160,6 +191,39 @@ export function ImprovementLoopsPanel({
         </div>
         <div className="improvement-loops-badge">Autonomous, review-gated</div>
       </header>
+
+      <section className="research-launchers" aria-label="Recommended research launchers">
+        <div className="research-launchers-heading">
+          <div>
+            <h3>Recommended research launchers</h3>
+            <p>Skip the JSON and cron tuning. These launchers create and schedule implementation-ready research loops.</p>
+          </div>
+          <button type="button" onClick={onOpenOperations}>
+            View active schedules
+          </button>
+        </div>
+        <div className="research-launcher-grid">
+          {RESEARCH_LAUNCH_PLANS.map((plan) => (
+            <article className="research-launcher-card" key={plan.id}>
+              <div>
+                <h4>{plan.title}</h4>
+                <p>{plan.summary}</p>
+              </div>
+              <div className="detail-field">
+                <span className="detail-label">Cadence</span>
+                <span>{plan.cadenceLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleLaunchPlan(plan)}
+                disabled={loadingAction !== null || launchingPlan !== null}
+              >
+                {launchingPlan === plan.id ? "Scheduling..." : plan.buttonLabel}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <div className="improvement-loops-grid">
         <aside className="improvement-loop-presets" aria-label="Improvement loop presets">
