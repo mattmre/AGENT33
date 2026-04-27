@@ -1584,6 +1584,143 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.consumer-mcp-health-layout {
+  width: min(1320px, 100%);
+  margin: 0 auto;
+}
+
+.mcp-health-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.mcp-health-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.16), rgba(14, 165, 233, 0.12));
+  border: 1px solid rgba(196, 181, 253, 0.24);
+  border-radius: 18px;
+  padding: 1.35rem;
+}
+
+.mcp-health-hero h2,
+.mcp-health-card h3 {
+  margin: 0 0 0.45rem;
+}
+
+.mcp-health-hero p {
+  margin: 0;
+  color: var(--text-soft);
+  max-width: 760px;
+}
+
+.mcp-health-badge {
+  border: 1px solid rgba(196, 181, 253, 0.38);
+  color: #ddd6fe;
+  background: rgba(76, 29, 149, 0.28);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.mcp-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.mcp-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.mcp-health-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.mcp-health-card {
+  background: rgba(8, 22, 31, 0.78);
+  border: 1px solid rgba(196, 181, 253, 0.18);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.mcp-health-card p {
+  color: var(--text-soft);
+  margin: 0.25rem 0 0;
+}
+
+.mcp-health-summary strong {
+  color: var(--accent);
+}
+
+.mcp-health-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.mcp-health-metrics span,
+.mcp-state {
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  background: rgba(14, 165, 233, 0.14);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  color: #bae6fd;
+  font-size: 0.78rem;
+}
+
+.mcp-health-row {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid rgba(125, 211, 252, 0.12);
+}
+
+.mcp-health-row:first-of-type {
+  border-top: 0;
+}
+
+.mcp-health-row div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.mcp-health-row span,
+.mcp-health-row small {
+  color: var(--text-soft);
+}
+
+.mcp-state-healthy {
+  background: rgba(22, 163, 74, 0.18);
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #bbf7d0;
+}
+
+.mcp-state-degraded,
+.mcp-state-cooldown {
+  background: rgba(217, 119, 6, 0.18);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+}
+
+.mcp-state-unhealthy,
+.mcp-state-stopped {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

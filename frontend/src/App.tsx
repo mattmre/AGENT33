@@ -26,6 +26,7 @@ import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
+import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
@@ -40,6 +41,7 @@ type AppTab =
   | "safety"
   | "skills"
   | "fabric"
+  | "mcp"
   | "starter"
   | "loops"
   | "operations"
@@ -70,6 +72,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "safety", label: "Safety Center" },
   { id: "skills", label: "Skill Wizard" },
   { id: "fabric", label: "Tool Fabric" },
+  { id: "mcp", label: "MCP Health" },
   { id: "starter", label: "Workflow Starter" },
   { id: "loops", label: "Improvement Loops" },
   { id: "operations", label: "Operations Hub" },
@@ -284,6 +287,20 @@ export default function App(): JSX.Element {
               onOpenTools={() => setActiveTab("tools")}
               onOpenSkills={() => setActiveTab("skills")}
               onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* MCP Health -> server/tool/sync readiness for external tool fabric */}
+        {activeTab === "mcp" && (
+          <div className="consumer-mcp-health-layout">
+            <McpHealthPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenToolFabric={() => setActiveTab("fabric")}
+              onOpenTools={() => setActiveTab("tools")}
               onResult={onResult}
             />
           </div>
