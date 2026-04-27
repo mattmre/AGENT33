@@ -155,6 +155,7 @@ services:
     environment:
       AGENT33_API_URL: http://api:8000
       AGENT33_HOME: /home/agentos/.agent33
+      AGENT33_SESSION: ${AGENT_OS_SESSION_NAME:-default}
       AGENT33_WORKSPACE: /agent-workspace
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       DATABASE_URL: postgresql://agent33:agent33@postgres:5432/agent33
@@ -178,7 +179,7 @@ services:
       - ..:/workspace
       - shared_data:/data/shared
       - agent_os_home:/home/agentos
-      - agent_os_workspace:/agent-workspace
+      - ${AGENT_OS_SESSION_WORKSPACE:-agent_os_workspace}:/agent-workspace
       - /var/run/docker.sock:/var/run/docker.sock
     profiles:
       - agent-os
