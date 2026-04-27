@@ -24,6 +24,7 @@ import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
 import { ToolFabricPanel } from "./features/tool-fabric/ToolFabricPanel";
 import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
+import { WorkflowCatalogPanel } from "./features/workflow-catalog/WorkflowCatalogPanel";
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
@@ -43,6 +44,7 @@ type AppTab =
   | "skills"
   | "fabric"
   | "mcp"
+  | "catalog"
   | "starter"
   | "loops"
   | "operations"
@@ -98,6 +100,7 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
       { id: "skills", label: "Skill Wizard" },
       { id: "fabric", label: "Tool Fabric" },
       { id: "mcp", label: "MCP Health" },
+      { id: "catalog", label: "Workflow Catalog" },
       { id: "starter", label: "Workflow Starter" },
       { id: "tools", label: "Tools" }
     ]
@@ -355,6 +358,17 @@ export default function App(): JSX.Element {
               onOpenToolFabric={() => setActiveTab("fabric")}
               onOpenTools={() => setActiveTab("tools")}
               onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* Workflow Catalog -> curated outcome systems with safe starter routing */}
+        {activeTab === "catalog" && (
+          <div className="consumer-workflow-catalog-layout">
+            <WorkflowCatalogPanel
+              onOpenWorkflowStarter={openWorkflowStarter}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenOperations={() => setActiveTab("operations")}
             />
           </div>
         )}
