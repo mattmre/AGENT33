@@ -25,6 +25,26 @@ export interface OperationsHubProcessDetail extends OperationsHubProcessSummary 
 
 export type OperationsHubControlAction = "pause" | "resume" | "cancel";
 
+export type OperationsTimelineTone = "active" | "attention" | "done" | "neutral";
+
+export interface OperationsTimelineItem {
+  id: string;
+  processId: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  tone: OperationsTimelineTone;
+}
+
+export interface OperationsTimelineSummary {
+  total: number;
+  active: number;
+  attention: number;
+  done: number;
+  primaryMessage: string;
+  nextAction: string;
+}
+
 export interface IngestionAssetSummary {
   id: string;
   name: string;
