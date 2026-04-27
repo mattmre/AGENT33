@@ -23,6 +23,7 @@ import { ImpactDashboardPanel } from "./features/impact-dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { SafetyCenterPanel } from "./features/safety-center/SafetyCenterPanel";
 import { SkillWizardPanel } from "./features/skill-wizard/SkillWizardPanel";
+import { WorkflowStarterPanel } from "./features/workflow-starter/WorkflowStarterPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
@@ -36,6 +37,7 @@ type AppTab =
   | "review"
   | "safety"
   | "skills"
+  | "starter"
   | "operations"
   | "outcomes"
   | "analytics"
@@ -63,6 +65,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
   { id: "review", label: "Review Queue" },
   { id: "safety", label: "Safety Center" },
   { id: "skills", label: "Skill Wizard" },
+  { id: "starter", label: "Workflow Starter" },
   { id: "operations", label: "Operations Hub" },
   { id: "outcomes", label: "Outcomes" },
   { id: "analytics", label: "Analytics" },
@@ -260,6 +263,20 @@ export default function App(): JSX.Element {
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {/* Workflow Starter -> guided research and loop workflow creation */}
+        {activeTab === "starter" && (
+          <div className="consumer-workflow-starter-layout">
+            <WorkflowStarterPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenSpawner={() => setActiveTab("spawner")}
+              onOpenOperations={() => setActiveTab("operations")}
               onResult={onResult}
             />
           </div>
