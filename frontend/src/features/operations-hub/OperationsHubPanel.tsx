@@ -9,13 +9,15 @@ import {
   fetchProcessDetail
 } from "./api";
 import {
+  buildOperationsTimeline,
   canCancel,
   canPause,
   canResume,
   filterAndSortProcesses,
   formatTimestamp,
   getStatusClass,
-  getStatusLabel
+  getStatusLabel,
+  summarizeOperations
 } from "./helpers";
 import { IngestionReviewPanel } from "./IngestionReviewPanel";
 import type {
@@ -125,6 +127,12 @@ export function OperationsHubPanel({
     return filterAndSortProcesses(processes, statusFilter, textFilter);
   }, [processes, statusFilter, textFilter]);
 
+  const timelineSummary = useMemo(() => summarizeOperations(processes), [processes]);
+  const timelineItems = useMemo(
+    () => buildOperationsTimeline(filteredProcesses, selectedProcess),
+    [filteredProcesses, selectedProcess]
+  );
+
   const availableStatuses = useMemo(() => {
     const values = new Set<string>(["all"]);
     processes.forEach((process) => values.add(process.status.toLowerCase()));
@@ -165,8 +173,9 @@ export function OperationsHubPanel({
     <section className="operations-hub-panel">
       <header className="ops-hub-head">
         <div>
-          <h2>Operations Hub</h2>
-          <p>Unified lifecycle view with pause/resume/cancel controls.</p>
+          <p className="ops-hub-eyebrow">Run Timeline</p>
+          <h2>See what the agents are doing right now</h2>
+          <p>Plain-language progress, attention signals, and safe controls for active work.</p>
         </div>
         <div className="ops-hub-filters">
           <label>
@@ -189,6 +198,57 @@ export function OperationsHubPanel({
           </label>
         </div>
       </header>
+      <section className="ops-timeline-overview" aria-label="Run timeline overview">
+        <div className="ops-timeline-summary-card">
+          <span>Current state</span>
+          <strong>{timelineSummary.primaryMessage}</strong>
+          <p>{timelineSummary.nextAction}</p>
+        </div>
+        <div className="ops-timeline-stats" aria-label="Run counts">
+          <div>
+            <strong>{timelineSummary.total}</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.active}</strong>
+            <span>Working</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.attention}</strong>
+            <span>Needs attention</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.done}</strong>
+            <span>Done</span>
+          </div>
+        </div>
+      </section>
+      <section className="ops-timeline-panel" aria-label="Latest agent activity">
+        <div className="ops-timeline-head">
+          <div>
+            <h3>Latest activity</h3>
+            <p>Select a process below to add its step-by-step actions to this timeline.</p>
+          </div>
+          {hubTimestamp ? <span>Updated {formatTimestamp(hubTimestamp)}</span> : null}
+        </div>
+        {timelineItems.length === 0 && !loadingHub ? (
+          <p className="ops-hub-empty">No agent activity yet.</p>
+        ) : null}
+        {timelineItems.length > 0 ? (
+          <ol className="ops-timeline-list">
+            {timelineItems.map((item) => (
+              <li key={item.id} className={`ops-timeline-item ops-timeline-item--${item.tone}`}>
+                <div className="ops-timeline-marker" aria-hidden="true" />
+                <div>
+                  <span className="ops-timeline-time">{formatTimestamp(item.timestamp)}</span>
+                  <h4>{item.title}</h4>
+                  <p>{item.description}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </section>
       <div className="ops-hub-content">
         <div className="ops-hub-list">
           {hubError ? <p className="ops-hub-error" role="alert">{hubError}</p> : null}

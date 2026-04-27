@@ -4018,13 +4018,22 @@ button:disabled {
 
 .ops-hub-head h2 {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1.25rem;
 }
 
 .ops-hub-head p {
   margin: 0.3rem 0 0.7rem;
   color: var(--text-soft);
   font-size: 0.88rem;
+}
+
+.ops-hub-eyebrow {
+  margin: 0 0 0.25rem;
+  color: #93c5fd;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .ops-hub-filters {
@@ -4035,6 +4044,133 @@ button:disabled {
 
 .ops-hub-filters label {
   min-width: 140px;
+}
+
+.ops-timeline-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 0.85rem;
+}
+
+.ops-timeline-summary-card,
+.ops-timeline-panel {
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(48, 213, 200, 0.12), transparent 34%),
+    rgba(8, 24, 32, 0.72);
+  padding: 0.95rem;
+}
+
+.ops-timeline-summary-card {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ops-timeline-summary-card span,
+.ops-timeline-stats span,
+.ops-timeline-head span,
+.ops-timeline-time {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.ops-timeline-summary-card strong {
+  color: #f8fbfd;
+  font-size: 1.2rem;
+}
+
+.ops-timeline-summary-card p,
+.ops-timeline-head p,
+.ops-timeline-item p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.ops-timeline-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.ops-timeline-stats div {
+  display: grid;
+  gap: 0.25rem;
+  align-content: center;
+  min-height: 86px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.62);
+  padding: 0.75rem;
+}
+
+.ops-timeline-stats strong {
+  color: #bbf7d0;
+  font-size: 1.45rem;
+}
+
+.ops-timeline-panel {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.ops-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.ops-timeline-head h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.ops-timeline-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-timeline-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 12px;
+  background: rgba(5, 15, 22, 0.62);
+}
+
+.ops-timeline-marker {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: #93c5fd;
+  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.12);
+}
+
+.ops-timeline-item--active .ops-timeline-marker {
+  background: #30d5c8;
+  box-shadow: 0 0 0 4px rgba(48, 213, 200, 0.14);
+}
+
+.ops-timeline-item--attention .ops-timeline-marker {
+  background: #f6bd60;
+  box-shadow: 0 0 0 4px rgba(246, 189, 96, 0.14);
+}
+
+.ops-timeline-item--done .ops-timeline-marker {
+  background: #52c41a;
+  box-shadow: 0 0 0 4px rgba(82, 196, 26, 0.14);
+}
+
+.ops-timeline-item h4 {
+  margin: 0.2rem 0;
+  font-size: 0.92rem;
 }
 
 .ops-hub-content {
@@ -4378,6 +4514,10 @@ button:disabled {
 }
 
 @media (max-width: 1100px) {
+  .ops-timeline-overview {
+    grid-template-columns: 1fr;
+  }
+
   .ops-hub-content {
     grid-template-columns: 1fr;
   }
@@ -4401,6 +4541,14 @@ button:disabled {
 
 @media (max-width: 768px) {
   .ops-hub-head {
+    flex-direction: column;
+  }
+
+  .ops-timeline-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-timeline-head {
     flex-direction: column;
   }
 
