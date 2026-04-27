@@ -11,7 +11,7 @@ describe("workflow catalog filters", () => {
   it("finds workflows by plain-language outcome text", () => {
     const workflows = filterWorkflowCatalog(OUTCOME_WORKFLOWS, {
       ...getDefaultWorkflowCatalogFilters(),
-      query: "landing page copy"
+      query: "landing page, copy"
     });
 
     expect(workflows.map((workflow) => workflow.id)).toContain("create-landing-page");

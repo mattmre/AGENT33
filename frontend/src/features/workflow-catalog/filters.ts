@@ -32,6 +32,7 @@ export function filterWorkflowCatalog(
   const queryTerms = filters.query
     .trim()
     .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
     .split(/\s+/)
     .filter(Boolean);
 

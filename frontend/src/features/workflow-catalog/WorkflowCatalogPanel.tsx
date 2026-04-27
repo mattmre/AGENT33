@@ -51,10 +51,7 @@ export function WorkflowCatalogPanel({
   const workflows = useMemo(() => filterWorkflowCatalog(OUTCOME_WORKFLOWS, filters), [filters]);
   const selectedWorkflow = useMemo(
     () =>
-      workflows.find((workflow) => workflow.id === selectedId) ??
-      workflows[0] ??
-      OUTCOME_WORKFLOWS.find((workflow) => workflow.id === selectedId) ??
-      OUTCOME_WORKFLOWS[0],
+      workflows.find((workflow) => workflow.id === selectedId) ?? workflows[0] ?? null,
     [selectedId, workflows]
   );
 
