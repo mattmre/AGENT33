@@ -16,6 +16,7 @@ interface OutcomeHomePanelProps {
   token: string;
   apiKey: string;
   onOpenSetup: () => void;
+  onOpenModels: () => void;
   onOpenChat: () => void;
   onOpenOperations: () => void;
   onOpenWorkflowStarter: (draft?: WorkflowStarterDraft) => void;
@@ -78,6 +79,7 @@ export function OutcomeHomePanel({
   token,
   apiKey,
   onOpenSetup,
+  onOpenModels,
   onOpenChat,
   onOpenOperations,
   onOpenWorkflowStarter,
@@ -147,7 +149,7 @@ export function OutcomeHomePanel({
               ? "Connect OpenRouter, Ollama, or another provider before building."
               : "Model provider readiness is still pending or unknown.",
         action: "Connect model",
-        onAction: onOpenSetup
+        onAction: onOpenModels
       },
       {
         label: "Runtime memory",
@@ -170,7 +172,7 @@ export function OutcomeHomePanel({
         onAction: onOpenOperations
       }
     ];
-  }, [hasCredentials, onOpenOperations, onOpenSetup, status]);
+  }, [hasCredentials, onOpenModels, onOpenOperations, onOpenSetup, status]);
 
   const tagOptions = useMemo(() => {
     const tags = new Set<string>(["featured"]);
@@ -290,8 +292,8 @@ export function OutcomeHomePanel({
       </section>
 
       <section className="outcome-next-actions" aria-label="Common next actions">
-        <button type="button" onClick={onOpenSetup}>
-          Connect models and tools
+        <button type="button" onClick={onOpenModels}>
+          Connect model
         </button>
         <button type="button" onClick={onOpenMcp}>
           Check MCP health
