@@ -129,6 +129,107 @@ describe("IngestionReviewPanel", () => {
     expect(screen.getByText("Review required")).toBeInTheDocument();
   });
 
+  it("filters review assets by confidence, quarantine, and text", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/v1/ingestion/review-queue")) {
+        return Promise.resolve(
+          mockFetchResponse([
+            {
+              id: "asset-1",
+              name: "safe-pack",
+              asset_type: "pack",
+              status: "candidate",
+              confidence: "medium",
+              source_uri: "https://example.test/safe-pack",
+              tenant_id: "tenant-1",
+              created_at: "2026-04-25T10:00:00Z",
+              updated_at: "2026-04-25T10:00:00Z",
+              validated_at: null,
+              published_at: null,
+              revoked_at: null,
+              revocation_reason: null,
+              metadata: {
+                review_required: true
+              }
+            },
+            {
+              id: "asset-2",
+              name: "risky-pack",
+              asset_type: "pack",
+              status: "candidate",
+              confidence: "low",
+              source_uri: "https://example.test/risky-pack",
+              tenant_id: "tenant-1",
+              created_at: "2026-04-25T10:01:00Z",
+              updated_at: "2026-04-25T10:01:00Z",
+              validated_at: null,
+              published_at: null,
+              revoked_at: null,
+              revocation_reason: null,
+              metadata: {
+                review_required: true,
+                quarantine: true
+              }
+            }
+          ])
+        );
+      }
+
+      if (url.includes("/v1/ingestion/candidates/asset-1/history")) {
+        return Promise.resolve(
+          mockFetchResponse({
+            asset: {
+              id: "asset-1",
+              name: "safe-pack",
+              asset_type: "pack",
+              status: "candidate",
+              confidence: "medium",
+              source_uri: "https://example.test/safe-pack",
+              tenant_id: "tenant-1",
+              created_at: "2026-04-25T10:00:00Z",
+              updated_at: "2026-04-25T10:00:00Z",
+              validated_at: null,
+              published_at: null,
+              revoked_at: null,
+              revocation_reason: null,
+              metadata: {
+                review_required: true
+              }
+            },
+            history: []
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url}`));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<IngestionReviewPanel token="token" apiKey="" onResult={vi.fn()} />);
+
+    expect(await screen.findByRole("button", { name: /safe-pack/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /risky-pack/i })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Attention"), "quarantine");
+
+    expect(screen.queryByRole("button", { name: /safe-pack/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /risky-pack/i })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Confidence"), "medium");
+
+    expect(screen.getByText("No assets match the current filters.")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Attention"), "all");
+    await user.clear(screen.getByLabelText("Search assets"));
+    await user.type(screen.getByLabelText("Search assets"), "safe");
+
+    expect(screen.getByRole("button", { name: /safe-pack/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /risky-pack/i })).not.toBeInTheDocument();
+  });
+
   it("submits approve actions and refreshes the selected asset", async () => {
     let assetStatus = "candidate";
     const baseAsset = {

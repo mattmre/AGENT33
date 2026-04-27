@@ -72,6 +72,9 @@ export function IngestionReviewPanel({
   const [actionInFlight, setActionInFlight] = useState<ReviewAction | null>(null);
   const [operator, setOperator] = useState("operations-hub");
   const [reason, setReason] = useState("");
+  const [confidenceFilter, setConfidenceFilter] = useState("all");
+  const [attentionFilter, setAttentionFilter] = useState("all");
+  const [textFilter, setTextFilter] = useState("");
 
   const loadQueue = useCallback(async (): Promise<IngestionAssetSummary[] | null> => {
     if (!token && !apiKey) {
@@ -156,6 +159,28 @@ export function IngestionReviewPanel({
     }
     return assets.find((asset) => asset.id === selectedAssetId) ?? null;
   }, [assetHistory, assets, selectedAssetId]);
+  const filteredAssets = useMemo(() => {
+    const normalizedText = textFilter.trim().toLowerCase();
+    return assets.filter((asset) => {
+      const matchesConfidence =
+        confidenceFilter === "all" || asset.confidence.toLowerCase() === confidenceFilter;
+      const matchesAttention =
+        attentionFilter === "all" ||
+        (attentionFilter === "quarantine" && asset.metadata.quarantine === true) ||
+        (attentionFilter === "review_required" && asset.metadata.review_required === true);
+      const matchesText =
+        normalizedText === "" ||
+        asset.name.toLowerCase().includes(normalizedText) ||
+        asset.id.toLowerCase().includes(normalizedText) ||
+        (asset.source_uri ?? "").toLowerCase().includes(normalizedText);
+      return matchesConfidence && matchesAttention && matchesText;
+    });
+  }, [assets, attentionFilter, confidenceFilter, textFilter]);
+  const availableConfidence = useMemo(() => {
+    const values = new Set<string>(["all"]);
+    assets.forEach((asset) => values.add(asset.confidence.toLowerCase()));
+    return [...values];
+  }, [assets]);
   const timelineEntries = useMemo(() => {
     if (assetHistory?.asset.id !== selectedAssetId) {
       return [];
@@ -208,12 +233,44 @@ export function IngestionReviewPanel({
       <header className="review-panel-head">
         <div>
           <h3>Ingestion Review Queue</h3>
-          <p>Inspect per-asset history, metadata, and approve or reject pending candidates.</p>
+          <p>
+            Review candidate skills, packs, and assets before they become usable. Quarantined items
+            stay visible here until an operator approves or rejects them.
+          </p>
         </div>
         <div className="review-panel-meta">
+          <span>{filteredAssets.length} shown</span>
           <span>{assets.length} awaiting review</span>
         </div>
       </header>
+      <div className="review-panel-toolbar" aria-label="Review queue filters">
+        <label>
+          Search assets
+          <input
+            placeholder="Name, id, or source"
+            value={textFilter}
+            onChange={(event) => setTextFilter(event.target.value)}
+          />
+        </label>
+        <label>
+          Confidence
+          <select value={confidenceFilter} onChange={(event) => setConfidenceFilter(event.target.value)}>
+            {availableConfidence.map((confidence) => (
+              <option key={confidence} value={confidence}>
+                {confidence === "all" ? "All confidence levels" : getStatusLabel(confidence)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Attention
+          <select value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value)}>
+            <option value="all">All review items</option>
+            <option value="review_required">Review required</option>
+            <option value="quarantine">Quarantined only</option>
+          </select>
+        </label>
+      </div>
       <div className="review-panel-content">
         <div className="review-asset-list">
           {queueError ? <p className="ops-hub-error" role="alert">{queueError}</p> : null}
@@ -223,7 +280,10 @@ export function IngestionReviewPanel({
           {assets.length === 0 && !loadingQueue && !queueError ? (
             <p className="ops-hub-empty">No assets currently require review.</p>
           ) : null}
-          {assets.map((asset) => (
+          {assets.length > 0 && filteredAssets.length === 0 ? (
+            <p className="ops-hub-empty">No assets match the current filters.</p>
+          ) : null}
+          {filteredAssets.map((asset) => (
             <article
               key={asset.id}
               className={`ops-hub-process-item ${selectedAssetId === asset.id ? "selected" : ""}`}
