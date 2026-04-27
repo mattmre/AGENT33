@@ -697,8 +697,9 @@ button:disabled {
 .consumer-topbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
   background: rgba(4, 12, 18, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(47, 90, 108, 0.4);
@@ -749,22 +750,51 @@ button:disabled {
 
 .main-nav {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
   background: rgba(11, 30, 39, 0.6);
-  padding: 0.3rem;
+  padding: 0.45rem;
   border-radius: 12px;
   border: 1px solid rgba(47, 90, 108, 0.3);
+  max-width: 940px;
+}
+
+.main-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border-radius: 10px;
+  background: rgba(4, 12, 18, 0.34);
+  border: 1px solid rgba(47, 90, 108, 0.22);
+}
+
+.main-nav-group-label {
+  color: #6fa8b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 0.25rem 0 0.35rem;
+}
+
+.main-nav-group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 .main-nav button {
   background: transparent;
   border: none;
   color: #9dc3cf;
-  padding: 0.6rem 1.2rem;
+  padding: 0.45rem 0.65rem;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 500;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .main-nav button:hover {

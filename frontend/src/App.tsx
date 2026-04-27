@@ -63,27 +63,62 @@ interface ActivityItem {
   url: string;
 }
 
-const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
-  { id: "start", label: "Start Here" },
-  { id: "chat", label: "💬 Chat Central" },
-  { id: "voice", label: "🎙️ Voice Call" },
-  { id: "setup", label: "🔌 Integrations" },
-  { id: "review", label: "Review Queue" },
-  { id: "safety", label: "Safety Center" },
-  { id: "skills", label: "Skill Wizard" },
-  { id: "fabric", label: "Tool Fabric" },
-  { id: "mcp", label: "MCP Health" },
-  { id: "starter", label: "Workflow Starter" },
-  { id: "loops", label: "Improvement Loops" },
-  { id: "operations", label: "Operations Hub" },
-  { id: "outcomes", label: "Outcomes" },
-  { id: "analytics", label: "Analytics" },
-  { id: "impact", label: "Impact" },
-  { id: "tools", label: "Tools" },
-  { id: "marketplace", label: "Marketplace" },
-  { id: "builder", label: "Builder" },
-  { id: "spawner", label: "Spawner" },
-  { id: "advanced", label: "⚙️ Advanced Settings" }
+interface AppTabConfig {
+  id: AppTab;
+  label: string;
+}
+
+interface AppTabGroup {
+  label: string;
+  tabs: AppTabConfig[];
+}
+
+const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
+  {
+    label: "Start",
+    tabs: [
+      { id: "start", label: "Start Here" },
+      { id: "chat", label: "Chat" },
+      { id: "voice", label: "Voice" }
+    ]
+  },
+  {
+    label: "Operate",
+    tabs: [
+      { id: "setup", label: "Integrations" },
+      { id: "review", label: "Review Queue" },
+      { id: "safety", label: "Safety Center" },
+      { id: "operations", label: "Operations Hub" }
+    ]
+  },
+  {
+    label: "Build",
+    tabs: [
+      { id: "skills", label: "Skill Wizard" },
+      { id: "fabric", label: "Tool Fabric" },
+      { id: "mcp", label: "MCP Health" },
+      { id: "starter", label: "Workflow Starter" },
+      { id: "tools", label: "Tools" }
+    ]
+  },
+  {
+    label: "Improve",
+    tabs: [
+      { id: "loops", label: "Improvement Loops" },
+      { id: "outcomes", label: "Outcomes" },
+      { id: "analytics", label: "Analytics" },
+      { id: "impact", label: "Impact" }
+    ]
+  },
+  {
+    label: "Extend",
+    tabs: [
+      { id: "marketplace", label: "Marketplace" },
+      { id: "builder", label: "Builder" },
+      { id: "spawner", label: "Spawner" },
+      { id: "advanced", label: "Advanced" }
+    ]
+  }
 ];
 
 export default function App(): JSX.Element {
@@ -135,15 +170,22 @@ export default function App(): JSX.Element {
         </div>
         <GlobalSearch token={token || null} />
         <nav className="main-nav" aria-label="Main navigation">
-          {APP_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              className={activeTab === tab.id ? "active" : ""}
-              onClick={() => setActiveTab(tab.id)}
-              aria-current={activeTab === tab.id ? "page" : undefined}
-            >
-              {tab.label}
-            </button>
+          {APP_TAB_GROUPS.map((group) => (
+            <section key={group.label} className="main-nav-group" aria-label={`${group.label} navigation`}>
+              <span className="main-nav-group-label">{group.label}</span>
+              <div className="main-nav-group-tabs">
+                {group.tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={activeTab === tab.id ? "active" : ""}
+                    onClick={() => setActiveTab(tab.id)}
+                    aria-current={activeTab === tab.id ? "page" : undefined}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
         </nav>
       </header>
