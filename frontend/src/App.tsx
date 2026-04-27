@@ -19,12 +19,14 @@ import "./features/pack-marketplace/PackMarketplacePage.css";
 import { SpawnerPage } from "./features/spawner";
 import { ToolCatalogPage } from "./features/tool-catalog";
 import { ImpactDashboardPanel } from "./features/impact-dashboard";
+import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import { getRuntimeConfig } from "./lib/api";
 import type { ApiResult } from "./types";
 
 type AppTab =
+  | "start"
   | "chat"
   | "voice"
   | "setup"
@@ -48,6 +50,7 @@ interface ActivityItem {
 }
 
 const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
+  { id: "start", label: "Start Here" },
   { id: "chat", label: "💬 Chat Central" },
   { id: "voice", label: "🎙️ Voice Call" },
   { id: "setup", label: "🔌 Integrations" },
@@ -63,7 +66,7 @@ const APP_TABS: ReadonlyArray<{ id: AppTab; label: string }> = [
 ];
 
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<AppTab>("chat");
+  const [activeTab, setActiveTab] = useState<AppTab>("start");
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
@@ -125,6 +128,19 @@ export default function App(): JSX.Element {
       </header>
 
       <div className="consumer-content" id="main-content" role="main">
+        {activeTab === "start" && (
+          <div className="consumer-onboarding-layout">
+            <OnboardingPanel
+              token={token}
+              apiKey={apiKey}
+              onOpenSetup={() => setActiveTab("setup")}
+              onOpenChat={() => setActiveTab("chat")}
+              onOpenOperations={() => setActiveTab("operations")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
         {/* Chat Central -> Render new ChatInterface */}
         {activeTab === "chat" && (
           <div className="consumer-chat-layout">
