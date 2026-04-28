@@ -1,25 +1,49 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { WorkflowStarterDraft } from "../workflow-starter/types";
+import type { UserRoleId } from "../role-intake/types";
 import { DEMO_SCENARIOS, findDemoScenario, getDefaultDemoScenario } from "./demoScenarios";
 
 interface DemoModePanelProps {
+  selectedRole?: UserRoleId | null;
   onOpenModels: () => void;
   onOpenWorkflowCatalog: () => void;
   onOpenWorkflowStarter: (draft?: WorkflowStarterDraft) => void;
 }
 
 export function DemoModePanel({
+  selectedRole,
   onOpenModels,
   onOpenWorkflowCatalog,
   onOpenWorkflowStarter
 }: DemoModePanelProps): JSX.Element {
   const [selectedId, setSelectedId] = useState(getDefaultDemoScenario().id);
-  const scenario = useMemo(() => findDemoScenario(selectedId), [selectedId]);
+  const visibleScenarios = useMemo(() => {
+    if (!selectedRole) {
+      return DEMO_SCENARIOS;
+    }
+    const filtered = DEMO_SCENARIOS.filter(
+      (item) => item.forRoles === undefined || item.forRoles.includes(selectedRole)
+    );
+    return filtered.length > 0 ? filtered : DEMO_SCENARIOS;
+  }, [selectedRole]);
+  const scenario = useMemo(
+    () =>
+      visibleScenarios.find((item) => item.id === selectedId) ??
+      visibleScenarios[0] ??
+      findDemoScenario(selectedId),
+    [selectedId, visibleScenarios]
+  );
   const scenarioIndex = Math.max(
-    DEMO_SCENARIOS.findIndex((item) => item.id === scenario.id) + 1,
+    visibleScenarios.findIndex((item) => item.id === scenario.id) + 1,
     1
   );
+
+  useEffect(() => {
+    if (!visibleScenarios.some((item) => item.id === selectedId)) {
+      setSelectedId(visibleScenarios[0]?.id ?? getDefaultDemoScenario().id);
+    }
+  }, [selectedId, visibleScenarios]);
 
   return (
     <section className="demo-mode-panel" aria-labelledby="demo-mode-title">
@@ -42,7 +66,7 @@ export function DemoModePanel({
       <div className="demo-mode-layout">
         <aside className="demo-mode-picker" aria-label="Demo scenarios">
           <h3>Choose a sample outcome</h3>
-          {DEMO_SCENARIOS.map((item) => (
+          {visibleScenarios.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -66,7 +90,7 @@ export function DemoModePanel({
               <h3>{scenario.title}</h3>
               <div className="demo-scenario-meta" aria-label="Selected demo details">
                 <span>
-                  {scenarioIndex} of {DEMO_SCENARIOS.length}
+                  {scenarioIndex} of {visibleScenarios.length}
                 </span>
                 <span>{scenario.complexity}</span>
                 <span>{scenario.timeEstimate}</span>

@@ -45,4 +45,19 @@ describe("DemoModePanel", () => {
       })
     );
   });
+
+  it("filters scenarios for the selected role", () => {
+    render(
+      <DemoModePanel
+        selectedRole="enterprise"
+        onOpenModels={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onOpenWorkflowStarter={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Repo triage report/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Landing page launch kit/ })).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+  });
 });

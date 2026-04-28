@@ -7,6 +7,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Founder / operations lead",
     complexity: "Beginner",
     timeEstimate: "5 min preview",
+    forRoles: ["founder", "operator"],
     outcome:
       "A practical product brief, workflow plan, dashboard sections, and QA checklist for a support analytics dashboard.",
     prompt:
@@ -94,6 +95,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Founder / agency",
     complexity: "Beginner",
     timeEstimate: "4 min preview",
+    forRoles: ["founder", "agency"],
     outcome:
       "A launch-ready landing page structure with positioning, section copy, design notes, and implementation checklist.",
     prompt:
@@ -166,6 +168,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Developer / maintainer",
     complexity: "Intermediate",
     timeEstimate: "6 min preview",
+    forRoles: ["developer", "enterprise"],
     outcome:
       "A prioritized repo improvement report with likely risks, PR slices, validation commands, and rollback notes.",
     prompt:
@@ -238,6 +241,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Non-technical founder",
     complexity: "Beginner",
     timeEstimate: "5 min preview",
+    forRoles: ["founder"],
     outcome:
       "A rough idea becomes a simple MVP scope, first-week build plan, success checks, and risk notes.",
     prompt:
@@ -316,6 +320,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Small-business operator",
     complexity: "Beginner",
     timeEstimate: "4 min preview",
+    forRoles: ["agency", "operator"],
     outcome:
       "A messy customer export becomes a clean weekly report plan with segments, checks, and follow-up actions.",
     prompt:
@@ -390,6 +395,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     audience: "Team lead / operations",
     complexity: "Beginner",
     timeEstimate: "5 min preview",
+    forRoles: ["developer", "agency", "enterprise", "operator"],
     outcome:
       "A meeting-notes helper plan with agenda capture, action items, owners, reminders, and approval rules.",
     prompt:
