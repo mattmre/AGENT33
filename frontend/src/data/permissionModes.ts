@@ -77,7 +77,9 @@ export function isPermissionModeId(value: string | null): value is PermissionMod
 export function getPermissionMode(modeId: PermissionModeId): PermissionModeDefinition {
   const mode = PERMISSION_MODES.find((candidate) => candidate.id === modeId);
   if (!mode) {
-    throw new Error("Permission mode configuration is unavailable.");
+    throw new Error(
+      `Permission mode configuration is unavailable for modeId "${modeId}". Known IDs: ${PERMISSION_MODE_IDS.join(", ")}.`
+    );
   }
 
   return mode;

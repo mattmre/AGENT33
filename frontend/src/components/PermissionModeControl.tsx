@@ -4,14 +4,13 @@ import {
   isPermissionModeId,
   type PermissionModeId
 } from "../data/permissionModes";
-
-type ControlPlaneMode = "beginner" | "pro";
+import type { OperatorMode } from "../features/advanced/AdvancedControlPlanePanel";
 
 interface PermissionModeControlProps {
   selectedModeId: PermissionModeId;
-  operatorMode: ControlPlaneMode;
+  operatorMode: OperatorMode;
   onSelectMode: (modeId: PermissionModeId) => void;
-  onOperatorModeChange: (mode: ControlPlaneMode) => void;
+  onOperatorModeChange: (mode: OperatorMode) => void;
 }
 
 export function PermissionModeControl({
@@ -33,8 +32,7 @@ export function PermissionModeControl({
           onChange={(event) => {
             const nextMode = event.target.value;
             if (!isPermissionModeId(nextMode)) {
-              console.error(`Unknown permission mode: ${nextMode}`);
-              return;
+              throw new Error(`Permission mode selection "${nextMode}" is unavailable.`);
             }
             onSelectMode(nextMode);
           }}
