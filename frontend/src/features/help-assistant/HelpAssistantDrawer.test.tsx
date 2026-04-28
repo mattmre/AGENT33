@@ -43,4 +43,26 @@ describe("HelpAssistantDrawer", () => {
 
     expect(onNavigate).toHaveBeenCalledWith("connect");
   });
+
+  it("lets users choose helper runtime modes without starting a model", async () => {
+    const user = userEvent.setup();
+
+    render(<HelpAssistantDrawer onNavigate={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Ask AGENT33" }));
+
+    expect(screen.getByRole("heading", { name: "Choose how the helper thinks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Static cited search/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    await user.click(screen.getByRole("button", { name: /Ollama sidecar helper/ }));
+
+    expect(screen.getByRole("button", { name: /Ollama sidecar helper/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("Start Ollama locally")).toBeInTheDocument();
+  });
 });

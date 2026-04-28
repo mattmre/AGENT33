@@ -546,6 +546,58 @@ button:disabled {
   gap: 0.55rem;
 }
 
+.help-runtime-panel {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 18px;
+  padding: 0.9rem;
+  background: rgba(7, 22, 30, 0.68);
+}
+
+.help-runtime-panel h3 {
+  margin: 0;
+}
+
+.help-runtime-panel p:not(.eyebrow),
+.help-runtime-panel small,
+.help-runtime-details {
+  color: #b9d7df;
+}
+
+.help-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.help-runtime-card {
+  display: grid;
+  gap: 0.3rem;
+  text-align: left;
+  border-color: rgba(48, 213, 200, 0.18);
+  background: rgba(10, 31, 41, 0.78);
+}
+
+.help-runtime-card.active {
+  border-color: rgba(48, 213, 200, 0.54);
+  background: rgba(48, 213, 200, 0.12);
+}
+
+.help-runtime-card span {
+  color: #b7f7ca;
+  font-size: 0.78rem;
+}
+
+.help-runtime-card small {
+  color: #9fb9c4;
+}
+
+.help-runtime-details ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
 .help-assistant-quick-prompts button,
 .help-assistant-actions button,
 .help-assistant-related button {
@@ -663,6 +715,10 @@ button:disabled {
   .help-assistant-header,
   .help-assistant-answer-head {
     flex-direction: column;
+  }
+
+  .help-runtime-grid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -2,6 +2,43 @@ import type { HelpArticle } from "./types";
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
+    id: "helper-runtime-modes",
+    title: "Choose a helper runtime",
+    audience: "New user deciding whether setup help should stay local",
+    summary:
+      "The Help Assistant defaults to static cited search. Browser semantic search and Ollama sidecar modes are pilot paths that must stay opt-in and privacy-explicit.",
+    body: [
+      "Static cited search is available now and uses only built-in help articles.",
+      "Browser semantic search should ask before downloading model or embedding assets and must keep static search as the fallback.",
+      "Ollama sidecar help should only run when a user starts a local server and chooses that runtime."
+    ],
+    steps: [
+      'Click "Ask AGENT33".',
+      "Keep Static cited search selected for no-setup help.",
+      "Use Browser semantic search only when the UI says the browser is ready.",
+      "Use Ollama sidecar only after starting a local Ollama server and connecting Models."
+    ],
+    keywords: [
+      "helper",
+      "runtime",
+      "browser",
+      "semantic",
+      "ollama",
+      "local",
+      "privacy",
+      "assistant"
+    ],
+    sources: [
+      { label: "Helper runtime modes", path: "frontend/src/features/help-assistant/helperModes.ts" },
+      { label: "Help Assistant drawer", path: "frontend/src/features/help-assistant/HelpAssistantDrawer.tsx" },
+      { label: "Wave 2 helper architecture", path: "docs/research/wave2-r10-helper-llm-pilot.md" }
+    ],
+    actions: [
+      { label: "Open Models", target: "models" },
+      { label: "Open Connect Center", target: "connect" }
+    ]
+  },
+  {
     id: "connect-center",
     title: "Use Connect Center for setup",
     audience: "New user who needs to connect models, tools, and safety",
