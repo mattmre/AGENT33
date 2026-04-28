@@ -84,6 +84,8 @@ describe("VisuallyHidden", () => {
 describe("App accessibility", () => {
   // Mock dependencies that App uses
   beforeEach(() => {
+    window.sessionStorage.clear();
+
     // Mock localStorage for auth
     vi.stubGlobal("localStorage", {
       getItem: vi.fn().mockReturnValue(null),
@@ -169,6 +171,22 @@ describe("App accessibility", () => {
     const orb = document.querySelector(".logo-orb");
     expect(orb).toBeTruthy();
     expect(orb).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("keeps permission mode visible and changeable in the cockpit context", async () => {
+    const { default: App } = await import("../../App");
+    render(<App />);
+
+    const permissionRegion = screen.getByRole("region", { name: "Permission mode" });
+    expect(permissionRegion).toBeInTheDocument();
+
+    const permissionSelect = screen.getByRole("combobox", { name: "Permission mode" });
+    expect(permissionSelect).toHaveValue("ask");
+
+    fireEvent.change(permissionSelect, { target: { value: "pr-first" } });
+
+    expect(permissionSelect).toHaveValue("pr-first");
+    expect(screen.getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
   });
 });
 
