@@ -197,4 +197,26 @@ describe("AgentBuilderPage", () => {
     render(<AgentBuilderPage token="test-token" />);
     expect(screen.getByText("Agent Builder")).toBeInTheDocument();
   });
+
+  it("renders guided templates and review-before-save summary", () => {
+    render(<AgentBuilderPage token="test-token" />);
+
+    expect(screen.getByRole("heading", { name: /start with a template/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Research analyst/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /review before save/i })).toBeInTheDocument();
+    expect(screen.getByText("Custom agent")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+
+  it("applies a beginner-safe template with recommended setup guidance", async () => {
+    const user = userEvent.setup();
+    render(<AgentBuilderPage token="test-token" />);
+
+    await user.click(screen.getByRole("button", { name: /Safe implementer/i }));
+
+    expect(screen.getByPlaceholderText("my-agent")).toHaveValue("safe-implementer");
+    expect(screen.getByDisplayValue("implementer")).toBeInTheDocument();
+    expect(screen.getByText(/patch authoring/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review required for file-write, code-execution/i)).toBeInTheDocument();
+  });
 });
