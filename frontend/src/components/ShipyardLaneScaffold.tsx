@@ -1,5 +1,6 @@
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import {
+  WORKSPACE_TASK_STATUS_LABELS,
   getWorkspaceBoard,
   type WorkspaceAgentRole,
   type WorkspaceTaskCard
@@ -79,7 +80,8 @@ export function ShipyardLaneScaffold({
               <div className="shipyard-lane-card-header">
                 <div>
                   <span>{role}</span>
-                  <h3>{agents.map((agent) => agent.name).join(", ") || `${role} lane`}</h3>
+                  <h3>{role} lane</h3>
+                  {agents.length > 0 ? <small>Agent: {agents.map((agent) => agent.name).join(", ")}</small> : null}
                 </div>
                 <strong>{status}</strong>
               </div>
@@ -91,13 +93,13 @@ export function ShipyardLaneScaffold({
                 {tasks.length > 0 ? (
                   tasks.map((task) => (
                     <li key={task.id}>
-                      <span>{task.status}</span>
+                      <span>{WORKSPACE_TASK_STATUS_LABELS[task.status]}</span>
                       {task.title}
                     </li>
                   ))
                 ) : (
                   <li>
-                    <span>ready</span>
+                    <span>Ready</span>
                     No tasks assigned to this role yet.
                   </li>
                 )}

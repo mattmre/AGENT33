@@ -17,11 +17,13 @@ describe("ShipyardLaneScaffold", () => {
 
     expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
     expect(screen.getByText("Shipyard command lanes")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Coordinator" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Scout" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Builder" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Reviewer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Coordinator lane" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Scout lane" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Builder lane" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reviewer lane" })).toBeInTheDocument();
+    expect(screen.getByText("Agent: Coordinator")).toBeInTheDocument();
     expect(screen.getByText("Scout implementation risks")).toBeInTheDocument();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
     expect(screen.getByText("Expected output: Implementation slice, validation commands, and changed artifacts.")).toBeInTheDocument();
   });
 
