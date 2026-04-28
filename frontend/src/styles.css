@@ -966,6 +966,8 @@ button:disabled {
   align-items: center;
   gap: 1rem;
   padding: 0.7rem 1.15rem;
+  min-height: var(--cockpit-topbar-height);
+  box-sizing: border-box;
   background: rgba(4, 12, 18, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(47, 90, 108, 0.4);
