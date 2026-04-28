@@ -1153,6 +1153,89 @@ button:disabled {
   padding: 0.85rem;
 }
 
+.workspace-session-card {
+  gap: 0.65rem;
+}
+
+.workspace-session-heading {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.workspace-session-select-label {
+  color: #6fa8b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-session-select {
+  width: 100%;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 10px;
+  background: rgba(4, 12, 18, 0.72);
+  color: #e2f1f8;
+  padding: 0.55rem 0.6rem;
+}
+
+.workspace-session-card p {
+  margin: 0;
+  color: #b7dbe5;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.workspace-session-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.workspace-session-stats div {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.45rem;
+  border-radius: 10px;
+  background: rgba(48, 213, 200, 0.08);
+}
+
+.workspace-session-stats dt {
+  color: #6fa8b8;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.workspace-session-stats dd {
+  margin: 0;
+  color: #f7ead1;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.workspace-session-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.workspace-session-actions button {
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 10px;
+  background: rgba(125, 211, 252, 0.08);
+  color: #dff7ff;
+  padding: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.workspace-session-actions button:hover {
+  background: rgba(48, 213, 200, 0.14);
+  color: #fff;
+}
+
 .cockpit-sidebar-context strong,
 .cockpit-context-bar strong {
   color: #f7ead1;
