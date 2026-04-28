@@ -3,6 +3,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
+import type { ArtifactDrawerSectionId } from "../lib/cockpitUrlState";
 
 const DRAWER_SECTIONS = [
   {
@@ -55,25 +56,29 @@ const DRAWER_SECTIONS = [
   }
 ] as const;
 
-type DrawerSectionId = (typeof DRAWER_SECTIONS)[number]["id"];
-
 interface ArtifactReviewDrawerProps {
   workspace: WorkspaceSessionSummary;
   permissionModeId: PermissionModeId;
+  activeSectionId?: ArtifactDrawerSectionId;
+  onSectionChange?: (sectionId: ArtifactDrawerSectionId) => void;
 }
 
 export function ArtifactReviewDrawer({
   workspace,
-  permissionModeId
+  permissionModeId,
+  activeSectionId: controlledActiveSectionId,
+  onSectionChange
 }: ArtifactReviewDrawerProps): JSX.Element {
-  const [activeSectionId, setActiveSectionId] = useState<DrawerSectionId>("plan");
+  const [uncontrolledActiveSectionId, setUncontrolledActiveSectionId] = useState<ArtifactDrawerSectionId>("plan");
+  const activeSectionId = controlledActiveSectionId ?? uncontrolledActiveSectionId;
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const activeSection = DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
 
-  function selectSection(sectionId: DrawerSectionId, shouldFocus = false): void {
-    setActiveSectionId(sectionId);
+  function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
+    setUncontrolledActiveSectionId(sectionId);
+    onSectionChange?.(sectionId);
     if (shouldFocus) {
       window.requestAnimationFrame(() => tabRefs.current[sectionId]?.focus());
     }

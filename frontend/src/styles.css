@@ -1950,6 +1950,18 @@ button:disabled {
     max-height: none;
   }
 
+  .artifact-drawer-tabs {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scroll-snap-type: x proximity;
+  }
+
+  .artifact-drawer-tabs button {
+    min-width: 9rem;
+    scroll-snap-align: start;
+  }
+
   .cockpit-dashboard-hero,
   .cockpit-dashboard-grid,
   .cockpit-dashboard-artifacts {
@@ -1997,6 +2009,10 @@ button:disabled {
 
   .workspace-board-actions {
     display: grid;
+  }
+
+  .shipyard-lane-grid {
+    grid-template-columns: 1fr;
   }
 }
 

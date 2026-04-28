@@ -6,7 +6,7 @@
  * accessibility, form labels, and heading hierarchy.
  */
 
-import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
 
 import { SkipLink } from "../SkipLink";
@@ -84,6 +84,7 @@ describe("VisuallyHidden", () => {
 describe("App accessibility", () => {
   // Mock dependencies that App uses
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     window.sessionStorage.clear();
 
     // Mock localStorage for auth
@@ -198,6 +199,32 @@ describe("App accessibility", () => {
     expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
+  });
+
+  it("opens major cockpit destinations from URL state and keeps shareable links updated", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?view=operations&workspace=shipyard&permission=pr-first&drawer=activity"
+    );
+
+    const { default: App } = await import("../../App");
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: /Sessions & Runs/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("combobox", { name: "Permission mode" })).toHaveValue("pr-first");
+    expect(screen.getByRole("combobox", { name: "Active project template" })).toHaveValue("shipyard");
+    expect(screen.getByRole("tab", { name: "Activity / Mailbox" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Agent mailbox")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Safety & Approvals/ }));
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("view=safety");
+      expect(window.location.search).toContain("workspace=shipyard");
+      expect(window.location.search).toContain("permission=pr-first");
+      expect(window.location.search).not.toContain("drawer=");
+    });
   });
 });
 
