@@ -1,6 +1,10 @@
 import type { OnboardingStatus } from "../onboarding/types";
 import type { ConnectCard, ConnectStatus } from "./types";
 
+const STEP_DATABASE = "OB-01";
+const STEP_MODELS = "OB-02";
+const STEP_SAFETY = "OB-08";
+
 function findStep(status: OnboardingStatus | null, stepId: string): boolean | null {
   const step = status?.steps.find((item) => item.step_id === stepId);
   return step?.completed ?? null;
@@ -22,7 +26,7 @@ export function buildConnectCards(hasCredentials: boolean, status: OnboardingSta
     {
       id: "engine-access",
       title: "Engine access",
-      plainLabel: "Can this browser talk to AGENT-33?",
+      plainLabel: "Is engine access saved in this browser?",
       status: hasCredentials ? "ready" : "attention",
       detail: hasCredentials
         ? "An operator token or API key is saved for this browser session."
@@ -35,7 +39,7 @@ export function buildConnectCards(hasCredentials: boolean, status: OnboardingSta
       id: "model-provider",
       title: "Model provider",
       plainLabel: "Can AGENT-33 call a model?",
-      status: hasCredentials ? statusFromStep(status, "OB-02") : "attention",
+      status: hasCredentials ? statusFromStep(status, STEP_MODELS) : "attention",
       detail: "Connect OpenRouter first, or use a local OpenAI-compatible model path in the next setup round.",
       impact: "Required for real workflow generation, chat, research loops, and agent work.",
       actionLabel: "Open model setup",
@@ -45,7 +49,7 @@ export function buildConnectCards(hasCredentials: boolean, status: OnboardingSta
       id: "runtime-memory",
       title: "Runtime and memory",
       plainLabel: "Can agent work keep durable state?",
-      status: hasCredentials ? statusFromStep(status, "OB-01") : "unknown",
+      status: hasCredentials ? statusFromStep(status, STEP_DATABASE) : "unknown",
       detail: "Checks whether the runtime database and state path are ready for longer agent work.",
       impact: "Important for multi-step work, replay, recovery, and long-running workflows.",
       actionLabel: "Open integrations",
@@ -75,7 +79,7 @@ export function buildConnectCards(hasCredentials: boolean, status: OnboardingSta
       id: "safety-approvals",
       title: "Safety and approvals",
       plainLabel: "Will risky work ask before acting?",
-      status: hasCredentials ? statusFromStep(status, "OB-08") : "unknown",
+      status: hasCredentials ? statusFromStep(status, STEP_SAFETY) : "unknown",
       detail: "Review API protection, approval defaults, and beginner/pro controls before automation runs.",
       impact: "Protects users from destructive operations while keeping productive paths visible.",
       actionLabel: "Open safety",

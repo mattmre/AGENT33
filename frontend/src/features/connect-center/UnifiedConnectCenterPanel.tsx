@@ -4,7 +4,7 @@ import type { ApiResult } from "../../types";
 import { asOnboardingStatus, fetchOnboardingStatus } from "../onboarding/api";
 import type { OnboardingStatus } from "../onboarding/types";
 import { buildConnectCards, getConnectScore } from "./helpers";
-import type { ConnectTarget } from "./types";
+import type { ConnectStatus, ConnectTarget } from "./types";
 
 interface UnifiedConnectCenterPanelProps {
   token: string;
@@ -13,14 +13,13 @@ interface UnifiedConnectCenterPanelProps {
   onResult: (label: string, result: ApiResult) => void;
 }
 
-function statusLabel(status: string): string {
-  if (status === "ready") {
-    return "Ready";
-  }
-  if (status === "attention") {
-    return "Needs attention";
-  }
-  return "Unknown";
+function statusLabel(status: ConnectStatus): string {
+  const labels: Record<ConnectStatus, string> = {
+    ready: "Ready",
+    attention: "Needs attention",
+    unknown: "Unknown"
+  };
+  return labels[status];
 }
 
 export function UnifiedConnectCenterPanel({
@@ -29,13 +28,18 @@ export function UnifiedConnectCenterPanel({
   onNavigate,
   onResult
 }: UnifiedConnectCenterPanelProps): JSX.Element {
+  const safeToken = token ?? "";
+  const safeApiKey = apiKey ?? "";
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
+  const hasCredentials = safeToken.trim() !== "" || safeApiKey.trim() !== "";
   const cards = useMemo(() => buildConnectCards(hasCredentials, status), [hasCredentials, status]);
   const score = getConnectScore(cards);
-  const nextAttention = cards.find((card) => card.status === "attention") ?? cards[0];
+  const nextAttention =
+    cards.find((card) => card.status === "attention") ??
+    cards.find((card) => card.status === "unknown") ??
+    cards[0];
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!hasCredentials) {
@@ -47,11 +51,11 @@ export function UnifiedConnectCenterPanel({
     setLoading(true);
     setError("");
     try {
-      const result = await fetchOnboardingStatus(token, apiKey);
+      const result = await fetchOnboardingStatus(safeToken, safeApiKey);
       onResult("Connect Center - Readiness", result);
       const parsed = asOnboardingStatus(result.data);
       if (!result.ok || parsed === null) {
-        setError(`Connection scan failed (${result.status})`);
+        setError(!result.ok ? `Connection scan failed (${result.status})` : "Received invalid readiness data.");
         return;
       }
       setStatus(parsed);
@@ -60,7 +64,7 @@ export function UnifiedConnectCenterPanel({
     } finally {
       setLoading(false);
     }
-  }, [apiKey, hasCredentials, onResult, token]);
+  }, [hasCredentials, onResult, safeApiKey, safeToken]);
 
   useEffect(() => {
     void refresh();

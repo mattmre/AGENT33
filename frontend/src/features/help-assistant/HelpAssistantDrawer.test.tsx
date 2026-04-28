@@ -32,7 +32,7 @@ describe("HelpAssistantDrawer", () => {
     expect(onNavigate).toHaveBeenCalledWith("models");
   });
 
-  it("opens Connect Center directly from the setup help article", async () => {
+  it("opens Connect Center directly from the assistant", async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
 

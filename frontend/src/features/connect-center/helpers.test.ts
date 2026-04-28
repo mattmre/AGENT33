@@ -4,9 +4,9 @@ import { buildConnectCards, getConnectScore } from "./helpers";
 import type { OnboardingStatus } from "../onboarding/types";
 
 const READY_STATUS: OnboardingStatus = {
-  completed_count: 3,
+  completed_count: 2,
   total_count: 3,
-  overall_complete: true,
+  overall_complete: false,
   steps: [
     {
       step_id: "OB-01",
