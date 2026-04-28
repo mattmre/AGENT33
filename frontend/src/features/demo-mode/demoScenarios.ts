@@ -461,6 +461,10 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
 ];
 
 export function getDefaultDemoScenario(): DemoScenario {
+  if (DEMO_SCENARIOS.length === 0) {
+    throw new Error("Demo Mode requires at least one scenario.");
+  }
+
   return DEMO_SCENARIOS[0];
 }
 

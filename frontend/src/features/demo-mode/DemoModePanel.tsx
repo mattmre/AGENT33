@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { WorkflowStarterDraft } from "../workflow-starter/types";
-import { DEMO_SCENARIOS, findDemoScenario } from "./demoScenarios";
+import { DEMO_SCENARIOS, findDemoScenario, getDefaultDemoScenario } from "./demoScenarios";
 
 interface DemoModePanelProps {
   onOpenModels: () => void;
@@ -14,7 +14,7 @@ export function DemoModePanel({
   onOpenWorkflowCatalog,
   onOpenWorkflowStarter
 }: DemoModePanelProps): JSX.Element {
-  const [selectedId, setSelectedId] = useState(DEMO_SCENARIOS[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(getDefaultDemoScenario().id);
   const scenario = useMemo(() => findDemoScenario(selectedId), [selectedId]);
   const scenarioIndex = Math.max(
     DEMO_SCENARIOS.findIndex((item) => item.id === scenario.id) + 1,
