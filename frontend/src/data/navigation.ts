@@ -29,13 +29,13 @@ export const APP_TAB_IDS = [
 export type AppTab = (typeof APP_TAB_IDS)[number];
 
 export interface AppTabConfig {
-  id: AppTab;
-  label: string;
+  readonly id: AppTab;
+  readonly label: string;
 }
 
 export interface AppTabGroup {
-  label: string;
-  tabs: AppTabConfig[];
+  readonly label: string;
+  readonly tabs: ReadonlyArray<AppTabConfig>;
 }
 
 export const DEFAULT_APP_TAB: AppTab = "guide";
@@ -95,11 +95,14 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
 ];
 
 const APP_TAB_ID_SET = new Set<string>(APP_TAB_IDS);
+const APP_TAB_LABEL_MAP = new Map<AppTab, string>(
+  APP_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab.id, tab.label] as const))
+);
 
 export function isAppTab(value: string): value is AppTab {
   return APP_TAB_ID_SET.has(value);
 }
 
 export function getAppTabLabel(tabId: AppTab): string {
-  return APP_TAB_GROUPS.flatMap((group) => group.tabs).find((tab) => tab.id === tabId)?.label ?? tabId;
+  return APP_TAB_LABEL_MAP.get(tabId) ?? tabId;
 }
