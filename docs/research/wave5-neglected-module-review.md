@@ -2,7 +2,7 @@
 
 ## Scope
 
-This review looks beyond the Wave 4 cockpit shell and asks which user-facing modules remain shallow, over-focused, under-tested, or disconnected from the beginner workflow. It uses the merged `origin/main` state after PR #476 and consolidates three module audits:
+This review looks beyond the Wave 4 cockpit shell and asks which user-facing modules remain shallow, over-focused, under-tested, or disconnected from the beginner workflow. It uses the merged `origin/main` state at commit `dc8455f` after the Wave 5 competitor refresh and consolidates three module audits:
 
 1. Beginner setup modules.
 2. Build/workflow modules.
@@ -174,8 +174,9 @@ The neglected-module review reinforces the Wave 6 artifact/review focus. Wave 6 
    - Cover preset switching, one-click launch, schedule/cadence display, API failures, and credential gates.
    - Files: `frontend/src/features/improvement-loops/ImprovementLoopsPanel.tsx`, new `ImprovementLoopsPanel.test.tsx`.
 
-3. **Add frontend coverage and guidance for Spawner**
-   - Cover empty state, create workflow, child agent validation, execution tree status, error display, and no-token states.
+3. **Add frontend coverage for Spawner's existing flow**
+   - Cover the current empty state, create workflow path, child agent validation, execution tree status, error display, and no-token states without redesigning the visual workflow builder.
+   - Keep beginner guidance features such as agent discovery, safe defaults, examples, and abort/recovery as later Wave 7+ candidates unless Wave 6 artifact work exposes a narrow shared-state dependency.
    - Files: `frontend/src/features/spawner/SpawnerPage.tsx`, `ExecutionTree.tsx`, new tests.
 
 4. **Implement artifact/review view models before deeper module polish**
