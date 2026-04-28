@@ -1,5 +1,29 @@
 # Progress Log
 
+## 2026-04-28 (UX overhaul implementation wave through PRs #449-#454)
+
+- Completed the first UX overhaul queue from fresh `origin/main` worktrees, one PR
+  per slice, with review feedback fixed before merge and all required CI checks
+  green.
+- Research and implementation slices:
+  - **PR #449** (`9c7f6e`) — expert-panel UX overhaul research and 125-item backlog
+  - **PR #450** (`fe27f94`) — outcome-first home shell and workflow draft routing
+  - **PR #451** (`8fde809`) — dedicated Workflow Catalog
+  - **PR #452** (`4a3aead`) — Model Connection Wizard
+  - **PR #453** (`710a2ae`) — Run Timeline overview in Operations Hub
+  - **PR #454** (`5179e0e`) — Beginner/Pro mode and Advanced quarantine
+- Local validation highlights:
+  - Outcome Home / Workflow Catalog / Model Wizard / Run Timeline / Advanced
+    slices each passed their focused frontend tests plus `npm run lint` and
+    `npm run build` before PR merge.
+  - PR review feedback was resolved for `#450`, `#451`, `#452`, and `#454`; no
+    review fixes were required for `#453`.
+- `origin/main` is now at `5179e0e`.
+- Refreshed the handoff layer for the merged UX wave:
+  - `docs/next-session.md`
+  - `docs/research/ux-overhaul-backlog-2026-04-27.md`
+  - `docs/sessions/session-133-2026-04-27-ux-overhaul.md`
+
 ## 2026-04-27 (Operator UX / Agent OS expansion through PRs #435-#447)
 
 - Executed the Operator UX rescue and platform-advantage queue from fresh

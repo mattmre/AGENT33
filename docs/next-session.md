@@ -1,22 +1,22 @@
 # Next Session Briefing
 
-Last updated: 2026-04-27 (Operator UX / Agent OS expansion merged through PR `#447`)
+Last updated: 2026-04-28 (UX overhaul implementation wave merged through PR `#454`)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged implementation PR**: `#447` (`feat(frontend): add scheduled research launchers`)
-- **Latest handoff refresh**: this document update after the `#435`-`#447` implementation wave
-- **Latest commit on main**: `cf8d68a`
-- **Cumulative implementation PRs merged through this wave**: 447
+- **Latest merged implementation PR**: `#454` (`feat(frontend): quarantine advanced controls`)
+- **Latest handoff refresh**: this document update after the `#449`-`#454` UX overhaul wave
+- **Latest commit on main**: `5179e0e`
+- **Cumulative implementation PRs merged through this wave**: 454
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
 - **POST-3 (Pack Ecosystem)**: COMPLETE
 - **POST-4 (Interruption & Self-Improvement)**: COMPLETE through PR `#406`
 - **POST-CLUSTER (Distribution & Ecosystem Growth)**: COMPLETE through the tracked follow-up and Operator UX expansion waves (`#433`, `#435`-`#447`)
-- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md` plus the UX backlog in `docs/research/ux-overhaul-backlog-2026-04-27.md`
 - **Security scan posture**: the Trivy/admin-override burden was removed in PR `#418`; treat any new repo-level scan failures as regressions, not accepted baseline drift
 
 ## What Sessions 130-132 And The Final Follow-up Wave Delivered
@@ -63,20 +63,33 @@ Last updated: 2026-04-27 (Operator UX / Agent OS expansion merged through PR `#4
 | #446 | `751933e` | Agent OS sessions | named Agent OS session workspaces and lifecycle controls |
 | #447 | `cf8d68a` | Research launchers | one-click competitive, UX, and Agent OS research schedules |
 
+## What The UX Overhaul Research And First Implementation Wave Delivered
+
+| PR | Commit | Slice | Description |
+|----|--------|-------|-------------|
+| #449 | `9c7f6e` | UX research | 10-persona expert-panel research plus 125-item UX improvement backlog |
+| #450 | `fe27f94` | Outcome Home | outcome-first Start Here shell, readiness guidance, and workflow draft routing |
+| #451 | `8fde809` | Workflow Catalog | searchable/filterable catalog of baked-in workflow systems with detail routing |
+| #452 | `4a3aead` | Model setup | plain-language Model Connection Wizard with OpenRouter defaults, save, probe, and catalog handoff |
+| #453 | `710a2ae` | Run Timeline | human-readable Operations Hub timeline, work/attention/done counts, and selected-process action feed |
+| #454 | `5179e0e` | Advanced quarantine | Beginner/Pro operator mode, quarantined raw control plane, safer route cards, global Pro search, and raw endpoint warnings |
+
 ## Current Roadmap Posture
 
 - **Roadmap authority**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
-- **Current execution queue**: none from the tracked roadmap and Operator UX expansion waves
-- **Current merged session log**: `docs/sessions/session-129-2026-04-20.md` (newer work is currently summarized through queue/handoff docs plus `progress.md`)
+- **Current execution queue**: none from the tracked roadmap, Operator UX expansion, or first UX overhaul implementation wave
+- **Current merged session log**: `docs/sessions/session-133-2026-04-27-ux-overhaul.md`
 - **Recovery note**: stale root checkouts may still have out-of-date planning docs; recover from a fresh `origin/main` worktree, then read this file, `task_plan.md`, and `progress.md`
-- **Immediate implementation focus**: none from this closed cycle — PRs `#425`-`#433` and `#435`-`#447` are merged and CI-verified; start any new work from a new scope lock on updated `origin/main`
+- **Immediate implementation focus**: no open PRs after this closed cycle — PRs `#425`-`#433`, `#435`-`#447`, and `#449`-`#454` are merged and CI-verified; start any new work from a new scope lock on updated `origin/main`
+- **Recommended next UX wave**: continue from the remaining backlog items: demo/sample project mode, role-based start paths, guided idea/product brief intake, unified Connect area, recent outcomes feed, workflow result pages, persona-specific templates, install/setup hardening, Agent OS container UX polish, and support/education surfaces.
 
 ## Queue Status
 
 - The prior queue (`ingestion hardening -> operator UX depth -> SSE schema v2 -> skills-system integration -> SkillsBench follow-up`) is **COMPLETE** on `main`.
 - The Operator UX rescue / Agent OS / MCP / recurring research queue is **COMPLETE** on `main` through `#447`.
+- The first UX overhaul queue (`expert-panel research -> Outcome Home -> Workflow Catalog -> Model Connection Wizard -> Run Timeline -> Advanced quarantine`) is **COMPLETE** on `main` through `#454`.
 - Queue/handoff docs should now be read as closed-cycle references rather than an open implementation prompt.
-- If implementation resumes, start from a fresh `origin/main` worktree and create a new scoped plan instead of reopening the completed queue above.
+- If implementation resumes, start from a fresh `origin/main` worktree and create a new scoped plan from the remaining items in `docs/research/ux-overhaul-backlog-2026-04-27.md`.
 
 ## Key References
 
@@ -104,6 +117,11 @@ Last updated: 2026-04-27 (Operator UX / Agent OS expansion merged through PR `#4
 - `frontend/src/features/skill-wizard/` - operator skill authoring wizard
 - `frontend/src/features/workflow-starter/` - guided workflow starter
 - `frontend/src/features/tool-fabric/` - adaptive tool fabric resolver
+- `frontend/src/features/outcome-home/` - outcome-first Start Here shell and launchable workflow systems
+- `frontend/src/features/workflow-catalog/` - searchable workflow catalog and workflow-starter draft routing
+- `frontend/src/features/model-connection/` - plain-language model/provider connection wizard
+- `frontend/src/features/advanced/` - Beginner/Pro mode and raw control-plane quarantine wrapper
+- `frontend/src/features/operations-hub/OperationsHubPanel.tsx` - Run Timeline over operations state
 - `frontend/src/features/improvement-loops/` - improvement loops and research launchers
 - `frontend/src/features/mcp-health/` - MCP Health Center and operator actions
 - `engine/Dockerfile.agent-os`, `scripts/agent-os.ps1`, `scripts/agent-os.sh`, and `docs/operators/agent-os-runtime.md` - Agent OS runtime and session lifecycle
