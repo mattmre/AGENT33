@@ -26,8 +26,21 @@ describe("HelpAssistantDrawer", () => {
     render(<HelpAssistantDrawer onNavigate={onNavigate} />);
 
     await user.click(screen.getByRole("button", { name: "Ask AGENT33" }));
+    await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await user.click(screen.getByRole("button", { name: "Open Models" }));
 
     expect(onNavigate).toHaveBeenCalledWith("models");
+  });
+
+  it("opens Demo Mode directly from the demo help article", async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+
+    render(<HelpAssistantDrawer onNavigate={onNavigate} />);
+
+    await user.click(screen.getByRole("button", { name: "Ask AGENT33" }));
+    await user.click(screen.getByRole("button", { name: "Open Demo Mode" }));
+
+    expect(onNavigate).toHaveBeenCalledWith("demo");
   });
 });

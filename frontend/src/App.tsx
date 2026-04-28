@@ -26,6 +26,7 @@ import { WorkflowCatalogPanel } from "./features/workflow-catalog/WorkflowCatalo
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
+import { DemoModePanel } from "./features/demo-mode/DemoModePanel";
 import { HelpAssistantDrawer } from "./features/help-assistant/HelpAssistantDrawer";
 import {
   AdvancedControlPlanePanel,
@@ -39,6 +40,7 @@ import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
   | "start"
+  | "demo"
   | "chat"
   | "voice"
   | "models"
@@ -76,6 +78,7 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     label: "Start",
     tabs: [
       { id: "start", label: "Start Here" },
+      { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
       { id: "chat", label: "Chat" },
       { id: "voice", label: "Voice" }
@@ -221,6 +224,7 @@ export default function App(): JSX.Element {
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
               onOpenModels={() => setActiveTab("models")}
+              onOpenDemo={() => setActiveTab("demo")}
               onOpenChat={() => setActiveTab("chat")}
               onOpenOperations={() => setActiveTab("operations")}
               onOpenWorkflowStarter={openWorkflowStarter}
@@ -228,6 +232,16 @@ export default function App(): JSX.Element {
               onOpenMcp={() => setActiveTab("mcp")}
               onOpenAdvanced={() => setActiveTab("advanced")}
               onResult={onResult}
+            />
+          </div>
+        )}
+
+        {activeTab === "demo" && (
+          <div className="consumer-demo-mode-layout">
+            <DemoModePanel
+              onOpenModels={() => setActiveTab("models")}
+              onOpenWorkflowCatalog={() => setActiveTab("catalog")}
+              onOpenWorkflowStarter={openWorkflowStarter}
             />
           </div>
         )}

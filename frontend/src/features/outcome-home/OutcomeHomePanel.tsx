@@ -17,6 +17,7 @@ interface OutcomeHomePanelProps {
   apiKey: string;
   onOpenSetup: () => void;
   onOpenModels: () => void;
+  onOpenDemo: () => void;
   onOpenChat: () => void;
   onOpenOperations: () => void;
   onOpenWorkflowStarter: (draft?: WorkflowStarterDraft) => void;
@@ -80,6 +81,7 @@ export function OutcomeHomePanel({
   apiKey,
   onOpenSetup,
   onOpenModels,
+  onOpenDemo,
   onOpenChat,
   onOpenOperations,
   onOpenWorkflowStarter,
@@ -241,6 +243,9 @@ export function OutcomeHomePanel({
           placeholder="Example: Build a customer support dashboard with ticket trends, SLA alerts, and an admin view."
         />
         <div className="outcome-goal-actions">
+          <button type="button" onClick={onOpenDemo}>
+            Try demo mode first
+          </button>
           <button type="button" onClick={handleCustomGoal} disabled={goal.trim() === ""}>
             Turn this into a workflow
           </button>
@@ -294,6 +299,9 @@ export function OutcomeHomePanel({
       <section className="outcome-next-actions" aria-label="Common next actions">
         <button type="button" onClick={onOpenModels}>
           Connect model
+        </button>
+        <button type="button" onClick={onOpenDemo}>
+          Try demo without setup
         </button>
         <button type="button" onClick={onOpenMcp}>
           Check MCP health
