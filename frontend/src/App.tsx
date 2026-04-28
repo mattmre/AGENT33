@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
+import { ArtifactReviewDrawer } from "./components/ArtifactReviewDrawer";
+import { CockpitProjectDashboard } from "./components/CockpitProjectDashboard";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { PermissionModeControl } from "./components/PermissionModeControl";
 import { SkipLink } from "./components/SkipLink";
@@ -110,6 +112,7 @@ export default function App(): JSX.Element {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(getSavedWorkspaceSessionId);
   const [permissionModeId, setPermissionModeId] = useState<PermissionModeId>(getSavedPermissionModeId);
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
+  const showCockpitDashboard = activeTab === "operations";
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -204,7 +207,18 @@ export default function App(): JSX.Element {
             />
           </div>
 
-          <div className="consumer-content">
+          <div className="cockpit-workspace-stage">
+            <div className="cockpit-stage-content">
+              <div className="consumer-content">
+                {showCockpitDashboard ? (
+                  <CockpitProjectDashboard
+                    workspace={selectedWorkspace}
+                    permissionModeId={permissionModeId}
+                    onOpenRuns={() => setActiveTab("operations")}
+                    onOpenWorkflows={() => setActiveTab("starter")}
+                    onOpenSafety={() => setActiveTab("safety")}
+                  />
+                ) : null}
         {activeTab === "guide" && (
           <div className="consumer-role-intake-layout">
             <RoleIntakePanel
@@ -536,6 +550,9 @@ export default function App(): JSX.Element {
             onResult={onResult}
           />
         )}
+              </div>
+            </div>
+            <ArtifactReviewDrawer workspace={selectedWorkspace} permissionModeId={permissionModeId} />
           </div>
         </main>
       </div>

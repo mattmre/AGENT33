@@ -1568,6 +1568,184 @@ button:disabled {
   color: #031116;
 }
 
+.cockpit-workspace-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 360px);
+  gap: 1rem;
+  max-width: 1600px;
+  width: calc(100% - 2rem);
+  margin: 0 auto;
+}
+
+.cockpit-stage-content {
+  min-width: 0;
+}
+
+.cockpit-stage-content .consumer-content {
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.cockpit-project-dashboard,
+.artifact-review-drawer {
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(11, 30, 39, 0.76), rgba(4, 12, 18, 0.74));
+  box-shadow: 0 18px 40px rgba(1, 8, 12, 0.28);
+}
+
+.cockpit-project-dashboard {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.cockpit-dashboard-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cockpit-dashboard-hero h2,
+.artifact-review-drawer h2,
+.artifact-drawer-panel h3 {
+  margin: 0;
+  color: #f7ead1;
+}
+
+.cockpit-dashboard-hero p,
+.artifact-review-drawer header p,
+.artifact-drawer-panel p {
+  margin: 0.35rem 0 0;
+  color: #b7dbe5;
+  line-height: 1.45;
+}
+
+.cockpit-dashboard-status {
+  display: grid;
+  gap: 0.25rem;
+  align-content: start;
+  min-width: 180px;
+  padding: 0.65rem;
+  border-radius: 14px;
+  background: rgba(48, 213, 200, 0.08);
+}
+
+.cockpit-dashboard-status span,
+.cockpit-dashboard-artifacts span,
+.artifact-drawer-panel span {
+  color: #6fa8b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cockpit-dashboard-grid,
+.cockpit-dashboard-artifacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cockpit-dashboard-card,
+.cockpit-dashboard-artifacts article,
+.artifact-drawer-panel {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 14px;
+  background: rgba(4, 12, 18, 0.46);
+}
+
+.cockpit-dashboard-card strong,
+.cockpit-dashboard-artifacts strong,
+.artifact-drawer-panel strong {
+  color: #e2f1f8;
+}
+
+.cockpit-dashboard-card p,
+.cockpit-dashboard-artifacts p {
+  margin: 0;
+  color: #9dc3cf;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.cockpit-dashboard-card button {
+  justify-self: start;
+  border: 1px solid rgba(48, 213, 200, 0.32);
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.1);
+  color: #d9edf4;
+  padding: 0.45rem 0.7rem;
+}
+
+.artifact-review-drawer {
+  position: sticky;
+  top: calc(var(--cockpit-topbar-height) + 1rem);
+  align-self: start;
+  display: grid;
+  gap: 0.8rem;
+  max-height: calc(100vh - var(--cockpit-topbar-height) - 2rem);
+  overflow: auto;
+  padding: 0.9rem;
+}
+
+.artifact-review-drawer header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.artifact-drawer-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.artifact-drawer-tabs button {
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 10px;
+  background: rgba(4, 12, 18, 0.48);
+  color: #b7dbe5;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+}
+
+.artifact-drawer-tabs button.active {
+  border-color: rgba(48, 213, 200, 0.62);
+  background: rgba(48, 213, 200, 0.13);
+  color: #e2f1f8;
+}
+
+.artifact-drawer-panel dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0;
+}
+
+.artifact-drawer-panel div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.artifact-drawer-panel dt {
+  color: #6fa8b8;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.artifact-drawer-panel dd {
+  margin: 0;
+  color: #e2f1f8;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .consumer-content {
   flex: 1;
   display: flex;
@@ -1613,6 +1791,25 @@ button:disabled {
   .workspace-board-header {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .cockpit-workspace-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-review-drawer {
+    position: static;
+    max-height: none;
+  }
+
+  .cockpit-dashboard-hero,
+  .cockpit-dashboard-grid,
+  .cockpit-dashboard-artifacts {
+    grid-template-columns: 1fr;
+  }
+
+  .cockpit-dashboard-hero {
+    display: grid;
   }
 
   .permission-mode-control,

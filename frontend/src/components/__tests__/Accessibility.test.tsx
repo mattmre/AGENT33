@@ -6,7 +6,7 @@
  * accessibility, form labels, and heading hierarchy.
  */
 
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
 
 import { SkipLink } from "../SkipLink";
@@ -186,7 +186,17 @@ describe("App accessibility", () => {
     fireEvent.change(permissionSelect, { target: { value: "pr-first" } });
 
     expect(permissionSelect).toHaveValue("pr-first");
-    expect(screen.getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
+    expect(within(permissionRegion).getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
+  });
+
+  it("renders the cockpit dashboard and artifact drawer landmarks", async () => {
+    const { default: App } = await import("../../App");
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sessions & Runs/ }));
+
+    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
   });
 });
 
