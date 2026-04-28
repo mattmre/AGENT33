@@ -13,7 +13,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       "Ollama sidecar help should only run when a user starts a local server and chooses that runtime."
     ],
     steps: [
-      "Open Ask AGENT33.",
+      'Click "Ask AGENT33".',
       "Keep Static cited search selected for no-setup help.",
       "Use Browser semantic search only when the UI says the browser is ready.",
       "Use Ollama sidecar only after starting a local Ollama server and connecting Models."

@@ -559,7 +559,7 @@ button:disabled {
   margin: 0;
 }
 
-.help-runtime-panel p,
+.help-runtime-panel p:not(.eyebrow),
 .help-runtime-panel small,
 .help-runtime-details {
   color: #b9d7df;
