@@ -34,12 +34,64 @@ interface CapabilityToggle {
   capability: string;
 }
 
+interface AgentTemplate {
+  id: string;
+  title: string;
+  audience: string;
+  description: string;
+  name: string;
+  role: (typeof AGENT_ROLES)[number];
+  capabilities: Array<CapabilityToggle["key"]>;
+  providerHint: string;
+  recommendedSkills: string[];
+  recommendedTools: string[];
+}
+
 const CAPABILITY_TOGGLES: CapabilityToggle[] = [
   { key: "canReadFiles", label: "Can it read your files?", capability: "file-read" },
   { key: "canWriteFiles", label: "Can it write to your files?", capability: "file-write" },
   { key: "canSearchWeb", label: "Can it search the web?", capability: "web-search" },
   { key: "canRunCode", label: "Can it run code?", capability: "code-execution" },
   { key: "canCallAPIs", label: "Can it connect to external services?", capability: "api-calls" },
+];
+
+const AGENT_TEMPLATES: AgentTemplate[] = [
+  {
+    id: "research-analyst",
+    title: "Research analyst",
+    audience: "Founder or product owner",
+    description: "Finds sources, compares options, and returns a cited decision brief.",
+    name: "research-analyst",
+    role: "researcher",
+    capabilities: ["canReadFiles", "canSearchWeb"],
+    providerHint: "Use a long-context cloud model or a strong local research model.",
+    recommendedSkills: ["web research", "source synthesis", "competitive analysis"],
+    recommendedTools: ["web search", "document reader", "citation tracker"]
+  },
+  {
+    id: "safe-implementer",
+    title: "Safe implementer",
+    audience: "Developer or operator",
+    description: "Makes scoped code changes with review gates before saving work.",
+    name: "safe-implementer",
+    role: "implementer",
+    capabilities: ["canReadFiles", "canWriteFiles", "canRunCode"],
+    providerHint: "Bind to your coding model after Models shows a successful connection.",
+    recommendedSkills: ["repo analysis", "test planning", "patch authoring"],
+    recommendedTools: ["file read", "file edit", "test runner"]
+  },
+  {
+    id: "qa-reviewer",
+    title: "QA reviewer",
+    audience: "QA lead or maintainer",
+    description: "Reviews features, proposes test coverage, and checks release risk.",
+    name: "qa-reviewer",
+    role: "qa",
+    capabilities: ["canReadFiles", "canRunCode"],
+    providerHint: "Use a coding model with reliable test reasoning.",
+    recommendedSkills: ["test generation", "regression review", "release readiness"],
+    recommendedTools: ["file read", "test runner", "artifact viewer"]
+  }
 ];
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
@@ -74,11 +126,18 @@ function buildGovernance(state: AgentBuilderState) {
     : state.canSearchWeb
       ? "external-read"
       : "none";
+  const approvalRequired = [
+    state.canWriteFiles ? "file-write" : null,
+    state.canRunCode ? "code-execution" : null,
+    state.canCallAPIs ? "api-calls" : null,
+  ].filter((value): value is string => value !== null);
   return {
     scope: "workspace",
     network,
-    approval_required: [] as string[],
-    tool_policies: {} as Record<string, string>,
+    approval_required: approvalRequired,
+    tool_policies: Object.fromEntries(
+      approvalRequired.map((capability) => [capability, "review-required"]),
+    ) as Record<string, string>,
   };
 }
 
@@ -150,6 +209,7 @@ export default function AgentBuilderPage({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { API_BASE_URL } = getRuntimeConfig();
@@ -229,6 +289,23 @@ export default function AgentBuilderPage({
   ) {
     setState((prev) => ({ ...prev, [key]: value }));
     if (key === "name") validateName(value as string);
+  }
+
+  function applyTemplate(template: AgentTemplate) {
+    const nextState: AgentBuilderState = {
+      ...state,
+      name: template.name,
+      description: template.description,
+      role: template.role,
+      canReadFiles: template.capabilities.includes("canReadFiles"),
+      canWriteFiles: template.capabilities.includes("canWriteFiles"),
+      canSearchWeb: template.capabilities.includes("canSearchWeb"),
+      canRunCode: template.capabilities.includes("canRunCode"),
+      canCallAPIs: template.capabilities.includes("canCallAPIs"),
+    };
+    setSelectedTemplateId(template.id);
+    setState(nextState);
+    validateName(nextState.name);
   }
 
   // -- Save agent ------------------------------------------------------------
@@ -354,6 +431,11 @@ export default function AgentBuilderPage({
   // -- Render ----------------------------------------------------------------
 
   const nameValid = state.name.length >= 2 && NAME_PATTERN.test(state.name) && !nameError;
+  const selectedTemplate = AGENT_TEMPLATES.find((template) => template.id === selectedTemplateId) ?? null;
+  const governance = buildGovernance(state);
+  const enabledCapabilityLabels = CAPABILITY_TOGGLES.filter((toggle) => state[toggle.key]).map(
+    (toggle) => toggle.capability,
+  );
 
   return (
     <div className="agent-builder-page">
@@ -365,6 +447,28 @@ export default function AgentBuilderPage({
       <div className="agent-builder-layout">
         {/* Left column: form */}
         <div className="agent-builder-form">
+          <section className="builder-section">
+            <h2>Start with a template</h2>
+            <p className="section-subtitle">
+              Pick a safe default, then edit the name, role, and capabilities before saving.
+            </p>
+            <div className="agent-template-grid" role="group" aria-label="Agent templates">
+              {AGENT_TEMPLATES.map((template) => (
+                <button
+                  type="button"
+                  key={template.id}
+                  className={`agent-template-card ${selectedTemplateId === template.id ? "active" : ""}`}
+                  aria-pressed={selectedTemplateId === template.id}
+                  onClick={() => applyTemplate(template)}
+                >
+                  <strong>{template.title}</strong>
+                  <span>{template.audience}</span>
+                  <small>{template.description}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Basic Info */}
           <section className="builder-section">
             <h2>Basic Info</h2>
@@ -448,6 +552,30 @@ export default function AgentBuilderPage({
             </div>
           </section>
 
+          <section className="builder-section">
+            <h2>Recommended setup</h2>
+            <p className="section-subtitle">
+              Use these as plain-language hints before saving this agent definition.
+            </p>
+            <div className="agent-recommendation-list">
+              <article>
+                <strong>Provider binding</strong>
+                <span>
+                  {selectedTemplate?.providerHint ??
+                    "Choose a template to see the model/provider fit before saving."}
+                </span>
+              </article>
+              <article>
+                <strong>Suggested skills</strong>
+                <span>{selectedTemplate?.recommendedSkills.join(", ") ?? "Choose a template first."}</span>
+              </article>
+              <article>
+                <strong>Suggested tools</strong>
+                <span>{selectedTemplate?.recommendedTools.join(", ") ?? "Choose a template first."}</span>
+              </article>
+            </div>
+          </section>
+
           {/* Inline Test */}
           <section className="builder-section">
             <h2>Test Agent</h2>
@@ -516,6 +644,35 @@ export default function AgentBuilderPage({
 
         {/* Right column: live preview */}
         <div className="agent-builder-preview">
+          <section className="agent-builder-review" aria-labelledby="agent-builder-review-title">
+            <h2 id="agent-builder-review-title">Review before save</h2>
+            <dl>
+              <div>
+                <dt>Template</dt>
+                <dd>{selectedTemplate?.title ?? "Custom agent"}</dd>
+              </div>
+              <div>
+                <dt>Autonomy</dt>
+                <dd>{state.canWriteFiles || state.canRunCode ? "Supervised" : "Read-only"}</dd>
+              </div>
+              <div>
+                <dt>Network</dt>
+                <dd>{governance.network}</dd>
+              </div>
+              <div>
+                <dt>Capabilities</dt>
+                <dd>{enabledCapabilityLabels.length > 0 ? enabledCapabilityLabels.join(", ") : "None enabled"}</dd>
+              </div>
+            </dl>
+            {governance.approval_required.length > 0 ? (
+              <p className="agent-review-warning">
+                Review required for {governance.approval_required.join(", ")}.
+              </p>
+            ) : (
+              <p className="agent-review-safe">This agent is read-only unless you enable more tools.</p>
+            )}
+          </section>
+
           <h2>System Prompt Preview</h2>
           {state.isPreviewLoading && (
             <p className="preview-loading">Generating preview...</p>

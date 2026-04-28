@@ -68,6 +68,50 @@
   margin-bottom: 0.6rem;
 }
 
+.agent-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.agent-template-card {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+  border: 1px solid rgba(48, 213, 200, 0.16);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-inner);
+}
+
+.agent-template-card.active {
+  border-color: rgba(48, 213, 200, 0.55);
+  background: rgba(48, 213, 200, 0.1);
+}
+
+.agent-template-card span,
+.agent-template-card small {
+  color: var(--text-soft);
+}
+
+.agent-recommendation-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.agent-recommendation-list article {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  padding: 0.75rem;
+}
+
+.agent-recommendation-list span {
+  color: var(--text-soft);
+}
+
 .field-error {
   color: var(--danger);
   font-size: 0.8rem;
@@ -217,6 +261,56 @@
   box-shadow: var(--shadow-outer-sm);
 }
 
+.agent-builder-review {
+  display: grid;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.agent-builder-review dl {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.agent-builder-review dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+  padding: 0.55rem;
+}
+
+.agent-builder-review dt {
+  color: var(--text-soft);
+}
+
+.agent-builder-review dd {
+  margin: 0;
+  text-align: right;
+}
+
+.agent-review-warning,
+.agent-review-safe {
+  margin: 0;
+  border-radius: 10px;
+  padding: 0.65rem;
+  font-size: 0.84rem;
+}
+
+.agent-review-warning {
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.agent-review-safe {
+  color: var(--ok);
+  background: rgba(48, 213, 200, 0.1);
+}
+
 .agent-builder-preview h2 {
   font-size: 1.1rem;
   margin: 0 0 1rem 0;
@@ -251,4 +345,10 @@
   max-height: 600px;
   overflow-y: auto;
   line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .agent-template-grid {
+    grid-template-columns: 1fr;
+  }
 }
