@@ -4,9 +4,10 @@
 
 Record and preserve the verified merged baseline after the Sessions 130-132
 follow-up wave, closing roadmap slices, Operator UX / Agent OS expansion, and
-UX overhaul first implementation wave (`#414`-`#454`), so any future
-work starts from a fresh `origin/main` worktree instead of reopening stale
-queue state.
+UX overhaul first implementation wave. The explicit ranges are `#414`-`#447`
+for the prior follow-up / Operator UX / Agent OS work and `#449`-`#454` for
+the UX overhaul wave, so any future work starts from a fresh `origin/main`
+worktree instead of reopening stale queue state.
 
 ## Current Baseline
 

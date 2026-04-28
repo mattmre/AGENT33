@@ -4,7 +4,12 @@
 **Baseline:** `b9bac47`  
 **Scope:** 125 concrete improvement candidates distilled from a 10-persona expert panel, current UI audit, repo research mining, and competitive scan.  
 
-**Implementation status:** The first wave is merged on `main` through PR `#454`. Completed initial slices: Outcome Home (`#450`), Workflow Catalog (`#451`), Model Connection Wizard (`#452`), Run Timeline (`#453`), and Advanced quarantine / Beginner-Pro mode (`#454`). Treat those backlog items as implemented in v1 form and use the remaining items below for the next scoped UX wave.
+**Implementation status:** The first wave is merged on `main` through PR `#454`.
+Completed initial slices: Outcome Home (`#450`), Workflow Catalog (`#451`),
+Model Connection Wizard (`#452`), Run Timeline (`#453`), and Advanced
+quarantine / Beginner-Pro mode (`#454`). Treat those backlog items as
+implemented in v1 form and use the remaining items below for the next scoped
+UX wave.
 
 Impact: `H` high, `M` medium, `L` low. Effort: `S`, `M`, `L`, `XL`.
 
