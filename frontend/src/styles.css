@@ -1297,7 +1297,8 @@ button:disabled {
 
 .workspace-kanban {
   display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
   gap: 0.7rem;
   overflow-x: auto;
 }
@@ -1530,13 +1531,13 @@ button:disabled {
     width: calc(100% - 1rem);
   }
 
-  .workspace-board-header,
   .workspace-board-grid {
     grid-template-columns: 1fr;
   }
 
   .workspace-board-header {
     display: grid;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1554,7 +1555,7 @@ button:disabled {
   }
 
   .workspace-kanban {
-    grid-template-columns: repeat(5, minmax(140px, 1fr));
+    grid-auto-columns: minmax(140px, 1fr);
   }
 
   .workspace-board-actions {

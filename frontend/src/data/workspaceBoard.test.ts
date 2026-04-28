@@ -10,8 +10,8 @@ import {
 
 describe("workspace board data", () => {
   it("provides a board for every workspace template", () => {
-    expect(WORKSPACE_BOARDS.map((board) => board.workspaceId)).toEqual(
-      WORKSPACE_SESSIONS.map((workspace) => workspace.id)
+    expect(WORKSPACE_BOARDS.map((board) => board.workspaceId).sort()).toEqual(
+      WORKSPACE_SESSIONS.map((workspace) => workspace.id).sort()
     );
   });
 
@@ -39,5 +39,14 @@ describe("workspace board data", () => {
       "Scout",
       "Reviewer"
     ]);
+  });
+
+  it("keeps workspace summary counts aligned to board content", () => {
+    for (const workspace of WORKSPACE_SESSIONS) {
+      const board = getWorkspaceBoard(workspace.id);
+
+      expect(workspace.tasks).toBe(board.tasks.length);
+      expect(workspace.agents).toBe(board.agents.length);
+    }
   });
 });

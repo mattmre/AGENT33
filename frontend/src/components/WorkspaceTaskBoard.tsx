@@ -1,8 +1,11 @@
+import { useMemo } from "react";
+
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import {
   WORKSPACE_TASK_STATUS_LABELS,
   WORKSPACE_TASK_STATUSES,
-  getWorkspaceBoard
+  getWorkspaceBoard,
+  groupWorkspaceTasksByStatus
 } from "../data/workspaceBoard";
 
 interface WorkspaceTaskBoardProps {
@@ -17,6 +20,7 @@ export function WorkspaceTaskBoard({
   onOpenWorkflows
 }: WorkspaceTaskBoardProps): JSX.Element {
   const board = getWorkspaceBoard(workspace.id);
+  const tasksByStatus = useMemo(() => groupWorkspaceTasksByStatus(board.tasks), [board.tasks]);
 
   return (
     <section className="workspace-board" aria-label={`${workspace.name} task board`}>
@@ -39,7 +43,7 @@ export function WorkspaceTaskBoard({
       <div className="workspace-board-grid">
         <div className="workspace-kanban" aria-label="Workspace task lanes">
           {WORKSPACE_TASK_STATUSES.map((status) => {
-            const laneTasks = board.tasks.filter((task) => task.status === status);
+            const laneTasks = tasksByStatus[status];
             return (
               <section key={status} className="workspace-kanban-lane" aria-label={`${WORKSPACE_TASK_STATUS_LABELS[status]} tasks`}>
                 <div className="workspace-lane-header">

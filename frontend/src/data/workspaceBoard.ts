@@ -259,25 +259,42 @@ export const WORKSPACE_BOARDS: ReadonlyArray<WorkspaceBoard> = [
 export function getWorkspaceBoard(workspaceId: WorkspaceSessionId): WorkspaceBoard {
   const board = WORKSPACE_BOARDS.find((candidate) => candidate.workspaceId === workspaceId);
   if (!board) {
-    throw new Error(`Unknown workspace board: ${workspaceId}`);
+    throw new Error("Workspace board is unavailable.");
   }
 
   return board;
 }
 
+function createEmptyTaskBuckets(): Record<WorkspaceTaskStatus, WorkspaceTaskCard[]> {
+  return {
+    todo: [],
+    running: [],
+    review: [],
+    complete: [],
+    blocked: []
+  };
+}
+
+export function groupWorkspaceTasksByStatus(
+  tasks: ReadonlyArray<WorkspaceTaskCard>
+): Record<WorkspaceTaskStatus, WorkspaceTaskCard[]> {
+  const tasksByStatus = createEmptyTaskBuckets();
+
+  for (const task of tasks) {
+    tasksByStatus[task.status].push(task);
+  }
+
+  return tasksByStatus;
+}
+
 export function getWorkspaceTaskCounts(workspaceId: WorkspaceSessionId): Record<WorkspaceTaskStatus, number> {
-  const board = getWorkspaceBoard(workspaceId);
-  return WORKSPACE_TASK_STATUSES.reduce<Record<WorkspaceTaskStatus, number>>(
-    (counts, status) => ({
-      ...counts,
-      [status]: board.tasks.filter((task) => task.status === status).length
-    }),
-    {
-      todo: 0,
-      running: 0,
-      review: 0,
-      complete: 0,
-      blocked: 0
-    }
-  );
+  const tasksByStatus = groupWorkspaceTasksByStatus(getWorkspaceBoard(workspaceId).tasks);
+
+  return {
+    todo: tasksByStatus.todo.length,
+    running: tasksByStatus.running.length,
+    review: tasksByStatus.review.length,
+    complete: tasksByStatus.complete.length,
+    blocked: tasksByStatus.blocked.length
+  };
 }
