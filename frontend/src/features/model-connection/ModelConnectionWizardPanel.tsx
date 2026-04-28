@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { apiRequest } from "../../lib/api";
 import {
-  OPENROUTER_RECOMMENDED_MODELS,
   filterOpenRouterModels,
   formatOpenRouterNumber,
   normalizeLikelyOpenRouterModelRef,
@@ -17,6 +16,8 @@ import {
   readStringArray
 } from "../../lib/valueReaders";
 import type { ApiResult } from "../../types";
+import { ModelCapabilityBadges } from "./ModelCapabilityBadges";
+import { ProviderPresetSelector } from "./ProviderPresetSelector";
 import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
   buildOpenRouterConfigChanges,
@@ -26,6 +27,14 @@ import {
   type ModelConnectionBaseline,
   type ModelConnectionForm
 } from "./helpers";
+import {
+  PROVIDER_PRESETS,
+  applyProviderPresetToForm,
+  getProviderPreset,
+  inferProviderPresetId,
+  type ProviderPreset,
+  type ProviderPresetId
+} from "./presets";
 
 interface ModelConnectionWizardPanelProps {
   token: string;
@@ -104,6 +113,7 @@ export function ModelConnectionWizardPanel({
   const [storedKeyHint, setStoredKeyHint] = useState("");
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
   const [modelSearch, setModelSearch] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState<ProviderPresetId>("openrouter");
   const [loadStatus, setLoadStatus] = useState<StatusMessage>({
     tone: "info",
     message: "Loading model connection status..."
@@ -126,6 +136,7 @@ export function ModelConnectionWizardPanel({
     () => filterOpenRouterModels(models, modelSearch).slice(0, 8),
     [modelSearch, models]
   );
+  const selectedPreset = getProviderPreset(selectedPresetId) ?? PROVIDER_PRESETS[0];
 
   useEffect(() => {
     if (!hasCredentials) {
@@ -154,6 +165,7 @@ export function ModelConnectionWizardPanel({
           const snapshot = buildConfigSnapshot(configResult.value.data);
           setBaseline(snapshot.baseline);
           setForm((current) => ({ ...current, ...snapshot.baseline, apiKey: "" }));
+          setSelectedPresetId(inferProviderPresetId(snapshot.baseline.baseUrl));
           setHasStoredKey(snapshot.hasStoredKey);
           setStoredKeyHint(snapshot.storedKeyHint);
         }
@@ -193,6 +205,13 @@ export function ModelConnectionWizardPanel({
       }
       return next;
     });
+  }
+
+  function selectProviderPreset(preset: ProviderPreset): void {
+    setSelectedPresetId(preset.id);
+    setForm((current) => applyProviderPresetToForm(current, preset));
+    setSaveStatus(null);
+    setProbeStatus(null);
   }
 
   async function saveSettings(): Promise<void> {
@@ -291,13 +310,19 @@ export function ModelConnectionWizardPanel({
           <p className="eyebrow">Model Connection Wizard</p>
           <h2 id="model-wizard-title">Connect a model before you build</h2>
           <p>
-            Use plain-language defaults instead of raw config keys. Save a provider, choose a
-            recommended model, test it, then launch a workflow with confidence.
+            Pick {selectedPreset.name}, save a recommended model, test the connection, then launch
+            a workflow with confidence.
           </p>
         </div>
         <div className="model-wizard-score">
           <strong>{readinessLabel}</strong>
-          <span>{hasStoredKey ? "Stored provider key configured" : "No stored provider key detected"}</span>
+          <span>
+            {selectedPreset.needsApiKey
+              ? hasStoredKey
+                ? "Stored provider key configured"
+                : "Provider key needed"
+              : "Local path can run without a key"}
+          </span>
         </div>
       </header>
 
@@ -311,13 +336,19 @@ export function ModelConnectionWizardPanel({
 
       {renderStatus(loadStatus)}
 
+      <ProviderPresetSelector
+        presets={PROVIDER_PRESETS}
+        selectedPresetId={selectedPresetId}
+        onSelectPreset={selectProviderPreset}
+      />
+
       <div className="model-wizard-grid">
         <section className="model-wizard-card">
           <span>Step 1</span>
           <h3>Choose a recommended default</h3>
-          <p>These are known-good picks for coding and workflow automation.</p>
+          <p>{selectedPreset.bestFor}. These picks are safe defaults for this provider path.</p>
           <div className="model-recommendation-list" role="group" aria-label="Recommended default models">
-            {OPENROUTER_RECOMMENDED_MODELS.map((model) => (
+            {selectedPreset.recommendedModels.map((model) => (
               <button
                 type="button"
                 key={model.id}
@@ -328,6 +359,7 @@ export function ModelConnectionWizardPanel({
               >
                 <strong>{model.name}</strong>
                 <small>{model.badgeLabel} · {model.description}</small>
+                <ModelCapabilityBadges model={model} />
               </button>
             ))}
           </div>
@@ -337,14 +369,15 @@ export function ModelConnectionWizardPanel({
           <span>Step 2</span>
           <h3>Add provider access</h3>
           <label>
-            OpenRouter API key
+            {selectedPreset.apiKeyLabel}
             <input
               type="password"
               value={form.apiKey}
               onChange={(event) => updateField("apiKey", event.target.value)}
-              placeholder={hasStoredKey ? "Stored key already configured" : "sk-or-v1-..."}
+              placeholder={hasStoredKey ? "Stored key already configured" : selectedPreset.apiKeyPlaceholder}
             />
           </label>
+          <p className="model-wizard-field-hint">{selectedPreset.apiKeyHint}</p>
           <label>
             Default model
             <input
@@ -360,7 +393,14 @@ export function ModelConnectionWizardPanel({
           </datalist>
           <label>
             Base URL
-            <input value={form.baseUrl} onChange={(event) => updateField("baseUrl", event.target.value)} />
+            <input
+              value={form.baseUrl}
+              onChange={(event) => {
+                const nextBaseUrl = event.target.value;
+                updateField("baseUrl", nextBaseUrl);
+                setSelectedPresetId(inferProviderPresetId(nextBaseUrl));
+              }}
+            />
           </label>
           <label className="model-wizard-checkbox">
             <input
@@ -392,7 +432,10 @@ export function ModelConnectionWizardPanel({
         <section className="model-wizard-card">
           <span>Step 3</span>
           <h3>Test and launch</h3>
-          <p>Probe the selected provider before handing work to agents.</p>
+          <p>
+            Test {selectedPreset.name}. If it succeeds, open the workflow catalog and start from a
+            packaged outcome.
+          </p>
           <div className="model-wizard-actions">
             <button type="button" onClick={() => void probeConnection()} disabled={!hasCredentials || isProbing}>
               {isProbing ? "Testing..." : "Test connection"}
@@ -426,6 +469,7 @@ export function ModelConnectionWizardPanel({
             <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
               <strong>{model.name}</strong>
               <span>{model.id}</span>
+              <ModelCapabilityBadges model={model} />
               <small>
                 {model.contextLength ? `${formatOpenRouterNumber(model.contextLength)} context` : "Context unknown"}
                 {model.promptPrice ? ` · ${model.promptPrice} input` : ""}
