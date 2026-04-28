@@ -28,7 +28,7 @@ export const WORKSPACE_SESSIONS: ReadonlyArray<WorkspaceSessionSummary> = [
     goal: "Turn a plain-language idea into a guided build plan.",
     status: "Ready",
     updatedLabel: "Default workspace",
-    agents: 1,
+    agents: 2,
     tasks: 3
   },
   {
@@ -39,7 +39,7 @@ export const WORKSPACE_SESSIONS: ReadonlyArray<WorkspaceSessionSummary> = [
     status: "Planning",
     updatedLabel: "Template",
     agents: 3,
-    tasks: 6
+    tasks: 4
   },
   {
     id: "test-review",
@@ -59,7 +59,7 @@ export const WORKSPACE_SESSIONS: ReadonlyArray<WorkspaceSessionSummary> = [
     status: "Running",
     updatedLabel: "Template",
     agents: 4,
-    tasks: 8
+    tasks: 5
   }
 ];
 

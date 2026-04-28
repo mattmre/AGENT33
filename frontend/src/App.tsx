@@ -5,6 +5,7 @@ import { AppNavigation } from "./components/AppNavigation";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { SkipLink } from "./components/SkipLink";
 import { WorkspaceSessionSelector } from "./components/WorkspaceSessionSelector";
+import { WorkspaceTaskBoard } from "./components/WorkspaceTaskBoard";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ModelConnectionWizardPanel } from "./features/model-connection/ModelConnectionWizardPanel";
@@ -448,6 +449,11 @@ export default function App(): JSX.Element {
         {/* Operations Hub -> Unified lifecycle view with pause/resume/cancel controls */}
         {activeTab === "operations" && (
           <div className="consumer-operations-layout">
+            <WorkspaceTaskBoard
+              workspace={selectedWorkspace}
+              onOpenSafety={() => setActiveTab("safety")}
+              onOpenWorkflows={() => setActiveTab("starter")}
+            />
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
