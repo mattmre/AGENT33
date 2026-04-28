@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   APP_PRIMARY_NAV_ITEMS,
@@ -15,7 +15,6 @@ interface AppNavigationProps {
 export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JSX.Element {
   const isToolsSectionActive = isSecondaryAppTab(activeTab);
   const [isToolsOpen, setIsToolsOpen] = useState(isToolsSectionActive);
-  const toolsDescriptionId = useId();
 
   useEffect(() => {
     if (isToolsSectionActive) {
@@ -48,10 +47,10 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
         open={isToolsOpen}
         onToggle={(event) => setIsToolsOpen(event.currentTarget.open)}
       >
-        <summary aria-describedby={toolsDescriptionId}>
+        <summary>
           <span>Tools & advanced surfaces</span>
         </summary>
-        <p id={toolsDescriptionId} className="main-nav-tools-description">
+        <p className="main-nav-tools-description">
           Specialized builders, MCP, analytics, marketplace, and setup panels.
         </p>
         <div className="main-nav-tool-groups">

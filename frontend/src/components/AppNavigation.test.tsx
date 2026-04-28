@@ -38,4 +38,11 @@ describe("AppNavigation", () => {
 
     expect(onNavigate).toHaveBeenCalledWith("mcp");
   });
+
+  it("keeps the tools disclosure name concise while showing detail only in expanded content", () => {
+    render(<AppNavigation activeTab="guide" onNavigate={vi.fn()} />);
+
+    expect(screen.getByText("Tools & advanced surfaces").closest("summary")).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Specialized builders, MCP, analytics, marketplace, and setup panels.")).toBeInTheDocument();
+  });
 });

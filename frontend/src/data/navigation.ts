@@ -47,8 +47,8 @@ export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
-     label: "Start",
-     tabs: [
+    label: "Start",
+    tabs: [
       { id: "guide", label: "Guide / Intake" },
       { id: "start", label: "Home / Next Step" },
       { id: "connect", label: "Connect Models" },
@@ -59,8 +59,8 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     ]
   },
   {
-     label: "Operate",
-     tabs: [
+    label: "Operate",
+    tabs: [
       { id: "setup", label: "Integrations" },
       { id: "review", label: "Review Queue" },
       { id: "safety", label: "Safety & Approvals" },
