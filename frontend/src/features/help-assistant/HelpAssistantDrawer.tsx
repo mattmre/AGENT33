@@ -2,6 +2,12 @@ import { useMemo, useState } from "react";
 
 import { searchHelpArticles } from "./search";
 import type { HelpArticle, HelpAssistantTarget } from "./types";
+import {
+  HELPER_RUNTIME_MODES,
+  getHelperRuntimeMode,
+  getRuntimeStatusLabel,
+  type HelperRuntimeModeId
+} from "./helperModes";
 
 interface HelpAssistantDrawerProps {
   onNavigate: (target: HelpAssistantTarget) => void;
@@ -56,8 +62,10 @@ function renderArticle(article: HelpArticle, onNavigate: (target: HelpAssistantT
 export function HelpAssistantDrawer({ onNavigate }: HelpAssistantDrawerProps): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [runtimeModeId, setRuntimeModeId] = useState<HelperRuntimeModeId>("static-search");
   const results = useMemo(() => searchHelpArticles(query), [query]);
   const selectedArticle = results[0]?.article;
+  const selectedRuntimeMode = getHelperRuntimeMode(runtimeModeId);
 
   return (
     <aside className="help-assistant" aria-label="Ask AGENT33 help assistant">
@@ -96,6 +104,37 @@ export function HelpAssistantDrawer({ onNavigate }: HelpAssistantDrawerProps): J
               autoComplete="off"
             />
           </label>
+
+          <section className="help-runtime-panel" aria-labelledby="help-runtime-title">
+            <div>
+              <p className="eyebrow">Helper runtime</p>
+              <h3 id="help-runtime-title">Choose how the helper thinks</h3>
+              <p>{selectedRuntimeMode.privacy}</p>
+            </div>
+            <div className="help-runtime-grid" role="group" aria-label="Helper runtime modes">
+              {HELPER_RUNTIME_MODES.map((mode) => (
+                <button
+                  type="button"
+                  key={mode.id}
+                  className={`help-runtime-card ${runtimeModeId === mode.id ? "active" : ""}`}
+                  aria-pressed={runtimeModeId === mode.id}
+                  onClick={() => setRuntimeModeId(mode.id)}
+                >
+                  <strong>{mode.title}</strong>
+                  <span>{getRuntimeStatusLabel(mode.status)}</span>
+                  <small>{mode.description}</small>
+                </button>
+              ))}
+            </div>
+            <details className="help-runtime-details">
+              <summary>{selectedRuntimeMode.title} setup and privacy</summary>
+              <ul>
+                {selectedRuntimeMode.setup.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ul>
+            </details>
+          </section>
 
           <div className="help-assistant-quick-prompts" aria-label="Suggested help questions">
             {["Connect OpenRouter", "Start Docker", "Run a first workflow", "What is MCP?"].map((prompt) => (
