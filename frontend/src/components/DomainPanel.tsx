@@ -37,7 +37,8 @@ export function DomainPanel({
         op.path,
         op.description
       ].join(" ");
-      return terms.every((term) => searchable.toLowerCase().includes(term));
+      const searchableLower = searchable.toLowerCase();
+      return terms.every((term) => searchableLower.includes(term));
     });
   }, [domain.operations, externalFilter, filter]);
 

@@ -3,18 +3,9 @@ import { useMemo, useState } from "react";
 import { DomainPanel } from "../../components/DomainPanel";
 import { HealthPanel } from "../../components/HealthPanel";
 import { ObservationStream } from "../../components/ObservationStream";
-import type { ApiResult, DomainConfig } from "../../types";
+import type { ActivityItem, ApiResult, DomainConfig } from "../../types";
 
 export type OperatorMode = "beginner" | "pro";
-
-interface ActivityItem {
-  id: string;
-  at: string;
-  label: string;
-  status: number;
-  durationMs: number;
-  url: string;
-}
 
 interface AdvancedControlPlanePanelProps {
   domains: DomainConfig[];

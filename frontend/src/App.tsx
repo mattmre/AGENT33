@@ -32,7 +32,7 @@ import {
 } from "./features/advanced/AdvancedControlPlanePanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
-import type { ApiResult } from "./types";
+import type { ActivityItem, ApiResult } from "./types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
@@ -58,15 +58,6 @@ type AppTab =
   | "builder"
   | "spawner"
   | "advanced";
-
-interface ActivityItem {
-  id: string;
-  at: string;
-  label: string;
-  status: number;
-  durationMs: number;
-  url: string;
-}
 
 interface AppTabConfig {
   id: AppTab;
