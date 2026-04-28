@@ -168,7 +168,7 @@ The neglected-module review reinforces the Wave 6 artifact/review focus. Wave 6 
 
 1. **Remove or clearly demote fake messaging integration success paths**
    - Replace incomplete integration cards with "coming soon" states or route to the real OpenRouter/model setup path.
-   - Files: `frontend/src/features/integrations/MessagingSetup.tsx`, `MessagingSetup.test.tsx`.
+   - Files: `frontend/src/features/integrations/MessagingSetup.tsx`, `frontend/src/features/integrations/MessagingSetup.test.tsx`.
 
 2. **Add main-panel coverage for Improvement Loops**
    - Cover preset switching, one-click launch, schedule/cadence display, API failures, and credential gates.
@@ -177,7 +177,7 @@ The neglected-module review reinforces the Wave 6 artifact/review focus. Wave 6 
 3. **Add frontend coverage for Spawner's existing flow**
    - Cover the current empty state, create workflow path, child agent validation, execution tree status, error display, and no-token states without redesigning the visual workflow builder.
    - Keep beginner guidance features such as agent discovery, safe defaults, examples, and abort/recovery as later Wave 7+ candidates unless Wave 6 artifact work exposes a narrow shared-state dependency.
-   - Files: `frontend/src/features/spawner/SpawnerPage.tsx`, `ExecutionTree.tsx`, new tests.
+   - Files: `frontend/src/features/spawner/SpawnerPage.tsx`, `frontend/src/features/spawner/ExecutionTree.tsx`, new tests.
 
 4. **Implement artifact/review view models before deeper module polish**
    - This is the common adapter that lets cockpit, task board, approvals, operations, and analytics speak the same language.
