@@ -1,3 +1,5 @@
+import { useEffect, useId, useState } from "react";
+
 import {
   APP_PRIMARY_NAV_ITEMS,
   APP_SECONDARY_NAV_GROUPS,
@@ -12,6 +14,14 @@ interface AppNavigationProps {
 
 export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JSX.Element {
   const isToolsSectionActive = isSecondaryAppTab(activeTab);
+  const [isToolsOpen, setIsToolsOpen] = useState(isToolsSectionActive);
+  const toolsDescriptionId = useId();
+
+  useEffect(() => {
+    if (isToolsSectionActive) {
+      setIsToolsOpen(true);
+    }
+  }, [isToolsSectionActive]);
 
   return (
     <nav className="main-nav cockpit-sidebar-nav" aria-label="Main navigation">
@@ -33,11 +43,17 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
         </div>
       </section>
 
-      <details className="main-nav-group main-nav-tools" open={isToolsSectionActive}>
-        <summary>
+      <details
+        className="main-nav-group main-nav-tools"
+        open={isToolsOpen}
+        onToggle={(event) => setIsToolsOpen(event.currentTarget.open)}
+      >
+        <summary aria-describedby={toolsDescriptionId}>
           <span>Tools & advanced surfaces</span>
-          <small>Specialized builders, MCP, analytics, marketplace, and setup panels.</small>
         </summary>
+        <p id={toolsDescriptionId} className="main-nav-tools-description">
+          Specialized builders, MCP, analytics, marketplace, and setup panels.
+        </p>
         <div className="main-nav-tool-groups">
           {APP_SECONDARY_NAV_GROUPS.map((group) => (
             <section key={group.label} className="main-nav-tool-group" aria-label={`${group.label} tools`}>

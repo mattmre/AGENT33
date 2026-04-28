@@ -144,24 +144,23 @@ describe("App accessibility", () => {
   it("marks the active tab with aria-current", async () => {
     const { default: App } = await import("../../App");
     render(<App />);
-    // The default active tab is "chat" which maps to "Chat Central"
     const buttons = screen.getAllByRole("button");
-    const chatTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Chat Central")
+    const guideTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Guide / Intake")
     );
-    expect(chatTabButton).toBeTruthy();
-    expect(chatTabButton).toHaveAttribute("aria-current", "page");
+    expect(guideTabButton).toBeTruthy();
+    expect(guideTabButton).toHaveAttribute("aria-current", "page");
   });
 
   it("non-active tabs do not have aria-current", async () => {
     const { default: App } = await import("../../App");
     render(<App />);
     const buttons = screen.getAllByRole("button");
-    const voiceTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Voice Call")
+    const sessionsTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Sessions & Runs")
     );
-    expect(voiceTabButton).toBeTruthy();
-    expect(voiceTabButton).not.toHaveAttribute("aria-current");
+    expect(sessionsTabButton).toBeTruthy();
+    expect(sessionsTabButton).not.toHaveAttribute("aria-current");
   });
 
   it("decorative logo orb has aria-hidden", async () => {

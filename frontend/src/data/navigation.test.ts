@@ -32,7 +32,8 @@ describe("app navigation registry", () => {
   });
 
   it("returns beginner-readable labels for registered tabs", () => {
-    expect(getAppTabLabel("guide")).toBe("Guide Me");
+    expect(getAppTabLabel("guide")).toBe("Guide / Intake");
+    expect(getAppTabLabel("operations")).toBe("Sessions & Runs");
     expect(getAppTabLabel("advanced")).toBe("Advanced");
   });
 

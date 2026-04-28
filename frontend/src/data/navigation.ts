@@ -47,11 +47,11 @@ export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
-    label: "Start",
-    tabs: [
-      { id: "guide", label: "Guide Me" },
-      { id: "start", label: "Start Here" },
-      { id: "connect", label: "Connect" },
+     label: "Start",
+     tabs: [
+      { id: "guide", label: "Guide / Intake" },
+      { id: "start", label: "Home / Next Step" },
+      { id: "connect", label: "Connect Models" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
       { id: "chat", label: "Chat" },
@@ -59,12 +59,12 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     ]
   },
   {
-    label: "Operate",
-    tabs: [
+     label: "Operate",
+     tabs: [
       { id: "setup", label: "Integrations" },
       { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety Center" },
-      { id: "operations", label: "Operations Hub" }
+      { id: "safety", label: "Safety & Approvals" },
+      { id: "operations", label: "Sessions & Runs" }
     ]
   },
   {
@@ -74,7 +74,7 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
       { id: "fabric", label: "Tool Fabric" },
       { id: "mcp", label: "MCP Health" },
       { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflow Starter" },
+      { id: "starter", label: "Workflows" },
       { id: "tools", label: "Tools" }
     ]
   },

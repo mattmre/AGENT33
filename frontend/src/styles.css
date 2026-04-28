@@ -1082,7 +1082,7 @@ button:disabled {
 }
 
 .main-nav button small,
-.main-nav-tools summary small {
+.main-nav-tools-description {
   display: block;
   margin-top: 0.16rem;
   color: rgba(157, 195, 207, 0.78);
@@ -1090,6 +1090,11 @@ button:disabled {
   font-weight: 500;
   line-height: 1.25;
   white-space: normal;
+}
+
+.main-nav-tools-description {
+  margin: -0.1rem 0 0.2rem;
+  padding: 0 0.6rem;
 }
 
 .main-nav-tool-groups {
