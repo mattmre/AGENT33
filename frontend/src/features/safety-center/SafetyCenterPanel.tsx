@@ -14,6 +14,10 @@ import {
   type ToolApprovalRequest,
   type ToolApprovalStatus
 } from "./types";
+import {
+  buildAttentionQueue,
+  buildBulkDecisionGuidance
+} from "./attentionQueue";
 
 interface SafetyCenterPanelProps {
   token: string;
@@ -141,6 +145,8 @@ export function SafetyCenterPanel({
   const pendingCount = useMemo(() => {
     return approvals.filter((approval) => approval.status === "pending").length;
   }, [approvals]);
+  const attentionQueue = useMemo(() => buildAttentionQueue(filteredApprovals), [filteredApprovals]);
+  const bulkGuidance = useMemo(() => buildBulkDecisionGuidance(attentionQueue), [attentionQueue]);
 
   async function handleDecision(decision: ToolApprovalDecision): Promise<void> {
     if (selectedApproval === null) {
@@ -244,6 +250,32 @@ export function SafetyCenterPanel({
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
+
+      <section className="attention-queue-panel" aria-labelledby="attention-queue-title">
+        <div>
+          <p className="eyebrow">Attention queue</p>
+          <h3 id="attention-queue-title">Decide the riskiest items first</h3>
+          <p>{bulkGuidance}</p>
+        </div>
+        {attentionQueue.length === 0 ? (
+          <p className="ops-hub-empty">No pending safety decisions need attention.</p>
+        ) : (
+          <div className="attention-queue-list">
+            {attentionQueue.slice(0, 4).map((item) => (
+              <article key={item.id} className={`attention-queue-item attention-queue-item--${item.priority}`}>
+                <strong>{item.title}</strong>
+                <span>{item.priority} priority</span>
+                <p>{item.reason}</p>
+                <small>{item.timeGuidance}</small>
+                <small>Policy preset: {item.policyPreset}</small>
+                <button type="button" onClick={() => setSelectedApprovalId(item.id)}>
+                  Review this decision
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="safety-center-content">
         <div className="review-asset-list safety-approval-list">

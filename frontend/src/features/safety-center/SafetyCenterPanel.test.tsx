@@ -81,7 +81,10 @@ describe("SafetyCenterPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findAllByText("filesystem: delete")).toHaveLength(2);
+    expect(await screen.findAllByText("filesystem: delete")).toHaveLength(3);
+    expect(screen.getByRole("heading", { name: "Decide the riskiest items first" })).toBeInTheDocument();
+    expect(screen.getByText("1 high-priority item should be reviewed one by one.")).toBeInTheDocument();
+    expect(screen.getByText(/Policy preset: Deny by default/)).toBeInTheDocument();
     expect(screen.getByText("Destructive or high-impact action")).toBeInTheDocument();
     expect(screen.getByText("Remove-Item C:\\temp\\unsafe.txt")).toBeInTheDocument();
 

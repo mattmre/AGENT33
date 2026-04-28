@@ -2099,6 +2099,64 @@ button:disabled {
   padding-top: 0.7rem;
 }
 
+/* Safety Attention Queue */
+.attention-queue-panel {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1rem;
+}
+
+.attention-queue-panel h3 {
+  margin: 0;
+}
+
+.attention-queue-panel p,
+.attention-queue-panel small {
+  color: var(--text-soft);
+}
+
+.attention-queue-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.attention-queue-item {
+  display: grid;
+  gap: 0.4rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 22, 31, 0.62);
+  padding: 0.8rem;
+}
+
+.attention-queue-item > span {
+  justify-self: start;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.12);
+  color: #bae6fd;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.attention-queue-item--high {
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.attention-queue-item--high > span {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+}
+
+.attention-queue-item--medium > span {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
 .workflow-catalog-actions {
   border-top: 1px solid rgba(125, 211, 252, 0.16);
   padding-top: 0.8rem;
@@ -2349,6 +2407,7 @@ button:disabled {
   .model-catalog-grid,
   .product-workflow-estimates,
   .run-dashboard-grid,
+  .attention-queue-list,
   .advanced-safe-route-grid,
   .advanced-domain-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2393,6 +2452,7 @@ button:disabled {
   .model-catalog-grid,
   .product-workflow-estimates,
   .run-dashboard-grid,
+  .attention-queue-list,
   .advanced-safe-route-grid,
   .advanced-domain-preview-grid,
   .advanced-quarantine-search {
