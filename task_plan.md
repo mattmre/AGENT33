@@ -3,15 +3,16 @@
 ## Goal
 
 Record and preserve the verified merged baseline after the Sessions 130-132
-follow-up wave, closing roadmap slices, and Operator UX / Agent OS expansion
-(`#414`-`#447`), so any future
-work starts from a fresh `origin/main` worktree instead of reopening stale
-queue state.
+follow-up wave, closing roadmap slices, Operator UX / Agent OS expansion, and
+UX overhaul first implementation wave. The explicit ranges are `#414`-`#447`
+for the prior follow-up / Operator UX / Agent OS work and `#449`-`#454` for
+the UX overhaul wave, so any future work starts from a fresh `origin/main`
+worktree instead of reopening stale queue state.
 
 ## Current Baseline
 
-- There are 0 open GitHub PRs as of `2026-04-27` after PR `#447`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (447 PRs merged).
+- There are 0 open GitHub PRs as of `2026-04-28` after PR `#454`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (454 PRs merged).
 - POST-1 through POST-4 are COMPLETE on `main`.
 - POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
 - POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
@@ -29,10 +30,16 @@ queue state.
   Start Here onboarding, Review Queue, Safety Center, Skill Wizard, Workflow
   Starter, Tool Fabric, Agent OS runtime and sessions, Improvement Loops, MCP
   Health/actions, grouped navigation, and scheduled research launchers.
+- UX overhaul first wave is merged through PR `#454`, including expert-panel
+  UX research, Outcome Home, Workflow Catalog, Model Connection Wizard, Run
+  Timeline, and Advanced quarantine / Beginner-Pro mode.
 - The prior queue (ingestion hardening -> operator UX depth -> SSE schema v2 ->
   skills-system integration -> SkillsBench follow-up) is complete on `main`.
 - The Operator UX rescue / MCP / Agent OS / scheduled research launcher queue is
   complete on `main`.
+- The UX overhaul first implementation queue is complete on `main`; remaining
+  usability work should be newly scoped from
+  `docs/research/ux-overhaul-backlog-2026-04-27.md`.
 - POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
 - Treat the root checkout as disposable and always implement from fresh
   `origin/main` worktrees.
@@ -50,11 +57,11 @@ If execution stops mid-slice, resume in this order:
 ## Current Slice Pointer
 
 - Active queue owner: post-merge queue (closed)
-- Current slice: none - queue complete through `#447`
+- Current slice: none - queue complete through `#454`
 - Worktree: create a fresh worktree from updated `origin/main` when new scoped work starts
 - Branch: TBD (new branch from verified `main` for the next slice)
 - Active PR: none
-- Resume artifacts: `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and `progress.md`
+- Resume artifacts: `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, `docs/research/ux-overhaul-backlog-2026-04-27.md`, and `progress.md`
 
 ---
 
