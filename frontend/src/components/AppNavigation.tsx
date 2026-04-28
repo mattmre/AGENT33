@@ -7,7 +7,7 @@ interface AppNavigationProps {
 
 export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JSX.Element {
   return (
-    <nav className="main-nav cockpit-sidebar-nav" aria-label="Workspace navigation">
+    <nav className="main-nav cockpit-sidebar-nav" aria-label="Main navigation">
       {APP_TAB_GROUPS.map((group) => (
         <section key={group.label} className="main-nav-group" aria-label={`${group.label} navigation`}>
           <span className="main-nav-group-label">{group.label}</span>

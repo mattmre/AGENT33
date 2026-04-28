@@ -952,6 +952,7 @@ button:disabled {
    ========================================================================= */
 
 .consumer-app-shell {
+  --cockpit-topbar-height: 4rem;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -1075,14 +1076,14 @@ button:disabled {
 .cockpit-layout {
   display: grid;
   grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
-  min-height: calc(100vh - 4rem);
+  min-height: calc(100vh - var(--cockpit-topbar-height));
 }
 
 .cockpit-sidebar {
   position: sticky;
-  top: 4rem;
+  top: var(--cockpit-topbar-height);
   align-self: start;
-  height: calc(100vh - 4rem);
+  height: calc(100vh - var(--cockpit-topbar-height));
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -1111,7 +1112,7 @@ button:disabled {
 }
 
 .cockpit-sidebar-context small,
-.cockpit-context-bar span {
+.cockpit-context-note {
   color: #9dc3cf;
 }
 

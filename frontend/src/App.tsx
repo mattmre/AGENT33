@@ -149,18 +149,18 @@ export default function App(): JSX.Element {
           <div className="cockpit-sidebar-context">
             <span className="eyebrow">Workspace</span>
             <strong>Local Shipyard</strong>
-            <small>Sidebar foundation for BridgeSpace-style project control.</small>
+            <small>Project navigation, tools, and run surfaces in one place.</small>
           </div>
           <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
         </aside>
 
-        <main className="cockpit-main" id="main-content">
+        <main className="cockpit-main" id="main-content" role="main">
           <div className="cockpit-context-bar" aria-label="Current workspace context">
             <div>
               <span className="eyebrow">Now viewing</span>
               <strong>{getAppTabLabel(activeTab)}</strong>
             </div>
-            <span>Workspace, task board, agent roster, and artifact lanes land in the next Wave 4 slices.</span>
+            <span className="cockpit-context-note">Choose a surface from the sidebar to continue building, operating, or reviewing work.</span>
           </div>
 
           <div className="consumer-content">

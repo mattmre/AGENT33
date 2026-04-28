@@ -8,7 +8,7 @@ describe("AppNavigation", () => {
   it("renders grouped workspace navigation with the active page marked", () => {
     render(<AppNavigation activeTab="guide" onNavigate={vi.fn()} />);
 
-    expect(screen.getByRole("navigation", { name: "Workspace navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guide Me" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Operations Hub" })).not.toHaveAttribute("aria-current");
   });
