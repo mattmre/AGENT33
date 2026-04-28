@@ -3,77 +3,47 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
+import {
+  ARTIFACT_DRAWER_SECTIONS,
+  type ArtifactDrawerSectionId
+} from "../data/artifactDrawerSections";
 
-const DRAWER_SECTIONS = [
-  {
-    id: "plan",
-    label: "Plan",
-    title: "Plan artifact",
-    body: "Checklist, assumptions, risks, and validation commands will appear here before execution."
-  },
-  {
-    id: "commands",
-    label: "Command Blocks",
-    title: "Command blocks",
-    body: "Tool and command runs will be grouped with source agent, status, duration, and redaction state."
-  },
-  {
-    id: "logs",
-    label: "Logs",
-    title: "Run logs",
-    body: "Readable logs will summarize important output instead of forcing users into terminal walls."
-  },
-  {
-    id: "tests",
-    label: "Tests",
-    title: "Validation evidence",
-    body: "Test, lint, build, and smoke results will show pass/fail status and next repair action."
-  },
-  {
-    id: "risks",
-    label: "Risks",
-    title: "Risk register",
-    body: "Known blockers, secrets warnings, destructive actions, and uncertainty notes will collect here."
-  },
-  {
-    id: "approval",
-    label: "Approval",
-    title: "Approval gate",
-    body: "Permission requests will explain what runs, why it is needed, and what can be safely skipped."
-  },
-  {
-    id: "activity",
-    label: "Activity / Mailbox",
-    title: "Agent mailbox",
-    body: "Coordinator, Builder, Scout, and Reviewer handoffs will be typed events, not transcript noise."
-  },
-  {
-    id: "outcome",
-    label: "Outcome",
-    title: "Done state",
-    body: "Completed sessions should end as PR ready, artifact package ready, or blocked with a clear action."
-  }
-] as const;
-
-type DrawerSectionId = (typeof DRAWER_SECTIONS)[number]["id"];
-
-interface ArtifactReviewDrawerProps {
+type ArtifactReviewDrawerBaseProps = {
   workspace: WorkspaceSessionSummary;
   permissionModeId: PermissionModeId;
-}
+};
+
+type ArtifactReviewDrawerControlledProps = ArtifactReviewDrawerBaseProps & {
+  activeSectionId: ArtifactDrawerSectionId;
+  onSectionChange: (sectionId: ArtifactDrawerSectionId) => void;
+};
+
+type ArtifactReviewDrawerUncontrolledProps = ArtifactReviewDrawerBaseProps & {
+  activeSectionId?: undefined;
+  onSectionChange?: (sectionId: ArtifactDrawerSectionId) => void;
+};
+
+type ArtifactReviewDrawerProps = ArtifactReviewDrawerControlledProps | ArtifactReviewDrawerUncontrolledProps;
 
 export function ArtifactReviewDrawer({
   workspace,
-  permissionModeId
+  permissionModeId,
+  activeSectionId: controlledActiveSectionId,
+  onSectionChange
 }: ArtifactReviewDrawerProps): JSX.Element {
-  const [activeSectionId, setActiveSectionId] = useState<DrawerSectionId>("plan");
+  const [uncontrolledActiveSectionId, setUncontrolledActiveSectionId] = useState<ArtifactDrawerSectionId>("plan");
+  const activeSectionId = controlledActiveSectionId ?? uncontrolledActiveSectionId;
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const activeSection = DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? DRAWER_SECTIONS[0];
+  const activeSection =
+    ARTIFACT_DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? ARTIFACT_DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
 
-  function selectSection(sectionId: DrawerSectionId, shouldFocus = false): void {
-    setActiveSectionId(sectionId);
+  function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
+    if (controlledActiveSectionId === undefined) {
+      setUncontrolledActiveSectionId(sectionId);
+    }
+    onSectionChange?.(sectionId);
     if (shouldFocus) {
       window.requestAnimationFrame(() => tabRefs.current[sectionId]?.focus());
     }
@@ -83,18 +53,18 @@ export function ArtifactReviewDrawer({
     let nextIndex: number | null = null;
 
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      nextIndex = (sectionIndex + 1) % DRAWER_SECTIONS.length;
+      nextIndex = (sectionIndex + 1) % ARTIFACT_DRAWER_SECTIONS.length;
     } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-      nextIndex = (sectionIndex - 1 + DRAWER_SECTIONS.length) % DRAWER_SECTIONS.length;
+      nextIndex = (sectionIndex - 1 + ARTIFACT_DRAWER_SECTIONS.length) % ARTIFACT_DRAWER_SECTIONS.length;
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = DRAWER_SECTIONS.length - 1;
+      nextIndex = ARTIFACT_DRAWER_SECTIONS.length - 1;
     }
 
     if (nextIndex !== null) {
       event.preventDefault();
-      selectSection(DRAWER_SECTIONS[nextIndex].id, true);
+      selectSection(ARTIFACT_DRAWER_SECTIONS[nextIndex].id, true);
     }
   }
 
@@ -107,7 +77,7 @@ export function ArtifactReviewDrawer({
       </header>
 
       <div className="artifact-drawer-tabs" role="tablist" aria-label="Artifact drawer sections">
-        {DRAWER_SECTIONS.map((section, sectionIndex) => (
+        {ARTIFACT_DRAWER_SECTIONS.map((section, sectionIndex) => (
           <button
             key={section.id}
             id={`artifact-drawer-tab-${section.id}`}

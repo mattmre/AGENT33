@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
@@ -60,6 +60,13 @@ import {
   isPermissionModeId,
   type PermissionModeId
 } from "./data/permissionModes";
+import {
+  DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
+  createCockpitUrl,
+  readCockpitUrlState,
+  type ArtifactDrawerSectionId,
+  type CockpitUrlState
+} from "./lib/cockpitUrlState";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
@@ -97,10 +104,24 @@ function getSavedPermissionModeId(): PermissionModeId {
   return isPermissionModeId(savedPermissionMode) ? savedPermissionMode : DEFAULT_PERMISSION_MODE_ID;
 }
 
+function getCurrentCockpitUrlState(fallbackState: Partial<CockpitUrlState>): CockpitUrlState {
+  if (typeof window === "undefined") {
+    return readCockpitUrlState("", fallbackState);
+  }
+
+  return readCockpitUrlState(window.location.search, fallbackState);
+}
+
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<AppTab>(() =>
-    getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB
+  const [initialCockpitUrlState] = useState(() =>
+    getCurrentCockpitUrlState({
+      activeTab: getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB,
+      workspaceId: getSavedWorkspaceSessionId(),
+      permissionModeId: getSavedPermissionModeId(),
+      drawerSectionId: DEFAULT_ARTIFACT_DRAWER_SECTION_ID
+    })
   );
+  const [activeTab, setActiveTab] = useState<AppTab>(initialCockpitUrlState.activeTab);
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
@@ -110,10 +131,60 @@ export default function App(): JSX.Element {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRoleId | null>(getSavedUserRole);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(getSavedWorkspaceSessionId);
-  const [permissionModeId, setPermissionModeId] = useState<PermissionModeId>(getSavedPermissionModeId);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(initialCockpitUrlState.workspaceId);
+  const [permissionModeId, setPermissionModeId] = useState<PermissionModeId>(initialCockpitUrlState.permissionModeId);
+  const [drawerSectionId, setDrawerSectionId] = useState<ArtifactDrawerSectionId>(
+    initialCockpitUrlState.drawerSectionId
+  );
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
   const showCockpitDashboard = activeTab === "operations";
+  const currentCockpitUrlState = useMemo(
+    (): CockpitUrlState => ({
+      activeTab,
+      workspaceId: selectedWorkspaceId,
+      permissionModeId,
+      drawerSectionId
+    }),
+    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId]
+  );
+  const currentCockpitUrlStateRef = useRef(currentCockpitUrlState);
+  const isApplyingBrowserNavigationRef = useRef(false);
+  const hasSyncedInitialUrlRef = useRef(false);
+
+  useEffect(() => {
+    function onPopState(): void {
+      const nextState = getCurrentCockpitUrlState(currentCockpitUrlStateRef.current);
+      isApplyingBrowserNavigationRef.current = true;
+      setActiveTab(nextState.activeTab);
+      setSelectedWorkspaceId(nextState.workspaceId);
+      setPermissionModeId(nextState.permissionModeId);
+      setDrawerSectionId(nextState.drawerSectionId);
+    }
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    currentCockpitUrlStateRef.current = currentCockpitUrlState;
+    const nextUrl = createCockpitUrl(window.location.href, currentCockpitUrlState);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    if (nextUrl === currentUrl) {
+      hasSyncedInitialUrlRef.current = true;
+      isApplyingBrowserNavigationRef.current = false;
+      return;
+    }
+
+    const shouldReplace = !hasSyncedInitialUrlRef.current || isApplyingBrowserNavigationRef.current;
+    window.history[shouldReplace ? "replaceState" : "pushState"](null, "", nextUrl);
+    hasSyncedInitialUrlRef.current = true;
+    isApplyingBrowserNavigationRef.current = false;
+  }, [currentCockpitUrlState]);
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -570,7 +641,14 @@ export default function App(): JSX.Element {
         )}
               </div>
             </div>
-            {showCockpitDashboard ? <ArtifactReviewDrawer workspace={selectedWorkspace} permissionModeId={permissionModeId} /> : null}
+            {showCockpitDashboard ? (
+              <ArtifactReviewDrawer
+                workspace={selectedWorkspace}
+                permissionModeId={permissionModeId}
+                activeSectionId={drawerSectionId}
+                onSectionChange={setDrawerSectionId}
+              />
+            ) : null}
           </div>
         </main>
       </div>
