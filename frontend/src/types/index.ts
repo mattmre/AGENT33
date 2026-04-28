@@ -70,6 +70,15 @@ export interface ApiResult {
   ok: boolean;
 }
 
+export interface ActivityItem {
+  id: string;
+  at: string;
+  label: string;
+  status: number;
+  durationMs: number;
+  url: string;
+}
+
 export interface RuntimeConfig {
   API_BASE_URL: string;
 }

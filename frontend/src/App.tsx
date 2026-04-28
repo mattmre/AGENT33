@@ -1,12 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
-import { DomainPanel } from "./components/DomainPanel";
-import { HealthPanel } from "./components/HealthPanel";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { SkipLink } from "./components/SkipLink";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
-import { ObservationStream } from "./components/ObservationStream";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ModelConnectionWizardPanel } from "./features/model-connection/ModelConnectionWizardPanel";
 import { ChatInterface } from "./features/chat/ChatInterface";
@@ -29,10 +26,13 @@ import { WorkflowCatalogPanel } from "./features/workflow-catalog/WorkflowCatalo
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
+import {
+  AdvancedControlPlanePanel,
+  type OperatorMode
+} from "./features/advanced/AdvancedControlPlanePanel";
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
-import { getRuntimeConfig } from "./lib/api";
-import type { ApiResult } from "./types";
+import type { ActivityItem, ApiResult } from "./types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
@@ -58,15 +58,6 @@ type AppTab =
   | "builder"
   | "spawner"
   | "advanced";
-
-interface ActivityItem {
-  id: string;
-  at: string;
-  label: string;
-  status: number;
-  durationMs: number;
-  url: string;
-}
 
 interface AppTabConfig {
   id: AppTab;
@@ -133,17 +124,11 @@ export default function App(): JSX.Element {
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
+  const [operatorMode, setOperatorMode] = useState<OperatorMode>("beginner");
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
-
-  const selectedDomain = useMemo(
-    () => domains.find((domain) => domain.id === selectedDomainId) ?? domains[0],
-    [selectedDomainId]
-  );
-
-  const { API_BASE_URL } = getRuntimeConfig();
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -182,6 +167,25 @@ export default function App(): JSX.Element {
           <h1>AGENT-33</h1>
         </div>
         <GlobalSearch token={token || null} />
+        <div className="operator-mode-switch" role="group" aria-label="Operator mode">
+          <span>Mode</span>
+          <button
+            type="button"
+            className={operatorMode === "beginner" ? "active" : ""}
+            onClick={() => setOperatorMode("beginner")}
+            aria-pressed={operatorMode === "beginner"}
+          >
+            Beginner
+          </button>
+          <button
+            type="button"
+            className={operatorMode === "pro" ? "active" : ""}
+            onClick={() => setOperatorMode("pro")}
+            aria-pressed={operatorMode === "pro"}
+          >
+            Pro
+          </button>
+        </div>
         <nav className="main-nav" aria-label="Main navigation">
           {APP_TAB_GROUPS.map((group) => (
             <section key={group.label} className="main-nav-group" aria-label={`${group.label} navigation`}>
@@ -474,55 +478,24 @@ export default function App(): JSX.Element {
           </div>
         )}
 
-        {/* Advanced Settings -> The original complex "Control Plane" Grid layout */}
+        {/* Advanced Settings -> quarantined raw control plane */}
         {activeTab === "advanced" && (
-          <div className="legacy-control-plane app-shell">
-            <div className="content">
-              <aside className="sidebar" aria-label="Sidebar">
-                <HealthPanel />
-                <nav className="domain-nav" aria-label="Technical domains">
-                  <h2>Technical Domains</h2>
-                  {domains.map((domain) => (
-                    <button
-                      key={domain.id}
-                      className={domain.id === selectedDomainId ? "active" : ""}
-                      onClick={() => setSelectedDomainId(domain.id)}
-                      aria-current={domain.id === selectedDomainId ? "true" : undefined}
-                    >
-                      {domain.title}
-                    </button>
-                  ))}
-                </nav>
-              </aside>
-
-              <main className="workspace">
-                <DomainPanel domain={selectedDomain} token={token} apiKey={apiKey} onResult={onResult} />
-              </main>
-
-              <aside className="activity-panel" aria-label="Activity log">
-                <ObservationStream token={token} />
-                <h2>System Calls</h2>
-                {activity.length === 0 ? <p>No calls yet.</p> : null}
-                <div className="activity-list">
-                  {activity.map((item) => (
-                    <article key={item.id} className="activity-item">
-                      <p className="activity-time">{item.at}</p>
-                      <h3>{item.label}</h3>
-                      <p>
-                        <span className={item.status < 400 ? "status-ok" : "status-error"}>
-                          <span className="sr-only">{item.status < 400 ? "Success" : "Error"}:</span>
-                          {item.status}
-                        </span>
-                        {" in "}
-                        {item.durationMs}ms
-                      </p>
-                      <p className="activity-url">{item.url}</p>
-                    </article>
-                  ))}
-                </div>
-              </aside>
-            </div>
-          </div>
+          <AdvancedControlPlanePanel
+            domains={domains}
+            selectedDomainId={selectedDomainId}
+            token={token}
+            apiKey={apiKey}
+            activity={activity}
+            operatorMode={operatorMode}
+            onOperatorModeChange={setOperatorMode}
+            onSelectedDomainChange={setSelectedDomainId}
+            onOpenModels={() => setActiveTab("models")}
+            onOpenWorkflowCatalog={() => setActiveTab("catalog")}
+            onOpenOperations={() => setActiveTab("operations")}
+            onOpenSafety={() => setActiveTab("safety")}
+            onOpenSetup={() => setActiveTab("setup")}
+            onResult={onResult}
+          />
         )}
       </div>
     </div>

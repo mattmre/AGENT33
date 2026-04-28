@@ -9,6 +9,7 @@ interface DomainPanelProps {
   domain: DomainConfig;
   token: string;
   apiKey: string;
+  externalFilter?: string;
   onResult: (label: string, result: ApiResult) => void;
 }
 
@@ -16,22 +17,30 @@ export function DomainPanel({
   domain,
   token,
   apiKey,
+  externalFilter = "",
   onResult
 }: DomainPanelProps): JSX.Element {
   const [filter, setFilter] = useState("");
   const operations = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (q === "") {
+    const terms = [externalFilter, filter]
+      .join(" ")
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (terms.length === 0) {
       return domain.operations;
     }
     return domain.operations.filter((op) => {
-      return (
-        op.title.toLowerCase().includes(q) ||
-        op.path.toLowerCase().includes(q) ||
-        op.description.toLowerCase().includes(q)
-      );
+      const searchable = [
+        op.title,
+        op.path,
+        op.description
+      ].join(" ");
+      const searchableLower = searchable.toLowerCase();
+      return terms.every((term) => searchableLower.includes(term));
     });
-  }, [domain.operations, filter]);
+  }, [domain.operations, externalFilter, filter]);
 
   return (
     <section className="domain-panel">
@@ -40,6 +49,9 @@ export function DomainPanel({
           <h2>{domain.title}</h2>
           <p>{domain.description}</p>
         </div>
+        {externalFilter.trim() !== "" ? (
+          <p className="domain-global-filter">Pro search applied: {externalFilter.trim()}</p>
+        ) : null}
         <label className="search-field">
           Search
           <input

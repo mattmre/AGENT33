@@ -204,6 +204,24 @@ describe("OperationCard", () => {
     expect(connectWorkflowLiveTransportMock).not.toHaveBeenCalled();
   });
 
+  it("shows the raw endpoint warning only after advanced controls are visible", async () => {
+    render(
+      <OperationCard
+        operation={presetExecuteOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Raw endpoint mode")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(screen.getByText("Raw endpoint mode")).toBeInTheDocument();
+    expect(screen.getByText(/Review path params, query params, and JSON body/)).toBeInTheDocument();
+  });
+
   it("requires an explicit apply action before a workflow preset overwrites execute inputs", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "22222222-2222-4222-8222-222222222222"

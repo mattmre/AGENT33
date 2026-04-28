@@ -207,4 +207,31 @@ describe("DomainPanel", () => {
     expect(screen.getByTestId("op-op-a")).toBeInTheDocument()
     expect(screen.queryByTestId("op-op-b")).not.toBeInTheDocument()
   })
+
+  it("applies and clears the external pro search filter", () => {
+    const domain = buildDomain()
+
+    const { rerender } = render(
+      <DomainPanel
+        domain={domain}
+        token="jwt"
+        apiKey=""
+        externalFilter="sessions"
+        onResult={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText("Pro search applied: sessions")).toBeInTheDocument()
+    expect(screen.getByTestId("op-op-c")).toBeInTheDocument()
+    expect(screen.queryByTestId("op-op-a")).not.toBeInTheDocument()
+
+    rerender(
+      <DomainPanel domain={domain} token="jwt" apiKey="" externalFilter="" onResult={vi.fn()} />
+    )
+
+    expect(screen.queryByText(/Pro search applied:/)).not.toBeInTheDocument()
+    expect(screen.getByTestId("op-op-a")).toBeInTheDocument()
+    expect(screen.getByTestId("op-op-b")).toBeInTheDocument()
+    expect(screen.getByTestId("op-op-c")).toBeInTheDocument()
+  })
 })
