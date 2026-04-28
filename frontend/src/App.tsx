@@ -36,101 +36,17 @@ import {
   type OperatorMode
 } from "./features/advanced/AdvancedControlPlanePanel";
 import { domains } from "./data/domains";
+import {
+  APP_TAB_GROUPS,
+  DEFAULT_APP_TAB,
+  ROLE_SELECTED_DEFAULT_APP_TAB,
+  type AppTab
+} from "./data/navigation";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 import type { UserRoleId } from "./features/role-intake/types";
-
-type AppTab =
-  | "guide"
-  | "start"
-  | "connect"
-  | "demo"
-  | "chat"
-  | "voice"
-  | "models"
-  | "setup"
-  | "review"
-  | "safety"
-  | "skills"
-  | "fabric"
-  | "mcp"
-  | "catalog"
-  | "starter"
-  | "loops"
-  | "operations"
-  | "outcomes"
-  | "analytics"
-  | "impact"
-  | "tools"
-  | "marketplace"
-  | "builder"
-  | "spawner"
-  | "advanced";
-
-interface AppTabConfig {
-  id: AppTab;
-  label: string;
-}
-
-interface AppTabGroup {
-  label: string;
-  tabs: AppTabConfig[];
-}
-
-const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
-  {
-    label: "Start",
-    tabs: [
-      { id: "guide", label: "Guide Me" },
-      { id: "start", label: "Start Here" },
-      { id: "connect", label: "Connect" },
-      { id: "demo", label: "Demo Mode" },
-      { id: "models", label: "Models" },
-      { id: "chat", label: "Chat" },
-      { id: "voice", label: "Voice" }
-    ]
-  },
-  {
-    label: "Operate",
-    tabs: [
-      { id: "setup", label: "Integrations" },
-      { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety Center" },
-      { id: "operations", label: "Operations Hub" }
-    ]
-  },
-  {
-    label: "Build",
-    tabs: [
-      { id: "skills", label: "Skill Wizard" },
-      { id: "fabric", label: "Tool Fabric" },
-      { id: "mcp", label: "MCP Health" },
-      { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflow Starter" },
-      { id: "tools", label: "Tools" }
-    ]
-  },
-  {
-    label: "Improve",
-    tabs: [
-      { id: "loops", label: "Improvement Loops" },
-      { id: "outcomes", label: "Outcomes" },
-      { id: "analytics", label: "Analytics" },
-      { id: "impact", label: "Impact" }
-    ]
-  },
-  {
-    label: "Extend",
-    tabs: [
-      { id: "marketplace", label: "Marketplace" },
-      { id: "builder", label: "Builder" },
-      { id: "spawner", label: "Spawner" },
-      { id: "advanced", label: "Advanced" }
-    ]
-  }
-];
 
 const ROLE_STORAGE_KEY = "agent33:selected-role";
 
@@ -144,7 +60,9 @@ function getSavedUserRole(): UserRoleId | null {
 }
 
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<AppTab>(() => (getSavedUserRole() ? "start" : "guide"));
+  const [activeTab, setActiveTab] = useState<AppTab>(() =>
+    getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB
+  );
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
