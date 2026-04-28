@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { OUTCOME_WORKFLOWS, buildWorkflowDraft } from "../outcome-home/catalog";
 import type { OutcomeWorkflow } from "../outcome-home/types";
 import type { WorkflowStarterDraft } from "../workflow-starter/types";
+import { ProductWorkflowDetail } from "./ProductWorkflowDetail";
 import {
   filterWorkflowCatalog,
   getDefaultWorkflowCatalogFilters,
@@ -177,54 +178,12 @@ export function WorkflowCatalogPanel({
         </div>
 
         {selectedWorkflow ? (
-          <aside className="workflow-catalog-detail" aria-label="Selected workflow details">
-            <div>
-              <p className="eyebrow">{selectedWorkflow.audience}</p>
-              <h3>{selectedWorkflow.title}</h3>
-              <p>{selectedWorkflow.summary}</p>
-            </div>
-
-            <section>
-              <h4>What AGENT-33 will prepare</h4>
-              <p>{selectedWorkflow.output}</p>
-            </section>
-
-            <section>
-              <h4>Deliverables</h4>
-              <ul>
-                {selectedWorkflow.deliverables.map((deliverable) => (
-                  <li key={deliverable}>{deliverable}</li>
-                ))}
-              </ul>
-            </section>
-
-            <section>
-              <h4>Before launch</h4>
-              <ul>
-                {selectedWorkflow.requires.map((requirement) => (
-                  <li key={requirement}>{requirement}</li>
-                ))}
-              </ul>
-            </section>
-
-            <div className="workflow-catalog-tag-row">
-              {selectedWorkflow.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-
-            <div className="workflow-catalog-actions">
-              <button type="button" onClick={() => useWorkflow(selectedWorkflow)}>
-                Customize in Workflow Starter
-              </button>
-              <button type="button" onClick={onOpenSetup}>
-                Connect models first
-              </button>
-              <button type="button" onClick={onOpenOperations}>
-                View running work
-              </button>
-            </div>
-          </aside>
+          <ProductWorkflowDetail
+            workflow={selectedWorkflow}
+            onUseWorkflow={useWorkflow}
+            onOpenSetup={onOpenSetup}
+            onOpenOperations={onOpenOperations}
+          />
         ) : null}
       </div>
     </section>
