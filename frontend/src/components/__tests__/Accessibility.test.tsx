@@ -196,6 +196,7 @@ describe("App accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /Sessions & Runs/ }));
 
     expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
   });
 });
