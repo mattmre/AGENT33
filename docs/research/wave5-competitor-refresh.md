@@ -2,18 +2,22 @@
 
 ## Scope
 
-This refresh updates the Wave 3 competitor model after the Wave 4 cockpit shell landed. It focuses on what AGENT33 should learn for Wave 6: artifact/review UX, project/workspace coordination, task lifecycle, permissions, and beginner-ready setup.
+This refresh updates the Wave 3 competitor model after the Wave 4 cockpit shell landed. The Wave 3 baseline was maintained in the session plan rather than as a standalone repo document; the closest repo-tracked successor is `docs/research/wave5-implementation-audit.md`, which records the Wave 4 reality check and Wave 6 starting backlog. This document is the durable repo artifact for the competitor delta. It focuses on what AGENT33 should learn for Wave 6: artifact/review UX, project/workspace coordination, task lifecycle, permissions, and beginner-ready setup.
 
 Primary references:
 
-- OpenAI Codex docs and `openai/codex` README.
-- Claude Code documentation.
-- Google Jules landing page.
-- OpenHands README and local setup documentation.
-- Agent Zero README.
-- OpenClaw Mission Control README.
-- Vercel v0 landing page.
-- Existing AGENT33 research docs under `docs/research`.
+- Wave 5 implementation audit: `docs/research/wave5-implementation-audit.md` at AGENT33 `32bd881`.
+- Session Wave 3 baseline: `C:\Users\mattm\.copilot\session-state\3651229b-b68f-4f3e-8419-cf32fdee82dc\plan.md`, "Wave 3 - Research, comparison, and cockpit charter" section, accessed 2026-04-28.
+- OpenAI Codex docs: <https://developers.openai.com/codex/> and Codex IDE docs: <https://developers.openai.com/codex/ide>, accessed 2026-04-28.
+- `openai/codex` README: <https://github.com/openai/codex/blob/main/README.md>, accessed 2026-04-28.
+- Claude Code documentation: <https://docs.anthropic.com/en/docs/claude-code/overview>, accessed 2026-04-28.
+- Google Jules landing page: <https://jules.google/>, accessed 2026-04-28.
+- OpenHands README: <https://github.com/All-Hands-AI/OpenHands/blob/main/README.md>, accessed 2026-04-28.
+- OpenHands local setup documentation: <https://docs.openhands.dev/openhands/usage/run-openhands/local-setup>, accessed 2026-04-28.
+- Agent Zero README: <https://github.com/frdel/agent-zero/blob/main/README.md>, accessed 2026-04-28.
+- OpenClaw Mission Control README: <https://github.com/abhi1693/openclaw-mission-control/blob/master/README.md>, accessed 2026-04-28.
+- Vercel v0 landing page: <https://v0.dev/>, accessed 2026-04-28.
+- Existing AGENT33 research docs under `docs/research` at AGENT33 `32bd881`.
 
 BridgeSpace/BridgeMind remains a user-provided reference pattern. Public source material was not strong enough to treat it as independently verified, so this document separates the BridgeSpace pattern language from source-backed claims.
 
