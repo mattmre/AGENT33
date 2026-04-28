@@ -4,6 +4,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { SkipLink } from "./components/SkipLink";
+import { WorkspaceSessionSelector } from "./components/WorkspaceSessionSelector";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
 import { MessagingSetup } from "./features/integrations/MessagingSetup";
 import { ModelConnectionWizardPanel } from "./features/model-connection/ModelConnectionWizardPanel";
@@ -43,6 +44,12 @@ import {
   getAppTabLabel,
   type AppTab
 } from "./data/navigation";
+import {
+  DEFAULT_WORKSPACE_SESSION_ID,
+  getWorkspaceSession,
+  isWorkspaceSessionId,
+  type WorkspaceSessionId
+} from "./data/workspaces";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
@@ -50,6 +57,7 @@ import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 import type { UserRoleId } from "./features/role-intake/types";
 
 const ROLE_STORAGE_KEY = "agent33:selected-role";
+const WORKSPACE_SESSION_STORAGE_KEY = "agent33:selected-workspace-session";
 
 function getSavedUserRole(): UserRoleId | null {
   if (typeof window === "undefined") {
@@ -58,6 +66,15 @@ function getSavedUserRole(): UserRoleId | null {
 
   const savedRole = window.sessionStorage.getItem(ROLE_STORAGE_KEY);
   return isUserRoleId(savedRole) ? savedRole : null;
+}
+
+function getSavedWorkspaceSessionId(): WorkspaceSessionId {
+  if (typeof window === "undefined") {
+    return DEFAULT_WORKSPACE_SESSION_ID;
+  }
+
+  const savedWorkspaceId = window.sessionStorage.getItem(WORKSPACE_SESSION_STORAGE_KEY);
+  return isWorkspaceSessionId(savedWorkspaceId) ? savedWorkspaceId : DEFAULT_WORKSPACE_SESSION_ID;
 }
 
 export default function App(): JSX.Element {
@@ -73,6 +90,8 @@ export default function App(): JSX.Element {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRoleId | null>(getSavedUserRole);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(getSavedWorkspaceSessionId);
+  const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -112,6 +131,13 @@ export default function App(): JSX.Element {
     setActiveTab(target);
   }, []);
 
+  const selectWorkspace = useCallback((workspaceId: WorkspaceSessionId): void => {
+    setSelectedWorkspaceId(workspaceId);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(WORKSPACE_SESSION_STORAGE_KEY, workspaceId);
+    }
+  }, []);
+
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -146,11 +172,12 @@ export default function App(): JSX.Element {
 
       <div className="cockpit-layout">
         <aside className="cockpit-sidebar">
-          <div className="cockpit-sidebar-context">
-            <span className="eyebrow">Workspace</span>
-            <strong>Local Shipyard</strong>
-            <small>Project navigation, tools, and run surfaces in one place.</small>
-          </div>
+          <WorkspaceSessionSelector
+            selectedWorkspaceId={selectedWorkspaceId}
+            onSelectWorkspace={selectWorkspace}
+            onOpenRuns={() => setActiveTab("operations")}
+            onOpenWorkflows={() => setActiveTab("starter")}
+          />
           <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
         </aside>
 
@@ -160,7 +187,9 @@ export default function App(): JSX.Element {
               <span className="eyebrow">Now viewing</span>
               <strong>{getAppTabLabel(activeTab)}</strong>
             </div>
-            <span className="cockpit-context-note">Choose a surface from the sidebar to continue building, operating, or reviewing work.</span>
+            <span className="cockpit-context-note">
+              {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
+            </span>
           </div>
 
           <div className="consumer-content">
