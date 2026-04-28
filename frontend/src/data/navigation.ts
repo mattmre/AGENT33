@@ -38,6 +38,11 @@ export interface AppTabGroup {
   readonly tabs: ReadonlyArray<AppTabConfig>;
 }
 
+export interface AppPrimaryNavItem {
+  readonly id: AppTab;
+  readonly description: string;
+}
+
 export const DEFAULT_APP_TAB: AppTab = "guide";
 export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
 
@@ -45,9 +50,9 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
     label: "Start",
     tabs: [
-      { id: "guide", label: "Guide Me" },
-      { id: "start", label: "Start Here" },
-      { id: "connect", label: "Connect" },
+      { id: "guide", label: "Guide / Intake" },
+      { id: "start", label: "Home / Next Step" },
+      { id: "connect", label: "Connect Models" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
       { id: "chat", label: "Chat" },
@@ -59,8 +64,8 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     tabs: [
       { id: "setup", label: "Integrations" },
       { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety Center" },
-      { id: "operations", label: "Operations Hub" }
+      { id: "safety", label: "Safety & Approvals" },
+      { id: "operations", label: "Sessions & Runs" }
     ]
   },
   {
@@ -70,7 +75,7 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
       { id: "fabric", label: "Tool Fabric" },
       { id: "mcp", label: "MCP Health" },
       { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflow Starter" },
+      { id: "starter", label: "Workflows" },
       { id: "tools", label: "Tools" }
     ]
   },
@@ -94,6 +99,40 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   }
 ];
 
+export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
+  {
+    id: "guide",
+    description: "Tell AGENT-33 what you want and get the safest next step."
+  },
+  {
+    id: "start",
+    description: "Beginner launchpad for setup, demo runs, and common outcomes."
+  },
+  {
+    id: "operations",
+    description: "Watch active work, recent results, and operator handoffs."
+  },
+  {
+    id: "starter",
+    description: "Pick a prebuilt strategy instead of assembling tools manually."
+  },
+  {
+    id: "connect",
+    description: "Set up providers, local models, and readiness checks."
+  },
+  {
+    id: "safety",
+    description: "Review risks, decisions, and protected actions before work runs."
+  }
+];
+
+const APP_PRIMARY_TAB_ID_SET = new Set<AppTab>(APP_PRIMARY_NAV_ITEMS.map((item) => item.id));
+
+export const APP_SECONDARY_NAV_GROUPS: ReadonlyArray<AppTabGroup> = APP_TAB_GROUPS.map((group) => ({
+  ...group,
+  tabs: group.tabs.filter((tab) => !APP_PRIMARY_TAB_ID_SET.has(tab.id))
+})).filter((group) => group.tabs.length > 0);
+
 const APP_TAB_ID_SET = new Set<string>(APP_TAB_IDS);
 const APP_TAB_LABEL_MAP = new Map<AppTab, string>(
   APP_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab.id, tab.label] as const))
@@ -105,4 +144,12 @@ export function isAppTab(value: string): value is AppTab {
 
 export function getAppTabLabel(tabId: AppTab): string {
   return APP_TAB_LABEL_MAP.get(tabId) ?? tabId;
+}
+
+export function isPrimaryAppTab(tabId: AppTab): boolean {
+  return APP_PRIMARY_TAB_ID_SET.has(tabId);
+}
+
+export function isSecondaryAppTab(tabId: AppTab): boolean {
+  return !APP_PRIMARY_TAB_ID_SET.has(tabId);
 }
