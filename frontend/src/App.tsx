@@ -28,6 +28,7 @@ import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
 import { DemoModePanel } from "./features/demo-mode/DemoModePanel";
 import { RoleIntakePanel } from "./features/role-intake/RoleIntakePanel";
+import { UnifiedConnectCenterPanel } from "./features/connect-center/UnifiedConnectCenterPanel";
 import { isUserRoleId } from "./features/role-intake/data";
 import { HelpAssistantDrawer } from "./features/help-assistant/HelpAssistantDrawer";
 import {
@@ -44,6 +45,7 @@ import type { UserRoleId } from "./features/role-intake/types";
 type AppTab =
   | "guide"
   | "start"
+  | "connect"
   | "demo"
   | "chat"
   | "voice"
@@ -83,6 +85,7 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     tabs: [
       { id: "guide", label: "Guide Me" },
       { id: "start", label: "Start Here" },
+      { id: "connect", label: "Connect" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
       { id: "chat", label: "Chat" },
@@ -269,6 +272,17 @@ export default function App(): JSX.Element {
               onOpenLoops={() => setActiveTab("loops")}
               onOpenMcp={() => setActiveTab("mcp")}
               onOpenAdvanced={() => setActiveTab("advanced")}
+              onResult={onResult}
+            />
+          </div>
+        )}
+
+        {activeTab === "connect" && (
+          <div className="consumer-connect-center-layout">
+            <UnifiedConnectCenterPanel
+              token={token}
+              apiKey={apiKey}
+              onNavigate={setActiveTab}
               onResult={onResult}
             />
           </div>

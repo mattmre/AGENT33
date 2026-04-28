@@ -2,6 +2,43 @@ import type { HelpArticle } from "./types";
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
+    id: "connect-center",
+    title: "Use Connect Center for setup",
+    audience: "New user who needs to connect models, tools, and safety",
+    summary:
+      "Connect Center turns setup into a readable checklist for engine access, models, runtime memory, MCP tools, tool catalog visibility, and safety approvals.",
+    body: [
+      "Use Connect Center when you are not sure whether you need Models, Integrations, MCP Health, Tools, or Safety Center.",
+      "It reuses existing readiness checks when credentials are available and otherwise gives safe next actions.",
+      "The center does not store secrets or auto-fix settings; each action opens the deeper setup page for review."
+    ],
+    steps: [
+      "Open Start > Connect.",
+      "Review the recommended next connection.",
+      "Use Refresh connection scan after adding an operator token or API key.",
+      "Open the suggested setup page and return to Connect when done."
+    ],
+    keywords: [
+      "connect",
+      "setup",
+      "models",
+      "integrations",
+      "mcp",
+      "tools",
+      "safety",
+      "readiness"
+    ],
+    sources: [
+      { label: "Connect Center panel", path: "frontend/src/features/connect-center/UnifiedConnectCenterPanel.tsx" },
+      { label: "Connect card helpers", path: "frontend/src/features/connect-center/helpers.ts" },
+      { label: "Wave 2 Round 4 research", path: "docs/research/wave2-r4-unified-connect-center.md" }
+    ],
+    actions: [
+      { label: "Open Connect Center", target: "connect" },
+      { label: "Open model setup", target: "models" }
+    ]
+  },
+  {
     id: "choose-role-path",
     title: "Choose a role-based start path",
     audience: "New user who is not sure where to begin",
