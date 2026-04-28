@@ -1051,7 +1051,8 @@ button:disabled {
   gap: 0.25rem;
 }
 
-.main-nav button {
+.main-nav button,
+.main-nav-tools summary {
   background: transparent;
   border: none;
   color: #9dc3cf;
@@ -1061,10 +1062,49 @@ button:disabled {
   font-weight: 500;
   text-align: left;
   transition: all 0.2s ease;
-  white-space: nowrap;
 }
 
-.main-nav button:hover {
+.main-nav-tools summary {
+  display: grid;
+  gap: 0.2rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.main-nav-tools summary::-webkit-details-marker {
+  display: none;
+}
+
+.main-nav-button-label,
+.main-nav-tools summary span {
+  color: inherit;
+  font-weight: 700;
+}
+
+.main-nav button small,
+.main-nav-tools summary small {
+  display: block;
+  margin-top: 0.16rem;
+  color: rgba(157, 195, 207, 0.78);
+  font-size: 0.69rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.main-nav-tool-groups {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+}
+
+.main-nav-tool-group {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.main-nav button:hover,
+.main-nav-tools summary:hover {
   background: rgba(48, 213, 200, 0.1);
   color: #fff;
 }

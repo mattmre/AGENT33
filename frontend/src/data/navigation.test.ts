@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { HELP_ASSISTANT_TARGETS } from "../features/help-assistant/types";
 import {
+  APP_PRIMARY_NAV_ITEMS,
+  APP_SECONDARY_NAV_GROUPS,
   APP_TAB_GROUPS,
   APP_TAB_IDS,
   DEFAULT_APP_TAB,
   ROLE_SELECTED_DEFAULT_APP_TAB,
   getAppTabLabel,
-  isAppTab
+  isAppTab,
+  isPrimaryAppTab,
+  isSecondaryAppTab
 } from "./navigation";
 
 describe("app navigation registry", () => {
@@ -30,5 +34,24 @@ describe("app navigation registry", () => {
   it("returns beginner-readable labels for registered tabs", () => {
     expect(getAppTabLabel("guide")).toBe("Guide Me");
     expect(getAppTabLabel("advanced")).toBe("Advanced");
+  });
+
+  it("splits cockpit primary navigation from demoted tools without losing destinations", () => {
+    const primaryIds = APP_PRIMARY_NAV_ITEMS.map((item) => item.id);
+    const secondaryIds = APP_SECONDARY_NAV_GROUPS.flatMap((group) => group.tabs.map((tab) => tab.id));
+    const splitIds = [...primaryIds, ...secondaryIds];
+
+    expect(new Set(primaryIds).size).toBe(primaryIds.length);
+    expect(new Set(secondaryIds).size).toBe(secondaryIds.length);
+    expect(primaryIds.some((id) => secondaryIds.includes(id))).toBe(false);
+    expect(new Set(splitIds)).toEqual(new Set(APP_TAB_IDS));
+    expect(primaryIds).toEqual(["guide", "start", "operations", "starter", "connect", "safety"]);
+  });
+
+  it("identifies whether a tab is a primary cockpit destination or a secondary tool", () => {
+    expect(isPrimaryAppTab("operations")).toBe(true);
+    expect(isSecondaryAppTab("operations")).toBe(false);
+    expect(isPrimaryAppTab("fabric")).toBe(false);
+    expect(isSecondaryAppTab("fabric")).toBe(true);
   });
 });
