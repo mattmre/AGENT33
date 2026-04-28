@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
@@ -138,17 +138,18 @@ export default function App(): JSX.Element {
   );
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
   const showCockpitDashboard = activeTab === "operations";
-  const currentCockpitUrlState: CockpitUrlState = {
-    activeTab,
-    workspaceId: selectedWorkspaceId,
-    permissionModeId,
-    drawerSectionId
-  };
+  const currentCockpitUrlState = useMemo(
+    (): CockpitUrlState => ({
+      activeTab,
+      workspaceId: selectedWorkspaceId,
+      permissionModeId,
+      drawerSectionId
+    }),
+    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId]
+  );
   const currentCockpitUrlStateRef = useRef(currentCockpitUrlState);
   const isApplyingBrowserNavigationRef = useRef(false);
   const hasSyncedInitialUrlRef = useRef(false);
-
-  currentCockpitUrlStateRef.current = currentCockpitUrlState;
 
   useEffect(() => {
     function onPopState(): void {
@@ -169,6 +170,7 @@ export default function App(): JSX.Element {
       return;
     }
 
+    currentCockpitUrlStateRef.current = currentCockpitUrlState;
     const nextUrl = createCockpitUrl(window.location.href, currentCockpitUrlState);
     const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 

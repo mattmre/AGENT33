@@ -1,5 +1,10 @@
 import { DEFAULT_APP_TAB, isAppTab, type AppTab } from "../data/navigation";
 import {
+  DEFAULT_ARTIFACT_DRAWER_SECTION_ID as DEFAULT_ARTIFACT_DRAWER_SECTION_ID_VALUE,
+  isArtifactDrawerSectionId as isArtifactDrawerSectionIdValue,
+  type ArtifactDrawerSectionId
+} from "../data/artifactDrawerSections";
+import {
   DEFAULT_PERMISSION_MODE_ID,
   isPermissionModeId,
   type PermissionModeId
@@ -15,32 +20,18 @@ export const COCKPIT_URL_WORKSPACE_PARAM = "workspace";
 export const COCKPIT_URL_PERMISSION_PARAM = "permission";
 export const COCKPIT_URL_DRAWER_PARAM = "drawer";
 
-export const ARTIFACT_DRAWER_SECTION_IDS = [
-  "plan",
-  "commands",
-  "logs",
-  "tests",
-  "risks",
-  "approval",
-  "activity",
-  "outcome"
-] as const;
-
-export type ArtifactDrawerSectionId = (typeof ARTIFACT_DRAWER_SECTION_IDS)[number];
+export {
+  ARTIFACT_DRAWER_SECTION_IDS,
+  DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
+  isArtifactDrawerSectionId
+} from "../data/artifactDrawerSections";
+export type { ArtifactDrawerSectionId } from "../data/artifactDrawerSections";
 
 export interface CockpitUrlState {
   readonly activeTab: AppTab;
   readonly workspaceId: WorkspaceSessionId;
   readonly permissionModeId: PermissionModeId;
   readonly drawerSectionId: ArtifactDrawerSectionId;
-}
-
-export const DEFAULT_ARTIFACT_DRAWER_SECTION_ID: ArtifactDrawerSectionId = "plan";
-
-const ARTIFACT_DRAWER_SECTION_ID_SET = new Set<string>(ARTIFACT_DRAWER_SECTION_IDS);
-
-export function isArtifactDrawerSectionId(value: string | null): value is ArtifactDrawerSectionId {
-  return value !== null && ARTIFACT_DRAWER_SECTION_ID_SET.has(value);
 }
 
 export function readCockpitUrlState(
@@ -63,9 +54,9 @@ export function readCockpitUrlState(
     permissionModeId: isPermissionModeId(requestedPermissionModeId)
       ? requestedPermissionModeId
       : fallbackState.permissionModeId ?? DEFAULT_PERMISSION_MODE_ID,
-    drawerSectionId: isArtifactDrawerSectionId(requestedDrawerSectionId)
+    drawerSectionId: isArtifactDrawerSectionIdValue(requestedDrawerSectionId)
       ? requestedDrawerSectionId
-      : fallbackState.drawerSectionId ?? DEFAULT_ARTIFACT_DRAWER_SECTION_ID
+      : fallbackState.drawerSectionId ?? DEFAULT_ARTIFACT_DRAWER_SECTION_ID_VALUE
   };
 }
 
