@@ -1,5 +1,6 @@
 export const HELP_ASSISTANT_TARGETS = [
   "start",
+  "demo",
   "models",
   "setup",
   "catalog",

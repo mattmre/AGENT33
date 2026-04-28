@@ -76,8 +76,8 @@ export function DemoModePanel({
             </div>
             <blockquote>{scenario.prompt}</blockquote>
             <div className="demo-mode-inputs">
-              {scenario.sampleInputs.map((input) => (
-                <span key={`${scenario.id}-${input}`}>{input}</span>
+              {scenario.sampleInputs.map((input, index) => (
+                <span key={`${scenario.id}-input-${index}`}>{input}</span>
               ))}
             </div>
           </article>

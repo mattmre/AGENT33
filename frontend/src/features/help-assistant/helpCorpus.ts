@@ -34,7 +34,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { label: "Wave 2 Round 2 research", path: "docs/research/wave2-r2-demo-mode-first-success.md" }
     ],
     actions: [
-      { label: "Open Start", target: "start" },
+      { label: "Open Demo Mode", target: "demo" },
       { label: "Connect model when ready", target: "models" }
     ]
   },
