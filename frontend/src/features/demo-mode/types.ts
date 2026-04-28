@@ -1,4 +1,5 @@
 import type { WorkflowStarterDraft } from "../workflow-starter/types";
+import type { UserRoleId } from "../role-intake/types";
 
 export type DemoStepTone = "done" | "active" | "attention";
 
@@ -22,6 +23,7 @@ export interface DemoScenario {
   audience: string;
   complexity: "Beginner" | "Intermediate";
   timeEstimate: string;
+  forRoles?: UserRoleId[];
   outcome: string;
   prompt: string;
   sampleInputs: string[];

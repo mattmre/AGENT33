@@ -4,6 +4,8 @@ import type { ApiResult } from "../../types";
 import { asOnboardingStatus, fetchOnboardingStatus } from "../onboarding/api";
 import type { OnboardingStatus } from "../onboarding/types";
 import type { WorkflowStarterDraft } from "../workflow-starter/types";
+import { getRoleProfile } from "../role-intake/data";
+import type { UserRoleId } from "../role-intake/types";
 import {
   OUTCOME_WORKFLOWS,
   buildCustomWorkflowDraft,
@@ -13,6 +15,7 @@ import {
 import type { OutcomeWorkflow } from "./types";
 
 interface OutcomeHomePanelProps {
+  selectedRole?: UserRoleId | null;
   token: string;
   apiKey: string;
   onOpenSetup: () => void;
@@ -77,6 +80,7 @@ function renderWorkflowCard(
 }
 
 export function OutcomeHomePanel({
+  selectedRole,
   token,
   apiKey,
   onOpenSetup,
@@ -95,6 +99,7 @@ export function OutcomeHomePanel({
   const [selectedTag, setSelectedTag] = useState("featured");
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState("");
+  const roleProfile = useMemo(() => getRoleProfile(selectedRole), [selectedRole]);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
 
@@ -184,10 +189,16 @@ export function OutcomeHomePanel({
 
   const workflows = useMemo(() => {
     if (selectedTag === "featured") {
+      if (roleProfile !== null) {
+        const roleWorkflows = OUTCOME_WORKFLOWS.filter((workflow) =>
+          roleProfile.workflowIds.includes(workflow.id)
+        );
+        return roleWorkflows.length > 0 ? roleWorkflows : getFeaturedWorkflows();
+      }
       return getFeaturedWorkflows();
     }
     return OUTCOME_WORKFLOWS.filter((workflow) => workflow.tags.includes(selectedTag));
-  }, [selectedTag]);
+  }, [roleProfile, selectedTag]);
 
   function handleUseWorkflow(workflow: OutcomeWorkflow): void {
     onOpenWorkflowStarter(buildWorkflowDraft(workflow));
@@ -205,7 +216,11 @@ export function OutcomeHomePanel({
       <header className="outcome-home-hero">
         <div>
           <p className="eyebrow">Outcome-first autopilot</p>
-          <h2 id="outcome-home-title">What do you want AGENT-33 to build or run?</h2>
+          <h2 id="outcome-home-title">
+            {roleProfile === null
+              ? "What do you want AGENT-33 to build or run?"
+              : `${roleProfile.title} path: what should AGENT-33 help you do first?`}
+          </h2>
           <p>
             Pick a proven workflow, describe an outcome in plain language, or connect the missing
             pieces. AGENT-33 will route you into a review-gated workflow instead of making you hunt
@@ -225,6 +240,21 @@ export function OutcomeHomePanel({
           <button type="button" onClick={() => void loadStatus()}>
             Try again
           </button>
+        </article>
+      ) : null}
+
+      {roleProfile !== null ? (
+        <article className="outcome-role-callout" aria-label="Selected role guidance">
+          <div>
+            <p className="eyebrow">Your selected role</p>
+            <h3>{roleProfile.headline}</h3>
+            <p>{roleProfile.summary}</p>
+          </div>
+          <div className="role-pill-row">
+            {roleProfile.setupFocus.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
         </article>
       ) : null}
 

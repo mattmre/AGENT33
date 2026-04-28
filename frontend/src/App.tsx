@@ -27,6 +27,8 @@ import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementL
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
 import { DemoModePanel } from "./features/demo-mode/DemoModePanel";
+import { RoleIntakePanel } from "./features/role-intake/RoleIntakePanel";
+import { isUserRoleId } from "./features/role-intake/data";
 import { HelpAssistantDrawer } from "./features/help-assistant/HelpAssistantDrawer";
 import {
   AdvancedControlPlanePanel,
@@ -37,8 +39,10 @@ import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
+import type { UserRoleId } from "./features/role-intake/types";
 
 type AppTab =
+  | "guide"
   | "start"
   | "demo"
   | "chat"
@@ -77,6 +81,7 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
     label: "Start",
     tabs: [
+      { id: "guide", label: "Guide Me" },
       { id: "start", label: "Start Here" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
@@ -124,8 +129,19 @@ const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   }
 ];
 
+const ROLE_STORAGE_KEY = "agent33:selected-role";
+
+function getSavedUserRole(): UserRoleId | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const savedRole = window.sessionStorage.getItem(ROLE_STORAGE_KEY);
+  return isUserRoleId(savedRole) ? savedRole : null;
+}
+
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<AppTab>("start");
+  const [activeTab, setActiveTab] = useState<AppTab>("guide");
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
@@ -134,6 +150,7 @@ export default function App(): JSX.Element {
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
+  const [selectedRole, setSelectedRole] = useState<UserRoleId | null>(getSavedUserRole);
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -160,6 +177,13 @@ export default function App(): JSX.Element {
   const openWorkflowStarter = useCallback((draft?: WorkflowStarterDraft): void => {
     setWorkflowStarterDraft(draft ?? null);
     setActiveTab("starter");
+  }, []);
+
+  const chooseRole = useCallback((roleId: UserRoleId): void => {
+    setSelectedRole(roleId);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(ROLE_STORAGE_KEY, roleId);
+    }
   }, []);
 
   const openHelpTarget = useCallback((target: HelpAssistantTarget): void => {
@@ -217,9 +241,23 @@ export default function App(): JSX.Element {
       </header>
 
       <div className="consumer-content" id="main-content" role="main">
+        {activeTab === "guide" && (
+          <div className="consumer-role-intake-layout">
+            <RoleIntakePanel
+              selectedRole={selectedRole}
+              onSelectRole={chooseRole}
+              onOpenDemo={() => setActiveTab("demo")}
+              onOpenModels={() => setActiveTab("models")}
+              onOpenWorkflowCatalog={() => setActiveTab("catalog")}
+              onOpenWorkflowStarter={openWorkflowStarter}
+            />
+          </div>
+        )}
+
         {activeTab === "start" && (
           <div className="consumer-onboarding-layout">
             <OutcomeHomePanel
+              selectedRole={selectedRole}
               token={token}
               apiKey={apiKey}
               onOpenSetup={() => setActiveTab("setup")}
@@ -239,6 +277,7 @@ export default function App(): JSX.Element {
         {activeTab === "demo" && (
           <div className="consumer-demo-mode-layout">
             <DemoModePanel
+              selectedRole={selectedRole}
               onOpenModels={() => setActiveTab("models")}
               onOpenWorkflowCatalog={() => setActiveTab("catalog")}
               onOpenWorkflowStarter={openWorkflowStarter}

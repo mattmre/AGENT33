@@ -1460,6 +1460,163 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+/* Role Intake */
+.consumer-role-intake-layout {
+  display: grid;
+  gap: 2rem;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.role-intake-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.role-intake-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.25rem;
+  align-items: flex-start;
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  border-radius: 22px;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top right, rgba(192, 132, 252, 0.2), transparent 32%),
+    linear-gradient(135deg, rgba(49, 18, 84, 0.48), rgba(15, 23, 42, 0.84));
+}
+
+.role-intake-hero h2 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.75rem, 3vw, 2.8rem);
+  max-width: 840px;
+}
+
+.role-intake-hero p,
+.role-path-card p,
+.role-picker button span,
+.guided-brief-card label span {
+  color: var(--text-soft);
+}
+
+.role-intake-score {
+  min-width: 220px;
+  border: 1px solid rgba(192, 132, 252, 0.36);
+  border-radius: 18px;
+  background: rgba(88, 28, 135, 0.28);
+  padding: 1rem;
+  text-align: right;
+}
+
+.role-intake-score strong {
+  display: block;
+  color: #e9d5ff;
+  font-size: 1.35rem;
+}
+
+.role-intake-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.role-picker,
+.role-path-card,
+.outcome-role-callout {
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 18px;
+  background: rgba(8, 22, 31, 0.78);
+  padding: 1rem;
+  box-shadow: 0 14px 28px rgba(5, 13, 17, 0.28);
+}
+
+.role-picker {
+  display: grid;
+  gap: 0.7rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.role-picker h3,
+.role-path-card h3,
+.role-path-card h4,
+.outcome-role-callout h3 {
+  margin: 0;
+}
+
+.role-picker button {
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  border-color: rgba(125, 211, 252, 0.18);
+}
+
+.role-picker button.active {
+  border-color: rgba(192, 132, 252, 0.5);
+  color: #e9d5ff;
+  background: rgba(88, 28, 135, 0.26);
+}
+
+.role-intake-workspace,
+.role-path-card,
+.guided-brief-card,
+.outcome-role-callout {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.role-pill-row,
+.role-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.role-pill-row span {
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  border-radius: 999px;
+  background: rgba(88, 28, 135, 0.2);
+  color: #e9d5ff;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.role-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.role-recommendation-grid section {
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.52);
+  padding: 0.8rem;
+}
+
+.guided-brief-card label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.guided-brief-card input,
+.guided-brief-card textarea {
+  width: 100%;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text-main);
+  padding: 0.75rem;
+}
+
+.role-intake-error {
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.24);
+  color: #fecaca;
+  padding: 0.75rem;
+}
+
 /* Workflow Catalog */
 .consumer-workflow-catalog-layout {
   display: grid;
@@ -1760,6 +1917,8 @@ button:disabled {
   .workflow-catalog-controls,
   .workflow-catalog-layout,
   .demo-mode-layout,
+  .role-intake-grid,
+  .role-recommendation-grid,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
@@ -1773,6 +1932,7 @@ button:disabled {
   .outcome-section-head,
   .workflow-catalog-hero,
   .demo-mode-hero,
+  .role-intake-hero,
   .model-wizard-hero,
   .advanced-quarantine-hero,
   .advanced-pro-banner {
@@ -1782,6 +1942,7 @@ button:disabled {
   .outcome-home-score,
   .workflow-catalog-stats,
   .demo-mode-score,
+  .role-intake-score,
   .model-wizard-score {
     width: 100%;
     text-align: left;
@@ -1793,6 +1954,8 @@ button:disabled {
   .workflow-catalog-layout,
   .demo-mode-layout,
   .demo-mode-next,
+  .role-intake-grid,
+  .role-recommendation-grid,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
@@ -1805,7 +1968,8 @@ button:disabled {
     position: static;
   }
 
-  .demo-mode-picker {
+  .demo-mode-picker,
+  .role-picker {
     position: static;
   }
 

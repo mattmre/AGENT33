@@ -1,4 +1,5 @@
 export const HELP_ASSISTANT_TARGETS = [
+  "guide",
   "start",
   "demo",
   "models",

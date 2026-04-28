@@ -2,6 +2,42 @@ import type { HelpArticle } from "./types";
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
+    id: "choose-role-path",
+    title: "Choose a role-based start path",
+    audience: "New user who is not sure where to begin",
+    summary:
+      "The Guide Me page asks what kind of user you are, recommends workflows and demos, and turns a plain-language idea into a Workflow Starter draft.",
+    body: [
+      "Use Guide Me before opening settings if you are unsure what model, tool, or workflow you need.",
+      "Role paths are advisory: they change the recommended workflows and demos, but they do not hide the full catalog.",
+      "The guided brief stays local and plan-only until you choose to connect a model and run a workflow."
+    ],
+    steps: [
+      "Open Guide Me.",
+      "Choose Founder, Developer, Agency, Enterprise, or Operator.",
+      "Review the recommended workflows and demos.",
+      "Fill in the guided brief and create a Workflow Starter draft."
+    ],
+    keywords: [
+      "guide",
+      "role",
+      "persona",
+      "beginner",
+      "idea intake",
+      "product brief",
+      "guided start"
+    ],
+    sources: [
+      { label: "Role Intake panel", path: "frontend/src/features/role-intake/RoleIntakePanel.tsx" },
+      { label: "Role profiles", path: "frontend/src/features/role-intake/data.ts" },
+      { label: "Wave 2 Round 3 research", path: "docs/research/wave2-r3-role-intake-guided-brief.md" }
+    ],
+    actions: [
+      { label: "Open Guide Me", target: "guide" },
+      { label: "Try Demo Mode", target: "demo" }
+    ]
+  },
+  {
     id: "try-demo-mode",
     title: "Try Demo Mode before setup",
     audience: "New user who wants to see value before connecting credentials",
