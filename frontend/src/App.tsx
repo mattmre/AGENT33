@@ -6,6 +6,7 @@ import { ArtifactReviewDrawer } from "./components/ArtifactReviewDrawer";
 import { CockpitProjectDashboard } from "./components/CockpitProjectDashboard";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { PermissionModeControl } from "./components/PermissionModeControl";
+import { ShipyardLaneScaffold } from "./components/ShipyardLaneScaffold";
 import { SkipLink } from "./components/SkipLink";
 import { WorkspaceSessionSelector } from "./components/WorkspaceSessionSelector";
 import { WorkspaceTaskBoard } from "./components/WorkspaceTaskBoard";
@@ -484,6 +485,11 @@ export default function App(): JSX.Element {
         {/* Operations Hub -> Unified lifecycle view with pause/resume/cancel controls */}
         {activeTab === "operations" && (
           <div className="consumer-operations-layout">
+            <ShipyardLaneScaffold
+              workspace={selectedWorkspace}
+              onOpenSafety={() => setActiveTab("safety")}
+              onOpenWorkflows={() => setActiveTab("starter")}
+            />
             <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
               <WorkspaceTaskBoard
                 workspace={selectedWorkspace}

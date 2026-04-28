@@ -1757,6 +1757,142 @@ button:disabled {
   line-height: 1.35;
 }
 
+.shipyard-lanes {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(11, 30, 39, 0.72), rgba(4, 12, 18, 0.68));
+  box-shadow: 0 18px 40px rgba(1, 8, 12, 0.24);
+}
+
+.shipyard-lanes-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shipyard-lanes-header h2 {
+  margin: 0;
+  color: #f7ead1;
+}
+
+.shipyard-lanes-header p {
+  margin: 0.35rem 0 0;
+  color: #b7dbe5;
+  line-height: 1.45;
+}
+
+.shipyard-lanes-actions {
+  display: flex;
+  align-items: start;
+  gap: 0.45rem;
+}
+
+.shipyard-lanes-actions button {
+  border: 1px solid rgba(48, 213, 200, 0.32);
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.1);
+  color: #d9edf4;
+  padding: 0.45rem 0.7rem;
+  white-space: nowrap;
+}
+
+.shipyard-lane-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 0.7rem;
+  overflow-x: auto;
+}
+
+.shipyard-lane-card {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 170px;
+  padding: 0.8rem;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-left: 4px solid #30d5c8;
+  border-radius: 14px;
+  background: rgba(4, 12, 18, 0.46);
+}
+
+.shipyard-lane-card--ready {
+  border-left-color: #30d5c8;
+}
+
+.shipyard-lane-card--blocked {
+  border-left-color: #fb7185;
+}
+
+.shipyard-lane-card--working {
+  border-left-color: #f6bd60;
+}
+
+.shipyard-lane-card--reviewing {
+  border-left-color: #c4b5fd;
+}
+
+.shipyard-lane-card--complete {
+  border-left-color: #86efac;
+}
+
+.shipyard-lane-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.shipyard-lane-card-header span,
+.shipyard-lane-card li span {
+  color: #6fa8b8;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shipyard-lane-card h3 {
+  margin: 0.15rem 0 0;
+  color: #e2f1f8;
+  font-size: 1rem;
+}
+
+.shipyard-lane-card-header strong {
+  align-self: start;
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.1);
+  color: #d9edf4;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.68rem;
+}
+
+.shipyard-lane-card p,
+.shipyard-lane-card small {
+  margin: 0;
+  color: #9dc3cf;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.shipyard-lane-card ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shipyard-lane-card li {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.45rem;
+  border-radius: 10px;
+  background: rgba(48, 213, 200, 0.07);
+  color: #e2f1f8;
+  font-size: 0.78rem;
+}
+
 .consumer-content {
   flex: 1;
   display: flex;
@@ -1822,6 +1958,18 @@ button:disabled {
 
   .cockpit-dashboard-hero {
     display: grid;
+  }
+
+  .shipyard-lanes-header {
+    display: grid;
+  }
+
+  .shipyard-lanes-actions {
+    flex-wrap: wrap;
+  }
+
+  .shipyard-lane-grid {
+    grid-template-columns: repeat(4, minmax(160px, 1fr));
   }
 
   .permission-mode-control,
