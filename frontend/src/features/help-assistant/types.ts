@@ -1,13 +1,16 @@
-export type HelpAssistantTarget =
-  | "start"
-  | "models"
-  | "setup"
-  | "catalog"
-  | "starter"
-  | "operations"
-  | "safety"
-  | "mcp"
-  | "advanced";
+export const HELP_ASSISTANT_TARGETS = [
+  "start",
+  "models",
+  "setup",
+  "catalog",
+  "starter",
+  "operations",
+  "safety",
+  "mcp",
+  "advanced"
+] as const;
+
+export type HelpAssistantTarget = (typeof HELP_ASSISTANT_TARGETS)[number];
 
 export interface HelpSource {
   label: string;

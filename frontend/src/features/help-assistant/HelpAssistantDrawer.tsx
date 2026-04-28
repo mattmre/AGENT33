@@ -19,15 +19,15 @@ function renderArticle(article: HelpArticle, onNavigate: (target: HelpAssistantT
       </div>
       <p>{article.summary}</p>
       <div className="help-assistant-body">
-        {article.body.map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
+        {article.body.map((paragraph, index) => (
+          <p key={`${article.id}-body-${index}`}>{paragraph}</p>
         ))}
       </div>
       <div className="help-assistant-steps">
         <h4>Do this next</h4>
         <ol>
-          {article.steps.map((step) => (
-            <li key={step}>{step}</li>
+          {article.steps.map((step, index) => (
+            <li key={`${article.id}-step-${index}`}>{step}</li>
           ))}
         </ol>
       </div>
@@ -60,7 +60,7 @@ export function HelpAssistantDrawer({ onNavigate }: HelpAssistantDrawerProps): J
   const selectedArticle = results[0]?.article;
 
   return (
-    <aside className={`help-assistant ${isOpen ? "help-assistant--open" : ""}`} aria-label="Ask AGENT33 help assistant">
+    <aside className="help-assistant" aria-label="Ask AGENT33 help assistant">
       <button
         type="button"
         className="help-assistant-toggle"

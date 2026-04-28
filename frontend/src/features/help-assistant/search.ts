@@ -36,10 +36,14 @@ export function tokenizeHelpQuery(query: string): string[] {
   if (!normalized) {
     return [];
   }
-  return normalized
-    .split(" ")
-    .map((term) => term.trim())
-    .filter((term) => term.length > 1 && !COMMON_WORDS.has(term));
+  return Array.from(
+    new Set(
+      normalized
+        .split(" ")
+        .map((term) => term.trim())
+        .filter((term) => term.length > 1 && !COMMON_WORDS.has(term))
+    )
+  );
 }
 
 function articleSearchText(article: HelpArticle): string {

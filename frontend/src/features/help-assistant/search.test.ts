@@ -13,6 +13,10 @@ describe("help assistant search", () => {
     ]);
   });
 
+  it("deduplicates repeated query terms before scoring", () => {
+    expect(tokenizeHelpQuery("docker docker docker health")).toEqual(["docker", "health"]);
+  });
+
   it("returns the OpenRouter setup recipe for model-provider questions", () => {
     const result = getBestHelpArticle("how do i connect openrouter model provider");
 
