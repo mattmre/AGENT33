@@ -2,6 +2,43 @@ import type { HelpArticle } from "./types";
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
+    id: "try-demo-mode",
+    title: "Try Demo Mode before setup",
+    audience: "New user who wants to see value before connecting credentials",
+    summary:
+      "Demo Mode shows sample outcomes, a simulated run timeline, and reviewable artifacts without calling a model or requiring API keys.",
+    body: [
+      "Use Demo Mode when you want to understand the product loop before configuring providers.",
+      "The demo is static and offline: it does not create files, call models, or pretend that a backend run succeeded.",
+      "When you are ready, you can send a sample into Workflow Starter as an editable draft or connect a model from the Models page."
+    ],
+    steps: [
+      "Open Start > Demo Mode.",
+      "Pick a sample outcome such as support dashboard, landing page, or repo triage.",
+      "Review the simulated timeline and artifacts.",
+      "Use Customize this demo after connecting credentials, or open Models to make the workflow real."
+    ],
+    keywords: [
+      "demo",
+      "sample",
+      "first success",
+      "no setup",
+      "no credentials",
+      "offline",
+      "preview",
+      "artifacts"
+    ],
+    sources: [
+      { label: "Demo Mode panel", path: "frontend/src/features/demo-mode/DemoModePanel.tsx" },
+      { label: "Demo scenarios", path: "frontend/src/features/demo-mode/demoScenarios.ts" },
+      { label: "Wave 2 Round 2 research", path: "docs/research/wave2-r2-demo-mode-first-success.md" }
+    ],
+    actions: [
+      { label: "Open Start", target: "start" },
+      { label: "Connect model when ready", target: "models" }
+    ]
+  },
+  {
     id: "connect-openrouter",
     title: "Connect OpenRouter",
     audience: "New user setting up the first cloud model",

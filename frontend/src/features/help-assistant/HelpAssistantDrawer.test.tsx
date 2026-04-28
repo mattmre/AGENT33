@@ -26,6 +26,7 @@ describe("HelpAssistantDrawer", () => {
     render(<HelpAssistantDrawer onNavigate={onNavigate} />);
 
     await user.click(screen.getByRole("button", { name: "Ask AGENT33" }));
+    await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await user.click(screen.getByRole("button", { name: "Open Models" }));
 
     expect(onNavigate).toHaveBeenCalledWith("models");

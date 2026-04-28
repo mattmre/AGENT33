@@ -1254,6 +1254,206 @@ button:disabled {
   justify-content: center;
 }
 
+/* Demo mode */
+.consumer-demo-mode-layout {
+  display: grid;
+  gap: 2rem;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.demo-mode-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.demo-mode-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.25rem;
+  align-items: flex-start;
+  border: 1px solid rgba(246, 189, 96, 0.3);
+  border-radius: 22px;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top right, rgba(246, 189, 96, 0.2), transparent 32%),
+    linear-gradient(135deg, rgba(46, 31, 14, 0.5), rgba(15, 23, 42, 0.84));
+}
+
+.demo-mode-hero h2 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.75rem, 3vw, 2.8rem);
+  max-width: 840px;
+}
+
+.demo-mode-hero p,
+.demo-mode-card p,
+.demo-mode-picker button span,
+.demo-run-step span {
+  color: var(--text-soft);
+}
+
+.demo-mode-score {
+  min-width: 210px;
+  border: 1px solid rgba(246, 189, 96, 0.36);
+  border-radius: 18px;
+  background: rgba(69, 42, 12, 0.32);
+  padding: 1rem;
+  text-align: right;
+}
+
+.demo-mode-score strong {
+  display: block;
+  color: #fde68a;
+  font-size: 1.35rem;
+}
+
+.demo-mode-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 330px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.demo-mode-picker,
+.demo-mode-card {
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 18px;
+  background: rgba(8, 22, 31, 0.78);
+  padding: 1rem;
+  box-shadow: 0 14px 28px rgba(5, 13, 17, 0.28);
+}
+
+.demo-mode-picker {
+  display: grid;
+  gap: 0.7rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.demo-mode-picker h3,
+.demo-mode-card h3 {
+  margin: 0;
+}
+
+.demo-mode-picker button {
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  border-color: rgba(125, 211, 252, 0.18);
+}
+
+.demo-mode-picker button small {
+  color: #bae6fd;
+  font-size: 0.75rem;
+}
+
+.demo-mode-picker button.active {
+  border-color: rgba(246, 189, 96, 0.48);
+  color: #fde68a;
+  background: rgba(92, 60, 17, 0.24);
+}
+
+.demo-mode-workspace,
+.demo-mode-card,
+.demo-artifact-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.demo-mode-brief blockquote {
+  margin: 0;
+  border-left: 3px solid rgba(246, 189, 96, 0.68);
+  padding: 0.75rem 0 0.75rem 1rem;
+  color: #fef3c7;
+  background: rgba(69, 42, 12, 0.18);
+  border-radius: 0 12px 12px 0;
+}
+
+.demo-mode-inputs,
+.demo-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.demo-mode-inputs span {
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.12);
+  color: #d8f3ff;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.demo-scenario-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.demo-scenario-meta span {
+  border: 1px solid rgba(246, 189, 96, 0.24);
+  border-radius: 999px;
+  background: rgba(246, 189, 96, 0.1);
+  color: #fde68a;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.demo-run-timeline {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.demo-run-step {
+  display: grid;
+  gap: 0.25rem;
+  border-left: 4px solid rgba(125, 211, 252, 0.35);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.64);
+  padding: 0.75rem;
+}
+
+.demo-run-step--done {
+  border-left-color: rgba(139, 233, 168, 0.72);
+}
+
+.demo-run-step--active {
+  border-left-color: rgba(48, 213, 200, 0.82);
+}
+
+.demo-run-step--attention {
+  border-left-color: rgba(246, 189, 96, 0.82);
+}
+
+.demo-artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.demo-artifact-card ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: #d9f2f0;
+}
+
+.demo-artifact-card li + li {
+  margin-top: 0.35rem;
+}
+
+.demo-mode-next {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.demo-mode-actions {
+  justify-content: end;
+}
+
 .workflow-starter-source {
   margin-top: 0.6rem;
   color: #bbf7d0;
@@ -1559,6 +1759,7 @@ button:disabled {
   .outcome-workflow-grid,
   .workflow-catalog-controls,
   .workflow-catalog-layout,
+  .demo-mode-layout,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
@@ -1571,6 +1772,8 @@ button:disabled {
   .outcome-home-hero,
   .outcome-section-head,
   .workflow-catalog-hero,
+  .demo-mode-hero,
+  .demo-mode-next,
   .model-wizard-hero,
   .advanced-quarantine-hero,
   .advanced-pro-banner {
@@ -1579,6 +1782,7 @@ button:disabled {
 
   .outcome-home-score,
   .workflow-catalog-stats,
+  .demo-mode-score,
   .model-wizard-score {
     width: 100%;
     text-align: left;
@@ -1588,6 +1792,8 @@ button:disabled {
   .outcome-workflow-grid,
   .workflow-catalog-controls,
   .workflow-catalog-layout,
+  .demo-mode-layout,
+  .demo-mode-next,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
@@ -1598,6 +1804,14 @@ button:disabled {
 
   .workflow-catalog-detail {
     position: static;
+  }
+
+  .demo-mode-picker {
+    position: static;
+  }
+
+  .demo-mode-actions {
+    justify-content: flex-start;
   }
 }
 
