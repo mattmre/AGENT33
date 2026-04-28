@@ -1236,6 +1236,199 @@ button:disabled {
   color: #fff;
 }
 
+.workspace-board {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 20px;
+  background: rgba(4, 14, 20, 0.62);
+  padding: 1rem;
+}
+
+.workspace-board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace-board-header h2,
+.workspace-board-header p,
+.workspace-roster-header h3,
+.workspace-roster-header p {
+  margin: 0;
+}
+
+.workspace-board-header h2 {
+  color: #f7ead1;
+  font-size: 1.25rem;
+}
+
+.workspace-board-header p,
+.workspace-roster-header p {
+  color: #9dc3cf;
+}
+
+.workspace-board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.workspace-board-actions button {
+  border: 1px solid rgba(48, 213, 200, 0.28);
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.1);
+  color: #dff7ff;
+  padding: 0.5rem 0.8rem;
+  font-weight: 700;
+}
+
+.workspace-board-actions button:hover {
+  background: rgba(48, 213, 200, 0.18);
+  color: #fff;
+}
+
+.workspace-board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 1rem;
+}
+
+.workspace-kanban {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 0.7rem;
+  overflow-x: auto;
+}
+
+.workspace-kanban-lane {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  min-width: 150px;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 16px;
+  background: rgba(11, 30, 39, 0.46);
+  padding: 0.65rem;
+}
+
+.workspace-lane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.workspace-lane-header h3 {
+  margin: 0;
+  color: #dff7ff;
+  font-size: 0.85rem;
+}
+
+.workspace-lane-header span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.14);
+  color: #f7ead1;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.workspace-empty-lane {
+  margin: 0;
+  color: #6fa8b8;
+  font-size: 0.76rem;
+}
+
+.workspace-task-card {
+  display: grid;
+  gap: 0.3rem;
+  border-left: 3px solid rgba(125, 211, 252, 0.4);
+  border-radius: 12px;
+  background: rgba(4, 12, 18, 0.68);
+  padding: 0.65rem;
+}
+
+.workspace-task-card--running {
+  border-left-color: #30d5c8;
+}
+
+.workspace-task-card--review {
+  border-left-color: #f7d774;
+}
+
+.workspace-task-card--complete {
+  border-left-color: #80ed99;
+}
+
+.workspace-task-card--blocked {
+  border-left-color: #ff8a8a;
+}
+
+.workspace-task-card span,
+.workspace-agent-card span,
+.workspace-agent-card small {
+  color: #6fa8b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.workspace-task-card h4,
+.workspace-task-card p,
+.workspace-agent-card p {
+  margin: 0;
+}
+
+.workspace-task-card h4,
+.workspace-agent-card strong {
+  color: #f7ead1;
+}
+
+.workspace-task-card p,
+.workspace-agent-card p {
+  color: #b7dbe5;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.workspace-agent-roster {
+  display: grid;
+  align-content: start;
+  gap: 0.7rem;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 16px;
+  background: rgba(11, 30, 39, 0.42);
+  padding: 0.75rem;
+}
+
+.workspace-roster-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.workspace-roster-header h3 {
+  color: #dff7ff;
+}
+
+.workspace-agent-card {
+  display: grid;
+  gap: 0.35rem;
+  border-radius: 12px;
+  background: rgba(4, 12, 18, 0.58);
+  padding: 0.7rem;
+}
+
+.workspace-agent-card div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
 .cockpit-sidebar-context strong,
 .cockpit-context-bar strong {
   color: #f7ead1;
@@ -1336,6 +1529,15 @@ button:disabled {
   .cockpit-context-bar {
     width: calc(100% - 1rem);
   }
+
+  .workspace-board-header,
+  .workspace-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-board-header {
+    display: grid;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1345,6 +1547,18 @@ button:disabled {
 
   .consumer-content {
     padding: 0.75rem;
+  }
+
+  .workspace-board {
+    padding: 0.75rem;
+  }
+
+  .workspace-kanban {
+    grid-template-columns: repeat(5, minmax(140px, 1fr));
+  }
+
+  .workspace-board-actions {
+    display: grid;
   }
 }
 
