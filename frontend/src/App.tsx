@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
+import { ArtifactReviewDrawer } from "./components/ArtifactReviewDrawer";
+import { CockpitProjectDashboard } from "./components/CockpitProjectDashboard";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { PermissionModeControl } from "./components/PermissionModeControl";
 import { SkipLink } from "./components/SkipLink";
@@ -110,6 +112,7 @@ export default function App(): JSX.Element {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(getSavedWorkspaceSessionId);
   const [permissionModeId, setPermissionModeId] = useState<PermissionModeId>(getSavedPermissionModeId);
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
+  const showCockpitDashboard = activeTab === "operations";
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -163,6 +166,16 @@ export default function App(): JSX.Element {
     }
   }, []);
 
+  const focusOperationsBoard = useCallback((): void => {
+    const operationsBoard = document.getElementById("operations-workspace-board");
+    if (!operationsBoard) {
+      throw new Error("Operations workspace board anchor is unavailable.");
+    }
+
+    operationsBoard.scrollIntoView({ block: "start" });
+    operationsBoard.focus();
+  }, []);
+
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -204,7 +217,18 @@ export default function App(): JSX.Element {
             />
           </div>
 
-          <div className="consumer-content">
+          <div className={showCockpitDashboard ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
+            <div className="cockpit-stage-content">
+              <div className="consumer-content">
+                {showCockpitDashboard ? (
+                  <CockpitProjectDashboard
+                    workspace={selectedWorkspace}
+                    permissionModeId={permissionModeId}
+                    onReviewCurrentWork={focusOperationsBoard}
+                    onOpenWorkflows={() => setActiveTab("starter")}
+                    onOpenSafety={() => setActiveTab("safety")}
+                  />
+                ) : null}
         {activeTab === "guide" && (
           <div className="consumer-role-intake-layout">
             <RoleIntakePanel
@@ -460,11 +484,13 @@ export default function App(): JSX.Element {
         {/* Operations Hub -> Unified lifecycle view with pause/resume/cancel controls */}
         {activeTab === "operations" && (
           <div className="consumer-operations-layout">
-            <WorkspaceTaskBoard
-              workspace={selectedWorkspace}
-              onOpenSafety={() => setActiveTab("safety")}
-              onOpenWorkflows={() => setActiveTab("starter")}
-            />
+            <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
+              <WorkspaceTaskBoard
+                workspace={selectedWorkspace}
+                onOpenSafety={() => setActiveTab("safety")}
+                onOpenWorkflows={() => setActiveTab("starter")}
+              />
+            </div>
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
@@ -536,6 +562,9 @@ export default function App(): JSX.Element {
             onResult={onResult}
           />
         )}
+              </div>
+            </div>
+            {showCockpitDashboard ? <ArtifactReviewDrawer workspace={selectedWorkspace} permissionModeId={permissionModeId} /> : null}
           </div>
         </main>
       </div>
