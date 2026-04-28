@@ -11,7 +11,7 @@ describe("CockpitProjectDashboard", () => {
       <CockpitProjectDashboard
         workspace={getWorkspaceSession("shipyard")}
         permissionModeId="pr-first"
-        onOpenRuns={vi.fn()}
+        onReviewCurrentWork={vi.fn()}
         onOpenWorkflows={vi.fn()}
         onOpenSafety={vi.fn()}
       />
@@ -26,7 +26,7 @@ describe("CockpitProjectDashboard", () => {
 
   it("routes dashboard actions through the existing cockpit surfaces", async () => {
     const user = userEvent.setup();
-    const onOpenRuns = vi.fn();
+    const onReviewCurrentWork = vi.fn();
     const onOpenWorkflows = vi.fn();
     const onOpenSafety = vi.fn();
 
@@ -34,17 +34,17 @@ describe("CockpitProjectDashboard", () => {
       <CockpitProjectDashboard
         workspace={getWorkspaceSession("solo-builder")}
         permissionModeId="ask"
-        onOpenRuns={onOpenRuns}
+        onReviewCurrentWork={onReviewCurrentWork}
         onOpenWorkflows={onOpenWorkflows}
         onOpenSafety={onOpenSafety}
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Open Sessions & Runs" }));
+    await user.click(screen.getByRole("button", { name: "Review task board" }));
     await user.click(screen.getByRole("button", { name: "Choose workflow" }));
     await user.click(screen.getByRole("button", { name: "Review approvals" }));
 
-    expect(onOpenRuns).toHaveBeenCalledTimes(1);
+    expect(onReviewCurrentWork).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenSafety).toHaveBeenCalledTimes(1);
   });

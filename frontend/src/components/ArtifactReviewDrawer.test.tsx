@@ -24,7 +24,12 @@ describe("ArtifactReviewDrawer", () => {
     await user.click(screen.getByRole("tab", { name: "Command Blocks" }));
     expect(screen.getByText("Command blocks")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Command Blocks" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Command Blocks" })).toHaveAttribute("tabindex", "0");
     expect(screen.getByText(/source agent, status, duration, and redaction state/i)).toBeInTheDocument();
+
+    await user.keyboard("{End}");
+    expect(screen.getByRole("tab", { name: "Outcome" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Done state")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Activity / Mailbox" }));
     expect(screen.getByText("Agent mailbox")).toBeInTheDocument();

@@ -6,7 +6,7 @@ import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
 interface CockpitProjectDashboardProps {
   workspace: WorkspaceSessionSummary;
   permissionModeId: PermissionModeId;
-  onOpenRuns: () => void;
+  onReviewCurrentWork: () => void;
   onOpenWorkflows: () => void;
   onOpenSafety: () => void;
 }
@@ -26,13 +26,14 @@ function getRecommendedAction(workspace: WorkspaceSessionSummary): string {
 export function CockpitProjectDashboard({
   workspace,
   permissionModeId,
-  onOpenRuns,
+  onReviewCurrentWork,
   onOpenWorkflows,
   onOpenSafety
 }: CockpitProjectDashboardProps): JSX.Element {
   const permissionMode = getPermissionMode(permissionModeId);
   const taskCounts = getWorkspaceTaskCounts(workspace.id);
   const activeTaskCount = taskCounts.running + taskCounts.review + taskCounts.blocked;
+  const attentionTaskLabel = activeTaskCount === 1 ? "1 task needs attention" : `${activeTaskCount} tasks need attention`;
 
   return (
     <section className="cockpit-project-dashboard" aria-label="Project cockpit dashboard">
@@ -51,10 +52,10 @@ export function CockpitProjectDashboard({
       <div className="cockpit-dashboard-grid">
         <article className="cockpit-dashboard-card">
           <span className="eyebrow">Current run</span>
-          <strong>{activeTaskCount} tasks need attention</strong>
+          <strong>{attentionTaskLabel}</strong>
           <p>{getRecommendedAction(workspace)}</p>
-          <button type="button" onClick={onOpenRuns}>
-            Open Sessions & Runs
+          <button type="button" onClick={onReviewCurrentWork}>
+            Review task board
           </button>
         </article>
 

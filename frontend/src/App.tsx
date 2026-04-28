@@ -166,6 +166,16 @@ export default function App(): JSX.Element {
     }
   }, []);
 
+  const focusOperationsBoard = useCallback((): void => {
+    const operationsBoard = document.getElementById("operations-workspace-board");
+    if (!operationsBoard) {
+      throw new Error("Operations workspace board anchor is unavailable.");
+    }
+
+    operationsBoard.scrollIntoView({ block: "start" });
+    operationsBoard.focus();
+  }, []);
+
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -207,14 +217,14 @@ export default function App(): JSX.Element {
             />
           </div>
 
-          <div className="cockpit-workspace-stage">
+          <div className={showCockpitDashboard ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
             <div className="cockpit-stage-content">
               <div className="consumer-content">
                 {showCockpitDashboard ? (
                   <CockpitProjectDashboard
                     workspace={selectedWorkspace}
                     permissionModeId={permissionModeId}
-                    onOpenRuns={() => setActiveTab("operations")}
+                    onReviewCurrentWork={focusOperationsBoard}
                     onOpenWorkflows={() => setActiveTab("starter")}
                     onOpenSafety={() => setActiveTab("safety")}
                   />
@@ -474,11 +484,13 @@ export default function App(): JSX.Element {
         {/* Operations Hub -> Unified lifecycle view with pause/resume/cancel controls */}
         {activeTab === "operations" && (
           <div className="consumer-operations-layout">
-            <WorkspaceTaskBoard
-              workspace={selectedWorkspace}
-              onOpenSafety={() => setActiveTab("safety")}
-              onOpenWorkflows={() => setActiveTab("starter")}
-            />
+            <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
+              <WorkspaceTaskBoard
+                workspace={selectedWorkspace}
+                onOpenSafety={() => setActiveTab("safety")}
+                onOpenWorkflows={() => setActiveTab("starter")}
+              />
+            </div>
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
           </div>
         )}
@@ -552,7 +564,7 @@ export default function App(): JSX.Element {
         )}
               </div>
             </div>
-            <ArtifactReviewDrawer workspace={selectedWorkspace} permissionModeId={permissionModeId} />
+            {showCockpitDashboard ? <ArtifactReviewDrawer workspace={selectedWorkspace} permissionModeId={permissionModeId} /> : null}
           </div>
         </main>
       </div>

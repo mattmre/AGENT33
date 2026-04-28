@@ -1569,12 +1569,17 @@ button:disabled {
 }
 
 .cockpit-workspace-stage {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.cockpit-workspace-stage-with-drawer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(290px, 360px);
   gap: 1rem;
   max-width: 1600px;
   width: calc(100% - 2rem);
-  margin: 0 auto;
 }
 
 .cockpit-stage-content {
@@ -1720,6 +1725,12 @@ button:disabled {
   color: #e2f1f8;
 }
 
+.operations-workspace-board-anchor:focus {
+  outline: 2px solid rgba(48, 213, 200, 0.7);
+  outline-offset: 4px;
+  border-radius: 18px;
+}
+
 .artifact-drawer-panel dl {
   display: grid;
   gap: 0.45rem;
@@ -1793,8 +1804,9 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .cockpit-workspace-stage {
+  .cockpit-workspace-stage-with-drawer {
     grid-template-columns: 1fr;
+    width: calc(100% - 1rem);
   }
 
   .artifact-review-drawer {

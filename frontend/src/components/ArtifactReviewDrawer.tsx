@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
@@ -67,9 +67,36 @@ export function ArtifactReviewDrawer({
   permissionModeId
 }: ArtifactReviewDrawerProps): JSX.Element {
   const [activeSectionId, setActiveSectionId] = useState<DrawerSectionId>("plan");
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const activeSection = DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
+
+  function selectSection(sectionId: DrawerSectionId, shouldFocus = false): void {
+    setActiveSectionId(sectionId);
+    if (shouldFocus) {
+      window.requestAnimationFrame(() => tabRefs.current[sectionId]?.focus());
+    }
+  }
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, sectionIndex: number): void {
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (sectionIndex + 1) % DRAWER_SECTIONS.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (sectionIndex - 1 + DRAWER_SECTIONS.length) % DRAWER_SECTIONS.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = DRAWER_SECTIONS.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      selectSection(DRAWER_SECTIONS[nextIndex].id, true);
+    }
+  }
 
   return (
     <aside className="artifact-review-drawer" aria-label="Artifact and review drawer">
@@ -80,16 +107,21 @@ export function ArtifactReviewDrawer({
       </header>
 
       <div className="artifact-drawer-tabs" role="tablist" aria-label="Artifact drawer sections">
-        {DRAWER_SECTIONS.map((section) => (
+        {DRAWER_SECTIONS.map((section, sectionIndex) => (
           <button
             key={section.id}
             id={`artifact-drawer-tab-${section.id}`}
+            ref={(element) => {
+              tabRefs.current[section.id] = element;
+            }}
             type="button"
             role="tab"
             className={section.id === activeSectionId ? "active" : ""}
             aria-controls="artifact-drawer-panel"
             aria-selected={section.id === activeSectionId}
-            onClick={() => setActiveSectionId(section.id)}
+            tabIndex={section.id === activeSectionId ? 0 : -1}
+            onClick={() => selectSection(section.id)}
+            onKeyDown={(event) => onTabKeyDown(event, sectionIndex)}
           >
             {section.label}
           </button>
@@ -101,7 +133,6 @@ export function ArtifactReviewDrawer({
         className="artifact-drawer-panel"
         role="tabpanel"
         aria-labelledby={activeTabId}
-        aria-live="polite"
       >
         <span>{activeSection.label}</span>
         <h3>{activeSection.title}</h3>
