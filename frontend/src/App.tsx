@@ -26,6 +26,7 @@ import { WorkflowCatalogPanel } from "./features/workflow-catalog/WorkflowCatalo
 import { ImprovementLoopsPanel } from "./features/improvement-loops/ImprovementLoopsPanel";
 import { McpHealthPanel } from "./features/mcp-health/McpHealthPanel";
 import { OutcomeHomePanel } from "./features/outcome-home/OutcomeHomePanel";
+import { HelpAssistantDrawer } from "./features/help-assistant/HelpAssistantDrawer";
 import {
   AdvancedControlPlanePanel,
   type OperatorMode
@@ -33,6 +34,7 @@ import {
 import { domains } from "./data/domains";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import type { ActivityItem, ApiResult } from "./types";
+import type { HelpAssistantTarget } from "./features/help-assistant/types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
 
 type AppTab =
@@ -155,6 +157,10 @@ export default function App(): JSX.Element {
   const openWorkflowStarter = useCallback((draft?: WorkflowStarterDraft): void => {
     setWorkflowStarterDraft(draft ?? null);
     setActiveTab("starter");
+  }, []);
+
+  const openHelpTarget = useCallback((target: HelpAssistantTarget): void => {
+    setActiveTab(target);
   }, []);
 
   return (
@@ -498,6 +504,7 @@ export default function App(): JSX.Element {
           />
         )}
       </div>
+      <HelpAssistantDrawer onNavigate={openHelpTarget} />
     </div>
   );
 }

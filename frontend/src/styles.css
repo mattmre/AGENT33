@@ -472,6 +472,200 @@ button:disabled {
   }
 }
 
+/* Wave 2: offline help assistant */
+.help-assistant {
+  position: fixed;
+  right: 1.1rem;
+  bottom: 1.1rem;
+  z-index: 80;
+  display: grid;
+  justify-items: end;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.help-assistant-toggle,
+.help-assistant-panel {
+  pointer-events: auto;
+}
+
+.help-assistant-toggle {
+  border-color: rgba(48, 213, 200, 0.48);
+  background: linear-gradient(135deg, rgba(48, 213, 200, 0.24), rgba(24, 50, 64, 0.98));
+  color: #f4fffb;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+}
+
+.help-assistant-panel {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(780px, calc(100vh - 6rem));
+  overflow: auto;
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(48, 213, 200, 0.28);
+  border-radius: 22px;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at top right, rgba(48, 213, 200, 0.16), transparent 32%),
+    linear-gradient(150deg, rgba(20, 40, 52, 0.98), rgba(10, 22, 30, 0.99));
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.54);
+}
+
+.help-assistant-header,
+.help-assistant-answer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.help-assistant-header h2,
+.help-assistant-answer h3,
+.help-assistant-related h3,
+.help-assistant-empty h3 {
+  margin: 0;
+}
+
+.help-assistant-header p,
+.help-assistant-answer p,
+.help-assistant-empty p {
+  margin: 0.35rem 0 0;
+  color: #b7cfda;
+  line-height: 1.5;
+}
+
+.help-assistant-search {
+  color: #d8eef4;
+  font-size: 0.9rem;
+}
+
+.help-assistant-quick-prompts,
+.help-assistant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.help-assistant-quick-prompts button,
+.help-assistant-actions button,
+.help-assistant-related button {
+  border-color: rgba(48, 213, 200, 0.24);
+  background: rgba(10, 31, 41, 0.78);
+  color: #dff7f6;
+  text-align: left;
+}
+
+.help-assistant-answer,
+.help-assistant-empty,
+.help-assistant-related {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 0.95rem;
+  background: rgba(7, 22, 30, 0.7);
+}
+
+.help-assistant-answer-head span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(139, 233, 168, 0.24);
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+  color: #b7f7ca;
+  font-size: 0.72rem;
+}
+
+.help-assistant-body {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.help-assistant-steps {
+  border: 1px solid rgba(246, 189, 96, 0.26);
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: rgba(74, 49, 18, 0.22);
+}
+
+.help-assistant-steps h4 {
+  margin: 0 0 0.45rem;
+  color: #f5d7a0;
+}
+
+.help-assistant-steps ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #f7ead1;
+}
+
+.help-assistant-steps li + li {
+  margin-top: 0.32rem;
+}
+
+.help-assistant-sources {
+  color: #b9d7df;
+  font-size: 0.84rem;
+}
+
+.help-assistant-sources summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.help-assistant-sources ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-assistant-sources li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.help-assistant-sources code {
+  white-space: normal;
+  word-break: break-word;
+  color: #9fd5e4;
+}
+
+.help-assistant-related button {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.help-assistant-related button span {
+  color: #9fb9c4;
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+@media (max-width: 720px) {
+  .help-assistant {
+    right: 0.7rem;
+    bottom: 0.7rem;
+    left: 0.7rem;
+    justify-items: stretch;
+  }
+
+  .help-assistant-toggle {
+    justify-self: end;
+  }
+
+  .help-assistant-panel {
+    width: 100%;
+    max-height: calc(100vh - 5rem);
+  }
+
+  .help-assistant-header,
+  .help-assistant-answer-head {
+    flex-direction: column;
+  }
+}
+
 /* Workflow Graph Styles */
 .workflow-graph-container {
   position: relative;
