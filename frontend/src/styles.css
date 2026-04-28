@@ -962,15 +962,22 @@ button:disabled {
 .consumer-topbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
-  padding: 0.85rem 1.25rem;
+  padding: 0.7rem 1.15rem;
   background: rgba(4, 12, 18, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(47, 90, 108, 0.4);
   position: sticky;
   top: 0;
   z-index: 100;
+}
+
+.cockpit-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
 }
 
 .brand {
@@ -1014,25 +1021,17 @@ button:disabled {
 }
 
 .main-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.55rem;
-  background: rgba(11, 30, 39, 0.6);
-  padding: 0.45rem;
-  border-radius: 12px;
-  border: 1px solid rgba(47, 90, 108, 0.3);
-  max-width: 940px;
+  display: grid;
+  gap: 0.65rem;
 }
 
 .main-nav-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem;
-  border-radius: 10px;
-  background: rgba(4, 12, 18, 0.34);
-  border: 1px solid rgba(47, 90, 108, 0.22);
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.65rem;
+  border-radius: 14px;
+  background: rgba(4, 12, 18, 0.42);
+  border: 1px solid rgba(47, 90, 108, 0.24);
 }
 
 .main-nav-group-label {
@@ -1045,8 +1044,7 @@ button:disabled {
 }
 
 .main-nav-group-tabs {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.25rem;
 }
 
@@ -1054,10 +1052,11 @@ button:disabled {
   background: transparent;
   border: none;
   color: #9dc3cf;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.6rem;
   border-radius: 8px;
   font-size: 0.82rem;
   font-weight: 500;
+  text-align: left;
   transition: all 0.2s ease;
   white-space: nowrap;
 }
@@ -1071,6 +1070,69 @@ button:disabled {
   background: #30d5c8;
   color: #03080c;
   box-shadow: 0 4px 12px rgba(48, 213, 200, 0.3);
+}
+
+.cockpit-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  min-height: calc(100vh - 4rem);
+}
+
+.cockpit-sidebar {
+  position: sticky;
+  top: 4rem;
+  align-self: start;
+  height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  overflow-y: auto;
+  background: rgba(4, 14, 20, 0.78);
+  border-right: 1px solid rgba(47, 90, 108, 0.34);
+}
+
+.cockpit-sidebar-context,
+.cockpit-context-bar {
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 16px;
+  background: rgba(11, 30, 39, 0.64);
+}
+
+.cockpit-sidebar-context {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem;
+}
+
+.cockpit-sidebar-context strong,
+.cockpit-context-bar strong {
+  color: #f7ead1;
+}
+
+.cockpit-sidebar-context small,
+.cockpit-context-bar span {
+  color: #9dc3cf;
+}
+
+.cockpit-main {
+  min-width: 0;
+}
+
+.cockpit-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem auto 0;
+  padding: 0.85rem 1rem;
+  max-width: 1400px;
+  width: calc(100% - 2rem);
+}
+
+.cockpit-context-bar > div {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .operator-mode-switch {
@@ -1110,10 +1172,49 @@ button:disabled {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 2rem;
+  padding: 1.25rem;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+}
+
+@media (max-width: 1040px) {
+  .consumer-topbar,
+  .cockpit-topbar-actions,
+  .cockpit-context-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cockpit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cockpit-sidebar {
+    position: static;
+    height: auto;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid rgba(47, 90, 108, 0.34);
+  }
+
+  .cockpit-sidebar-nav {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .cockpit-context-bar {
+    width: calc(100% - 1rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .cockpit-sidebar {
+    padding: 0.75rem;
+  }
+
+  .consumer-content {
+    padding: 0.75rem;
+  }
 }
 
 /* Chat Central & Sub-Layouts */

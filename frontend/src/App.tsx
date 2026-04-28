@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
+import { AppNavigation } from "./components/AppNavigation";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { SkipLink } from "./components/SkipLink";
 import { LiveVoicePanel } from "./features/voice/LiveVoicePanel";
@@ -37,9 +38,9 @@ import {
 } from "./features/advanced/AdvancedControlPlanePanel";
 import { domains } from "./data/domains";
 import {
-  APP_TAB_GROUPS,
   DEFAULT_APP_TAB,
   ROLE_SELECTED_DEFAULT_APP_TAB,
+  getAppTabLabel,
   type AppTab
 } from "./data/navigation";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
@@ -114,54 +115,55 @@ export default function App(): JSX.Element {
   return (
     <div className="consumer-app-shell">
       <SkipLink />
-      {/* Clean Top Navigation */}
       <header className="consumer-topbar">
         <div className="brand">
           <div className="logo-orb" aria-hidden="true"></div>
           <h1>AGENT-33</h1>
         </div>
-        <GlobalSearch token={token || null} />
-        <div className="operator-mode-switch" role="group" aria-label="Operator mode">
-          <span>Mode</span>
-          <button
-            type="button"
-            className={operatorMode === "beginner" ? "active" : ""}
-            onClick={() => setOperatorMode("beginner")}
-            aria-pressed={operatorMode === "beginner"}
-          >
-            Beginner
-          </button>
-          <button
-            type="button"
-            className={operatorMode === "pro" ? "active" : ""}
-            onClick={() => setOperatorMode("pro")}
-            aria-pressed={operatorMode === "pro"}
-          >
-            Pro
-          </button>
+        <div className="cockpit-topbar-actions">
+          <GlobalSearch token={token || null} />
+          <div className="operator-mode-switch" role="group" aria-label="Operator mode">
+            <span>Mode</span>
+            <button
+              type="button"
+              className={operatorMode === "beginner" ? "active" : ""}
+              onClick={() => setOperatorMode("beginner")}
+              aria-pressed={operatorMode === "beginner"}
+            >
+              Beginner
+            </button>
+            <button
+              type="button"
+              className={operatorMode === "pro" ? "active" : ""}
+              onClick={() => setOperatorMode("pro")}
+              aria-pressed={operatorMode === "pro"}
+            >
+              Pro
+            </button>
+          </div>
         </div>
-        <nav className="main-nav" aria-label="Main navigation">
-          {APP_TAB_GROUPS.map((group) => (
-            <section key={group.label} className="main-nav-group" aria-label={`${group.label} navigation`}>
-              <span className="main-nav-group-label">{group.label}</span>
-              <div className="main-nav-group-tabs">
-                {group.tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    className={activeTab === tab.id ? "active" : ""}
-                    onClick={() => setActiveTab(tab.id)}
-                    aria-current={activeTab === tab.id ? "page" : undefined}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
-        </nav>
       </header>
 
-      <div className="consumer-content" id="main-content" role="main">
+      <div className="cockpit-layout">
+        <aside className="cockpit-sidebar">
+          <div className="cockpit-sidebar-context">
+            <span className="eyebrow">Workspace</span>
+            <strong>Local Shipyard</strong>
+            <small>Sidebar foundation for BridgeSpace-style project control.</small>
+          </div>
+          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
+        </aside>
+
+        <main className="cockpit-main" id="main-content">
+          <div className="cockpit-context-bar" aria-label="Current workspace context">
+            <div>
+              <span className="eyebrow">Now viewing</span>
+              <strong>{getAppTabLabel(activeTab)}</strong>
+            </div>
+            <span>Workspace, task board, agent roster, and artifact lanes land in the next Wave 4 slices.</span>
+          </div>
+
+          <div className="consumer-content">
         {activeTab === "guide" && (
           <div className="consumer-role-intake-layout">
             <RoleIntakePanel
@@ -488,6 +490,8 @@ export default function App(): JSX.Element {
             onResult={onResult}
           />
         )}
+          </div>
+        </main>
       </div>
       <HelpAssistantDrawer onNavigate={openHelpTarget} />
     </div>
