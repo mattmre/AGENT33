@@ -37,7 +37,8 @@ export function WorkspaceSessionSelector({
         onChange={(event) => {
           const workspaceId = event.target.value;
           if (!isWorkspaceSessionId(workspaceId)) {
-            throw new Error(`Unknown workspace session: ${workspaceId}`);
+            console.error(`Unknown workspace session: ${workspaceId}`);
+            return;
           }
           onSelectWorkspace(workspaceId);
         }}
