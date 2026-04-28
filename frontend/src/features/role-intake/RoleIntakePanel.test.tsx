@@ -43,7 +43,8 @@ describe("RoleIntakePanel", () => {
   it("turns guided intake answers into a workflow starter draft", async () => {
     const user = userEvent.setup();
     const onOpenWorkflowStarter = vi.fn();
-    renderPanel({ selectedRole: "founder", onOpenWorkflowStarter });
+    const onSelectRole = vi.fn();
+    renderPanel({ selectedRole: "founder", onSelectRole, onOpenWorkflowStarter });
 
     await user.type(screen.getByPlaceholderText("Example: Client portal MVP"), "Client portal MVP");
     await user.type(
@@ -60,6 +61,7 @@ describe("RoleIntakePanel", () => {
     );
     await user.click(screen.getByRole("button", { name: "Create guided workflow draft" }));
 
+    expect(onSelectRole).toHaveBeenCalledWith("founder");
     expect(onOpenWorkflowStarter).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "client-portal-mvp",

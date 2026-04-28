@@ -63,11 +63,13 @@ export function RoleIntakePanel({
     [selectedRole]
   );
 
-  const recommendedWorkflows = OUTCOME_WORKFLOWS.filter((workflow) =>
-    activeRole.workflowIds.includes(workflow.id)
+  const recommendedWorkflows = useMemo(
+    () => OUTCOME_WORKFLOWS.filter((workflow) => activeRole.workflowIds.includes(workflow.id)),
+    [activeRole]
   );
-  const recommendedDemos = DEMO_SCENARIOS.filter((scenario) =>
-    activeRole.demoScenarioIds.includes(scenario.id)
+  const recommendedDemos = useMemo(
+    () => DEMO_SCENARIOS.filter((scenario) => activeRole.demoScenarioIds.includes(scenario.id)),
+    [activeRole]
   );
 
   function updateField(field: keyof BriefFormState, value: string): void {
@@ -90,6 +92,7 @@ export function RoleIntakePanel({
     }
 
     const brief = buildBrief(activeRole.id, form);
+    onSelectRole(activeRole.id);
     onOpenWorkflowStarter(buildWorkflowDraftFromBrief(brief));
   }
 
@@ -240,7 +243,13 @@ export function RoleIntakePanel({
               <button type="button" onClick={handleSubmit}>
                 Create guided workflow draft
               </button>
-              <button type="button" onClick={() => setForm(EMPTY_FORM)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setForm(EMPTY_FORM);
+                  setError("");
+                }}
+              >
                 Reset brief
               </button>
             </div>

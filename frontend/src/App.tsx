@@ -141,7 +141,7 @@ function getSavedUserRole(): UserRoleId | null {
 }
 
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<AppTab>("guide");
+  const [activeTab, setActiveTab] = useState<AppTab>(() => (getSavedUserRole() ? "start" : "guide"));
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
