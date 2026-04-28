@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   APP_PRIMARY_NAV_ITEMS,
   APP_SECONDARY_NAV_GROUPS,
+  getAppTabLabel,
   isSecondaryAppTab,
   type AppTab
 } from "../data/navigation";
@@ -35,7 +36,7 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
               onClick={() => onNavigate(item.id)}
               aria-current={activeTab === item.id ? "page" : undefined}
             >
-              <span className="main-nav-button-label">{item.label}</span>
+              <span className="main-nav-button-label">{getAppTabLabel(item.id)}</span>
               <small>{item.description}</small>
             </button>
           ))}

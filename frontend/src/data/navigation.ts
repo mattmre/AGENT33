@@ -38,7 +38,8 @@ export interface AppTabGroup {
   readonly tabs: ReadonlyArray<AppTabConfig>;
 }
 
-export interface AppNavItem extends AppTabConfig {
+export interface AppPrimaryNavItem {
+  readonly id: AppTab;
   readonly description: string;
 }
 
@@ -98,35 +99,29 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   }
 ];
 
-export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppNavItem> = [
+export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
   {
     id: "guide",
-    label: "Guide / Intake",
     description: "Tell AGENT-33 what you want and get the safest next step."
   },
   {
     id: "start",
-    label: "Home / Next Step",
     description: "Beginner launchpad for setup, demo runs, and common outcomes."
   },
   {
     id: "operations",
-    label: "Sessions & Runs",
     description: "Watch active work, recent results, and operator handoffs."
   },
   {
     id: "starter",
-    label: "Workflows",
     description: "Pick a prebuilt strategy instead of assembling tools manually."
   },
   {
     id: "connect",
-    label: "Connect Models",
     description: "Set up providers, local models, and readiness checks."
   },
   {
     id: "safety",
-    label: "Safety & Approvals",
     description: "Review risks, decisions, and protected actions before work runs."
   }
 ];
