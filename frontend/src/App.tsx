@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { AuthPanel } from "./components/AuthPanel";
 import { AppNavigation } from "./components/AppNavigation";
 import { GlobalSearch } from "./components/GlobalSearch";
+import { PermissionModeControl } from "./components/PermissionModeControl";
 import { SkipLink } from "./components/SkipLink";
 import { WorkspaceSessionSelector } from "./components/WorkspaceSessionSelector";
 import { WorkspaceTaskBoard } from "./components/WorkspaceTaskBoard";
@@ -51,6 +52,11 @@ import {
   isWorkspaceSessionId,
   type WorkspaceSessionId
 } from "./data/workspaces";
+import {
+  DEFAULT_PERMISSION_MODE_ID,
+  isPermissionModeId,
+  type PermissionModeId
+} from "./data/permissionModes";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
@@ -59,6 +65,7 @@ import type { UserRoleId } from "./features/role-intake/types";
 
 const ROLE_STORAGE_KEY = "agent33:selected-role";
 const WORKSPACE_SESSION_STORAGE_KEY = "agent33:selected-workspace-session";
+const PERMISSION_MODE_STORAGE_KEY = "agent33:permission-mode";
 
 function getSavedUserRole(): UserRoleId | null {
   if (typeof window === "undefined") {
@@ -78,6 +85,15 @@ function getSavedWorkspaceSessionId(): WorkspaceSessionId {
   return isWorkspaceSessionId(savedWorkspaceId) ? savedWorkspaceId : DEFAULT_WORKSPACE_SESSION_ID;
 }
 
+function getSavedPermissionModeId(): PermissionModeId {
+  if (typeof window === "undefined") {
+    return DEFAULT_PERMISSION_MODE_ID;
+  }
+
+  const savedPermissionMode = window.sessionStorage.getItem(PERMISSION_MODE_STORAGE_KEY);
+  return isPermissionModeId(savedPermissionMode) ? savedPermissionMode : DEFAULT_PERMISSION_MODE_ID;
+}
+
 export default function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<AppTab>(() =>
     getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB
@@ -92,6 +108,7 @@ export default function App(): JSX.Element {
   const [workflowStarterDraft, setWorkflowStarterDraft] = useState<WorkflowStarterDraft | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRoleId | null>(getSavedUserRole);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<WorkspaceSessionId>(getSavedWorkspaceSessionId);
+  const [permissionModeId, setPermissionModeId] = useState<PermissionModeId>(getSavedPermissionModeId);
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
 
   function setToken(tokenValue: string): void {
@@ -139,6 +156,13 @@ export default function App(): JSX.Element {
     }
   }, []);
 
+  const selectPermissionMode = useCallback((modeId: PermissionModeId): void => {
+    setPermissionModeId(modeId);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(PERMISSION_MODE_STORAGE_KEY, modeId);
+    }
+  }, []);
+
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -149,25 +173,6 @@ export default function App(): JSX.Element {
         </div>
         <div className="cockpit-topbar-actions">
           <GlobalSearch token={token || null} />
-          <div className="operator-mode-switch" role="group" aria-label="Operator mode">
-            <span>Mode</span>
-            <button
-              type="button"
-              className={operatorMode === "beginner" ? "active" : ""}
-              onClick={() => setOperatorMode("beginner")}
-              aria-pressed={operatorMode === "beginner"}
-            >
-              Beginner
-            </button>
-            <button
-              type="button"
-              className={operatorMode === "pro" ? "active" : ""}
-              onClick={() => setOperatorMode("pro")}
-              aria-pressed={operatorMode === "pro"}
-            >
-              Pro
-            </button>
-          </div>
         </div>
       </header>
 
@@ -184,13 +189,19 @@ export default function App(): JSX.Element {
 
         <main className="cockpit-main" id="main-content" role="main">
           <div className="cockpit-context-bar" aria-label="Current workspace context">
-            <div>
+            <div className="cockpit-context-copy">
               <span className="eyebrow">Now viewing</span>
               <strong>{getAppTabLabel(activeTab)}</strong>
+              <span className="cockpit-context-note">
+                {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
+              </span>
             </div>
-            <span className="cockpit-context-note">
-              {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
-            </span>
+            <PermissionModeControl
+              selectedModeId={permissionModeId}
+              operatorMode={operatorMode}
+              onSelectMode={selectPermissionMode}
+              onOperatorModeChange={setOperatorMode}
+            />
           </div>
 
           <div className="consumer-content">
