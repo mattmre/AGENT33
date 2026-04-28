@@ -1971,6 +1971,134 @@ button:disabled {
   padding-left: 0.75rem;
 }
 
+/* Run Dashboard */
+.sessions-dashboard {
+  display: grid;
+  gap: 1rem;
+}
+
+.sessions-dashboard-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1rem;
+}
+
+.sessions-dashboard-hero h3 {
+  margin: 0;
+}
+
+.sessions-dashboard-hero p {
+  color: var(--text-soft);
+}
+
+.sessions-dashboard-error {
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  padding: 0.75rem;
+}
+
+.run-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.run-dashboard-card,
+.run-dashboard-empty {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1rem;
+}
+
+.run-dashboard-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.run-dashboard-card-head h4,
+.run-dashboard-empty h4,
+.run-dashboard-card h5 {
+  margin: 0;
+}
+
+.run-dashboard-card-head span,
+.run-dashboard-card p,
+.run-dashboard-card dd,
+.run-dashboard-card li,
+.run-dashboard-empty p {
+  color: var(--text-soft);
+}
+
+.run-dashboard-card-head strong {
+  align-self: start;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  background: rgba(125, 211, 252, 0.12);
+  color: #bae6fd;
+}
+
+.run-dashboard-card--succeeded .run-dashboard-card-head strong {
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.run-dashboard-card--failed .run-dashboard-card-head strong {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+}
+
+.run-dashboard-card--running .run-dashboard-card-head strong {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.run-dashboard-card dl {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.run-dashboard-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.run-dashboard-card dd {
+  margin: 0;
+  text-align: right;
+}
+
+.run-artifact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.run-artifact-row span {
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.14);
+  color: #bae6fd;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.run-replay-hint {
+  border-top: 1px solid rgba(125, 211, 252, 0.16);
+  padding-top: 0.7rem;
+}
+
 .workflow-catalog-actions {
   border-top: 1px solid rgba(125, 211, 252, 0.16);
   padding-top: 0.8rem;
@@ -2220,6 +2348,7 @@ button:disabled {
   .model-wizard-grid,
   .model-catalog-grid,
   .product-workflow-estimates,
+  .run-dashboard-grid,
   .advanced-safe-route-grid,
   .advanced-domain-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2263,6 +2392,7 @@ button:disabled {
   .model-wizard-grid,
   .model-catalog-grid,
   .product-workflow-estimates,
+  .run-dashboard-grid,
   .advanced-safe-route-grid,
   .advanced-domain-preview-grid,
   .advanced-quarantine-search {
