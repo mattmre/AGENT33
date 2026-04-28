@@ -124,6 +124,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
     steps: [
       "Open Start > Models.",
+      "Pick the OpenRouter provider path.",
       "Paste your OpenRouter API key into the provider key field.",
       "Keep the base URL as https://openrouter.ai/api/v1 unless you are using a compatible gateway.",
       "Choose the recommended default model or enter DEFAULT_MODEL=openrouter/auto.",
@@ -145,6 +146,44 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { label: "OpenRouter config helpers", path: "frontend/src/features/model-connection/helpers.ts" },
       { label: "Engine environment example", path: "engine/.env.example" },
       { label: "Setup guide", path: "docs/setup-guide.md" }
+    ],
+    actions: [
+      { label: "Open Models", target: "models" },
+      { label: "Browse workflows after setup", target: "catalog" }
+    ]
+  },
+  {
+    id: "connect-local-model-provider",
+    title: "Connect Ollama or LM Studio",
+    audience: "Local user who wants a private model path",
+    summary:
+      "Use the Models page provider cards to choose Ollama or LM Studio, fill the local endpoint automatically, leave the key blank unless your local server requires one, then test the connection.",
+    body: [
+      "Ollama and LM Studio are local provider paths. AGENT33 does not download a model in this step; your local model server needs to be running first.",
+      "Ollama usually uses http://localhost:11434/v1. LM Studio usually uses http://localhost:1234/v1 after you start its local server.",
+      "Local paths are useful for privacy and setup practice, but smaller local models may be slower or less capable than cloud models."
+    ],
+    steps: [
+      "Open Start > Models.",
+      "Pick Ollama or LM Studio from the provider path cards.",
+      "Confirm the Base URL matches the local server you started.",
+      "Choose the recommended local model or type the model name your local server exposes.",
+      "Save settings, then run Test connection before using Workflow Catalog."
+    ],
+    keywords: [
+      "ollama",
+      "lm studio",
+      "local model",
+      "localhost",
+      "openai compatible",
+      "provider",
+      "models",
+      "setup"
+    ],
+    sources: [
+      { label: "Provider presets", path: "frontend/src/features/model-connection/presets.ts" },
+      { label: "Model Connection Wizard", path: "frontend/src/features/model-connection/ModelConnectionWizardPanel.tsx" },
+      { label: "Round 5 research", path: "docs/research/wave2-r5-provider-setup-v2.md" }
     ],
     actions: [
       { label: "Open Models", target: "models" },

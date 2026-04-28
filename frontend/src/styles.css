@@ -1958,6 +1958,47 @@ button:disabled {
   gap: 1rem;
 }
 
+.model-provider-paths {
+  gap: 1rem;
+}
+
+.provider-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.provider-preset-card {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  text-align: left;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 16px;
+  background: rgba(8, 22, 31, 0.66);
+  box-shadow: none;
+}
+
+.provider-preset-card.active {
+  border-color: rgba(52, 211, 153, 0.52);
+  background: rgba(20, 83, 45, 0.24);
+}
+
+.provider-preset-card span,
+.provider-preset-card small {
+  color: var(--text-soft);
+}
+
+.provider-preset-badge {
+  justify-self: start;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.12);
+  color: #bae6fd;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .model-wizard-card,
 .model-catalog-preview {
   display: grid;
@@ -1990,6 +2031,57 @@ button:disabled {
   gap: 0.3rem;
   text-align: left;
   box-shadow: none;
+}
+
+.model-wizard-field-hint {
+  margin: -0.35rem 0 0;
+  font-size: 0.86rem;
+}
+
+.model-capability-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.model-capability-badge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.model-capability-badge--coding {
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+.model-capability-badge--speed {
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.model-capability-badge--free {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.model-capability-badge--context {
+  background: rgba(168, 85, 247, 0.14);
+  color: #e9d5ff;
+}
+
+.model-capability-badge--local {
+  background: rgba(45, 212, 191, 0.14);
+  color: #99f6e4;
+}
+
+.model-capability-badge--easy {
+  background: rgba(244, 114, 182, 0.14);
+  color: #fbcfe8;
 }
 
 .model-recommendation-list button.active {
@@ -2047,6 +2139,7 @@ button:disabled {
   .role-intake-grid,
   .role-recommendation-grid,
   .connect-center-grid,
+  .provider-preset-grid,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
@@ -2088,6 +2181,7 @@ button:disabled {
   .role-recommendation-grid,
   .connect-center-grid,
   .connect-center-next,
+  .provider-preset-grid,
   .model-wizard-grid,
   .model-catalog-grid,
   .advanced-safe-route-grid,
