@@ -165,6 +165,94 @@ class TestPackRoutesWithRegistry:
         assert data["author"] == "tester"
         assert data["enabled_for_tenant"] is False
 
+    def test_get_pack_outcome_manifests_loads_bundled_workflows(self, tmp_path: Path) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        pack_dir = _write_pack(packs_dir, name="outcome-pack")
+        outcomes_dir = pack_dir / "outcomes"
+        workflows_dir = pack_dir / "workflows"
+        outcomes_dir.mkdir()
+        workflows_dir.mkdir()
+        (pack_dir / "PACK.yaml").write_text(
+            textwrap.dedent(
+                """\
+                name: outcome-pack
+                version: 1.0.0
+                description: Pack with outcome starters
+                author: tester
+                skills:
+                  - name: skill-1
+                    path: skills/skill-1
+                outcome_packs:
+                  - path: outcomes/founder-mvp.yaml
+                    description: Founder starter
+                """
+            ),
+            encoding="utf-8",
+        )
+        (outcomes_dir / "founder-mvp.yaml").write_text(
+            textwrap.dedent(
+                """\
+                schema_version: "1"
+                name: founder-mvp
+                version: 1.0.0
+                kind: outcome-pack
+                description: Build an MVP plan.
+                author: tester
+                workflows:
+                  - name: founder-mvp
+                    path: workflows/founder-mvp.yaml
+                presentation:
+                  title: Founder MVP
+                  summary: Build a first MVP plan.
+                  expected_deliverables:
+                    - MVP plan
+                governance:
+                  approval_required: true
+                  risk_level: medium
+                provenance:
+                  trust_tier: official
+                installation:
+                  auto_enable: false
+                artifacts:
+                  - name: MVP plan
+                    required: true
+                """
+            ),
+            encoding="utf-8",
+        )
+        (workflows_dir / "founder-mvp.yaml").write_text(
+            textwrap.dedent(
+                """\
+                name: founder-mvp
+                version: 1.0.0
+                description: Build an MVP plan.
+                inputs:
+                  idea:
+                    type: string
+                    required: true
+                outputs:
+                  plan:
+                    type: object
+                steps:
+                  - id: plan
+                    action: invoke-agent
+                    agent: orchestrator
+                    inputs:
+                      idea: ${inputs.idea}
+                """
+            ),
+            encoding="utf-8",
+        )
+        pack_reg.discover()
+
+        resp = client.get("/v1/packs/outcome-pack/outcome-manifests")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["packs"][0]["manifest"]["name"] == "founder-mvp"
+        assert data["packs"][0]["workflows"][0]["name"] == "founder-mvp"
+
     def test_get_pack_includes_skill_category_and_provenance(self, tmp_path: Path) -> None:
         client, pack_reg, packs_dir, _ = self._setup(tmp_path)
         pack_dir = packs_dir / "metadata-pack"

@@ -30,9 +30,11 @@ from agent33.packs.api_models import (
     TrustPolicyUpdateRequest,
 )
 from agent33.packs.models import PackSource
+from agent33.packs.outcome_pack import parse_outcome_pack_yaml
 from agent33.packs.provenance import evaluate_trust
 from agent33.packs.registry import PackRegistry
 from agent33.security.permissions import require_scope
+from agent33.workflows.definition import WorkflowDefinition
 
 logger = structlog.get_logger()
 
@@ -482,6 +484,77 @@ async def disable_pack_for_session(
         "session_id": session_id,
         "action": "disabled_for_session",
     }
+
+
+# ---------------------------------------------------------------------------
+# Outcome pack manifests
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{name}/outcome-manifests", dependencies=[require_scope("agents:read")])
+async def get_pack_outcome_manifests(name: str, request: Request) -> dict[str, Any]:
+    """Return validated outcome manifests and workflows bundled with an installed pack."""
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    pack = registry.get(name)
+    if pack is None:
+        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
+
+    pack_dir = pack.pack_dir.resolve()
+    results: list[dict[str, Any]] = []
+    for entry in pack.outcome_packs:
+        manifest_path = (pack_dir / entry.path).resolve()
+        try:
+            manifest_path.relative_to(pack_dir)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Outcome pack path '{entry.path}' escapes pack directory",
+            ) from exc
+
+        try:
+            manifest = parse_outcome_pack_yaml(manifest_path)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to load outcome pack '{entry.path}': {exc}",
+            ) from exc
+
+        workflows: list[dict[str, Any]] = []
+        for workflow_ref in manifest.workflows:
+            if workflow_ref.definition is not None:
+                workflows.append(workflow_ref.definition.model_dump(mode="json"))
+                continue
+            if workflow_ref.path is None:
+                continue
+            workflow_path = (pack_dir / workflow_ref.path).resolve()
+            try:
+                workflow_path.relative_to(pack_dir)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Workflow path '{workflow_ref.path}' escapes pack directory",
+                ) from exc
+            try:
+                workflow = WorkflowDefinition.load_from_file(workflow_path)
+            except (FileNotFoundError, ValueError, ImportError) as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to load workflow '{workflow_ref.path}': {exc}",
+                ) from exc
+            workflows.append(workflow.model_dump(mode="json"))
+
+        results.append(
+            {
+                "entry": entry.model_dump(mode="json"),
+                "manifest": manifest.model_dump(mode="json"),
+                "workflows": workflows,
+            }
+        )
+
+    return {"packs": results, "count": len(results)}
 
 
 # ---------------------------------------------------------------------------

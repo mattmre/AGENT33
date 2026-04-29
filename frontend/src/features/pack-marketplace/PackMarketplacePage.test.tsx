@@ -282,11 +282,50 @@ describe("PackMarketplacePage", () => {
         });
       }
 
+      if (url === "http://localhost:8000/v1/packs/alpha-pack/outcome-manifests") {
+        return jsonResponse({
+          packs: [
+            {
+              entry: {
+                path: "outcomes/founder-mvp-builder.yaml",
+                required: true,
+                description: "Founder MVP starter"
+              },
+              manifest: {
+                name: "founder-mvp-builder",
+                version: "1.0.0",
+                kind: "outcome-pack",
+                description: "Turn a product idea into a scoped MVP plan.",
+                author: "AGENT-33",
+                category: "startup",
+                tags: ["founder", "mvp"],
+                workflows: [{ name: "founder-mvp-builder", path: "workflows/founder.yaml" }],
+                presentation: {
+                  title: "Founder MVP Builder",
+                  summary: "Create the first MVP plan.",
+                  expected_deliverables: ["MVP brief", "First sprint plan"]
+                },
+                artifacts: [{ name: "MVP brief", required: true }]
+              },
+              workflows: [{ name: "founder-mvp-builder", inputs: {}, outputs: {} }]
+            }
+          ],
+          count: 1
+        });
+      }
+
       throw new Error(`Unhandled fetch: ${url}`);
     });
 
     const user = userEvent.setup();
-    render(<PackMarketplacePage token="session-token" apiKey={null} />);
+    const openWorkflowStarter = vi.fn();
+    render(
+      <PackMarketplacePage
+        token="session-token"
+        apiKey={null}
+        onOpenWorkflowStarter={openWorkflowStarter}
+      />
+    );
 
     await user.click(await screen.findByRole("button", { name: /open details for alpha-pack/i }));
     expect(await screen.findByText("Beginner preview")).toBeInTheDocument();
@@ -297,6 +336,18 @@ describe("PackMarketplacePage", () => {
     await user.click(await screen.findByRole("button", { name: /install selected version/i }));
 
     expect(await screen.findByText("Installed alpha-pack 1.4.0")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /launch outcome starter/i }));
+
+    await waitFor(() =>
+      expect(openWorkflowStarter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "founder-mvp-builder",
+          goal: "Create the first MVP plan.",
+          output: "MVP brief; First sprint plan",
+          sourceLabel: "Outcome pack: Founder MVP Builder"
+        })
+      )
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/v1/marketplace/install",
       expect.objectContaining({ method: "POST" })

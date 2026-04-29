@@ -94,6 +94,47 @@ export interface InstalledPackDetail extends InstalledPackSummary {
   enabled_for_tenant: boolean;
 }
 
+export interface OutcomePackPresentation {
+  title: string;
+  audience?: string;
+  summary: string;
+  difficulty?: string;
+  estimated_duration?: string;
+  expected_deliverables?: string[];
+  sample_inputs?: Record<string, unknown>;
+}
+
+export interface OutcomePackWorkflowReference {
+  name: string;
+  description?: string;
+  path?: string | null;
+  required?: boolean;
+}
+
+export interface OutcomePackManifest {
+  name: string;
+  version: string;
+  kind: string;
+  description: string;
+  author: string;
+  category?: string;
+  tags?: string[];
+  workflows: OutcomePackWorkflowReference[];
+  presentation: OutcomePackPresentation;
+  artifacts?: Array<{ name: string; description?: string; required?: boolean }>;
+}
+
+export interface PackOutcomeManifestRecord {
+  entry: { path: string; required: boolean; description: string };
+  manifest: OutcomePackManifest;
+  workflows: Array<{ name: string; description?: string; inputs?: Record<string, unknown>; outputs?: Record<string, unknown> }>;
+}
+
+export interface PackOutcomeManifestResponse {
+  packs: PackOutcomeManifestRecord[];
+  count: number;
+}
+
 export interface PackTrustPolicy {
   require_signature?: boolean;
   min_trust_level?: string | null;
