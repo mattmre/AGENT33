@@ -140,19 +140,22 @@ export function buildWorkspaceTemplateStarterDraft(starter: WorkspaceTemplateSta
   };
 }
 
-export function validateWorkspaceTemplateStarters(): ReadonlyArray<string> {
+export function validateWorkspaceTemplateStarters(
+  starters: ReadonlyArray<WorkspaceTemplateStarter> = WORKSPACE_TEMPLATE_STARTERS,
+  workspaceIds: ReadonlyArray<WorkspaceSessionId> = WORKSPACE_SESSION_IDS
+): ReadonlyArray<string> {
   const errors: string[] = [];
 
-  for (const workspaceId of WORKSPACE_SESSION_IDS) {
-    const starters = getWorkspaceTemplateStarters(workspaceId);
-    if (starters.length === 0) {
+  for (const workspaceId of workspaceIds) {
+    const workspaceStarters = starters.filter((starter) => starter.workspaceId === workspaceId);
+    if (workspaceStarters.length === 0) {
       errors.push(`${workspaceId} has no recommended starters.`);
       continue;
     }
 
     const board = getWorkspaceBoard(workspaceId);
 
-    for (const starter of starters) {
+    for (const starter of workspaceStarters) {
       const beginsWithTask = board.tasks.find((task) => task.id === starter.beginsWithTaskId);
       if (!beginsWithTask) {
         errors.push(`${starter.id} starts with unknown task ${starter.beginsWithTaskId}.`);
@@ -165,4 +168,11 @@ export function validateWorkspaceTemplateStarters(): ReadonlyArray<string> {
   }
 
   return errors;
+}
+
+export function assertWorkspaceTemplateStarters(): void {
+  const errors = validateWorkspaceTemplateStarters();
+  if (errors.length > 0) {
+    throw new Error(`Workspace template starter configuration is invalid: ${errors.join(" ")}`);
+  }
 }

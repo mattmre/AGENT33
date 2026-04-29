@@ -107,6 +107,46 @@ describe("cockpit artifact view models", () => {
     });
   });
 
+  it("keeps command artifact priority deterministic when several tasks can produce command evidence", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const [, commandArtifact] = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "first-running",
+            title: "First running task",
+            outcome: "This task should own the primary command artifact.",
+            status: "running",
+            ownerRole: "Scout"
+          },
+          {
+            id: "blocked-second",
+            title: "Blocked second task",
+            outcome: "Blocked command evidence should not outrank active running work.",
+            status: "blocked",
+            ownerRole: "Builder"
+          },
+          {
+            id: "running-third",
+            title: "Running third task",
+            outcome: "Later running work remains visible through command blocks and logs.",
+            status: "running",
+            ownerRole: "Builder"
+          }
+        ]
+      }
+    });
+
+    expect(commandArtifact).toMatchObject({
+      title: "First running task",
+      status: "running",
+      relatedTaskIds: ["first-running"]
+    });
+  });
+
   it("maps blocked work into risk, approval, and outcome artifacts", () => {
     const artifactsByKind = getCockpitArtifactsByKind("test-review");
 
@@ -179,6 +219,35 @@ describe("cockpit artifact view models", () => {
       state: "pr-ready",
       title: "PR ready",
       task: expect.objectContaining({ id: "pr-second" })
+    });
+  });
+
+  it("prefers explicit PR-ready completed tasks before generic pull request mentions", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "generic-pr-note",
+          title: "Collect pull request notes",
+          outcome: "Implementation notes mention the pull request but do not mark it ready.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        },
+        {
+          id: "ready-pr-note",
+          title: "Prepare release handoff",
+          outcome: "PR ready with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      task: expect.objectContaining({ id: "ready-pr-note" })
     });
   });
 
@@ -287,6 +356,51 @@ describe("cockpit artifact view models", () => {
       status: "needs-review",
       reviewState: "needs-review",
       relatedTaskIds: ["research-convert"],
+      validationItems: [
+        expect.objectContaining({ name: "Scope checks", status: "pass" }),
+        expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+        expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+      ]
+    });
+  });
+
+  it("prefers reviewer-owned review tasks when several tasks are in review", () => {
+    const workspace = getWorkspaceSession("test-review");
+    const artifacts = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "builder-review",
+            title: "Builder review",
+            outcome: "Builder-owned review should remain secondary validation evidence.",
+            status: "review",
+            ownerRole: "Builder"
+          },
+          {
+            id: "reviewer-review",
+            title: "Reviewer review",
+            outcome: "Reviewer-owned review should become the primary test artifact.",
+            status: "review",
+            ownerRole: "Reviewer"
+          },
+          {
+            id: "reviewer-complete",
+            title: "Completed reviewer handoff",
+            outcome: "Completed reviewer-owned task should not outrank active review work.",
+            status: "complete",
+            ownerRole: "Reviewer"
+          }
+        ]
+      }
+    });
+    const testArtifact = artifacts.find((artifact) => artifact.kind === "test");
+
+    expect(testArtifact).toMatchObject({
+      title: "Reviewer review",
+      relatedTaskIds: ["reviewer-review"],
       validationItems: [
         expect.objectContaining({ name: "Scope checks", status: "pass" }),
         expect.objectContaining({ name: "Automated validation", status: "skipped" }),
