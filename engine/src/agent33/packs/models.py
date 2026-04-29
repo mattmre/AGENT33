@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from agent33.packs.provenance_models import PackProvenance  # noqa: TC001
+from agent33.packs.validation import validate_relative_pack_path
 
 
 class PackStatus(StrEnum):
@@ -44,13 +45,7 @@ class OutcomePackEntry(BaseModel):
     @field_validator("path")
     @classmethod
     def _validate_path(cls, value: str) -> str:
-        if "\\" in value:
-            raise ValueError("Outcome pack path must use forward slashes")
-        if value.startswith("/") or ":" in value:
-            raise ValueError("Outcome pack path must be relative")
-        if any(part in {"", ".", ".."} for part in value.split("/")):
-            raise ValueError("Outcome pack path must not contain traversal segments")
-        return value
+        return validate_relative_pack_path(value, field_name="Outcome pack path")
 
 
 class PackDependency(BaseModel):

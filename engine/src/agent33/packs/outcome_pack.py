@@ -7,36 +7,21 @@ workflow definitions can be launched from it.
 
 from __future__ import annotations
 
-import re
 from enum import StrEnum
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agent33.packs.models import PackGovernance
+from agent33.packs.validation import (
+    validate_pack_name,
+    validate_relative_pack_path,
+    validate_semver,
+)
 from agent33.workflows.definition import WorkflowDefinition  # noqa: TC001
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_PACK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$")
-_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-def _validate_relative_manifest_path(value: str, *, field_name: str) -> str:
-    """Validate a portable relative path inside a pack manifest."""
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be empty")
-    if "\\" in value:
-        raise ValueError(f"{field_name} must use forward slashes")
-    if value.startswith("/") or ":" in value:
-        raise ValueError(f"{field_name} must be relative")
-
-    path = PurePosixPath(value)
-    if any(part in {"", ".", ".."} for part in path.parts):
-        raise ValueError(f"{field_name} must not contain traversal segments")
-    return value
 
 
 class OutcomePackKind(StrEnum):
@@ -105,7 +90,7 @@ class OutcomePackWorkflow(BaseModel):
     def _validate_path(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        return _validate_relative_manifest_path(value, field_name="workflow path")
+        return validate_relative_pack_path(value, field_name="Workflow path")
 
     @model_validator(mode="after")
     def _validate_source_present(self) -> OutcomePackWorkflow:
@@ -241,21 +226,12 @@ class OutcomePackManifest(BaseModel):
     @field_validator("name")
     @classmethod
     def _validate_name(cls, value: str) -> str:
-        if not _PACK_NAME_RE.match(value):
-            raise ValueError(
-                f"Outcome pack name '{value}' must be lowercase letters, digits, "
-                "and hyphens (1-64 chars, must start and end with letter or digit)"
-            )
-        return value
+        return validate_pack_name(value, entity="Outcome pack")
 
     @field_validator("version")
     @classmethod
     def _validate_version(cls, value: str) -> str:
-        if not _SEMVER_RE.match(value):
-            raise ValueError(
-                f"Outcome pack version '{value}' must be valid semver (MAJOR.MINOR.PATCH)"
-            )
-        return value
+        return validate_semver(value, entity="Outcome pack")
 
     @model_validator(mode="after")
     def _validate_workflow_names_unique(self) -> OutcomePackManifest:
@@ -292,16 +268,10 @@ class OutcomePackManifest(BaseModel):
     def _validate_user_visible_fields_safe(self) -> OutcomePackManifest:
         from agent33.security.injection import scan_inputs_recursive
 
-        scan_payload = {
-            "description": self.description,
-            "presentation": self.presentation.model_dump(mode="json"),
-            "customization": self.customization.model_dump(mode="json"),
-            "requirements": [
-                requirement.model_dump(mode="json") for requirement in self.requirements
-            ],
-            "installation": self.installation.model_dump(mode="json"),
-            "artifacts": [artifact.model_dump(mode="json") for artifact in self.artifacts],
-        }
+        scan_payload = self.model_dump(
+            mode="json",
+            exclude={"schema_version", "name", "version"},
+        )
         result = scan_inputs_recursive(scan_payload)
         if not result.is_safe:
             threats = ", ".join(result.threats)

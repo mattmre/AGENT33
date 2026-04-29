@@ -10,7 +10,6 @@ Since P-PACK v1, manifests may also contain *improvement pack* sections:
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -22,6 +21,7 @@ from agent33.packs.models import (
     PackGovernance,
     PackSkillEntry,
 )
+from agent33.packs.validation import validate_pack_name, validate_semver
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,12 +29,6 @@ if TYPE_CHECKING:
 import structlog
 
 logger = structlog.get_logger()
-
-# Regex for valid pack name: lowercase letters, digits, hyphens; 1-64 chars
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$")
-
-# Regex for semver: MAJOR.MINOR.PATCH (no pre-release tags in v1)
-_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class PackDependencies(BaseModel):
@@ -122,19 +116,12 @@ class PackManifest(BaseModel):
     @field_validator("name")
     @classmethod
     def _validate_name(cls, value: str) -> str:
-        if not _NAME_RE.match(value):
-            raise ValueError(
-                f"Pack name '{value}' must be lowercase letters, digits, and hyphens "
-                f"(1-64 chars, must start and end with letter or digit)"
-            )
-        return value
+        return validate_pack_name(value)
 
     @field_validator("version")
     @classmethod
     def _validate_version(cls, value: str) -> str:
-        if not _SEMVER_RE.match(value):
-            raise ValueError(f"Pack version '{value}' must be valid semver (MAJOR.MINOR.PATCH)")
-        return value
+        return validate_semver(value)
 
     @field_validator("schema_version")
     @classmethod
