@@ -9,6 +9,9 @@ export interface WorkflowStarterDraft {
   schedule?: string;
   author?: string;
   sourceLabel?: string;
+  sourcePack?: string;
+  sourcePackVersion?: string;
+  sourceOutcomeId?: string;
 }
 
 export interface WorkflowStarterRequest {

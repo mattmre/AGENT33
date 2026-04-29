@@ -344,7 +344,10 @@ describe("PackMarketplacePage", () => {
           name: "founder-mvp-builder",
           goal: "Create the first MVP plan.",
           output: "MVP brief; First sprint plan",
-          sourceLabel: "Outcome pack: Founder MVP Builder"
+          sourceLabel: "Outcome pack: Founder MVP Builder",
+          sourcePack: "alpha-pack",
+          sourcePackVersion: "1.4.0",
+          sourceOutcomeId: "founder-mvp-builder"
         })
       )
     );
