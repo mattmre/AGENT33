@@ -1,0 +1,103 @@
+import { describe, expect, it } from "vitest";
+
+import { createCockpitCommandBlock, formatCommandDuration, getCommandBlocksForWorkspace } from "./commandBlocks";
+
+describe("cockpit command blocks", () => {
+  it("formats command durations without inventing missing timing", () => {
+    expect(formatCommandDuration(undefined)).toBe("Duration not recorded");
+    expect(formatCommandDuration(250)).toBe("250 ms");
+    expect(formatCommandDuration(1500)).toBe("1.5 s");
+    expect(formatCommandDuration(2000)).toBe("2 s");
+  });
+
+  it("throws for invalid duration values", () => {
+    expect(() => formatCommandDuration(-1)).toThrow(/durationMs must be zero or greater/);
+  });
+
+  it("creates explicit success and failure records", () => {
+    const success = createCockpitCommandBlock({
+      id: "shipyard-command-success",
+      workspaceId: "shipyard",
+      commandLabel: "npm run lint",
+      sourceRole: "Builder",
+      status: "success",
+      exitCode: 0,
+      timestampLabel: "Just now",
+      durationMs: 2000,
+      redactionState: "not-required",
+      outputSummary: "TypeScript completed without errors.",
+      relatedArtifactId: "shipyard-command",
+      relatedTaskId: "shipyard-build"
+    });
+    const failure = createCockpitCommandBlock({
+      id: "shipyard-command-failure",
+      workspaceId: "shipyard",
+      commandLabel: "npm test",
+      sourceRole: "Reviewer",
+      status: "failed",
+      exitCode: 1,
+      timestampLabel: "Just now",
+      redactionState: "redacted",
+      outputSummary: "One test failed; full output was redacted for review.",
+      relatedArtifactId: "shipyard-command",
+      relatedTaskId: "shipyard-review"
+    });
+
+    expect(success).toMatchObject({
+      exitLabel: "Exit 0",
+      durationLabel: "2 s",
+      nextActionLabel: "Review the linked artifact"
+    });
+    expect(failure).toMatchObject({
+      exitLabel: "Exit 1",
+      durationLabel: "Duration not recorded",
+      redactionState: "redacted",
+      nextActionLabel: "Inspect the failure summary"
+    });
+  });
+
+  it("maps running workspace tasks into template command blocks linked to the command artifact", () => {
+    const blocks = getCommandBlocksForWorkspace("shipyard");
+
+    expect(blocks.map((block) => block.relatedTaskId)).toEqual(["shipyard-scout", "shipyard-build"]);
+    expect(blocks.every((block) => block.relatedArtifactId === "shipyard-command")).toBe(true);
+    expect(blocks.map((block) => block.sourceRole)).toEqual(["Scout", "Builder"]);
+    expect(blocks.every((block) => block.status === "running")).toBe(true);
+    expect(blocks.every((block) => block.redactionState === "review-required")).toBe(true);
+  });
+
+  it("maps blocked tasks into blocked command review records", () => {
+    const blocks = getCommandBlocksForWorkspace("test-review");
+
+    expect(blocks.find((block) => block.relatedTaskId === "quality-merge")).toMatchObject({
+      status: "blocked",
+      nextActionLabel: "Resolve the blocker before rerunning"
+    });
+  });
+
+  it("returns an explicit not-run block when no task has execution evidence", () => {
+    const block = createCockpitCommandBlock({
+      id: "solo-empty-command",
+      workspaceId: "solo-builder",
+      commandLabel: "No command has run yet",
+      sourceRole: "Operator",
+      status: "not-run",
+      timestampLabel: "Default workspace",
+      redactionState: "not-required",
+      outputSummary: "Command blocks will appear after execution starts.",
+      relatedArtifactId: "solo-builder-command"
+    });
+
+    expect(block).toMatchObject({
+      status: "not-run",
+      exitLabel: "No exit code yet",
+      nextActionLabel: "Start a workflow to create command evidence"
+    });
+  });
+
+  it("throws an actionable error for unknown workspaces", () => {
+    expect(() => getCommandBlocksForWorkspace("missing-workspace")).toThrow(
+      /Cannot build command blocks for unknown workspaceId "missing-workspace"/
+    );
+  });
+});
