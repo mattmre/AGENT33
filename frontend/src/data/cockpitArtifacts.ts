@@ -169,7 +169,10 @@ function createLogArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
 }
 
 function createTestArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const task = getFirstTaskOwnedByRole(snapshot.board, "Reviewer") ?? getFirstTaskByStatus(snapshot.board, "review");
+  const task =
+    getFirstTaskByStatus(snapshot.board, "review") ??
+    getFirstTaskOwnedByRole(snapshot.board, "Reviewer") ??
+    getFirstTaskByStatus(snapshot.board, "complete");
 
   if (!task) {
     return createArtifact(snapshot, "test", {

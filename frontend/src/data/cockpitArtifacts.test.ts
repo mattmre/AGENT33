@@ -116,6 +116,16 @@ describe("cockpit artifact view models", () => {
     });
   });
 
+  it("prioritizes active review work over a completed reviewer-owned task", () => {
+    const artifactsByKind = getCockpitArtifactsByKind("research-build");
+
+    expect(artifactsByKind.test).toMatchObject({
+      status: "needs-review",
+      reviewState: "needs-review",
+      relatedTaskIds: ["research-convert"]
+    });
+  });
+
   it("throws an actionable error for an unknown workspace id", () => {
     expect(() => getCockpitArtifactsForWorkspace("missing-workspace")).toThrow(
       /Cannot build cockpit artifacts for unknown workspaceId "missing-workspace"/
