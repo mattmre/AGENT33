@@ -190,16 +190,18 @@ class LMStudioReadinessService:
     async def aclose(self) -> None:
         """Close the pooled HTTP client when the application shuts down."""
 
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        async with self._client_lock:
+            if self._client is not None:
+                await self._client.aclose()
+                self._client = None
 
     async def _fetch(self, url: str) -> _LMStudioFetchResult:
         try:
             async with self._client_lock:
                 if self._client is None or self._client.is_closed:
                     self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
-            response = await self._client.get(url)
+                client = self._client
+            response = await client.get(url)
             payload = response.json()
             return _LMStudioFetchResult(status_code=response.status_code, payload=payload)
         except (httpx.HTTPError, ValueError) as exc:
