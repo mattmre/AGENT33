@@ -21,7 +21,6 @@ from agent33.component_security.models import (
 )
 from agent33.component_security.persistence import SecurityScanStore
 from agent33.config import settings
-from agent33.llm.runtime_config import resolve_default_model
 from agent33.security.permissions import require_scope
 from agent33.services.security_scan import (
     RunNotFoundError,
@@ -321,12 +320,11 @@ async def run_llm_scan(run_id: str, request: Request) -> dict[str, Any]:
     # Model probes are materially slower than metadata scans, so keep them
     # aligned with the deepest security profile until runs capture an explicit
     # AI target model.
-    default_model = resolve_default_model()
-    if run.profile == SecurityProfile.DEEP and default_model:
+    if run.profile == SecurityProfile.DEEP and settings.ollama_default_model:
         findings.extend(
             await asyncio.to_thread(
                 _llm_scanner.scan_model_behavior,
-                default_model,
+                settings.ollama_default_model,
                 run_id=run.id,
             )
         )

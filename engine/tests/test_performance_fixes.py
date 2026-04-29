@@ -47,7 +47,7 @@ class TestEmbeddingProvider:
 
     @pytest.mark.asyncio
     async def test_embed_uses_persistent_client(self) -> None:
-        """embed() should use self._client and normalize single-vector responses."""
+        """embed() should use self._client, not create a new httpx.AsyncClient."""
         provider = self._make_provider()
 
         mock_resp = _mock_response({"embedding": [0.1, 0.2, 0.3]})
@@ -58,28 +58,10 @@ class TestEmbeddingProvider:
         result = await provider.embed("hello world")
 
         mock.post.assert_awaited_once_with(
-            "http://test:11434/api/embed",
-            json={"model": "nomic-embed-text", "input": ["hello world"]},
+            "http://test:11434/api/embeddings",
+            json={"model": "nomic-embed-text", "prompt": "hello world"},
         )
         assert result == [0.1, 0.2, 0.3]
-
-    @pytest.mark.asyncio
-    async def test_embed_batch_accepts_legacy_single_embedding_shape(self) -> None:
-        """embed_batch() should wrap a legacy single-vector payload for one text."""
-        provider = self._make_provider()
-
-        mock_resp = _mock_response({"embedding": [0.1, 0.2, 0.3]})
-        mock = _mock_client()
-        mock.post.return_value = mock_resp
-        provider._client = mock
-
-        result = await provider.embed_batch(["hello world"])
-
-        mock.post.assert_awaited_once_with(
-            "http://test:11434/api/embed",
-            json={"model": "nomic-embed-text", "input": ["hello world"]},
-        )
-        assert result == [[0.1, 0.2, 0.3]]
 
     @pytest.mark.asyncio
     async def test_embed_batch_single_request(self) -> None:

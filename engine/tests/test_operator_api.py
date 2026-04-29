@@ -391,29 +391,6 @@ class TestOperatorConfig:
         # Default encryption_key is empty string, so redact returns ""
         assert data["groups"]["security"]["encryption_key"] == ""
 
-    def test_openrouter_key_presence_is_redacted(self, operator_read_client: TestClient) -> None:
-        from pydantic import SecretStr
-
-        svc = _make_operator_service()
-        object.__setattr__(svc._settings, "openai_api_key", SecretStr("sk-openai-test"))
-        object.__setattr__(svc._settings, "openrouter_api_key", SecretStr("sk-or-test"))
-        app.state.operator_service = svc
-        resp = operator_read_client.get("/v1/operator/config")
-        data = resp.json()
-        assert data["groups"]["llm"]["openai_api_key"] == "***"
-        assert data["groups"]["llm"]["openrouter_api_key"] == "***"
-
-    def test_default_model_is_exposed_via_llm_group(
-        self, operator_read_client: TestClient
-    ) -> None:
-        svc = _make_operator_service()
-        object.__setattr__(svc._settings, "default_model", "openrouter/auto")
-        app.state.operator_service = svc
-        resp = operator_read_client.get("/v1/operator/config")
-        data = resp.json()
-        assert data["groups"]["llm"]["default_model"] == "openrouter/auto"
-        assert "default_model" not in data["groups"]["ollama"]
-
 
 # ============================================================================
 # GET /v1/operator/doctor

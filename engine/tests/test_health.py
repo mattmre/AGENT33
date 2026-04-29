@@ -11,10 +11,7 @@ if TYPE_CHECKING:
     from fastapi.testclient import TestClient
 
 import pytest
-from pydantic import SecretStr
 
-from agent33.api.routes import health as health_routes
-from agent33.config import settings
 from agent33.main import app
 
 
@@ -27,14 +24,6 @@ class _AsyncHealthService:
 
 
 class _FakeAsyncClient:
-    def __init__(
-        self,
-        response_codes: dict[str, int],
-        failures: set[str],
-    ) -> None:
-        self._response_codes = response_codes
-        self._failures = failures
-
     async def __aenter__(self) -> _FakeAsyncClient:
         return self
 
@@ -42,14 +31,7 @@ class _FakeAsyncClient:
         return None
 
     async def get(self, url: str, headers=None):  # noqa: ANN001
-        if url in self._failures:
-            raise RuntimeError(f"forced failure for {url}")
-        return SimpleNamespace(status_code=self._response_codes.get(url, 200))
-
-    async def post(self, url: str, json=None, headers=None):  # noqa: ANN001
-        if url in self._failures:
-            raise RuntimeError(f"forced failure for {url}")
-        return SimpleNamespace(status_code=self._response_codes.get(url, 200))
+        return SimpleNamespace(status_code=200)
 
 
 class _FakeRedisClient:
@@ -60,43 +42,15 @@ class _FakeRedisClient:
         return None
 
 
-@pytest.fixture()
-def health_http_state() -> dict[str, object]:
-    return {"response_codes": {}, "failures": set()}
-
-
 @pytest.fixture(autouse=True)
-def _install_phase48_health_services(
-    monkeypatch: pytest.MonkeyPatch,
-    health_http_state: dict[str, object],
-) -> None:
+def _install_phase48_health_services(monkeypatch: pytest.MonkeyPatch) -> None:
     original_voice = getattr(app.state, "voice_sidecar_probe", None)
     original_status_line = getattr(app.state, "status_line_service", None)
     app.state.voice_sidecar_probe = _AsyncHealthService("ok")
     app.state.status_line_service = _AsyncHealthService("ok")
     monkeypatch.setattr(
-        "agent33.api.routes.health.httpx.AsyncClient",
-        lambda timeout=3: _FakeAsyncClient(
-            health_http_state["response_codes"],  # type: ignore[arg-type]
-            health_http_state["failures"],  # type: ignore[arg-type]
-        ),
+        "agent33.api.routes.health.httpx.AsyncClient", lambda timeout=3: _FakeAsyncClient()
     )
-    monkeypatch.setattr(settings, "default_model", "openrouter/auto")
-    monkeypatch.setattr(settings, "embedding_provider", "ollama")
-    monkeypatch.setattr(settings, "ollama_base_url", "http://ollama:11434")
-    monkeypatch.setattr(settings, "embedding_default_model", "nomic-embed-text")
-    monkeypatch.setattr(settings, "openai_base_url", "https://api.openai.com/v1")
-    monkeypatch.setattr(settings, "openrouter_base_url", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(settings, "openrouter_site_url", "http://localhost")
-    monkeypatch.setattr(settings, "openrouter_app_name", "AGENT-33")
-    monkeypatch.setattr(settings, "voice_daemon_transport", "stub")
-    monkeypatch.setattr(settings, "voice_sidecar_url", "")
-    monkeypatch.setattr(settings, "voice_tts_provider", "stub")
-    monkeypatch.setattr(settings, "voice_elevenlabs_enabled", False)
-    monkeypatch.setattr(settings, "jina_api_key", SecretStr(""))
-    monkeypatch.setattr(settings, "elevenlabs_api_key", SecretStr(""))
-    monkeypatch.setattr(settings, "openai_api_key", SecretStr("test-openai-key"))
-    monkeypatch.setattr(settings, "openrouter_api_key", SecretStr("test-openrouter-key"))
     _fake_redis_async = SimpleNamespace(from_url=lambda *args, **kwargs: _FakeRedisClient())
     monkeypatch.setitem(
         sys.modules,
@@ -160,7 +114,6 @@ def test_health_returns_200(client: TestClient) -> None:
     data = r.json()
     assert data["status"] in ("healthy", "degraded")
     assert isinstance(data["services"], dict)
-    assert isinstance(data["required_services"], dict)
     allowed_statuses = {"ok", "degraded", "unavailable", "configured", "unconfigured"}
     for svc_name, svc_status in data["services"].items():
         if svc_name.startswith("channel:"):
@@ -177,7 +130,6 @@ def test_health_lists_all_services(client: TestClient) -> None:
     assert expected.issubset(set(data["services"].keys())), (
         f"Service list mismatch. Missing: {expected - set(data['services'].keys())}"
     )
-    assert data["services"]["status_line"] == "ok"
 
 
 def test_healthz_returns_lightweight_status(client: TestClient) -> None:
@@ -185,87 +137,9 @@ def test_healthz_returns_lightweight_status(client: TestClient) -> None:
     assert data == {"status": "healthy"}
 
 
-def test_readyz_returns_runtime_dependency_status(client: TestClient) -> None:
+def test_readyz_returns_core_dependency_status(client: TestClient) -> None:
     response = client.get("/readyz")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert set(data["services"]) == {"ollama", "openrouter", "postgres", "redis", "nats"}
-
-
-def test_health_treats_inactive_openai_as_configured(
-    client: TestClient,
-    health_http_state: dict[str, object],
-) -> None:
-    response_codes = health_http_state["response_codes"]
-    assert isinstance(response_codes, dict)
-    response_codes["https://openrouter.ai/api/v1/models"] = 200
-    response_codes[f"{settings.runtime_ollama_base_url}/api/version"] = 200
-    response_codes["https://api.openai.com/v1/models"] = 401
-
-    data = client.get("/health").json()
-
-    assert data["status"] == "healthy"
-    assert data["services"]["openai"] == "configured"
-    assert "openai" not in data["required_services"]
-
-
-def test_health_degrades_when_required_ollama_is_unavailable(
-    client: TestClient,
-    health_http_state: dict[str, object],
-) -> None:
-    response_codes = health_http_state["response_codes"]
-    failures = health_http_state["failures"]
-    assert isinstance(response_codes, dict)
-    assert isinstance(failures, set)
-    response_codes["https://openrouter.ai/api/v1/models"] = 200
-    failures.add(f"{settings.runtime_ollama_base_url}/api/embed")
-
-    data = client.get("/health").json()
-
-    assert data["status"] == "degraded"
-    assert data["required_services"]["ollama"] == "unavailable"
-
-
-def test_health_degrades_when_required_embedding_model_is_missing(
-    client: TestClient,
-    health_http_state: dict[str, object],
-) -> None:
-    response_codes = health_http_state["response_codes"]
-    assert isinstance(response_codes, dict)
-    response_codes["https://openrouter.ai/api/v1/models"] = 200
-    response_codes[f"{settings.runtime_ollama_base_url}/api/embed"] = 404
-
-    data = client.get("/health").json()
-
-    assert data["status"] == "degraded"
-    assert data["required_services"]["ollama"] == "degraded"
-
-
-def test_default_provider_name_maps_claude_models_to_anthropic(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(health_routes, "resolve_default_model", lambda: "claude-3-5-sonnet")
-    monkeypatch.setattr(health_routes, "llamacpp_enabled", lambda: False)
-
-    assert health_routes._default_provider_name() == "anthropic"
-
-
-def test_readyz_tracks_anthropic_runtime_dependencies(
-    client: TestClient,
-    health_http_state: dict[str, object],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    response_codes = health_http_state["response_codes"]
-    assert isinstance(response_codes, dict)
-    monkeypatch.setattr(health_routes, "resolve_default_model", lambda: "claude-3-5-sonnet")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    response_codes["https://api.anthropic.com/v1/models"] = 200
-    response_codes[f"{settings.runtime_ollama_base_url}/api/embed"] = 200
-
-    response = client.get("/readyz")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert set(data["services"]) == {"anthropic", "ollama", "postgres", "redis", "nats"}
+    assert set(data["services"]) == {"ollama", "redis", "postgres", "nats"}

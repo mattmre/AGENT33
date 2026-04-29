@@ -6,8 +6,8 @@
  * accessibility, form labels, and heading hierarchy.
  */
 
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 
 import { SkipLink } from "../SkipLink";
 import { VisuallyHidden } from "../VisuallyHidden";
@@ -15,13 +15,6 @@ import { VisuallyHidden } from "../VisuallyHidden";
 // jsdom does not implement scrollIntoView; stub it globally for all tests
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
-});
-
-afterEach(() => {
-  cleanup();
-  delete (window as any).__AGENT33_CONFIG__;
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 /**
@@ -265,20 +258,6 @@ describe("ChatInterface accessibility", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-label", "Chat settings");
   });
-
-  it("model picker controls remain labeled when the settings tab is opened", async () => {
-    const { ChatInterface } = await import("../../features/chat/ChatInterface");
-    render(<ChatInterface token="test" apiKey="test" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Chat settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "Model & Provider" }));
-
-    expect(screen.getByLabelText("Model override")).toBeInTheDocument();
-    expect(screen.getByLabelText("Search model catalog")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Use server default" })
-    ).toBeInTheDocument();
-  });
 });
 
 // ---- HealthPanel ARIA checks ----
@@ -402,53 +381,6 @@ describe("OperationsHubPanel accessibility", () => {
 // ---- MessagingSetup icon a11y ----
 
 describe("MessagingSetup accessibility", () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes("/v1/operator/config")) {
-          return Promise.resolve(
-            mockFetchResponse({
-              groups: {
-                llm: {
-                  openrouter_api_key: "***",
-                  openrouter_base_url: "https://openrouter.ai/api/v1",
-                  openrouter_site_url: "https://agent33.example",
-                  openrouter_app_name: "Agent Console",
-                  openrouter_app_category: "ops-console",
-                },
-                ollama: {
-                  default_model: "openrouter/auto",
-                },
-              },
-            })
-          );
-        }
-
-        if (url.includes("/v1/openrouter/models")) {
-          return Promise.resolve(
-            mockFetchResponse({
-              data: [
-                {
-                  id: "openrouter/auto",
-                  name: "Auto Router",
-                  context_length: 128000,
-                  pricing: { prompt: "0.000001", completion: "0.000002" },
-                },
-              ],
-            })
-          );
-        }
-
-        return Promise.resolve(mockFetchResponse({}));
-      })
-    );
-    (window as any).__AGENT33_CONFIG__ = {
-      API_BASE_URL: "http://localhost:8000",
-    };
-  });
-
   it("decorative card icons have aria-hidden", async () => {
     const { MessagingSetup } = await import(
       "../../features/integrations/MessagingSetup"
@@ -461,27 +393,17 @@ describe("MessagingSetup accessibility", () => {
     });
   });
 
-  it("OpenRouter form controls expose accessible labels", async () => {
+  it("form inputs have associated labels via wrapping <label>", async () => {
     const { MessagingSetup } = await import(
       "../../features/integrations/MessagingSetup"
     );
     render(<MessagingSetup />);
-
-    expect(await screen.findByLabelText("API key")).toBeInTheDocument();
-    expect(screen.getByLabelText("Default model")).toBeInTheDocument();
-    expect(screen.getByLabelText("Search catalog")).toBeInTheDocument();
-  });
-
-  it("status updates are announced via aria-live regions", async () => {
-    const { MessagingSetup } = await import(
-      "../../features/integrations/MessagingSetup"
-    );
-    render(<MessagingSetup />);
-
-    const setupStatus = await screen.findByText(
-      /Loaded OpenRouter settings from the server/
-    );
-    expect(setupStatus).toHaveAttribute("aria-live", "polite");
+    // Each input should be inside a label element
+    const inputs = screen.getAllByRole("textbox");
+    inputs.forEach((input) => {
+      const parentLabel = input.closest("label");
+      expect(parentLabel).toBeTruthy();
+    });
   });
 });
 

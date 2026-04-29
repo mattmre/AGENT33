@@ -54,8 +54,10 @@ class StatusLineService:
         hook_present = False
         if discovery is not None:
             hook_present = "status-line" in discovery.discovered_hooks
-        if hook_present or getattr(self._app_state, "operator_session_service", None) is not None:
+        if hook_present:
             status = "ok"
+        elif getattr(self._app_state, "operator_session_service", None) is not None:
+            status = "degraded"
         else:
             status = "unavailable"
         return {

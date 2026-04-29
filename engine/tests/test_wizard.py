@@ -13,11 +13,8 @@ Tests verify:
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
-
-import pytest
 
 from agent33.cli.wizard import (
     QUICK_TEMPLATES,
@@ -25,13 +22,14 @@ from agent33.cli.wizard import (
     FirstRunWizard,
     WizardResult,
     _build_env_lines,
-    _stream_test_response,
     _write_env,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Iterator
     from pathlib import Path
+
+    import pytest
 
 # ---------------------------------------------------------------------------
 # Mock I/O helper
@@ -77,29 +75,11 @@ class MockIO:
             return ""
 
 
-@pytest.fixture(autouse=True)
-def _restore_llm_api_keys() -> Generator[None, None, None]:
-    openai_api_key = os.environ.get("OPENAI_API_KEY")
-    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
-    try:
-        yield
-    finally:
-        _restore_env_var("OPENAI_API_KEY", openai_api_key)
-        _restore_env_var("OPENROUTER_API_KEY", openrouter_api_key)
-
-
 def _wizard(answers: list[str], tmp_path: Path) -> WizardResult:
     """Convenience: run the wizard with scripted answers into a tmp env file."""
     io = MockIO(answers)
     w = FirstRunWizard(io=io, env_path=tmp_path / ".env.local")
     return w.run()
-
-
-def _restore_env_var(name: str, value: str | None) -> None:
-    if value is None:
-        os.environ.pop(name, None)
-    else:
-        os.environ[name] = value
 
 
 # ---------------------------------------------------------------------------
@@ -141,56 +121,6 @@ def test_wizard_chooses_minimal_profile(tmp_path: Path, monkeypatch: pytest.Monk
     assert result.profile == "minimal"
 
 
-def test_wizard_forces_fresh_environment_detection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured: list[bool] = []
-
-    def _record_detect(*, force_refresh: bool = False) -> object:
-        captured.append(force_refresh)
-        return SimpleNamespace(
-            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
-            tools=SimpleNamespace(ollama_available=True, docker_available=True),
-            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
-            mode="standard",
-        )
-
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _record_detect, raising=False)
-
-    result = _wizard(
-        answers=["developer", "skip", "None — I'll configure manually"],
-        tmp_path=tmp_path,
-    )
-
-    assert captured == [True]
-    assert result.profile == "developer"
-
-
-def test_wizard_retries_environment_detection_without_force_refresh_kwarg(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured: list[str] = []
-
-    def _legacy_detect() -> object:
-        captured.append("retried-without-kwarg")
-        return SimpleNamespace(
-            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
-            tools=SimpleNamespace(ollama_available=True, docker_available=True),
-            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
-            mode="standard",
-        )
-
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _legacy_detect, raising=False)
-
-    result = _wizard(
-        answers=["developer", "skip", "None — I'll configure manually"],
-        tmp_path=tmp_path,
-    )
-
-    assert captured == ["retried-without-kwarg"]
-    assert result.profile == "developer"
-
-
 # ---------------------------------------------------------------------------
 # LLM provider paths (step 2)
 # ---------------------------------------------------------------------------
@@ -228,26 +158,6 @@ def test_wizard_openai_provider_sets_api_key(
     assert result.entered_api_key == "sk-test-key-12345"
 
 
-def test_wizard_openrouter_provider_sets_api_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    result = _wizard(
-        answers=[
-            "developer",
-            "openrouter",
-            "sk-or-test-key-12345",
-            "no",
-            "None — I'll configure manually",
-        ],
-        tmp_path=tmp_path,
-    )
-    assert result.llm_provider == "openrouter"
-    assert result.api_key_set is True
-    assert result.llm_model == "openrouter/auto"
-    assert result.entered_api_key == "sk-or-test-key-12345"
-
-
 def test_wizard_openai_empty_key_does_not_set_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -283,42 +193,162 @@ def test_wizard_ollama_provider_without_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: None)  # no ollama binary
-    result = _wizard(
-        answers=["developer", "ollama", "None — I'll configure manually"],
-        tmp_path=tmp_path,
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=False,
+            bundled_compose_dir=None,
+        ),
     )
-    assert result.llm_provider == "ollama"
-    # No model set because ollama not installed
-    assert result.llm_model is None
-
-
-def test_wizard_ollama_without_binary_skips_test_prompt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: None)
-    result = _wizard(
-        answers=["developer", "ollama", "None — I'll configure manually"],
-        tmp_path=tmp_path,
-    )
-    assert result.template is None
-    assert "test_invocation_skipped" in result.steps_completed
-    assert "test_invocation" not in result.steps_completed
-
-
-def test_wizard_ollama_provider_with_binary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
     result = _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
     )
     assert result.llm_provider == "ollama"
     assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_with_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_ensure_ollama_ready",
+        lambda self, result: True,
+    )
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
+    result = _wizard(
+        answers=["developer", "ollama", "no", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_provider == "ollama"
+    assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_starts_bundled_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.2:3b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=True,
+            bundled_compose_dir=tmp_path,
+        ),
+    )
+    started: list[Path] = []
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.start_bundled_ollama_service",
+        lambda compose_dir: started.append(compose_dir),
+    )
+    monkeypatch.setattr("agent33.env.ollama_setup.wait_for_ollama", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.list_ollama_models",
+        lambda _base_url: ["llama3.2:3b"],
+    )
+
+    result = _wizard(
+        answers=[
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ],
+        tmp_path=tmp_path,
+    )
+
+    assert started == [tmp_path]
+    assert result.ollama_service_bootstrapped is True
+    assert result.llm_model == "llama3.2:3b"
+
+
+def test_wizard_ollama_provider_surfaces_bundled_start_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.2:3b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=False,
+            reachable=False,
+            docker_compose_available=True,
+            bundled_compose_dir=tmp_path,
+        ),
+    )
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.start_bundled_ollama_service",
+        lambda _compose_dir: (_ for _ in ()).throw(
+            RuntimeError("docker compose failed: stderr: bind error")
+        ),
+    )
+
+    io = MockIO(
+        [
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ]
+    )
+    result = FirstRunWizard(io=io, env_path=tmp_path / ".env.local").run()
+
+    assert result.completed is True
+    assert any("bind error" in message for message in io.messages)
+
+
+def test_wizard_ollama_provider_downloads_recommended_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_env = _fake_env_profile(model="llama3.1:8b")
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", lambda: fake_env)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.inspect_ollama_environment",
+        lambda **_: SimpleNamespace(
+            binary_available=True,
+            reachable=True,
+            docker_compose_available=False,
+            bundled_compose_dir=None,
+        ),
+    )
+    pull_calls: list[tuple[str, str]] = []
+    model_lists = [[], ["llama3.1:8b"]]
+
+    def _list_models(_base_url: str) -> list[str]:
+        return model_lists.pop(0)
+
+    monkeypatch.setattr("agent33.env.ollama_setup.list_ollama_models", _list_models)
+    monkeypatch.setattr(
+        "agent33.env.ollama_setup.pull_ollama_model",
+        lambda model, *, base_url: pull_calls.append((model, base_url)),
+    )
+
+    result = _wizard(
+        answers=[
+            "developer",
+            "ollama",
+            "yes",
+            "no",
+            "None — I'll configure manually",
+        ],
+        tmp_path=tmp_path,
+    )
+
+    assert pull_calls == [("llama3.1:8b", "http://localhost:11434")]
+    assert result.ollama_model_downloaded is True
+    assert result.llm_model == "llama3.1:8b"
 
 
 # ---------------------------------------------------------------------------
@@ -342,8 +372,12 @@ def test_wizard_skips_test_invocation_when_user_declines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(FirstRunWizard, "_ensure_ollama_ready", lambda self, result: True)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     result = _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
@@ -352,31 +386,16 @@ def test_wizard_skips_test_invocation_when_user_declines(
     assert "test_invocation_skipped" in result.steps_completed
 
 
-def test_wizard_skips_test_invocation_when_ollama_model_detection_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr(
-        "agent33.cli.wizard._pick_ollama_model",
-        lambda: (_ for _ in ()).throw(RuntimeError("no local models")),
-    )
-    result = _wizard(
-        answers=["developer", "ollama", "None — I'll configure manually"],
-        tmp_path=tmp_path,
-    )
-    assert result.llm_model == "llama3.2:3b"
-    assert result.template is None
-    assert "test_invocation_skipped" in result.steps_completed
-    assert "test_invocation" not in result.steps_completed
-
-
 def test_wizard_test_invocation_failure_is_graceful(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(FirstRunWizard, "_ensure_ollama_ready", lambda self, result: True)
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     monkeypatch.setattr(
         "agent33.cli.wizard._stream_test_response",
         lambda _result, _io: (_ for _ in ()).throw(RuntimeError("connection refused")),
@@ -461,30 +480,23 @@ def test_wizard_env_contains_ollama_url_when_ollama_chosen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_ensure_ollama_ready",
+        lambda self, result: True,
+    )
+    monkeypatch.setattr(
+        FirstRunWizard,
+        "_configure_ollama_model",
+        lambda self, result: setattr(result, "llm_model", "llama3.2:3b"),
+    )
     _wizard(
         answers=["developer", "ollama", "no", "None — I'll configure manually"],
         tmp_path=tmp_path,
     )
     content = (tmp_path / ".env.local").read_text()
     assert "OLLAMA_BASE_URL=http://localhost:11434" in content
-    assert "DEFAULT_MODEL=llama3.2:3b" in content
-
-
-def test_wizard_env_preserves_custom_ollama_url(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
-    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
-    _wizard(
-        answers=["developer", "ollama", "no", "None — I'll configure manually"],
-        tmp_path=tmp_path,
-    )
-    content = (tmp_path / ".env.local").read_text()
-    assert "OLLAMA_BASE_URL=http://ollama.remote:11434" in content
+    assert "OLLAMA_DEFAULT_MODEL=llama3.2:3b" in content
 
 
 def test_wizard_env_contains_template_when_chosen(
@@ -580,20 +592,6 @@ def test_build_env_lines_openai_with_entered_key() -> None:
     assert "DEFAULT_MODEL=gpt-4o-mini" in joined
 
 
-def test_build_env_lines_openrouter_with_entered_key() -> None:
-    result = WizardResult(
-        profile="production",
-        llm_provider="openrouter",
-        llm_model="openrouter/auto",
-        api_key_set=True,
-        entered_api_key="sk-or-test-abc",
-    )
-    lines = _build_env_lines(result)
-    joined = "\n".join(lines)
-    assert "OPENROUTER_API_KEY=sk-or-test-abc" in joined
-    assert "DEFAULT_MODEL=openrouter/auto" in joined
-
-
 def test_build_env_lines_openai_without_entered_key_omits_api_key() -> None:
     """If api_key_set from env but user didn't enter a key, don't write it to .env.local."""
     result = WizardResult(
@@ -618,66 +616,7 @@ def test_build_env_lines_ollama() -> None:
     lines = _build_env_lines(result)
     joined = "\n".join(lines)
     assert "OLLAMA_BASE_URL=http://localhost:11434" in joined
-    assert "DEFAULT_MODEL=llama3.1:8b" in joined
-
-
-def test_build_env_lines_ollama_reuses_existing_env_file_url(tmp_path: Path) -> None:
-    env_path = tmp_path / ".env.local"
-    env_path.write_text("OLLAMA_BASE_URL=http://ollama.internal:11434\n", encoding="utf-8")
-    result = WizardResult(
-        profile="minimal",
-        llm_provider="ollama",
-        llm_model="llama3.2:3b",
-        env_path=env_path,
-    )
-    lines = _build_env_lines(result)
-    joined = "\n".join(lines)
-    assert "OLLAMA_BASE_URL=http://ollama.internal:11434" in joined
-
-
-def test_stream_test_response_ollama_uses_resolved_base_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self) -> dict[str, str]:
-            return {"response": "hello"}
-
-    class FakeClient:
-        def __init__(self, *, timeout: int) -> None:
-            captured["timeout"] = timeout
-
-        def __enter__(self) -> FakeClient:
-            return self
-
-        def __exit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def post(self, url: str, json: dict[str, object]) -> FakeResponse:
-            captured["url"] = url
-            captured["json"] = json
-            return FakeResponse()
-
-    io = MockIO([])
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
-    monkeypatch.setattr("httpx.Client", FakeClient)
-
-    _stream_test_response(
-        WizardResult(llm_provider="ollama", llm_model="llama3.2:3b"),
-        io,
-    )
-
-    assert captured["url"] == "http://ollama.remote:11434/api/generate"
-    assert captured["json"] == {
-        "model": "llama3.2:3b",
-        "prompt": "What can you do? (answer in 2 sentences)",
-        "stream": False,
-    }
-    assert io.messages[-1] == "hello"
+    assert "OLLAMA_DEFAULT_MODEL=llama3.1:8b" in joined
 
 
 def test_build_env_lines_with_template() -> None:
@@ -714,6 +653,25 @@ def test_wizard_handles_missing_env_detection(
     )
     assert result.completed is True
     assert result.profile == "developer"
+
+
+def test_load_env_profile_uses_force_refresh_when_supported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+
+    def _detect(*, force_refresh: bool = False):
+        calls.append(force_refresh)
+        return _fake_env_profile()
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _detect, raising=False)
+
+    wizard = FirstRunWizard(io=MockIO([]), env_path=tmp_path / ".env.local")
+    profile = wizard._load_env_profile()
+
+    assert calls == [True]
+    assert profile.selected_model.ollama_model == "llama3.2:3b"
 
 
 def test_wizard_full_happy_path_completes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -758,3 +716,22 @@ def test_wizard_full_happy_path_completes(tmp_path: Path, monkeypatch: pytest.Mo
 def _failing_detect() -> None:
     """Stand-in for detect_env that raises — tests graceful fallback."""
     raise ImportError("env detection not available")
+
+
+def _fake_env_profile(model: str = "llama3.2:3b") -> object:
+    return SimpleNamespace(
+        hardware=SimpleNamespace(
+            cpu_cores=8,
+            ram_gb=16.0,
+            gpu_vram_gb=0.0,
+            gpu_brand="",
+        ),
+        tools=SimpleNamespace(
+            ollama_available=False,
+            docker_available=True,
+        ),
+        selected_model=SimpleNamespace(
+            ollama_model=model,
+        ),
+        mode="lite",
+    )

@@ -29,8 +29,6 @@ from agent33.cli.diagnose import (
 from agent33.cli.main import app
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import pytest
 
 # ---------------------------------------------------------------------------
@@ -104,11 +102,7 @@ def test_check_port_in_use() -> None:
     assert result.fix_hint != ""
 
 
-def test_check_env_file_with_env_var(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_check_env_file_with_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENT33_MODE", "lite")
     result = _check_env_file()
     assert result.status == Status.OK
@@ -116,24 +110,24 @@ def test_check_env_file_with_env_var(
 
 
 def test_check_env_file_with_dot_env(
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AGENT33_MODE", raising=False)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     # Create a .env file in the cwd
-    (tmp_path / ".env").write_text("FOO=bar\n")
+    (tmp_path / ".env").write_text("FOO=bar\n")  # type: ignore[operator]
     result = _check_env_file()
     assert result.status == Status.OK
     assert ".env" in result.message
 
 
 def test_check_env_file_missing(
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AGENT33_MODE", raising=False)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     result = _check_env_file()
     assert result.status == Status.WARN
     assert result.fix_hint != ""
@@ -163,17 +157,6 @@ def test_check_ollama_installed_not_running() -> None:
     assert result.status == Status.WARN
     assert "not running" in result.message.lower()
     assert result.auto_fixable is True
-
-
-def test_check_llm_config_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setenv("DEFAULT_MODEL", "openrouter/auto")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    result = _check_llm_config()
-    assert result.status == Status.OK
-    assert "OpenRouter" in result.message
-    assert "openrouter/auto" in result.message
 
 
 def test_check_redis_no_url() -> None:
@@ -215,14 +198,14 @@ def test_check_database_other_url() -> None:
 
 
 def test_check_pack_workspace_with_manifests(
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     packs_dir = tmp_path / "packs"
     pack_dir = packs_dir / "demo-pack"
     pack_dir.mkdir(parents=True)
     (pack_dir / "PACK.yaml").write_text("name: demo-pack\nversion: '1.0.0'\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
     monkeypatch.delenv("PACK_MARKETPLACE_REMOTE_SOURCES", raising=False)
 
@@ -232,12 +215,12 @@ def test_check_pack_workspace_with_manifests(
 
 
 def test_check_pack_workspace_invalid_remote_sources_warns(
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     monkeypatch.setenv("PACK_DEFINITIONS_DIR", str(packs_dir))
     monkeypatch.setenv("PACK_MARKETPLACE_REMOTE_SOURCES", "{bad json")
 
@@ -289,8 +272,6 @@ def test_check_pack_health_api_invalid_json_warns(monkeypatch: pytest.MonkeyPatc
 
 
 def test_check_llm_config_with_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     result = _check_llm_config()
@@ -299,8 +280,6 @@ def test_check_llm_config_with_openai_key(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_check_llm_config_with_anthropic_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     result = _check_llm_config()
@@ -309,19 +288,17 @@ def test_check_llm_config_with_anthropic_key(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_check_llm_config_ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b")
     with patch("urllib.request.urlopen"):
         result = _check_llm_config()
     assert result.status == Status.OK
     assert "ollama" in result.message.lower()
+    assert "llama3.2:3b" in result.message
 
 
 def test_check_llm_config_no_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with patch("urllib.request.urlopen", side_effect=Exception("no ollama")):
