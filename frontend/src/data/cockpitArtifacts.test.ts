@@ -4,6 +4,7 @@ import { ARTIFACT_DRAWER_SECTION_IDS } from "./artifactDrawerSections";
 import {
   COCKPIT_ARTIFACT_KINDS,
   buildCockpitArtifacts,
+  detectOutcomeCompletion,
   getCockpitArtifactsByKind,
   getCockpitArtifactsForWorkspace
 } from "./cockpitArtifacts";
@@ -123,6 +124,142 @@ describe("cockpit artifact view models", () => {
       title: "Blocked with required action",
       status: "blocked",
       relatedTaskIds: ["quality-merge"]
+    });
+  });
+
+  it("detects PR-ready completion from completed task context", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "feature-pr",
+          title: "Prepare PR handoff",
+          outcome: "PR-ready implementation with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      title: "PR ready",
+      status: "done",
+      reviewState: "approved",
+      nextActionLabel: "Open the PR-ready handoff"
+    });
+  });
+
+  it("prioritizes PR-ready completion across all completed tasks", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "package-first",
+          title: "Collect artifacts",
+          outcome: "Implementation notes and validation logs collected.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        },
+        {
+          id: "pr-second",
+          title: "Prepare pull request",
+          outcome: "Pull request is ready with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      title: "PR ready",
+      task: expect.objectContaining({ id: "pr-second" })
+    });
+  });
+
+
+  it("detects package-ready completion when no PR signal exists", () => {
+    const workspace = getWorkspaceSession("research-build");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "research-package",
+          title: "Review research handoff",
+          outcome: "Approved direction for the next build slice.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "package-ready",
+      title: "Artifact package ready",
+      status: "done",
+      reviewState: "approved",
+      nextActionLabel: "Review the completed handoff"
+    });
+  });
+
+  it("prioritizes blocked outcomes over completed work", () => {
+    const workspace = getWorkspaceSession("test-review");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "complete-package",
+          title: "Package artifacts",
+          outcome: "Artifact package collected.",
+          status: "complete",
+          ownerRole: "Builder"
+        },
+        {
+          id: "blocked-merge",
+          title: "Prepare merge handoff",
+          outcome: "Merge-safe summary and final status.",
+          status: "blocked",
+          ownerRole: "Coordinator"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "blocked",
+      title: "Blocked with required action",
+      status: "blocked",
+      task: expect.objectContaining({ id: "blocked-merge" })
+    });
+  });
+
+  it("keeps not-run outcomes explicit when no task is complete", () => {
+    const workspace = getWorkspaceSession("solo-builder");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "draft-plan",
+          title: "Draft the first workflow",
+          outcome: "Recommended starter plan with safe next action.",
+          status: "running",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "not-run",
+      title: "No PR or artifact package linked",
+      status: "not-available",
+      reviewState: "not-started"
     });
   });
 

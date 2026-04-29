@@ -34,7 +34,7 @@ describe("ArtifactReviewDrawer", () => {
     await user.keyboard("{End}");
     expect(screen.getByRole("tab", { name: "Outcome" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Done state")).toBeInTheDocument();
-    expect(screen.getByText("Blocked with required action")).toBeInTheDocument();
+    expect(screen.getAllByText("Blocked with required action")).toHaveLength(2);
 
     await user.click(screen.getByRole("tab", { name: "Activity / Mailbox" }));
     expect(screen.getByText("Agent mailbox")).toBeInTheDocument();
@@ -54,5 +54,17 @@ describe("ArtifactReviewDrawer", () => {
     expect(screen.getByText("Needs review")).toBeInTheDocument();
     expect(screen.getByText("These items need an operator decision before AGENT33 continues.")).toBeInTheDocument();
     expect(screen.getByText("Next: User approval before commands, writes, or external changes")).toBeInTheDocument();
+  });
+
+  it("renders an explicit outcome handoff state", async () => {
+    const user = userEvent.setup();
+    render(<ArtifactReviewDrawer workspace={getWorkspaceSession("shipyard")} permissionModeId="pr-first" />);
+
+    await user.click(screen.getByRole("tab", { name: "Outcome" }));
+
+    expect(screen.getByRole("region", { name: "Outcome handoff" })).toBeInTheDocument();
+    expect(screen.getAllByText("Artifact package ready").length).toBeGreaterThan(0);
+    expect(screen.getByText("Next: Review the completed handoff")).toBeInTheDocument();
+    expect(screen.getByText(/1 linked task/)).toBeInTheDocument();
   });
 });
