@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agent33.packs.models import (
+    OutcomePackEntry,
     PackCompatibility,
     PackDependency,
     PackGovernance,
@@ -113,6 +114,10 @@ class PackManifest(BaseModel):
         default_factory=dict,
         description="Per-tool parameter defaults and policy overrides.",
     )
+    outcome_packs: list[OutcomePackEntry] = Field(
+        default_factory=list,
+        description="Starter/outcome pack manifests bundled with this skill pack.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -182,6 +187,15 @@ class PackManifest(BaseModel):
                 f"Tool config in pack '{self.name}' failed injection scan: {threats}. "
                 f"Review and sanitize the tool configuration before loading."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_outcome_pack_paths_unique(self) -> PackManifest:
+        """Ensure bundled outcome pack references do not collide."""
+        paths = [entry.path for entry in self.outcome_packs]
+        if len(paths) != len(set(paths)):
+            duplicates = sorted({path for path in paths if paths.count(path) > 1})
+            raise ValueError(f"Duplicate outcome pack paths in pack '{self.name}': {duplicates}")
         return self
 
 

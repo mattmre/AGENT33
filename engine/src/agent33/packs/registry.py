@@ -166,6 +166,7 @@ class PackRegistry:
             compatibility=manifest.compatibility,
             prompt_addenda=manifest.prompt_addenda,
             tool_config=manifest.tool_config,
+            outcome_packs=manifest.outcome_packs,
             installed_at=datetime.now(UTC),
             source="local",
             checksum=compute_pack_checksum(pack_dir),

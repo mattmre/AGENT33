@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path  # noqa: TC003 -- Pydantic needs Path at runtime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agent33.packs.provenance_models import PackProvenance  # noqa: TC001
 
@@ -32,6 +32,25 @@ class PackSkillEntry(BaseModel):
     path: str = Field(..., min_length=1, description="Relative path to skill dir/file")
     description: str = ""
     required: bool = True
+
+
+class OutcomePackEntry(BaseModel):
+    """An outcome/starter pack manifest bundled with a pack."""
+
+    path: str = Field(..., min_length=1, description="Relative path to outcome pack YAML")
+    required: bool = True
+    description: str = ""
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        if "\\" in value:
+            raise ValueError("Outcome pack path must use forward slashes")
+        if value.startswith("/") or ":" in value:
+            raise ValueError("Outcome pack path must be relative")
+        if any(part in {"", ".", ".."} for part in value.split("/")):
+            raise ValueError("Outcome pack path must not contain traversal segments")
+        return value
 
 
 class PackDependency(BaseModel):
@@ -114,6 +133,7 @@ class InstalledPack(BaseModel):
     # Improvement pack sections (P-PACK v1)
     prompt_addenda: list[str] = Field(default_factory=list)
     tool_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    outcome_packs: list[OutcomePackEntry] = Field(default_factory=list)
 
     # Installation metadata
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
