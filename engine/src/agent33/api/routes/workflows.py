@@ -37,6 +37,7 @@ _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 _scheduler: WorkflowScheduler | None = None
 _ws_manager: Any | None = None
 _workflow_state_service: WorkflowStateService | None = None
+_workflow_run_archive_service: Any | None = None
 
 
 def get_workflow_registry() -> dict[str, WorkflowDefinition]:
@@ -59,6 +60,17 @@ def set_workflow_state_service(service: WorkflowStateService | None) -> None:
     _workflow_state_service = service
 
 
+def get_workflow_run_archive_service() -> Any | None:
+    """Expose the shared workflow run archive service for route composition."""
+    return _workflow_run_archive_service
+
+
+def set_workflow_run_archive_service(service: Any | None) -> None:
+    """Register the shared workflow run archive service for route access."""
+    global _workflow_run_archive_service
+    _workflow_run_archive_service = service
+
+
 def reset_workflow_state() -> None:
     """Clear workflow definitions and execution history."""
     if _workflow_state_service is not None:
@@ -77,6 +89,48 @@ def set_ws_manager(manager: Any | None) -> None:
     """Register the shared workflow WS manager for non-request code paths."""
     global _ws_manager
     _ws_manager = manager
+
+
+def _start_workflow_run_archive(
+    *,
+    run_id: str,
+    workflow_name: str,
+    trigger_type: str,
+    requested_inputs: dict[str, Any],
+    owner_subject: str | None,
+    tenant_id: str,
+    job_id: str | None = None,
+) -> None:
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        return
+    archive_service.start_run(
+        run_id,
+        workflow_name,
+        trigger_type=trigger_type,
+        owner_subject=owner_subject,
+        tenant_id=tenant_id,
+        metadata={
+            "requested_inputs": requested_inputs,
+            "job_id": job_id,
+        },
+    )
+
+
+def _record_workflow_run_archive(
+    *,
+    run_id: str,
+    history_record: WorkflowExecutionRecord,
+    result_payload: dict[str, Any] | None,
+) -> None:
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        return
+    archive_service.record_result(
+        run_id,
+        result_payload or {},
+        history_record=history_record.model_dump(mode="json"),
+    )
 
 
 class WorkflowCreateRequest(BaseModel):
@@ -147,6 +201,29 @@ class WorkflowHistoryEntry(BaseModel):
     step_statuses: dict[str, str] | None = None  # Optional step-level status map
 
 
+class WorkflowArchivedArtifact(BaseModel):
+    """Persisted artifact metadata for one workflow run."""
+
+    name: str
+    relative_path: str
+    size_bytes: int
+    mime_type: str
+    source: str
+    step_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    preview: str = ""
+
+
+class WorkflowArchivedRun(BaseModel):
+    """Archived workflow run detail payload."""
+
+    run: dict[str, Any]
+    history: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    artifacts: list[WorkflowArchivedArtifact] = Field(default_factory=list)
+
+
 def get_request_tenant_context(request: Request) -> tuple[str, list[str]]:
     """Return the current request tenant and scopes."""
     user = getattr(request.state, "user", None)
@@ -179,6 +256,33 @@ def execution_history_entry_visible(
         requester_tenant_id=requester_tenant_id,
         requester_scopes=requester_scopes,
     )
+
+
+def _get_archived_run_detail(run_id: str) -> dict[str, Any] | None:
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        return None
+    try:
+        return archive_service.get_run(run_id)
+    except ValueError:
+        return None
+
+
+def _assert_archived_run_access(run_id: str, request: Request) -> dict[str, Any]:
+    archived = _get_archived_run_detail(run_id)
+    if archived is None:
+        raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+    run_payload = archived.get("run", {})
+    if not isinstance(run_payload, dict):
+        raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+    tenant_id, scopes = get_request_tenant_context(request)
+    if not tenant_access_allowed(
+        str(run_payload.get("tenant_id", "")),
+        requester_tenant_id=tenant_id,
+        requester_scopes=scopes,
+    ):
+        raise HTTPException(status_code=404, detail=f"Workflow run '{run_id}' not found")
+    return archived
 
 
 @router.get("/", dependencies=[require_scope("workflows:read")])
@@ -276,6 +380,66 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
     layout = compute_dag_layout(workflow, run_state=run_state)
     layout.run_id = run_id
     return layout.model_dump(mode="json")
+
+
+@router.get("/runs/{run_id}", dependencies=[require_scope("workflows:read")])
+async def get_archived_run(run_id: str, request: Request) -> WorkflowArchivedRun:
+    """Return archived replay and artifact detail for one workflow run."""
+    archived = _assert_archived_run_access(run_id, request)
+    return WorkflowArchivedRun.model_validate(archived)
+
+
+@router.get("/runs/{run_id}/events", dependencies=[require_scope("workflows:read")])
+async def list_archived_run_events(
+    run_id: str,
+    request: Request,
+    offset: int = 0,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Return archived workflow events for one run."""
+    _assert_archived_run_access(run_id, request)
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        raise HTTPException(status_code=503, detail="Workflow run archive service not available")
+    return archive_service.list_events(run_id, offset=offset, limit=limit)
+
+
+@router.get("/runs/{run_id}/artifacts", dependencies=[require_scope("workflows:read")])
+async def list_archived_run_artifacts(
+    run_id: str,
+    request: Request,
+) -> list[WorkflowArchivedArtifact]:
+    """Return archived artifact metadata for one workflow run."""
+    _assert_archived_run_access(run_id, request)
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        raise HTTPException(status_code=503, detail="Workflow run archive service not available")
+    artifacts = archive_service.list_artifacts(run_id)
+    return [WorkflowArchivedArtifact.model_validate(artifact) for artifact in artifacts]
+
+
+@router.get("/runs/{run_id}/artifacts/{artifact_path:path}", dependencies=[require_scope("workflows:read")])
+async def get_archived_run_artifact(
+    run_id: str,
+    artifact_path: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Return one archived text artifact payload for a workflow run."""
+    _assert_archived_run_access(run_id, request)
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is None:
+        raise HTTPException(status_code=503, detail="Workflow run archive service not available")
+    content = archive_service.get_artifact(run_id, artifact_path)
+    if content is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Artifact '{artifact_path}' not found for workflow run '{run_id}'",
+        )
+    return {
+        "run_id": run_id,
+        "artifact_path": artifact_path,
+        "content": content,
+    }
 
 
 # -- Dynamic workflow routes (must be after static routes like /schedules) -----
@@ -491,6 +655,15 @@ async def _execute_single(
 ) -> dict[str, Any]:
     """Execute a workflow once and return the result."""
     run_id = await _allocate_run_id(run_id, ws_manager=ws_manager)
+    _start_workflow_run_archive(
+        run_id=run_id,
+        workflow_name=name,
+        trigger_type=trigger_type,
+        requested_inputs=dict(request.inputs),
+        owner_subject=owner_subject,
+        tenant_id=tenant_id,
+        job_id=job_id,
+    )
 
     # Optionally override dry_run
     if request.dry_run:
@@ -546,41 +719,53 @@ async def _execute_single(
                 )
             )
         # Record failure in history
-        get_execution_history().append(
-            WorkflowExecutionRecord(
-                run_id=run_id,
-                workflow_name=name,
-                trigger_type=trigger_type,
-                status="failed",
-                duration_ms=duration_ms,
-                timestamp=start_ts,
-                error=str(exc),
-                job_id=job_id,
-                step_statuses=None,
-                tenant_id=tenant_id,
-            ).model_dump(mode="json")
+        failed_record = WorkflowExecutionRecord(
+            run_id=run_id,
+            workflow_name=name,
+            trigger_type=trigger_type,
+            status="failed",
+            duration_ms=duration_ms,
+            timestamp=start_ts,
+            error=str(exc),
+            job_id=job_id,
+            step_statuses=None,
+            tenant_id=tenant_id,
         )
+        get_execution_history().append(failed_record.model_dump(mode="json"))
         _persist_workflow_state()
+        _record_workflow_run_archive(
+            run_id=run_id,
+            history_record=failed_record,
+            result_payload={
+                "run_id": run_id,
+                "workflow_name": name,
+                "status": "failed",
+                "duration_ms": round(duration_ms, 2),
+                "error": str(exc),
+                "steps_executed": [],
+                "step_results": [],
+                "outputs": {},
+            },
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Extract step statuses from result
     step_statuses = {sr.step_id: sr.status for sr in result.step_results}
 
     # Record success in history
-    get_execution_history().append(
-        WorkflowExecutionRecord(
-            run_id=run_id,
-            workflow_name=name,
-            trigger_type=trigger_type,
-            status=result.status.value,
-            duration_ms=result.duration_ms,
-            timestamp=start_ts,
-            error=error,
-            job_id=job_id,
-            step_statuses=step_statuses,
-            tenant_id=tenant_id,
-        ).model_dump(mode="json")
+    success_record = WorkflowExecutionRecord(
+        run_id=run_id,
+        workflow_name=name,
+        trigger_type=trigger_type,
+        status=result.status.value,
+        duration_ms=result.duration_ms,
+        timestamp=start_ts,
+        error=error,
+        job_id=job_id,
+        step_statuses=step_statuses,
+        tenant_id=tenant_id,
     )
+    get_execution_history().append(success_record.model_dump(mode="json"))
     _persist_workflow_state()
 
     logger.info(
@@ -594,6 +779,11 @@ async def _execute_single(
     response = result.model_dump()
     response["run_id"] = run_id
     response["workflow_name"] = name
+    _record_workflow_run_archive(
+        run_id=run_id,
+        history_record=success_record,
+        result_payload=response,
+    )
     return response
 
 
@@ -663,7 +853,11 @@ async def _execute_repeated_or_autonomous(
 async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None) -> str:
     """Return a unique workflow run identifier, honoring caller-supplied values."""
     if run_id is not None:
-        if await _run_id_exists(run_id, ws_manager=ws_manager):
+        try:
+            exists = await _run_id_exists(run_id, ws_manager=ws_manager)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if exists:
             raise HTTPException(
                 status_code=409,
                 detail=f"Workflow run '{run_id}' already exists",
@@ -681,6 +875,9 @@ async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
     for entry in get_execution_history():
         if normalize_execution_record(entry).run_id == run_id:
             return True
+    archive_service = get_workflow_run_archive_service()
+    if archive_service is not None and archive_service.has_run(run_id):
+        return True
     return ws_manager is not None and await ws_manager.has_run(run_id)
 
 

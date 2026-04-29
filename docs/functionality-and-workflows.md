@@ -45,6 +45,7 @@ Routers mounted:
 Persistent (database/backing service):
 - `memory_records` via `LongTermMemory` (PostgreSQL + pgvector)
 - Workflow registry and execution history (`api/routes/workflows.py`) via `OrchestrationStateStore` when `orchestration_state_store_path` is configured
+- Workflow run archives, replay events, and extracted artifacts (`workflows/run_archive.py`) via the file-backed archive under `workflow_run_archive_dir`
 - Review records (`review/service.py`) via `OrchestrationStateStore` when `orchestration_state_store_path` is configured
 - Trace/failure records (`observability/trace_collector.py`) via `OrchestrationStateStore`
 - Autonomy budgets/enforcers/escalations (`autonomy/service.py`) via `OrchestrationStateStore`
@@ -58,6 +59,7 @@ Persistent (database/backing service):
 In-memory only (lost on restart):
 - Evaluation runs/baselines/regressions (`evaluation/service.py` + recorder)
 - Auth users and API keys (`api/routes/auth.py`, `security/auth.py`)
+- Live workflow WebSocket snapshots/queues (`workflows/ws_manager.py`) before they are flushed into the run archive
 
 ## 4. Workflow Lifecycles
 

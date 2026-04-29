@@ -62,6 +62,8 @@ async def get_workflow_graph(
     if not used_live_overlay:
         execution_history = workflows.get_execution_history()
         tenant_id, scopes = workflows.get_request_tenant_context(request)
+        target_entry: dict[str, Any] | None = None
+        recent_executions: list[dict[str, Any]] = []
         if execution_history:
             recent_executions = [
                 entry
@@ -73,19 +75,50 @@ async def get_workflow_graph(
                     requester_scopes=scopes,
                 )
             ]
-            if recent_executions:
-                most_recent = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
-                step_statuses = most_recent.get("step_statuses")
-                if step_statuses:
-                    execution_status = step_statuses
-                else:
-                    workflow_status = most_recent.get("status")
-                    if workflow_status == "success":
-                        for step in workflow.steps:
-                            execution_status[step.id] = "success"
-                    elif workflow_status == "failed":
-                        for step in workflow.steps:
-                            execution_status[step.id] = "failed"
+            if run_id:
+                target_entry = next(
+                    (
+                        entry
+                        for entry in recent_executions
+                        if str(entry.get("run_id", "")).strip() == run_id
+                    ),
+                    None,
+                )
+            elif recent_executions:
+                target_entry = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
+
+        if target_entry is None and run_id:
+            archive_service = workflows.get_workflow_run_archive_service()
+            archived = archive_service.get_run(run_id) if archive_service is not None else None
+            if isinstance(archived, dict):
+                run_payload = archived.get("run", {})
+                history_payload = archived.get("history", {})
+                if (
+                    isinstance(run_payload, dict)
+                    and str(run_payload.get("workflow_name", "")).strip() == workflow_id
+                    and workflows.tenant_access_allowed(
+                        str(run_payload.get("tenant_id", "")),
+                        requester_tenant_id=tenant_id,
+                        requester_scopes=scopes,
+                    )
+                    and isinstance(history_payload, dict)
+                ):
+                    target_entry = history_payload
+        if target_entry is None and recent_executions:
+            target_entry = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
+
+        if target_entry is not None:
+            step_statuses = target_entry.get("step_statuses")
+            if step_statuses:
+                execution_status = step_statuses
+            else:
+                workflow_status = target_entry.get("status")
+                if workflow_status == "success":
+                    for step in workflow.steps:
+                        execution_status[step.id] = "success"
+                elif workflow_status == "failed":
+                    for step in workflow.steps:
+                        execution_status[step.id] = "failed"
 
     try:
         graph = generate_workflow_graph(workflow, execution_status)

@@ -78,6 +78,7 @@ class WorkflowWSManager:
         heartbeat_interval_seconds: float = 30.0,
         sse_queue_maxsize: int = 100,
         sse_replay_buffer_size: int = 200,
+        archive_service: Any | None = None,
     ) -> None:
         self._subscriptions: dict[str, set[Any]] = {}
         self._reverse: dict[Any, set[str]] = {}
@@ -89,6 +90,11 @@ class WorkflowWSManager:
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
         self.sse_queue_maxsize = max(1, sse_queue_maxsize)
         self.sse_replay_buffer_size = max(1, sse_replay_buffer_size)
+        self._archive_service = archive_service
+
+    def set_archive_service(self, archive_service: Any | None) -> None:
+        """Attach an optional durable archive service for workflow events."""
+        self._archive_service = archive_service
 
     async def register_run(
         self,
@@ -264,7 +270,7 @@ class WorkflowWSManager:
             if not subscribers:
                 del self._sse_subscriptions[run_id]
 
-    async def publish_event(self, event: WorkflowEvent) -> None:
+    async def publish_event(self, event: WorkflowEvent) -> WorkflowEvent:
         """Update the run snapshot and fan out *event* to subscribers."""
         async with self._lock:
             snapshot = self._snapshots.setdefault(
@@ -284,13 +290,25 @@ class WorkflowWSManager:
             ).append(event)
             targets = list(self._subscriptions.get(event.run_id, set()))
             sse_targets = list(self._sse_subscriptions.get(event.run_id, set()))
+            archive_service = self._archive_service
+
+        if archive_service is not None:
+            try:
+                archive_service.append_event(event.run_id, event)
+            except Exception:
+                logger.warning(
+                    "workflow_archive_append_failed",
+                    run_id=event.run_id,
+                    event_type=event.event_type.value,
+                    exc_info=True,
+                )
 
         for queue in sse_targets:
             if not self._publish_sse_event(queue, event, run_id=event.run_id):
                 logger.warning("sse_event_dropped", run_id=event.run_id)
 
         if not targets:
-            return
+            return event
 
         payload = event.to_json()
         dead: list[Any] = []
@@ -304,6 +322,7 @@ class WorkflowWSManager:
                 for ws in dead:
                     self._remove_ws_unlocked(ws)
             logger.debug("ws_dead_connections_cleaned", count=len(dead))
+        return event
 
     async def build_sync_event(self, run_id: str) -> WorkflowEvent | None:
         """Build a transport-neutral snapshot event for *run_id*."""
