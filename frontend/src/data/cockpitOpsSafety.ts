@@ -5,7 +5,7 @@ import { getStatusLabel, getTimelineTone, summarizeOperations } from "../feature
 import type { CockpitActivityEvent, CockpitActivitySeverity } from "./cockpitActivity";
 import { createCockpitActivityEvent } from "./cockpitActivity";
 import type { CockpitArtifact, CockpitArtifactKind } from "./cockpitArtifacts";
-import { getCockpitArtifactsByKind, getCockpitArtifactsForWorkspace } from "./cockpitArtifacts";
+import { getCockpitArtifactsForWorkspace } from "./cockpitArtifacts";
 import type { PermissionModeDefinition, PermissionModeId } from "./permissionModes";
 import { DEFAULT_PERMISSION_MODE_ID, getPermissionMode } from "./permissionModes";
 import type { WorkspaceSessionId } from "./workspaces";
@@ -247,44 +247,51 @@ function createActivityEvent(record: CockpitOpsSafetyRecord): CockpitActivityEve
   });
 }
 
+function getArtifactsByKind(artifacts: ReadonlyArray<CockpitArtifact>): Readonly<Record<CockpitArtifactKind, CockpitArtifact>> {
+  return Object.fromEntries(artifacts.map((artifact) => [artifact.kind, artifact])) as Record<
+    CockpitArtifactKind,
+    CockpitArtifact
+  >;
+}
+
 function summarizeOpsSafety(
   records: ReadonlyArray<CockpitOpsSafetyRecord>,
   processes: ReadonlyArray<OperationsHubProcessSummary>
 ): CockpitOpsSafetySnapshot["summary"] {
-  const blocked = records.filter((record) => record.status === "blocked").length;
-  const needsReview = records.filter((record) => record.status === "needs-review").length;
-  const active = records.filter((record) => record.status === "watching").length;
-  const operationsSummary = summarizeOperations([...processes]);
+  const counts = records.reduce(
+    (current, record) => ({
+      blocked: current.blocked + (record.status === "blocked" ? 1 : 0),
+      needsReview: current.needsReview + (record.status === "needs-review" ? 1 : 0),
+      active: current.active + (record.status === "watching" ? 1 : 0)
+    }),
+    { blocked: 0, needsReview: 0, active: 0 }
+  );
 
-  if (blocked > 0) {
+  if (counts.blocked > 0) {
     return {
       totalRecords: records.length,
-      blocked,
-      needsReview,
-      active,
-      primaryMessage: `${blocked} cockpit safety item${blocked === 1 ? "" : "s"} blocked.`,
+      ...counts,
+      primaryMessage: `${counts.blocked} cockpit safety item${counts.blocked === 1 ? "" : "s"} blocked.`,
       nextAction: "Open the linked risk or approval artifact before continuing."
     };
   }
 
-  if (needsReview > 0) {
+  if (counts.needsReview > 0) {
     return {
       totalRecords: records.length,
-      blocked,
-      needsReview,
-      active,
-      primaryMessage: `${needsReview} cockpit item${needsReview === 1 ? "" : "s"} ${
-        needsReview === 1 ? "needs" : "need"
+      ...counts,
+      primaryMessage: `${counts.needsReview} cockpit item${counts.needsReview === 1 ? "" : "s"} ${
+        counts.needsReview === 1 ? "needs" : "need"
       } review.`,
       nextAction: "Review approval and process records in priority order."
     };
   }
 
+  const operationsSummary = summarizeOperations([...processes]);
+
   return {
     totalRecords: records.length,
-    blocked,
-    needsReview,
-    active,
+    ...counts,
     primaryMessage: operationsSummary.primaryMessage,
     nextAction: operationsSummary.nextAction
   };
@@ -293,10 +300,11 @@ function summarizeOpsSafety(
 export function buildCockpitOpsSafetySnapshot(input: CockpitOpsSafetyInput): CockpitOpsSafetySnapshot {
   assertWorkspaceId(input.workspaceId);
 
+  const artifacts = getCockpitArtifactsForWorkspace(input.workspaceId);
   const context: OpsSafetyBuildContext = {
     workspaceId: input.workspaceId,
     permissionMode: getPermissionMode(input.permissionModeId ?? DEFAULT_PERMISSION_MODE_ID),
-    artifactsByKind: getCockpitArtifactsByKind(input.workspaceId),
+    artifactsByKind: getArtifactsByKind(artifacts),
     approvals: input.approvals ?? [],
     processes: input.processes ?? [],
     now: input.now ?? Date.now()
@@ -314,7 +322,7 @@ export function buildCockpitOpsSafetySnapshot(input: CockpitOpsSafetyInput): Coc
     summary: summarizeOpsSafety(records, context.processes),
     records,
     activityEvents: records.map((record) => createActivityEvent(record)),
-    artifacts: getCockpitArtifactsForWorkspace(context.workspaceId)
+    artifacts
   };
 }
 
