@@ -1612,7 +1612,15 @@ button:disabled {
   gap: 1rem;
 }
 
+.cockpit-dashboard-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
 .cockpit-dashboard-hero h2,
+.cockpit-dashboard-section-heading h3,
 .artifact-review-drawer h2,
 .artifact-drawer-panel h3 {
   margin: 0;
@@ -1620,6 +1628,7 @@ button:disabled {
 }
 
 .cockpit-dashboard-hero p,
+.cockpit-dashboard-section-heading p,
 .artifact-review-drawer header p,
 .artifact-drawer-panel p {
   margin: 0.35rem 0 0;
@@ -1647,15 +1656,33 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.cockpit-dashboard-grid,
-.cockpit-dashboard-artifacts {
+.cockpit-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
+.cockpit-dashboard-timeline,
+.cockpit-dashboard-safety-signals {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cockpit-dashboard-artifacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.cockpit-dashboard-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+}
+
 .cockpit-dashboard-card,
 .cockpit-dashboard-artifacts article,
+.cockpit-safety-signal,
 .artifact-drawer-panel {
   display: grid;
   gap: 0.35rem;
@@ -1667,25 +1694,73 @@ button:disabled {
 
 .cockpit-dashboard-card strong,
 .cockpit-dashboard-artifacts strong,
+.cockpit-safety-signal strong,
 .artifact-drawer-panel strong {
   color: #e2f1f8;
 }
 
 .cockpit-dashboard-card p,
-.cockpit-dashboard-artifacts p {
+.cockpit-dashboard-artifacts p,
+.cockpit-safety-signal p {
   margin: 0;
   color: #9dc3cf;
   font-size: 0.82rem;
   line-height: 1.4;
 }
 
-.cockpit-dashboard-card button {
+.cockpit-dashboard-card button,
+.cockpit-dashboard-artifacts button {
   justify-self: start;
   border: 1px solid rgba(48, 213, 200, 0.32);
   border-radius: 999px;
   background: rgba(48, 213, 200, 0.1);
   color: #d9edf4;
   padding: 0.45rem 0.7rem;
+}
+
+.artifact-card-meta {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.artifact-card-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border-top: 1px solid rgba(125, 211, 252, 0.1);
+  padding-top: 0.3rem;
+}
+
+.artifact-card-meta dt,
+.cockpit-safety-signal small {
+  color: #6fa8b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.artifact-card-meta dd {
+  margin: 0;
+  color: #e2f1f8;
+  font-size: 0.76rem;
+  text-align: right;
+}
+
+.artifact-card-blocked,
+.signal-blocked {
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.artifact-card-needs-review,
+.signal-needs-review {
+  border-color: rgba(251, 191, 36, 0.38);
+}
+
+.artifact-card-running,
+.signal-watching {
+  border-color: rgba(48, 213, 200, 0.34);
 }
 
 .artifact-review-drawer {
