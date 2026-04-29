@@ -45,6 +45,13 @@ export interface CommandBlockInput {
   readonly nextActionLabel?: string;
 }
 
+export interface CommandBlockTaskSnapshot {
+  readonly workspaceId: WorkspaceSessionId;
+  readonly relatedArtifactId: string;
+  readonly timestampLabel: string;
+  readonly tasks: ReadonlyArray<WorkspaceTaskCard>;
+}
+
 type CommandBackedTask = WorkspaceTaskCard & {
   readonly status: "running" | "blocked";
 };
@@ -139,6 +146,7 @@ function isCommandBackedTask(task: WorkspaceTaskCard): task is CommandBackedTask
 function createTemplateCommandBlock(
   workspaceId: WorkspaceSessionId,
   relatedArtifactId: string,
+  timestampLabel: string,
   task: CommandBackedTask
 ): CockpitCommandBlock {
   return createCockpitCommandBlock({
@@ -147,7 +155,7 @@ function createTemplateCommandBlock(
     commandLabel: `${task.ownerRole} lane: ${task.title}`,
     sourceRole: task.ownerRole,
     status: task.status === "blocked" ? "blocked" : "running",
-    timestampLabel: "Workspace template",
+    timestampLabel,
     redactionState: task.status === "blocked" ? "review-required" : "not-required",
     outputSummary: `${task.outcome} Command output has not been captured yet.`,
     relatedArtifactId,
@@ -160,25 +168,37 @@ export function getCommandBlocksForWorkspace(workspaceId: string): ReadonlyArray
 
   const board = getWorkspaceBoard(workspaceId);
   const commandArtifact = getCockpitArtifactsByKind(workspaceId).command;
-  const activeTasks = board.tasks.filter(isCommandBackedTask);
+
+  return buildCommandBlocksFromTasks({
+    workspaceId,
+    relatedArtifactId: commandArtifact.id,
+    timestampLabel: commandArtifact.timestampLabel,
+    tasks: board.tasks
+  });
+}
+
+export function buildCommandBlocksFromTasks(snapshot: CommandBlockTaskSnapshot): ReadonlyArray<CockpitCommandBlock> {
+  const activeTasks = snapshot.tasks.filter(isCommandBackedTask);
 
   if (activeTasks.length === 0) {
     return [
       createCockpitCommandBlock({
-        id: `${workspaceId}-command-empty`,
-        workspaceId,
+        id: `${snapshot.workspaceId}-command-empty`,
+        workspaceId: snapshot.workspaceId,
         commandLabel: "No command has run yet",
         sourceRole: "Operator",
         status: "not-run",
-        timestampLabel: commandArtifact.timestampLabel,
+        timestampLabel: snapshot.timestampLabel,
         redactionState: "not-required",
         outputSummary: "Command blocks will appear after a task starts running through a workflow or agent lane.",
-        relatedArtifactId: commandArtifact.id
+        relatedArtifactId: snapshot.relatedArtifactId
       })
     ];
   }
 
-  return activeTasks.map((task) => createTemplateCommandBlock(workspaceId, commandArtifact.id, task));
+  return activeTasks.map((task) =>
+    createTemplateCommandBlock(snapshot.workspaceId, snapshot.relatedArtifactId, snapshot.timestampLabel, task)
+  );
 }
 
 export function getCommandBlocksByArtifactId(

@@ -113,7 +113,7 @@ function createPlanArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact 
 }
 
 function createCommandArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const task = getFirstTaskByStatus(snapshot.board, "running");
+  const task = getFirstTaskByStatus(snapshot.board, "running") ?? getFirstTaskByStatus(snapshot.board, "blocked");
 
   if (!task) {
     return createArtifact(snapshot, "command", {
@@ -131,11 +131,11 @@ function createCommandArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifa
   return createArtifact(snapshot, "command", {
     title: task.title,
     summary: `${task.ownerRole} lane is expected to produce command/tool evidence: ${task.outcome}`,
-    status: "running",
-    reviewState: "in-progress",
+    status: task.status === "blocked" ? "blocked" : "running",
+    reviewState: task.status === "blocked" ? "blocked" : "in-progress",
     ownerRole: task.ownerRole,
     evidenceState: "template",
-    nextActionLabel: "Open command blocks when execution evidence is available",
+    nextActionLabel: task.status === "blocked" ? "Resolve the blocker before collecting command evidence" : "Open command blocks when execution evidence is available",
     relatedTaskIds: [task.id]
   });
 }

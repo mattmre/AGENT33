@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCommandBlocksFromTasks,
   createCockpitCommandBlock,
   formatCommandDuration,
   getCommandBlocksByArtifactId,
@@ -67,6 +68,7 @@ describe("cockpit command blocks", () => {
 
     expect(blocks.map((block) => block.relatedTaskId)).toEqual(["shipyard-scout", "shipyard-build"]);
     expect(blocks.every((block) => block.relatedArtifactId === "shipyard-command")).toBe(true);
+    expect(blocks.every((block) => block.timestampLabel === "Template")).toBe(true);
     expect(blocks.map((block) => block.sourceRole)).toEqual(["Scout", "Builder"]);
     expect(blocks.every((block) => block.status === "running")).toBe(true);
     expect(blocks.every((block) => block.redactionState === "not-required")).toBe(true);
@@ -96,21 +98,26 @@ describe("cockpit command blocks", () => {
   });
 
   it("returns an explicit not-run block when no task has execution evidence", () => {
-    const block = createCockpitCommandBlock({
-      id: "solo-empty-command",
+    const [block] = buildCommandBlocksFromTasks({
       workspaceId: "solo-builder",
-      commandLabel: "No command has run yet",
-      sourceRole: "Operator",
-      status: "not-run",
+      relatedArtifactId: "solo-builder-command",
       timestampLabel: "Default workspace",
-      redactionState: "not-required",
-      outputSummary: "Command blocks will appear after execution starts.",
-      relatedArtifactId: "solo-builder-command"
+      tasks: [
+        {
+          id: "completed-build",
+          title: "Completed build",
+          outcome: "Completed work should not become a running command block.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
     });
 
     expect(block).toMatchObject({
+      id: "solo-builder-command-empty",
       status: "not-run",
       exitLabel: "No exit code yet",
+      timestampLabel: "Default workspace",
       nextActionLabel: "Start a workflow to create command evidence"
     });
   });
