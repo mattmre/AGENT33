@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from agent33.api.route_approvals import APPROVAL_TOKEN_HEADER
 from agent33.main import app
 from agent33.security.auth import (
     _api_keys,
@@ -39,6 +40,34 @@ def invoker_client() -> TestClient:
     """Client with invoke scope only."""
     token = create_access_token("invoker-user", scopes=["agents:invoke"])
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture(autouse=True)
+def reset_tool_approval_service() -> None:
+    from agent33.api.routes.tool_approvals import _reset_tool_approval_service
+
+    _reset_tool_approval_service()
+    yield
+    _reset_tool_approval_service()
+
+
+def _approve_api_key_creation(client: TestClient, payload: dict[str, object]) -> str:
+    pending = client.post("/v1/auth/api-keys", json=payload)
+    assert pending.status_code == 428
+    approval_id = pending.json()["detail"]["approval_id"]
+
+    decision = client.post(
+        f"/v1/approvals/tools/{approval_id}/decision",
+        json={"decision": "approve"},
+    )
+    assert decision.status_code == 200
+
+    token_response = client.post(
+        f"/v1/approvals/tools/{approval_id}/token",
+        json={"token_preset": "single_use"},
+    )
+    assert token_response.status_code == 200
+    return token_response.json()["approval_token"]
 
 
 # --- Agent endpoint scope tests ---
@@ -168,10 +197,24 @@ class TestApiKeyOwnership:
         yield
         _api_keys.clear()
 
-    def test_admin_can_create_api_key(self, admin_client: TestClient) -> None:
+    def test_admin_create_api_key_requires_approval_token(self, admin_client: TestClient) -> None:
         resp = admin_client.post(
             "/v1/auth/api-keys",
             json={"subject": "test-user", "scopes": ["agents:read"]},
+        )
+        assert resp.status_code == 428
+        detail = resp.json()["detail"]
+        assert detail["approval_id"].startswith("APR-")
+        assert detail["approval_header"] == APPROVAL_TOKEN_HEADER
+
+    def test_admin_can_create_api_key(self, admin_client: TestClient) -> None:
+        payload = {"subject": "test-user", "scopes": ["agents:read"]}
+        approval_token = _approve_api_key_creation(admin_client, payload)
+
+        resp = admin_client.post(
+            "/v1/auth/api-keys",
+            json=payload,
+            headers={APPROVAL_TOKEN_HEADER: approval_token},
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -188,9 +231,12 @@ class TestApiKeyOwnership:
 
     def test_admin_can_revoke_any_key(self, admin_client: TestClient) -> None:
         # Create a key
+        payload = {"subject": "other-user", "scopes": []}
+        approval_token = _approve_api_key_creation(admin_client, payload)
         resp = admin_client.post(
             "/v1/auth/api-keys",
-            json={"subject": "other-user", "scopes": []},
+            json=payload,
+            headers={APPROVAL_TOKEN_HEADER: approval_token},
         )
         key_id = resp.json()["key_id"]
         # Admin can revoke it

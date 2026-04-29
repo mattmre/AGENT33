@@ -638,6 +638,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             state_store=orchestration_state_store,
         )
     app.state.approval_token_manager = approval_token_manager
+    tool_approvals.set_approval_token_manager(approval_token_manager)
 
     tool_governance = ToolGovernance(
         approval_service=tool_approval_service,
