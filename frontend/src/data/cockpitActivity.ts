@@ -58,7 +58,7 @@ export interface CockpitActivityEventInput {
   readonly nextActionLabel: string;
 }
 
-interface ActivityTaskSnapshot {
+export interface ActivityTaskSnapshot {
   readonly workspaceId: WorkspaceSessionId;
   readonly timestampLabel: string;
   readonly tasks: ReadonlyArray<WorkspaceTaskCard>;
@@ -258,23 +258,22 @@ function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTa
 
 export function buildActivityEventsFromTasks(snapshot: ActivityTaskSnapshot): ReadonlyArray<CockpitActivityEvent> {
   return snapshot.tasks.flatMap((task) => {
-    if (task.status === "todo") {
-      return [createDecisionEvent(snapshot, task)];
+    switch (task.status) {
+      case "todo":
+        return [createDecisionEvent(snapshot, task)];
+      case "running":
+        return [createHandoffEvent(snapshot, task)];
+      case "review":
+        return createReviewEvents(snapshot, task);
+      case "blocked":
+        return [createBlockerEvent(snapshot, task)];
+      case "complete":
+        return [createValidationEvent(snapshot, task)];
+      default: {
+        const unexpectedStatus: never = task.status;
+        throw new Error(`Unhandled workspace task status: ${unexpectedStatus}`);
+      }
     }
-
-    if (task.status === "running") {
-      return [createHandoffEvent(snapshot, task)];
-    }
-
-    if (task.status === "review") {
-      return createReviewEvents(snapshot, task);
-    }
-
-    if (task.status === "blocked") {
-      return [createBlockerEvent(snapshot, task)];
-    }
-
-    return [createValidationEvent(snapshot, task)];
   });
 }
 
