@@ -84,7 +84,7 @@ function getDefaultDecisionState(type: CockpitActivityEventType): CockpitActivit
   }
 
   if (type === "validation") {
-    return "approved";
+    return "pending";
   }
 
   return "not-required";
@@ -173,63 +173,68 @@ function createHandoffEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskC
   });
 }
 
-function createReviewEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
-  const artifact = findArtifactForTask(snapshot.artifacts, task, ["test", "approval"]);
-
-  return createCockpitActivityEvent({
-    id: `${snapshot.workspaceId}-activity-review-${task.id}`,
-    workspaceId: snapshot.workspaceId,
-    type: "review-comment",
-    severity: "attention",
-    senderRole: task.ownerRole,
-    recipientRole: "Reviewer",
-    title: task.title,
-    summary: task.outcome,
-    timestampLabel: snapshot.timestampLabel,
-    decisionState: "pending",
-    relatedTaskId: task.id,
-    relatedArtifactId: artifact?.id,
-    nextActionLabel: "Review and approve or request changes"
-  });
-}
-
-function createBlockerEvents(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): ReadonlyArray<CockpitActivityEvent> {
-  const riskArtifact = findArtifactForTask(snapshot.artifacts, task, ["risk", "outcome"]);
-  const approvalArtifact = findArtifactForTask(snapshot.artifacts, task, ["approval"]);
-  const commandBlockId = getCommandBlockIdForTask(snapshot.commandBlocks, task.id);
+function createReviewEvents(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): ReadonlyArray<CockpitActivityEvent> {
+  const artifact = findArtifactForTask(snapshot.artifacts, task, ["test"]);
+  const approvalArtifact = snapshot.artifacts.find(
+    (candidate) => candidate.kind === "approval" && candidate.relatedTaskIds.includes(task.id)
+  );
 
   return [
     createCockpitActivityEvent({
-      id: `${snapshot.workspaceId}-activity-blocker-${task.id}`,
+      id: `${snapshot.workspaceId}-activity-review-${task.id}`,
       workspaceId: snapshot.workspaceId,
-      type: "blocker",
-      severity: "blocked",
+      type: "review-comment",
+      severity: "attention",
       senderRole: task.ownerRole,
-      recipientRole: "Operator",
+      recipientRole: "Reviewer",
       title: task.title,
       summary: task.outcome,
       timestampLabel: snapshot.timestampLabel,
+      decisionState: "pending",
       relatedTaskId: task.id,
-      relatedArtifactId: riskArtifact?.id,
-      relatedCommandBlockId: commandBlockId,
-      nextActionLabel: "Resolve this blocker"
+      relatedArtifactId: artifact?.id,
+      nextActionLabel: "Review and approve or request changes"
     }),
-    createCockpitActivityEvent({
-      id: `${snapshot.workspaceId}-activity-approval-${task.id}`,
-      workspaceId: snapshot.workspaceId,
-      type: "approval",
-      severity: "attention",
-      senderRole: task.ownerRole,
-      recipientRole: "Operator",
-      title: `Approval needed: ${task.title}`,
-      summary: task.outcome,
-      timestampLabel: snapshot.timestampLabel,
-      relatedTaskId: task.id,
-      relatedArtifactId: approvalArtifact?.id,
-      relatedCommandBlockId: commandBlockId,
-      nextActionLabel: "Approve, reject, or ask for a safer route"
-    })
+    ...(approvalArtifact
+      ? [
+          createCockpitActivityEvent({
+            id: `${snapshot.workspaceId}-activity-approval-${task.id}`,
+            workspaceId: snapshot.workspaceId,
+            type: "approval",
+            severity: "attention",
+            senderRole: task.ownerRole,
+            recipientRole: "Operator",
+            title: `Approval requested: ${task.title}`,
+            summary: task.outcome,
+            timestampLabel: snapshot.timestampLabel,
+            relatedTaskId: task.id,
+            relatedArtifactId: approvalArtifact.id,
+            nextActionLabel: "Approve, reject, or request changes"
+          })
+        ]
+      : [])
   ];
+}
+
+function createBlockerEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
+  const riskArtifact = findArtifactForTask(snapshot.artifacts, task, ["risk", "outcome"]);
+  const commandBlockId = getCommandBlockIdForTask(snapshot.commandBlocks, task.id);
+
+  return createCockpitActivityEvent({
+    id: `${snapshot.workspaceId}-activity-blocker-${task.id}`,
+    workspaceId: snapshot.workspaceId,
+    type: "blocker",
+    severity: "blocked",
+    senderRole: task.ownerRole,
+    recipientRole: "Operator",
+    title: task.title,
+    summary: task.outcome,
+    timestampLabel: snapshot.timestampLabel,
+    relatedTaskId: task.id,
+    relatedArtifactId: riskArtifact?.id,
+    relatedCommandBlockId: commandBlockId,
+    nextActionLabel: "Resolve this blocker before approval can proceed"
+  });
 }
 
 function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
@@ -262,11 +267,11 @@ export function buildActivityEventsFromTasks(snapshot: ActivityTaskSnapshot): Re
     }
 
     if (task.status === "review") {
-      return [createReviewEvent(snapshot, task)];
+      return createReviewEvents(snapshot, task);
     }
 
     if (task.status === "blocked") {
-      return createBlockerEvents(snapshot, task);
+      return [createBlockerEvent(snapshot, task)];
     }
 
     return [createValidationEvent(snapshot, task)];

@@ -40,12 +40,14 @@ describe("cockpit activity events", () => {
 
   it("maps workspace tasks into decision, handoff, review, blocker, approval, and validation events", () => {
     const eventTypes = getActivityEventsForWorkspace("test-review").map((event) => event.type);
+    const researchEventTypes = getActivityEventsForWorkspace("research-build").map((event) => event.type);
 
-    expect(eventTypes).toEqual(["decision", "handoff", "review-comment", "blocker", "approval"]);
-    expect(getActivityEventsForWorkspace("research-build").map((event) => event.type)).toContain("validation");
+    expect(eventTypes).toEqual(["decision", "handoff", "review-comment", "blocker"]);
+    expect(researchEventTypes).toContain("approval");
+    expect(researchEventTypes).toContain("validation");
   });
 
-  it("links blocked activity to blocker and approval artifacts", () => {
+  it("links blocked activity to blocker artifacts without implying approval", () => {
     const events = getActivityEventsForWorkspace("test-review");
 
     expect(getActivityEventsByTaskId(events, "quality-merge")).toEqual([
@@ -53,13 +55,20 @@ describe("cockpit activity events", () => {
         type: "blocker",
         severity: "blocked",
         decisionState: "blocked",
-        relatedArtifactId: "test-review-risk"
-      }),
+        relatedArtifactId: "test-review-risk",
+        nextActionLabel: "Resolve this blocker before approval can proceed"
+      })
+    ]);
+  });
+
+  it("links approval events to review gates instead of blocked tasks", () => {
+    const events = getActivityEventsForWorkspace("research-build");
+
+    expect(getActivityEventsByType(events, "approval")).toEqual([
       expect.objectContaining({
-        type: "approval",
-        severity: "attention",
-        decisionState: "pending",
-        relatedArtifactId: "test-review-approval"
+        relatedTaskId: "research-convert",
+        relatedArtifactId: "research-build-approval",
+        decisionState: "pending"
       })
     ]);
   });
@@ -99,6 +108,17 @@ describe("cockpit activity events", () => {
       type: "decision",
       relatedArtifactId: "solo-builder-plan",
       decisionState: "pending"
+    });
+  });
+
+  it("keeps completed validation handoffs pending operator review", () => {
+    const event = getActivityEventsByTaskId(getActivityEventsForWorkspace("shipyard"), "shipyard-log")[0];
+
+    expect(event).toMatchObject({
+      type: "validation",
+      severity: "success",
+      decisionState: "pending",
+      relatedArtifactId: "shipyard-outcome"
     });
   });
 
