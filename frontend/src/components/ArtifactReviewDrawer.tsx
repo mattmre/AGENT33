@@ -187,9 +187,26 @@ export function ArtifactReviewDrawer({
               <article key={block.id}>
                 <strong>{block.commandLabel}</strong>
                 <p>{block.outputSummary}</p>
+                {block.failureSummary ? <p className="safety-record-next-action">Failure: {block.failureSummary}</p> : null}
                 <small>
                   {block.sourceRole} / {formatGateLabel(block.status)} / {block.exitLabel} / {block.durationLabel} /
                   redaction {formatGateLabel(block.redactionState)}
+                  {block.traceId ? ` / trace ${block.traceId}` : ""}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {activeArtifact?.validationItems && activeArtifact.validationItems.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Validation status evidence">
+            <h4>Validation status</h4>
+            {activeArtifact.validationItems.map((item) => (
+              <article key={`${activeArtifact.id}-${item.name}`}>
+                <strong>{item.name}</strong>
+                <p>{item.summary}</p>
+                <small>
+                  {formatGateLabel(item.status)}
+                  {item.durationLabel ? ` / ${item.durationLabel}` : ""}
                 </small>
               </article>
             ))}
@@ -202,7 +219,20 @@ export function ArtifactReviewDrawer({
               <article key={event.id}>
                 <strong>{event.title}</strong>
                 <p>{event.summary}</p>
+                {event.createdAtLabel || event.expiresAtLabel ? (
+                  <p className="safety-record-next-action">
+                    {[event.createdAtLabel, event.expiresAtLabel].filter(Boolean).join(" / ")}
+                  </p>
+                ) : null}
+                {event.validationDetails && event.validationDetails.length > 0 ? (
+                  <p className="safety-record-next-action">
+                    Validation: {event.validationDetails.map((item) => `${item.name} ${formatGateLabel(item.status)}`).join(", ")}
+                  </p>
+                ) : null}
                 <small>
+                  {event.isInterAgentHandoff
+                    ? `Mailbox handoff #${event.sequenceIndex ?? "?"} / `
+                    : ""}
                   {event.senderRole} to {event.recipientRole} / {formatGateLabel(event.type)} /{" "}
                   {formatGateLabel(event.decisionState)}
                 </small>
@@ -242,6 +272,8 @@ export function ArtifactReviewDrawer({
             <p className="safety-record-next-action">Next: {activeArtifact.nextActionLabel}</p>
             <small>
               {formatGateLabel(activeArtifact.status)} / {formatGateLabel(activeArtifact.reviewState)} /{" "}
+              {activeArtifact.outcomeState ? `${formatGateLabel(activeArtifact.outcomeState)} / ` : ""}
+              {activeArtifact.handoffState ? `${formatGateLabel(activeArtifact.handoffState)} / ` : ""}
               {activeArtifact.relatedTaskIds.length === 0
                 ? "No linked task yet"
                 : `${activeArtifact.relatedTaskIds.length} linked task${

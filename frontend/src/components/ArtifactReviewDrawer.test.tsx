@@ -30,6 +30,8 @@ describe("ArtifactReviewDrawer", () => {
     expect(screen.getByText(/source agent, status, duration, and redaction state/i)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Command block evidence" })).toBeInTheDocument();
     expect(screen.getByText("Builder lane: Run checks")).toBeInTheDocument();
+    expect(screen.getByText(/trace test-review-trace-quality-run/)).toBeInTheDocument();
+    expect(screen.getByText("Failure: Prepare merge handoff is blocked before command evidence can complete.")).toBeInTheDocument();
 
     await user.keyboard("{End}");
     expect(screen.getByRole("tab", { name: "Outcome" })).toHaveAttribute("aria-selected", "true");
@@ -41,6 +43,20 @@ describe("ArtifactReviewDrawer", () => {
     expect(screen.getByText("Quality Gate")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Activity evidence" })).toBeInTheDocument();
     expect(screen.getByText("Run checks")).toBeInTheDocument();
+    expect(screen.getByText(/Mailbox handoff #2/)).toBeInTheDocument();
+  });
+
+  it("shows validation status details in the tests section", async () => {
+    const user = userEvent.setup();
+    render(<ArtifactReviewDrawer workspace={getWorkspaceSession("research-build")} permissionModeId="ask" />);
+
+    await user.click(screen.getByRole("tab", { name: "Tests" }));
+
+    expect(screen.getByRole("region", { name: "Validation status evidence" })).toBeInTheDocument();
+    expect(screen.getByText("Scope checks")).toBeInTheDocument();
+    expect(screen.getByText("Automated validation")).toBeInTheDocument();
+    expect(screen.getByText("Reviewer decision")).toBeInTheDocument();
+    expect(screen.getAllByText(/skipped \/ Waiting/)).toHaveLength(2);
   });
 
   it("groups approval safety evidence by permission gate status", async () => {
@@ -65,6 +81,6 @@ describe("ArtifactReviewDrawer", () => {
     expect(screen.getByRole("region", { name: "Outcome handoff" })).toBeInTheDocument();
     expect(screen.getAllByText("Artifact package ready").length).toBeGreaterThan(0);
     expect(screen.getByText("Next: Review the completed handoff")).toBeInTheDocument();
-    expect(screen.getByText(/1 linked task/)).toBeInTheDocument();
+    expect(screen.getByText(/package ready \/ confirmed \/ 1 linked task/)).toBeInTheDocument();
   });
 });

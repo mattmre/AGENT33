@@ -37,6 +37,8 @@ export interface CockpitOpsSafetyRecord {
   readonly relatedArtifactId: string;
   readonly relatedArtifactKind: CockpitArtifactKind;
   readonly relatedActivityEventId: string;
+  readonly createdAtLabel?: string;
+  readonly expiresAtLabel?: string;
   readonly nextActionLabel: string;
 }
 
@@ -149,9 +151,54 @@ function getApprovalArtifactKind(priority: "high" | "medium" | "low"): CockpitAr
   return priority === "high" ? "risk" : "approval";
 }
 
+function formatRelativeHours(minutes: number): string {
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} h`;
+}
+
+function formatApprovalCreatedAtLabel(createdAt: string, now: number): string {
+  const timestamp = Date.parse(createdAt);
+  if (!Number.isFinite(timestamp)) {
+    return "Request time unknown";
+  }
+
+  const minutes = Math.max(0, Math.round((now - timestamp) / 60_000));
+  if (minutes === 0) {
+    return "Requested just now";
+  }
+  if (minutes < 60) {
+    return `Requested ${minutes} min ago`;
+  }
+  return `Requested ${formatRelativeHours(minutes)} ago`;
+}
+
+function formatApprovalExpiresAtLabel(expiresAt: string | null, now: number): string {
+  if (!expiresAt) {
+    return "No expiry recorded";
+  }
+
+  const timestamp = Date.parse(expiresAt);
+  if (!Number.isFinite(timestamp)) {
+    return "Expiry unknown";
+  }
+
+  const minutes = Math.round((timestamp - now) / 60_000);
+  if (minutes <= 0) {
+    return "Expired or expiring now";
+  }
+  if (minutes < 60) {
+    return `Expires in ${minutes} min`;
+  }
+  return `Expires in ${formatRelativeHours(minutes)}`;
+}
+
 function createApprovalRecords(context: OpsSafetyBuildContext): ReadonlyArray<CockpitOpsSafetyRecord> {
-  return buildAttentionQueue([...context.approvals], context.now).map((item) =>
-    createRecord(context, {
+  const approvalsById = new Map(context.approvals.map((approval) => [approval.approval_id, approval]));
+
+  return buildAttentionQueue([...context.approvals], context.now).map((item) => {
+    const approval = approvalsById.get(item.id);
+
+    return createRecord(context, {
       id: `${context.workspaceId}-ops-safety-approval-${item.id}`,
       kind: "tool-approval",
       status: item.priority === "high" ? "blocked" : "needs-review",
@@ -160,9 +207,11 @@ function createApprovalRecords(context: OpsSafetyBuildContext): ReadonlyArray<Co
       sourceLabel: "Safety attention queue",
       relatedArtifactKind: getApprovalArtifactKind(item.priority),
       relatedActivityEventId: `${context.workspaceId}-ops-safety-event-approval-${item.id}`,
+      createdAtLabel: approval ? formatApprovalCreatedAtLabel(approval.created_at, context.now) : undefined,
+      expiresAtLabel: approval ? formatApprovalExpiresAtLabel(approval.expires_at, context.now) : undefined,
       nextActionLabel: item.recommendedAction
-    })
-  );
+    });
+  });
 }
 
 function getProcessStatus(tone: OperationsTimelineTone, status: string): CockpitOpsSafetyRecordStatus {
@@ -234,6 +283,8 @@ function createActivityEvent(record: CockpitOpsSafetyRecord): CockpitActivityEve
     title: record.title,
     summary: record.summary,
     timestampLabel: record.sourceLabel,
+    createdAtLabel: record.createdAtLabel,
+    expiresAtLabel: record.expiresAtLabel,
     decisionState:
       record.status === "blocked"
         ? "blocked"

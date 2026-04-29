@@ -1,5 +1,5 @@
-import type { CockpitArtifact, CockpitArtifactOwnerRole } from "./cockpitArtifacts";
-import { getCockpitArtifactsForWorkspace } from "./cockpitArtifacts";
+import type { CockpitArtifact, CockpitArtifactOwnerRole, CockpitValidationItem } from "./cockpitArtifacts";
+import { getCockpitArtifactsForWorkspace, getValidationItemsForTask } from "./cockpitArtifacts";
 import type { CockpitCommandBlock } from "./commandBlocks";
 import { getCommandBlocksByTaskId, getCommandBlocksForWorkspace } from "./commandBlocks";
 import type { WorkspaceTaskCard } from "./workspaceBoard";
@@ -34,6 +34,11 @@ export interface CockpitActivityEvent {
   readonly title: string;
   readonly summary: string;
   readonly timestampLabel: string;
+  readonly sequenceIndex?: number;
+  readonly isInterAgentHandoff?: boolean;
+  readonly createdAtLabel?: string;
+  readonly expiresAtLabel?: string;
+  readonly validationDetails?: ReadonlyArray<CockpitValidationItem>;
   readonly decisionState: CockpitActivityDecisionState;
   readonly relatedTaskId?: string;
   readonly relatedArtifactId?: string;
@@ -51,6 +56,11 @@ export interface CockpitActivityEventInput {
   readonly title: string;
   readonly summary: string;
   readonly timestampLabel: string;
+  readonly sequenceIndex?: number;
+  readonly isInterAgentHandoff?: boolean;
+  readonly createdAtLabel?: string;
+  readonly expiresAtLabel?: string;
+  readonly validationDetails?: ReadonlyArray<CockpitValidationItem>;
   readonly decisionState?: CockpitActivityDecisionState;
   readonly relatedTaskId?: string;
   readonly relatedArtifactId?: string;
@@ -103,6 +113,11 @@ export function createCockpitActivityEvent(input: CockpitActivityEventInput): Co
     title: input.title,
     summary: input.summary,
     timestampLabel: input.timestampLabel,
+    sequenceIndex: input.sequenceIndex,
+    isInterAgentHandoff: input.isInterAgentHandoff,
+    createdAtLabel: input.createdAtLabel,
+    expiresAtLabel: input.expiresAtLabel,
+    validationDetails: input.validationDetails,
     decisionState: input.decisionState ?? getDefaultDecisionState(input.type),
     relatedTaskId: input.relatedTaskId,
     relatedArtifactId: input.relatedArtifactId,
@@ -155,6 +170,7 @@ function createDecisionEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTask
 function createHandoffEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
   const artifact = findArtifactForTask(snapshot.artifacts, task, ["command", "log", "activity"]);
   const commandBlock = getCommandBlocksByTaskId(snapshot.commandBlocks, task.id)[0];
+  const sequenceIndex = snapshot.tasks.findIndex((candidate) => candidate.id === task.id) + 1;
 
   return createCockpitActivityEvent({
     id: `${snapshot.workspaceId}-activity-handoff-${task.id}`,
@@ -166,6 +182,8 @@ function createHandoffEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskC
     title: task.title,
     summary: `${task.ownerRole} lane is working: ${task.outcome}`,
     timestampLabel: snapshot.timestampLabel,
+    sequenceIndex,
+    isInterAgentHandoff: true,
     relatedTaskId: task.id,
     relatedArtifactId: commandBlock?.relatedArtifactId ?? artifact?.id,
     relatedCommandBlockId: commandBlock?.id,
@@ -250,6 +268,8 @@ function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTa
     title: task.title,
     summary: task.outcome,
     timestampLabel: snapshot.timestampLabel,
+    sequenceIndex: snapshot.tasks.findIndex((candidate) => candidate.id === task.id) + 1,
+    validationDetails: getValidationItemsForTask(task),
     relatedTaskId: task.id,
     relatedArtifactId: artifact?.id,
     nextActionLabel: "Review the completed handoff"
