@@ -26,15 +26,26 @@ from agent33.services.orchestration_state import OrchestrationStateStore
 from agent33.skills.registry import SkillRegistry
 
 
-def _write_pack(base: Path, *, name: str = "test-pack") -> Path:
+def _write_pack(
+    base: Path,
+    *,
+    name: str = "test-pack",
+    version: str = "1.0.0",
+    pack_dependencies: list[tuple[str, str]] | None = None,
+) -> Path:
     """Create a minimal valid pack directory."""
     pack_dir = base / name
     pack_dir.mkdir(parents=True, exist_ok=True)
-
-    (pack_dir / "PACK.yaml").write_text(
-        textwrap.dedent(f"""\
+    dependency_yaml = ""
+    if pack_dependencies:
+        dependency_items = "\n".join(
+            f"    - name: {dep_name}\n      version_constraint: \"{constraint}\""
+            for dep_name, constraint in pack_dependencies
+        )
+        dependency_yaml = f"\ndependencies:\n  packs:\n{dependency_items}\n"
+    manifest_yaml = textwrap.dedent(f"""\
         name: {name}
-        version: 1.0.0
+        version: {version}
         description: Pack {name}
         author: tester
         tags:
@@ -42,7 +53,10 @@ def _write_pack(base: Path, *, name: str = "test-pack") -> Path:
         skills:
           - name: skill-1
             path: skills/skill-1
-        """),
+        """)
+
+    (pack_dir / "PACK.yaml").write_text(
+        manifest_yaml + dependency_yaml,
         encoding="utf-8",
     )
     sdir = pack_dir / "skills" / "skill-1"
@@ -252,6 +266,62 @@ class TestPackRoutesWithRegistry:
         assert data["count"] == 1
         assert data["packs"][0]["manifest"]["name"] == "founder-mvp"
         assert data["packs"][0]["workflows"][0]["name"] == "founder-mvp"
+
+    def test_get_pack_recovery_preview_surfaces_dependents_and_rollback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        _write_pack(packs_dir, name="base-utils", version="1.0.0")
+        _write_pack(
+            packs_dir,
+            name="app-pack",
+            pack_dependencies=[("base-utils", "^1.0.0")],
+        )
+        pack_reg.discover()
+        client.app.state.pack_rollback_manager.archive_current("base-utils")
+
+        resp = client.get(
+            "/v1/packs/base-utils/recovery-preview",
+            params={"target_version": "2.0.0"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pack_name"] == "base-utils"
+        assert data["installed_version"] == "1.0.0"
+        assert data["target_version"] == "2.0.0"
+        assert data["affected_skills"] == ["base-utils/skill-1"]
+        assert data["can_uninstall_safely"] is False
+        assert data["can_upgrade_safely"] is False
+        assert data["can_rollback"] is True
+        assert data["dependents"] == [
+            {
+                "name": "app-pack",
+                "version": "1.0.0",
+                "version_constraint": "^1.0.0",
+                "status": "installed",
+            }
+        ]
+        assert data["archived_versions"][0]["version"] == "1.0.0"
+        assert "Upgrade would break dependent" in data["compatibility_errors"][0]
+        assert "Do not upgrade base-utils to 2.0.0" in data["recommended_action"]
+
+    def test_get_pack_recovery_preview_allows_safe_pack(self, tmp_path: Path) -> None:
+        client, pack_reg, packs_dir, _ = self._setup(tmp_path)
+        _write_pack(packs_dir, name="standalone-pack")
+        pack_reg.discover()
+
+        resp = client.get("/v1/packs/standalone-pack/recovery-preview")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["dependents"] == []
+        assert data["compatibility_errors"] == []
+        assert data["can_uninstall_safely"] is True
+        assert data["can_upgrade_safely"] is True
+        assert data["can_rollback"] is False
+        assert "No dependent packs are blocking this change" in data["recommended_action"]
 
     def test_get_pack_includes_skill_category_and_provenance(self, tmp_path: Path) -> None:
         client, pack_reg, packs_dir, _ = self._setup(tmp_path)

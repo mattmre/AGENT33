@@ -7,10 +7,11 @@ import {
   fetchInstalledPacks,
   fetchMarketplaceCategories,
   fetchMarketplacePackDetail,
-  fetchMarketplacePacks,
-  fetchPackOutcomeManifests,
-  fetchPackQualityAssessment,
-  fetchPackTrust,
+    fetchMarketplacePacks,
+    fetchPackOutcomeManifests,
+    fetchPackQualityAssessment,
+    fetchPackRecoveryPreview,
+    fetchPackTrust,
   installMarketplacePack,
   submitPackForCuration
 } from "./api";
@@ -24,6 +25,7 @@ import type {
   MarketplacePackSummary,
   MarketplacePackVersionInfo,
   OutcomePackManifest,
+  PackRecoveryPreviewResponse,
   QualityAssessment,
   PackTrustResponse
 } from "./types";
@@ -228,6 +230,129 @@ function QualityBadge({ assessment }: { assessment: QualityAssessment | null | u
   );
 }
 
+function formatArchiveDate(value: string): string {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+  return new Date(timestamp).toLocaleString();
+}
+
+function RecoveryPreviewPanel({
+  preview,
+  loading,
+  error
+}: {
+  preview: PackRecoveryPreviewResponse | null;
+  loading: boolean;
+  error: string | null;
+}): JSX.Element | null {
+  if (loading) {
+    return (
+      <section className="pack-marketplace-recovery-preview">
+        <div className="pack-marketplace-preview-header">
+          <h3>Change safety preview</h3>
+          <span className="marketplace-pill preview">Checking...</span>
+        </div>
+        <p>Checking dependents and rollback options before pack changes...</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="pack-marketplace-recovery-preview warning">
+        <div className="pack-marketplace-preview-header">
+          <h3>Change safety preview</h3>
+          <span className="marketplace-pill trust-untrusted">Unavailable</span>
+        </div>
+        <p>{error}</p>
+      </section>
+    );
+  }
+
+  if (!preview) {
+    return null;
+  }
+
+  const hasUpgradeTarget =
+    preview.target_version !== "" && preview.target_version !== preview.installed_version;
+  const latestArchive = preview.archived_versions[0] ?? null;
+
+  return (
+    <section className="pack-marketplace-recovery-preview">
+      <div className="pack-marketplace-preview-header">
+        <h3>Change safety preview</h3>
+        <span className="marketplace-pill preview">Before uninstall / upgrade / rollback</span>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Selected change</dt>
+          <dd>
+            {hasUpgradeTarget
+              ? `Upgrade ${preview.installed_version} -> ${preview.target_version}`
+              : `Installed version ${preview.installed_version}`}
+          </dd>
+        </div>
+        <div>
+          <dt>Dependents</dt>
+          <dd>
+            {preview.dependents.length === 0
+              ? "No installed packs depend on this pack."
+              : `${preview.dependents.length} installed pack(s) depend on this pack.`}
+          </dd>
+        </div>
+        <div>
+          <dt>Rollback</dt>
+          <dd>
+            {preview.can_rollback && latestArchive
+              ? `${preview.archived_versions.length} archived version(s); latest ${latestArchive.version} from ${formatArchiveDate(latestArchive.archived_at)}.`
+              : "No rollback archive is available yet. Upgrades archive the current version first."}
+          </dd>
+        </div>
+        <div>
+          <dt>Safe action</dt>
+          <dd>{preview.recommended_action}</dd>
+        </div>
+      </dl>
+
+      {preview.dependents.length > 0 && (
+        <div className="pack-marketplace-dependency-list">
+          <strong>Uninstall blockers</strong>
+          <ul>
+            {preview.dependents.map((dependent) => (
+              <li key={dependent.name}>
+                {dependent.name} {dependent.version}
+                {dependent.version_constraint ? ` requires ${dependent.version_constraint}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.compatibility_errors.length > 0 && (
+        <div className="pack-marketplace-dependency-list warning">
+          <strong>Upgrade compatibility issues</strong>
+          <ul>
+            {preview.compatibility_errors.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.warnings.length > 0 && (
+        <ul className="pack-marketplace-recovery-warnings">
+          {preview.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function canSubmitForCuration(curation: CurationRecord | null): boolean {
   if (!curation) {
     return true;
@@ -256,6 +381,7 @@ function PackDetailPanel({
   trust,
   curation,
   quality,
+  recoveryPreview,
   selectedVersion,
   detailLoading,
   detailError,
@@ -267,6 +393,8 @@ function PackDetailPanel({
   submissionFeedbackTone,
   qualityLoading,
   qualityError,
+  recoveryLoading,
+  recoveryError,
   outcomeLaunchPending,
   outcomeLaunchFeedback,
   canLaunchOutcome,
@@ -282,6 +410,7 @@ function PackDetailPanel({
   trust: PackTrustResponse | null;
   curation: CurationRecord | null;
   quality: QualityAssessment | null;
+  recoveryPreview: PackRecoveryPreviewResponse | null;
   selectedVersion: string;
   detailLoading: boolean;
   detailError: string | null;
@@ -293,6 +422,8 @@ function PackDetailPanel({
   submissionFeedbackTone: "success" | "error" | null;
   qualityLoading: boolean;
   qualityError: string | null;
+  recoveryLoading: boolean;
+  recoveryError: string | null;
   outcomeLaunchPending: boolean;
   outcomeLaunchFeedback: string | null;
   canLaunchOutcome: boolean;
@@ -488,6 +619,14 @@ function PackDetailPanel({
             </ul>
           </section>
 
+          {isInstalled && (
+            <RecoveryPreviewPanel
+              preview={recoveryPreview}
+              loading={recoveryLoading}
+              error={recoveryError}
+            />
+          )}
+
           <div className="pack-marketplace-actions">
             <button
               type="button"
@@ -619,6 +758,8 @@ export function PackMarketplacePage({
   const [selectedInstalledDetail, setSelectedInstalledDetail] = useState<InstalledPackDetail | null>(null);
   const [selectedTrust, setSelectedTrust] = useState<PackTrustResponse | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<QualityAssessment | null>(null);
+  const [selectedRecoveryPreview, setSelectedRecoveryPreview] =
+    useState<PackRecoveryPreviewResponse | null>(null);
   const [selectedVersion, setSelectedVersion] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -632,6 +773,8 @@ export function PackMarketplacePage({
   const [submissionFeedbackTone, setSubmissionFeedbackTone] = useState<"success" | "error" | null>(null);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityError, setQualityError] = useState<string | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [outcomeLaunchPending, setOutcomeLaunchPending] = useState(false);
   const [outcomeLaunchFeedback, setOutcomeLaunchFeedback] = useState<string | null>(null);
 
@@ -697,10 +840,13 @@ export function PackMarketplacePage({
       setSelectedInstalledDetail(null);
       setSelectedTrust(null);
       setSelectedQuality(null);
+      setSelectedRecoveryPreview(null);
       setSelectedVersion("");
       setDetailError(null);
       setInstalledDetailError(null);
       setQualityError(null);
+      setRecoveryError(null);
+      setRecoveryLoading(false);
       return;
     }
 
@@ -724,6 +870,9 @@ export function PackMarketplacePage({
           setSelectedInstalledDetail(null);
           setSelectedTrust(null);
           setSelectedQuality(null);
+          setSelectedRecoveryPreview(null);
+          setRecoveryLoading(false);
+          setRecoveryError(null);
           setQualityLoading(false);
           return;
         }
@@ -776,6 +925,44 @@ export function PackMarketplacePage({
     };
   }, [apiKey, installedByPack, selectedPackName, token]);
 
+  useEffect(() => {
+    if (!selectedPackName || !installedByPack[selectedPackName] || !selectedVersion) {
+      setSelectedRecoveryPreview(null);
+      setRecoveryError(null);
+      setRecoveryLoading(false);
+      return;
+    }
+
+    const packName = selectedPackName;
+    let cancelled = false;
+    setRecoveryLoading(true);
+    setRecoveryError(null);
+
+    async function loadRecoveryPreview(): Promise<void> {
+      try {
+        const preview = await fetchPackRecoveryPreview(token, apiKey, packName, selectedVersion);
+        if (!cancelled) {
+          setSelectedRecoveryPreview(preview);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSelectedRecoveryPreview(null);
+          setRecoveryError(err instanceof Error ? err.message : "Pack recovery preview failed");
+        }
+      } finally {
+        if (!cancelled) {
+          setRecoveryLoading(false);
+        }
+      }
+    }
+
+    void loadRecoveryPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, installedByPack, selectedPackName, selectedVersion, token]);
+
   const featuredPacks = useMemo(
     () => packs.filter((pack) => Boolean(curationByPack[pack.name]?.featured)).slice(0, 3),
     [curationByPack, packs]
@@ -804,12 +991,15 @@ export function PackMarketplacePage({
     setSelectedInstalledDetail(null);
     setSelectedTrust(null);
     setSelectedQuality(null);
+    setSelectedRecoveryPreview(null);
     setSelectedVersion("");
     setInstallFeedback(null);
     setInstalledDetailError(null);
     setSubmissionFeedback(null);
     setSubmissionFeedbackTone(null);
     setQualityError(null);
+    setRecoveryError(null);
+    setRecoveryLoading(false);
     setOutcomeLaunchFeedback(null);
   };
 
@@ -1088,6 +1278,7 @@ export function PackMarketplacePage({
           trust={selectedTrust}
           curation={selectedPackName ? curationByPack[selectedPackName] ?? null : null}
           quality={selectedQuality}
+          recoveryPreview={selectedRecoveryPreview}
           selectedVersion={selectedVersion}
           detailLoading={detailLoading}
           detailError={detailError}
@@ -1099,6 +1290,8 @@ export function PackMarketplacePage({
           submissionFeedbackTone={submissionFeedbackTone}
           qualityLoading={qualityLoading}
           qualityError={qualityError}
+          recoveryLoading={recoveryLoading}
+          recoveryError={recoveryError}
           outcomeLaunchPending={outcomeLaunchPending}
           outcomeLaunchFeedback={outcomeLaunchFeedback}
           canLaunchOutcome={Boolean(onOpenWorkflowStarter)}

@@ -151,6 +151,34 @@ export interface PackTrustResponse {
   policy: PackTrustPolicy;
 }
 
+export interface PackRecoveryDependent {
+  name: string;
+  version: string;
+  version_constraint: string;
+  status: string;
+}
+
+export interface PackRecoveryArchive {
+  version: string;
+  archived_at: string;
+}
+
+export interface PackRecoveryPreviewResponse {
+  pack_name: string;
+  installed_version: string;
+  target_version: string;
+  affected_skills: string[];
+  enabled_tenants: string[];
+  dependents: PackRecoveryDependent[];
+  compatibility_errors: string[];
+  archived_versions: PackRecoveryArchive[];
+  can_uninstall_safely: boolean;
+  can_upgrade_safely: boolean;
+  can_rollback: boolean;
+  recommended_action: string;
+  warnings: string[];
+}
+
 export interface MarketplaceInstallResponse {
   success: boolean;
   pack_name: string;
