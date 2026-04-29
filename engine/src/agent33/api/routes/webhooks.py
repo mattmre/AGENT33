@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
+from agent33.security.injection import scan_inputs_recursive
+
 router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,16 @@ _adapters: dict[str, Any] = {}
 def register_adapter(platform: str, adapter: Any) -> None:
     """Register a messaging adapter so the webhook route can dispatch to it."""
     _adapters[platform] = adapter
+
+
+def _reject_unsafe_payload(payload: object) -> None:
+    """Reject external webhook payloads containing prompt-injection attempts."""
+    scan = scan_inputs_recursive(payload)
+    if not scan.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Webhook payload rejected: {', '.join(scan.threats)}",
+        )
 
 
 # -----------------------------------------------------------------------
@@ -33,6 +45,7 @@ async def telegram_webhook(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=503, detail="Telegram adapter not configured")
 
     payload = await request.json()
+    _reject_unsafe_payload(payload)
     adapter.enqueue_webhook_update(payload)
     return {"status": "ok"}
 
@@ -64,6 +77,7 @@ async def discord_webhook(
     if payload.get("type") == 1:
         return {"type": 1}
 
+    _reject_unsafe_payload(payload)
     adapter.enqueue_interaction(payload)
     return {"status": "ok"}
 
@@ -95,6 +109,7 @@ async def slack_webhook(
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge", "")}
 
+    _reject_unsafe_payload(payload)
     adapter.enqueue_event(payload)
     return {"status": "ok"}
 
@@ -141,6 +156,7 @@ async def whatsapp_webhook(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
 
     payload = await request.json()
+    _reject_unsafe_payload(payload)
     adapter.enqueue_webhook_payload(payload)
     return {"status": "ok"}
 
@@ -158,6 +174,7 @@ async def signal_webhook(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=503, detail="Signal adapter not configured")
 
     payload = await request.json()
+    _reject_unsafe_payload(payload)
     adapter.enqueue_message(payload)
     return {"status": "ok"}
 
@@ -175,5 +192,6 @@ async def imessage_webhook(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=503, detail="iMessage adapter not configured")
 
     payload = await request.json()
+    _reject_unsafe_payload(payload)
     adapter.enqueue_message(payload)
     return {"status": "ok"}

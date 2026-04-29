@@ -44,18 +44,19 @@ Routers mounted:
 
 Persistent (database/backing service):
 - `memory_records` via `LongTermMemory` (PostgreSQL + pgvector)
+- Review records (`review/service.py`) via `OrchestrationStateStore` when `orchestration_state_store_path` is configured
+- Trace/failure records (`observability/trace_collector.py`) via `OrchestrationStateStore`
+- Autonomy budgets/enforcers/escalations (`autonomy/service.py`) via `OrchestrationStateStore`
+- Release records/sync/rollback state (`release/service.py`) via `OrchestrationStateStore`
+- Improvement intakes/lessons/metrics/checklists/refreshes (`improvement/service.py`) via pluggable learning signal stores
+- Approval tokens, tool approvals, process state, and mutation audit records via their configured state stores
 - Training store tables (when `training_enabled` and initialized)
 - Redis ephemeral cache/state
 - NATS event transport
 
 In-memory only (lost on restart):
 - Workflow registry (`api/routes/workflows.py`)
-- Review records (`review/service.py`)
-- Trace/failure records (`observability/trace_collector.py`)
 - Evaluation runs/baselines/regressions (`evaluation/service.py` + recorder)
-- Autonomy budgets/enforcers/escalations (`autonomy/service.py`)
-- Release records/sync/rollback state (`release/service.py`)
-- Improvement intakes/lessons/metrics/checklists/refreshes (`improvement/service.py`)
 - Auth users and API keys (`api/routes/auth.py`, `security/auth.py`)
 
 ## 4. Workflow Lifecycles
