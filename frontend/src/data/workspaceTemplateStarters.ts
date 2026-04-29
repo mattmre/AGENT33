@@ -173,6 +173,6 @@ export function validateWorkspaceTemplateStarters(
 export function assertWorkspaceTemplateStarters(): void {
   const errors = validateWorkspaceTemplateStarters();
   if (errors.length > 0) {
-    throw new Error(`Workspace template starter configuration is invalid: ${errors.join(" ")}`);
+    throw new Error(`Workspace template starter configuration is invalid:\n- ${errors.join("\n- ")}`);
   }
 }
