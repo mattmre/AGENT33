@@ -79,6 +79,33 @@ describe("cockpit artifact view models", () => {
     });
   });
 
+  it("marks blocked command artifacts as blocked instead of unavailable", () => {
+    const workspace = getWorkspaceSession("solo-builder");
+    const [, commandArtifact] = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "blocked-command",
+            title: "Command waiting on approval",
+            outcome: "The command cannot collect evidence until the operator approves it.",
+            status: "blocked",
+            ownerRole: "Coordinator"
+          }
+        ]
+      }
+    });
+
+    expect(commandArtifact).toMatchObject({
+      kind: "command",
+      status: "blocked",
+      reviewState: "blocked",
+      relatedTaskIds: ["blocked-command"]
+    });
+  });
+
   it("maps blocked work into risk, approval, and outcome artifacts", () => {
     const artifactsByKind = getCockpitArtifactsByKind("test-review");
 
