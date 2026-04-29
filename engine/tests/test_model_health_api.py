@@ -163,6 +163,10 @@ class TestModelHealthRoute:
         assert resp.status_code == 200
         data = resp.json()
         assert data["overall_state"] == "needs_attention"
+        assert data["summary"] == (
+            "Local model setup needs attention. Install or load a model, "
+            "or start the offline runtime."
+        )
         assert data["ready_provider_count"] == 0
         assert data["attention_provider_count"] == 1
         assert data["total_model_count"] == 0

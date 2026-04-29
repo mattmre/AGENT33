@@ -143,7 +143,10 @@ class ModelHealthService:
                 f"{total_model_count} detected {model_label}."
             )
         if overall_state == "needs_attention":
-            return "Local runtimes responded, but a model still needs to be installed or loaded."
+            return (
+                "Local model setup needs attention. Install or load a model, "
+                "or start the offline runtime."
+            )
         return (
             "No local model runtime is reachable yet. Start Ollama or LM Studio "
             "to use local models."
