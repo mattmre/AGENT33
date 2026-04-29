@@ -273,7 +273,9 @@ function summarizeOpsSafety(
       blocked,
       needsReview,
       active,
-      primaryMessage: `${needsReview} cockpit item${needsReview === 1 ? "" : "s"} need review.`,
+      primaryMessage: `${needsReview} cockpit item${needsReview === 1 ? "" : "s"} ${
+        needsReview === 1 ? "needs" : "need"
+      } review.`,
       nextAction: "Review approval and process records in priority order."
     };
   }
