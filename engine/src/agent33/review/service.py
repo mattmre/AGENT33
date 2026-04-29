@@ -8,6 +8,12 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from agent33.services.orchestration_state import OrchestrationStateStore
 
 from agent33.review.assignment import ReviewerAssigner
 from agent33.review.models import (
@@ -40,17 +46,49 @@ class ReviewStateError(Exception):
 
 
 class ReviewService:
-    """In-memory review lifecycle manager.
+    """Review lifecycle manager with optional durable state.
 
     Thread-safety note: the service is *not* thread-safe.  For concurrent
     access behind an async web server this is acceptable because the event
     loop is single-threaded.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_store: OrchestrationStateStore | None = None) -> None:
+        self._state_store = state_store
         self._reviews: dict[str, ReviewRecord] = {}
         self._risk_assessor = RiskAssessor()
         self._assigner = ReviewerAssigner()
+        self._load_state()
+
+    def _persist_state(self) -> None:
+        if self._state_store is None:
+            return
+        self._state_store.write_namespace(
+            "reviews",
+            {
+                "records": {
+                    review_id: review.model_dump(mode="json")
+                    for review_id, review in self._reviews.items()
+                }
+            },
+        )
+
+    def _load_state(self) -> None:
+        if self._state_store is None:
+            return
+        payload = self._state_store.read_namespace("reviews")
+        records_payload = payload.get("records", {})
+        if not isinstance(records_payload, dict):
+            return
+        for review_id, review_data in records_payload.items():
+            if not isinstance(review_id, str):
+                continue
+            try:
+                record = ReviewRecord.model_validate(review_data)
+            except ValidationError:
+                logger.warning("review_restore_failed id=%s", review_id)
+                continue
+            self._reviews[review_id] = record
 
     # ------------------------------------------------------------------
     # CRUD
@@ -74,6 +112,7 @@ class ReviewService:
         )
         self._reviews[record.id] = record
         logger.info("review_created id=%s task=%s", record.id, _sanitize_log_value(task_id))
+        self._persist_state()
         return record
 
     def get(self, review_id: str) -> ReviewRecord:
@@ -95,6 +134,7 @@ class ReviewService:
             raise ReviewNotFoundError(f"Review not found: {review_id}")
         del self._reviews[review_id]
         logger.info("review_deleted id=%s", review_id)
+        self._persist_state()
 
     # ------------------------------------------------------------------
     # Risk assessment
@@ -117,6 +157,7 @@ class ReviewService:
             assessment.l1_required,
             assessment.l2_required,
         )
+        self._persist_state()
         return record
 
     # ------------------------------------------------------------------
@@ -136,6 +177,7 @@ class ReviewService:
         """Move review from DRAFT to READY."""
         record = self.get(review_id)
         self._transition(record, SignoffState.READY)
+        self._persist_state()
         return record
 
     def assign_l1(self, review_id: str) -> ReviewRecord:
@@ -154,6 +196,7 @@ class ReviewService:
             l1.agent_id,
             l1.reviewer_role,
         )
+        self._persist_state()
         return record
 
     def submit_l1(
@@ -192,6 +235,7 @@ class ReviewService:
             self._transition(record, SignoffState.L1_APPROVED)
 
         logger.info("l1_submitted id=%s decision=%s", review_id, decision.value)
+        self._persist_state()
         return record
 
     def assign_l2(self, review_id: str) -> ReviewRecord:
@@ -210,6 +254,7 @@ class ReviewService:
             l2.agent_id,
             l2.reviewer_role,
         )
+        self._persist_state()
         return record
 
     def submit_l2(
@@ -244,6 +289,7 @@ class ReviewService:
             self._transition(record, SignoffState.L2_CHANGES_REQUESTED)
 
         logger.info("l2_submitted id=%s decision=%s", review_id, decision.value)
+        self._persist_state()
         return record
 
     def approve(
@@ -280,6 +326,7 @@ class ReviewService:
             _sanitize_log_value(approver_id),
             approval_type,
         )
+        self._persist_state()
         return record
 
     def approve_with_rationale(
@@ -341,6 +388,7 @@ class ReviewService:
             _sanitize_log_value(approver_id),
             decision,
         )
+        self._persist_state()
         return record
 
     def merge(self, review_id: str) -> ReviewRecord:
@@ -348,4 +396,5 @@ class ReviewService:
         record = self.get(review_id)
         self._transition(record, SignoffState.MERGED)
         logger.info("review_merged id=%s", review_id)
+        self._persist_state()
         return record

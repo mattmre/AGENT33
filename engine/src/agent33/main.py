@@ -201,15 +201,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.backup.service import BackupService
     from agent33.observability.trace_collector import TraceCollector
     from agent33.release.service import ReleaseService
+    from agent33.review.service import ReviewService
 
     autonomy_service = AutonomyService(state_store=orchestration_state_store)
     release_service = ReleaseService(state_store=orchestration_state_store)
+    review_service = ReviewService(state_store=orchestration_state_store)
     trace_collector = TraceCollector(state_store=orchestration_state_store)
     app.state.autonomy_service = autonomy_service
     app.state.release_service = release_service
+    app.state.review_service = review_service
     app.state.trace_collector = trace_collector
     autonomy.set_autonomy_service(autonomy_service)
     releases.set_release_service(release_service)
+    reviews.set_review_service(review_service)
     traces.set_trace_collector(trace_collector)
 
     # -- Redis -------------------------------------------------------------
