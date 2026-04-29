@@ -17,6 +17,13 @@ import {
 } from "../../lib/valueReaders";
 import type { ApiResult } from "../../types";
 import { ModelCapabilityBadges } from "./ModelCapabilityBadges";
+import {
+  ProviderModelHealthSummary,
+  type LocalModelHealth,
+  type LocalModelHealthState,
+  type LocalProviderHealth,
+  type LocalProviderHealthState
+} from "./ProviderModelHealthSummary";
 import { ProviderPresetSelector } from "./ProviderPresetSelector";
 import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
@@ -96,6 +103,11 @@ interface LMStudioRuntimeStatus {
   baseUrl: string;
   message: string;
   models: LMStudioModelEntry[];
+}
+
+interface LoadLocalModelHealthOptions {
+  ollamaBaseUrl?: string;
+  lmStudioBaseUrl?: string;
 }
 
 function buildConfigSnapshot(data: unknown): ConfigSnapshot {
@@ -209,6 +221,53 @@ function parseLMStudioModel(data: unknown): LMStudioModelEntry | null {
   };
 }
 
+function parseLocalModelHealth(data: unknown): LocalModelHealth {
+  const root = asRecord(data);
+  const providers = Array.isArray(root.providers)
+    ? root.providers
+        .map(parseLocalProviderHealth)
+        .filter((provider): provider is LocalProviderHealth => provider !== null)
+    : [];
+  const state = readString(root.overall_state);
+  const overallState: LocalModelHealthState =
+    state === "ready" || state === "needs_attention" || state === "unavailable"
+      ? state
+      : "unavailable";
+
+  return {
+    overallState,
+    summary: readString(root.summary) || "Local model health could not be summarized.",
+    readyProviderCount: readNumber(root.ready_provider_count) ?? 0,
+    attentionProviderCount: readNumber(root.attention_provider_count) ?? 0,
+    totalModelCount: readNumber(root.total_model_count) ?? 0,
+    providers
+  };
+}
+
+function parseLocalProviderHealth(data: unknown): LocalProviderHealth | null {
+  const root = asRecord(data);
+  const provider = readString(root.provider);
+  if (provider !== "ollama" && provider !== "lm-studio") {
+    return null;
+  }
+  const state = readString(root.state);
+  const normalizedState: LocalProviderHealthState =
+    state === "available" || state === "empty" || state === "unavailable" || state === "error"
+      ? state
+      : "error";
+
+  return {
+    provider,
+    label: readString(root.label) || (provider === "ollama" ? "Ollama" : "LM Studio"),
+    state: normalizedState,
+    ok: root.ok === true,
+    baseUrl: readString(root.base_url),
+    modelCount: readNumber(root.model_count) ?? 0,
+    message: readString(root.message) || "Status unavailable.",
+    action: readString(root.action) || "Refresh local health after checking this runtime."
+  };
+}
+
 function formatModelSize(size: number | null): string {
   if (size === null || size <= 0) {
     return "size unknown";
@@ -242,6 +301,7 @@ export function ModelConnectionWizardPanel({
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaRuntimeStatus | null>(null);
   const [lmStudioStatus, setLMStudioStatus] = useState<LMStudioRuntimeStatus | null>(null);
+  const [localModelHealth, setLocalModelHealth] = useState<LocalModelHealth | null>(null);
   const [modelSearch, setModelSearch] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState<ProviderPresetId>("openrouter");
   const [loadStatus, setLoadStatus] = useState<StatusMessage>({
@@ -254,6 +314,7 @@ export function ModelConnectionWizardPanel({
   const [isProbing, setIsProbing] = useState(false);
   const [isLoadingOllama, setIsLoadingOllama] = useState(false);
   const [isLoadingLMStudio, setIsLoadingLMStudio] = useState(false);
+  const [isLoadingLocalHealth, setIsLoadingLocalHealth] = useState(false);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const effectiveHasKey = form.removeStoredKey ? false : hasStoredKey || form.apiKey.trim() !== "";
@@ -450,6 +511,60 @@ export function ModelConnectionWizardPanel({
     }
   }
 
+  async function loadLocalModelHealth(
+    options: LoadLocalModelHealthOptions = {}
+  ): Promise<LocalModelHealth | null> {
+    if (!hasCredentials) {
+      setLocalModelHealth(null);
+      return null;
+    }
+    const query: Record<string, string> = {};
+    if (options.ollamaBaseUrl) {
+      query.ollama_base_url = normalizeOllamaBaseUrl(options.ollamaBaseUrl);
+    }
+    if (options.lmStudioBaseUrl) {
+      query.lm_studio_base_url = normalizeLmStudioBaseUrl(options.lmStudioBaseUrl);
+    }
+
+    setIsLoadingLocalHealth(true);
+    try {
+      const result = await apiRequest({
+        method: "GET",
+        path: "/v1/model-health",
+        token,
+        apiKey,
+        query: Object.keys(query).length > 0 ? query : undefined
+      });
+      onResult("Model Wizard - Local Model Health", result);
+      const health = parseLocalModelHealth(result.data);
+      setLocalModelHealth(health);
+      return health;
+    } catch {
+      const health: LocalModelHealth = {
+        overallState: "unavailable",
+        summary: "Could not check local model health. Confirm the engine is reachable.",
+        readyProviderCount: 0,
+        attentionProviderCount: 0,
+        totalModelCount: 0,
+        providers: []
+      };
+      setLocalModelHealth(health);
+      return health;
+    } finally {
+      setIsLoadingLocalHealth(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!hasCredentials) {
+      setLocalModelHealth(null);
+      return;
+    }
+    void loadLocalModelHealth();
+    // Run once when engine credentials become available; manual refresh handles URL edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCredentials, token, apiKey]);
+
   useEffect(() => {
     if (!hasCredentials) {
       return;
@@ -624,6 +739,20 @@ export function ModelConnectionWizardPanel({
         presets={PROVIDER_PRESETS}
         selectedPresetId={selectedPresetId}
         onSelectPreset={selectProviderPreset}
+      />
+
+      <ProviderModelHealthSummary
+        health={localModelHealth}
+        isLoading={isLoadingLocalHealth}
+        hasCredentials={hasCredentials}
+        selectedPresetId={selectedPresetId}
+        selectedProviderName={selectedPreset.name}
+        onRefresh={() =>
+          void loadLocalModelHealth({
+            ollamaBaseUrl: isOllamaSelected ? getOllamaBaseUrlOverride() : undefined,
+            lmStudioBaseUrl: isLMStudioSelected ? getLMStudioBaseUrlOverride() : undefined
+          })
+        }
       />
 
       <div className="model-wizard-grid">

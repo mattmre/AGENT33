@@ -50,6 +50,7 @@ from agent33.api.routes import (
     memory_search,
     migrations,
     moa,
+    model_health,
     multimodal,
     ollama,
     openrouter,
@@ -2438,6 +2439,7 @@ app.include_router(operator.router)
 app.include_router(openrouter.router)
 app.include_router(ollama.router)
 app.include_router(lm_studio.router)
+app.include_router(model_health.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)
