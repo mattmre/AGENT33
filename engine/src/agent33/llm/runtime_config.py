@@ -61,6 +61,14 @@ def build_model_router() -> ModelRouter:
             default_model=settings.ollama_default_model,
         ),
     )
+    router.register(
+        "lmstudio",
+        OpenAIProvider(
+            api_key="local",
+            base_url=settings.runtime_lm_studio_base_url,
+            default_model=settings.lm_studio_default_model,
+        ),
+    )
 
     if llamacpp_enabled():
         router.register(

@@ -229,7 +229,7 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
     await user.click(detectedModels.getByRole("button", { name: /mistral-nemo-instruct/ }));
 
-    expect(screen.getByLabelText("Default model")).toHaveValue("mistral-nemo-instruct");
+    expect(screen.getByLabelText("Default model")).toHaveValue("lmstudio/mistral-nemo-instruct");
     expect(apiRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "GET",
@@ -261,6 +261,36 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     await waitFor(() =>
       expect(apiRequestMock).not.toHaveBeenCalledWith(
         expect.objectContaining({ path: "/v1/openrouter/probe" })
+      )
+    );
+  });
+
+  it("passes an LM Studio override only when the operator edits the configured URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    await screen.findByText("Detected 2 LM Studio models.");
+    const baseUrlInput = screen.getByLabelText("Base URL");
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://127.0.0.1:1234");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/lm-studio/status",
+          query: { base_url: "http://127.0.0.1:1234/v1" }
+        })
       )
     );
   });

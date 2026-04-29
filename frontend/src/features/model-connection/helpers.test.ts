@@ -56,9 +56,9 @@ describe("model connection helpers", () => {
     expect(normalizeLmStudioBaseUrl("http://localhost:1234/v1")).toBe("http://localhost:1234/v1");
     expect(normalizeLmStudioBaseUrl("http://localhost:1234/v1/")).toBe("http://localhost:1234/v1");
     expect(formatLmStudioModelRef("qwen2.5-coder-7b-instruct")).toBe(
-      "qwen2.5-coder-7b-instruct"
+      "lmstudio/qwen2.5-coder-7b-instruct"
     );
-    expect(stripLmStudioModelRef("qwen2.5-coder-7b-instruct")).toBe(
+    expect(stripLmStudioModelRef("lmstudio/qwen2.5-coder-7b-instruct")).toBe(
       "qwen2.5-coder-7b-instruct"
     );
   });

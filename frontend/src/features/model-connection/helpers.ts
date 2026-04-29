@@ -138,11 +138,13 @@ export function stripOllamaModelRef(modelRef: string): string {
 }
 
 export function formatLmStudioModelRef(modelName: string): string {
-  return modelName.trim();
+  const trimmed = modelName.trim();
+  return trimmed.startsWith("lmstudio/") ? trimmed : `lmstudio/${trimmed}`;
 }
 
 export function stripLmStudioModelRef(modelRef: string): string {
-  return modelRef.trim();
+  const trimmed = modelRef.trim();
+  return trimmed.startsWith("lmstudio/") ? trimmed.slice("lmstudio/".length) : trimmed;
 }
 
 export function getModelReadinessLabel(

@@ -53,6 +53,7 @@ export const OPENROUTER_RECOMMENDED_MODELS: OpenRouterRecommendedModel[] = [
 const EXPLICIT_PROVIDER_MODEL_PREFIXES = new Set([
   "airllm",
   "llamacpp",
+  "lmstudio",
   "ollama",
   "openai",
   "openrouter"
