@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { WORKSPACE_SESSION_IDS, type WorkspaceSessionId } from "./workspaces";
 import { getWorkspaceBoard } from "./workspaceBoard";
 import {
+  assertWorkspaceTemplateStarters,
   buildWorkspaceTemplateStarterDraft,
   getPrimaryWorkspaceTemplateStarter,
   getWorkspaceTemplateStarters,
@@ -12,6 +13,7 @@ import {
 describe("workspace template starters", () => {
   it("provides reachable starter configurations for every workspace template", () => {
     expect(validateWorkspaceTemplateStarters()).toEqual([]);
+    expect(() => assertWorkspaceTemplateStarters()).not.toThrow();
 
     for (const workspaceId of WORKSPACE_SESSION_IDS) {
       const starters = getWorkspaceTemplateStarters(workspaceId);
@@ -40,5 +42,32 @@ describe("workspace template starters", () => {
       author: "coordinator",
       sourceLabel: "Workspace template: Multi-agent slice orchestration"
     });
+  });
+
+  it("reports stale starter task references with actionable errors", () => {
+    const [starter] = getWorkspaceTemplateStarters("solo-builder");
+
+    expect(
+      validateWorkspaceTemplateStarters(
+        [
+          {
+            ...starter,
+            beginsWithTaskId: "missing-task"
+          }
+        ],
+        ["solo-builder"]
+      )
+    ).toEqual(["solo-guided-build starts with unknown task missing-task."]);
+    expect(
+      validateWorkspaceTemplateStarters(
+        [
+          {
+            ...starter,
+            assignedRole: "Builder"
+          }
+        ],
+        ["solo-builder"]
+      )
+    ).toEqual(["solo-guided-build role Builder does not match solo-intake owner Coordinator."]);
   });
 });

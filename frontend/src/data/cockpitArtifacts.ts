@@ -109,13 +109,25 @@ function getTasksByStatus(board: WorkspaceBoard, status: WorkspaceTaskCard["stat
   return board.tasks.filter((task) => task.status === status);
 }
 
-function getFirstTaskOwnedByRole(board: WorkspaceBoard, role: WorkspaceAgentRole): WorkspaceTaskCard | undefined {
-  return board.tasks.find((task) => task.ownerRole === role);
+// Frontend adapters use stable board order until backend run metadata can mark the primary artifact task explicitly.
+function getPrimaryCommandTask(board: WorkspaceBoard): WorkspaceTaskCard | undefined {
+  return getFirstTaskByStatus(board, "running") ?? getFirstTaskByStatus(board, "blocked");
+}
+
+function getPrimaryValidationTask(board: WorkspaceBoard): WorkspaceTaskCard | undefined {
+  const reviewTasks = getTasksByStatus(board, "review");
+  const reviewerOwnedReviewTask = reviewTasks.find((task) => task.ownerRole === "Reviewer");
+  return reviewerOwnedReviewTask ?? reviewTasks[0] ?? getFirstTaskByStatus(board, "complete");
 }
 
 function taskMentionsPullRequest(task: WorkspaceTaskCard): boolean {
   const searchableText = `${task.title} ${task.outcome}`.toLowerCase();
   return /\b(pr|pull request)\b/.test(searchableText);
+}
+
+function taskMentionsPullRequestReady(task: WorkspaceTaskCard): boolean {
+  const searchableText = `${task.title} ${task.outcome}`.toLowerCase();
+  return /\b(pr|pull request)[\s-]*ready\b/.test(searchableText) || /\bready\b.*\b(pr|pull request)\b/.test(searchableText);
 }
 
 export function detectOutcomeCompletion(board: WorkspaceBoard): OutcomeCompletion {
@@ -135,7 +147,9 @@ export function detectOutcomeCompletion(board: WorkspaceBoard): OutcomeCompletio
   }
 
   const completeTasks = getTasksByStatus(board, "complete");
-  const prReadyTask = completeTasks.find((task) => taskMentionsPullRequest(task));
+  const prReadyTask =
+    completeTasks.find((task) => taskMentionsPullRequestReady(task)) ??
+    completeTasks.find((task) => taskMentionsPullRequest(task));
   const completeTask = prReadyTask ?? completeTasks[0];
   if (!completeTask) {
     return {
@@ -256,7 +270,7 @@ function createPlanArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact 
 }
 
 function createCommandArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const task = getFirstTaskByStatus(snapshot.board, "running") ?? getFirstTaskByStatus(snapshot.board, "blocked");
+  const task = getPrimaryCommandTask(snapshot.board);
 
   if (!task) {
     return createArtifact(snapshot, "command", {
@@ -312,10 +326,7 @@ function createLogArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
 }
 
 function createTestArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const task =
-    getFirstTaskByStatus(snapshot.board, "review") ??
-    getFirstTaskOwnedByRole(snapshot.board, "Reviewer") ??
-    getFirstTaskByStatus(snapshot.board, "complete");
+  const task = getPrimaryValidationTask(snapshot.board);
 
   if (!task) {
     return createArtifact(snapshot, "test", {
