@@ -182,6 +182,7 @@ class TestGetConfig:
             "redis",
             "nats",
             "ollama",
+            "lm_studio",
             "llm",
             "agents",
             "skills",
