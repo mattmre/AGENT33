@@ -1,8 +1,15 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
+import { getCockpitArtifactsForWorkspace } from "../data/cockpitArtifacts";
+import { getActivityEventsByArtifactId, getActivityEventsForWorkspace } from "../data/cockpitActivity";
+import { getCommandBlocksByArtifactId, getCommandBlocksForWorkspace } from "../data/commandBlocks";
+import {
+  buildCockpitOpsSafetySnapshot,
+  getCockpitOpsSafetyRecordsByArtifactId
+} from "../data/cockpitOpsSafety";
 import {
   ARTIFACT_DRAWER_SECTIONS,
   type ArtifactDrawerSectionId
@@ -25,6 +32,10 @@ type ArtifactReviewDrawerUncontrolledProps = ArtifactReviewDrawerBaseProps & {
 
 type ArtifactReviewDrawerProps = ArtifactReviewDrawerControlledProps | ArtifactReviewDrawerUncontrolledProps;
 
+function formatEvidenceLabel(value: string): string {
+  return value.replace(/-/g, " ");
+}
+
 export function ArtifactReviewDrawer({
   workspace,
   permissionModeId,
@@ -38,6 +49,38 @@ export function ArtifactReviewDrawer({
     ARTIFACT_DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? ARTIFACT_DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
+  const artifacts = useMemo(() => getCockpitArtifactsForWorkspace(workspace.id), [workspace.id]);
+  const activeArtifact = useMemo(
+    () => artifacts.find((artifact) => artifact.sectionId === activeSection.id),
+    [activeSection.id, artifacts]
+  );
+  const commandBlocksForWorkspace = useMemo(() => getCommandBlocksForWorkspace(workspace.id), [workspace.id]);
+  const commandBlocks = useMemo(
+    () => (activeArtifact ? getCommandBlocksByArtifactId(commandBlocksForWorkspace, activeArtifact.id) : []),
+    [activeArtifact, commandBlocksForWorkspace]
+  );
+  const opsSafety = useMemo(
+    () => buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId }),
+    [permissionModeId, workspace.id]
+  );
+  const baseActivityEvents = useMemo(() => getActivityEventsForWorkspace(workspace.id), [workspace.id]);
+  const allActivityEvents = useMemo(
+    () => [...baseActivityEvents, ...opsSafety.activityEvents],
+    [baseActivityEvents, opsSafety.activityEvents]
+  );
+  const activityEvents = useMemo(
+    () =>
+      activeArtifact
+        ? activeSection.id === "activity"
+          ? allActivityEvents
+          : getActivityEventsByArtifactId(allActivityEvents, activeArtifact.id)
+        : [],
+    [activeArtifact, activeSection.id, allActivityEvents]
+  );
+  const safetyRecords = useMemo(
+    () => (activeArtifact ? getCockpitOpsSafetyRecordsByArtifactId(opsSafety.records, activeArtifact.id) : []),
+    [activeArtifact, opsSafety.records]
+  );
 
   function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
     if (controlledActiveSectionId === undefined) {
@@ -107,6 +150,82 @@ export function ArtifactReviewDrawer({
         <span>{activeSection.label}</span>
         <h3>{activeSection.title}</h3>
         <p>{activeSection.body}</p>
+        {activeArtifact ? (
+          <section className="artifact-drawer-artifact-card" aria-label={`${activeSection.label} artifact details`}>
+            <strong>{activeArtifact.title}</strong>
+            <p>{activeArtifact.summary}</p>
+            <dl>
+              <div>
+                <dt>Status</dt>
+                <dd>{formatEvidenceLabel(activeArtifact.status)}</dd>
+              </div>
+              <div>
+                <dt>Review</dt>
+                <dd>{formatEvidenceLabel(activeArtifact.reviewState)}</dd>
+              </div>
+              <div>
+                <dt>Owner</dt>
+                <dd>{activeArtifact.ownerRole}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>{activeArtifact.sourceLabel}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{activeArtifact.timestampLabel}</dd>
+              </div>
+              <div>
+                <dt>Next</dt>
+                <dd>{activeArtifact.nextActionLabel}</dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+        {commandBlocks.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Command block evidence">
+            <h4>Command evidence</h4>
+            {commandBlocks.map((block) => (
+              <article key={block.id}>
+                <strong>{block.commandLabel}</strong>
+                <p>{block.outputSummary}</p>
+                <small>
+                  {block.sourceRole} / {formatEvidenceLabel(block.status)} / {block.exitLabel} /{" "}
+                  {block.durationLabel} / redaction {formatEvidenceLabel(block.redactionState)}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {activityEvents.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Activity evidence">
+            <h4>Activity events</h4>
+            {activityEvents.map((event) => (
+              <article key={event.id}>
+                <strong>{event.title}</strong>
+                <p>{event.summary}</p>
+                <small>
+                  {event.senderRole} to {event.recipientRole} / {formatEvidenceLabel(event.type)} /{" "}
+                  {formatEvidenceLabel(event.decisionState)}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {safetyRecords.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Safety evidence">
+            <h4>Safety signals</h4>
+            {safetyRecords.map((record) => (
+              <article key={record.id}>
+                <strong>{record.title}</strong>
+                <p>{record.summary}</p>
+                <small>
+                  {formatEvidenceLabel(record.status)} / {record.sourceLabel}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
         <dl>
           <div>
             <dt>Workspace</dt>
