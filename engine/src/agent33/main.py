@@ -50,6 +50,7 @@ from agent33.api.routes import (
     migrations,
     moa,
     multimodal,
+    ollama,
     openrouter,
     operations,
     operations_hub,
@@ -2424,6 +2425,7 @@ app.include_router(sessions.router)
 app.include_router(context.router)
 app.include_router(operator.router)
 app.include_router(openrouter.router)
+app.include_router(ollama.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)

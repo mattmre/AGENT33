@@ -22,8 +22,11 @@ import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
   buildOpenRouterConfigChanges,
   buildOpenRouterProbePayload,
+  formatOllamaModelRef,
   getModelReadinessLabel,
+  normalizeOllamaBaseUrl,
   normalizeConfiguredValue,
+  stripOllamaModelRef,
   type ModelConnectionBaseline,
   type ModelConnectionForm
 } from "./helpers";
@@ -55,6 +58,21 @@ interface ConfigSnapshot {
   baseline: ModelConnectionBaseline;
   hasStoredKey: boolean;
   storedKeyHint: string;
+}
+
+interface OllamaModelEntry {
+  name: string;
+  size: number | null;
+  parameterSize: string;
+  quantizationLevel: string;
+}
+
+interface OllamaRuntimeStatus {
+  state: "available" | "empty" | "unavailable" | "error";
+  ok: boolean;
+  baseUrl: string;
+  message: string;
+  models: OllamaModelEntry[];
 }
 
 function buildConfigSnapshot(data: unknown): ConfigSnapshot {
@@ -93,6 +111,49 @@ function renderStatus(status: StatusMessage | null): JSX.Element | null {
   );
 }
 
+function parseOllamaRuntimeStatus(data: unknown): OllamaRuntimeStatus {
+  const root = asRecord(data);
+  const models = Array.isArray(root.models)
+    ? root.models.map(parseOllamaModel).filter((model): model is OllamaModelEntry => model !== null)
+    : [];
+  const state = readString(root.state);
+  const normalizedState =
+    state === "available" || state === "empty" || state === "unavailable" || state === "error"
+      ? state
+      : "error";
+
+  return {
+    state: normalizedState,
+    ok: root.ok === true,
+    baseUrl: readString(root.base_url),
+    message: readString(root.message) || "Could not read Ollama status.",
+    models
+  };
+}
+
+function parseOllamaModel(data: unknown): OllamaModelEntry | null {
+  const root = asRecord(data);
+  const name = readString(root.name);
+  if (!name) {
+    return null;
+  }
+  const details = asRecord(root.details);
+  return {
+    name,
+    size: readNumber(root.size),
+    parameterSize: readString(details.parameter_size),
+    quantizationLevel: readString(details.quantization_level)
+  };
+}
+
+function formatModelSize(size: number | null): string {
+  if (size === null || size <= 0) {
+    return "size unknown";
+  }
+  const gib = size / 1024 ** 3;
+  return `${gib.toFixed(gib >= 10 ? 0 : 1)} GB`;
+}
+
 export function ModelConnectionWizardPanel({
   token,
   apiKey,
@@ -112,6 +173,7 @@ export function ModelConnectionWizardPanel({
   const [hasStoredKey, setHasStoredKey] = useState(false);
   const [storedKeyHint, setStoredKeyHint] = useState("");
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaRuntimeStatus | null>(null);
   const [modelSearch, setModelSearch] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState<ProviderPresetId>("openrouter");
   const [loadStatus, setLoadStatus] = useState<StatusMessage>({
@@ -122,13 +184,16 @@ export function ModelConnectionWizardPanel({
   const [probeStatus, setProbeStatus] = useState<StatusMessage | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isProbing, setIsProbing] = useState(false);
+  const [isLoadingOllama, setIsLoadingOllama] = useState(false);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const effectiveHasKey = form.removeStoredKey ? false : hasStoredKey || form.apiKey.trim() !== "";
+  const selectedPreset = getProviderPreset(selectedPresetId) ?? PROVIDER_PRESETS[0];
+  const providerAccessReady = selectedPreset.needsApiKey ? effectiveHasKey : true;
   const probeSucceeded = probeStatus?.tone === "success";
   const readinessLabel = getModelReadinessLabel(
     hasCredentials,
-    effectiveHasKey,
+    providerAccessReady,
     form.defaultModel,
     probeSucceeded
   );
@@ -136,7 +201,8 @@ export function ModelConnectionWizardPanel({
     () => filterOpenRouterModels(models, modelSearch).slice(0, 8),
     [modelSearch, models]
   );
-  const selectedPreset = getProviderPreset(selectedPresetId) ?? PROVIDER_PRESETS[0];
+  const ollamaModels = ollamaStatus?.models ?? [];
+  const liveOllamaModelRefs = ollamaModels.map((model) => formatOllamaModelRef(model.name));
 
   useEffect(() => {
     if (!hasCredentials) {
@@ -212,7 +278,50 @@ export function ModelConnectionWizardPanel({
     setForm((current) => applyProviderPresetToForm(current, preset));
     setSaveStatus(null);
     setProbeStatus(null);
+    setOllamaStatus(null);
   }
+
+  async function loadOllamaStatus(baseUrl = form.baseUrl): Promise<OllamaRuntimeStatus | null> {
+    if (!hasCredentials) {
+      setOllamaStatus(null);
+      return null;
+    }
+    setIsLoadingOllama(true);
+    try {
+      const result = await apiRequest({
+        method: "GET",
+        path: "/v1/ollama/status",
+        token,
+        apiKey,
+        query: { base_url: normalizeOllamaBaseUrl(baseUrl) }
+      });
+      onResult("Model Wizard - Ollama Status", result);
+      const status = parseOllamaRuntimeStatus(result.data);
+      setOllamaStatus(status);
+      return status;
+    } catch (error) {
+      const status: OllamaRuntimeStatus = {
+        state: "error",
+        ok: false,
+        baseUrl: normalizeOllamaBaseUrl(baseUrl),
+        message: error instanceof Error ? error.message : "Could not check Ollama status.",
+        models: []
+      };
+      setOllamaStatus(status);
+      return status;
+    } finally {
+      setIsLoadingOllama(false);
+    }
+  }
+
+  useEffect(() => {
+    if (selectedPresetId !== "ollama" || !hasCredentials) {
+      return;
+    }
+    void loadOllamaStatus();
+    // Run when the operator enters the Ollama path; manual refresh handles base URL edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCredentials, selectedPresetId]);
 
   async function saveSettings(): Promise<void> {
     const changes = buildOpenRouterConfigChanges(form, baseline);
@@ -277,6 +386,23 @@ export function ModelConnectionWizardPanel({
     setIsProbing(true);
     setProbeStatus({ tone: "info", message: "Testing model connection..." });
     try {
+      if (selectedPresetId === "ollama") {
+        const status = await loadOllamaStatus();
+        const selectedModel = stripOllamaModelRef(form.defaultModel);
+        const hasSelectedModel =
+          status?.models.some((model) => model.name === selectedModel) ?? false;
+        const ok = status?.ok === true && hasSelectedModel;
+        setProbeStatus({
+          tone: ok ? "success" : "error",
+          message: ok
+            ? `Ollama is ready at ${status.baseUrl}. Model: ${form.defaultModel}.`
+            : status?.ok
+              ? `Ollama is running, but ${selectedModel || "the selected model"} is not installed.`
+              : status?.message ?? "Ollama connection failed."
+        });
+        return;
+      }
+
       const result = await apiRequest({
         method: "POST",
         path: "/v1/openrouter/probe",
@@ -363,6 +489,50 @@ export function ModelConnectionWizardPanel({
               </button>
             ))}
           </div>
+          {selectedPresetId === "ollama" ? (
+            <div className="local-runtime-panel">
+              <div>
+                <strong>Local Ollama status</strong>
+                <p>
+                  {isLoadingOllama
+                    ? "Checking Ollama..."
+                    : ollamaStatus?.message ??
+                      "Check whether Ollama is running and which models are installed."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadOllamaStatus()}
+                disabled={!hasCredentials || isLoadingOllama}
+              >
+                {isLoadingOllama ? "Checking..." : "Refresh Ollama"}
+              </button>
+              {ollamaModels.length > 0 ? (
+                <div className="local-runtime-models" role="group" aria-label="Detected Ollama models">
+                  {ollamaModels.map((model) => {
+                    const modelRef = formatOllamaModelRef(model.name);
+                    const meta = [
+                      model.parameterSize,
+                      model.quantizationLevel,
+                      formatModelSize(model.size)
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <button
+                        type="button"
+                        key={model.name}
+                        className={form.defaultModel === modelRef ? "active" : ""}
+                        aria-pressed={form.defaultModel === modelRef}
+                        onClick={() => updateField("defaultModel", modelRef)}
+                      >
+                        <strong>{model.name}</strong>
+                        <small>{meta || "Local Ollama model"}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="model-wizard-card">
@@ -383,13 +553,17 @@ export function ModelConnectionWizardPanel({
             <input
               value={form.defaultModel}
               onChange={(event) => updateField("defaultModel", event.target.value)}
-              list="model-wizard-openrouter-models"
+              list="model-wizard-model-options"
             />
           </label>
-          <datalist id="model-wizard-openrouter-models">
-            {models.slice(0, 80).map((model) => (
-              <option key={model.id} value={model.id}>{model.name}</option>
-            ))}
+          <datalist id="model-wizard-model-options">
+            {selectedPresetId === "ollama"
+              ? liveOllamaModelRefs.map((modelRef) => (
+                  <option key={modelRef} value={modelRef}>{stripOllamaModelRef(modelRef)}</option>
+                ))
+              : models.slice(0, 80).map((model) => (
+                  <option key={model.id} value={model.id}>{model.name}</option>
+                ))}
           </datalist>
           <label>
             Base URL
@@ -452,31 +626,54 @@ export function ModelConnectionWizardPanel({
         <div className="outcome-section-head">
           <div>
             <p className="eyebrow">Model catalog</p>
-            <h3 id="model-catalog-preview-title">Available OpenRouter models</h3>
-            <p>Use search to find coding, free, long-context, or moderated model options.</p>
+            <h3 id="model-catalog-preview-title">
+              {selectedPresetId === "ollama" ? "Detected Ollama models" : "Available OpenRouter models"}
+            </h3>
+            <p>
+              {selectedPresetId === "ollama"
+                ? "Use detected local models after starting Ollama. No prompts or secrets are sent during this check."
+                : "Use search to find coding, free, long-context, or moderated model options."}
+            </p>
           </div>
-          <label>
+          {selectedPresetId !== "ollama" ? (
+            <label>
             Search models
             <input
               value={modelSearch}
               onChange={(event) => setModelSearch(event.target.value)}
               placeholder="coder, qwen, free, long context..."
             />
-          </label>
+            </label>
+          ) : null}
         </div>
         <div className="model-catalog-grid">
-          {filteredModels.map((model) => (
-            <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
-              <strong>{model.name}</strong>
-              <span>{model.id}</span>
-              <ModelCapabilityBadges model={model} />
-              <small>
-                {model.contextLength ? `${formatOpenRouterNumber(model.contextLength)} context` : "Context unknown"}
-                {model.promptPrice ? ` · ${model.promptPrice} input` : ""}
-                {model.isFree ? " · Free option" : ""}
-              </small>
-            </button>
-          ))}
+          {selectedPresetId === "ollama"
+            ? ollamaModels.map((model) => {
+                const modelRef = formatOllamaModelRef(model.name);
+                return (
+                  <button type="button" key={model.name} onClick={() => updateField("defaultModel", modelRef)}>
+                    <strong>{model.name}</strong>
+                    <span>{modelRef}</span>
+                    <small>
+                      {[model.parameterSize, model.quantizationLevel, formatModelSize(model.size)]
+                        .filter(Boolean)
+                        .join(" · ") || "Local Ollama model"}
+                    </small>
+                  </button>
+                );
+              })
+            : filteredModels.map((model) => (
+                <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
+                  <strong>{model.name}</strong>
+                  <span>{model.id}</span>
+                  <ModelCapabilityBadges model={model} />
+                  <small>
+                    {model.contextLength ? `${formatOpenRouterNumber(model.contextLength)} context` : "Context unknown"}
+                    {model.promptPrice ? ` · ${model.promptPrice} input` : ""}
+                    {model.isFree ? " · Free option" : ""}
+                  </small>
+                </button>
+              ))}
         </div>
       </section>
     </section>
