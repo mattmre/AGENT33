@@ -379,6 +379,10 @@ class PackRegistry:
                     break
         return dependents
 
+    def find_dependents(self, name: str) -> list[InstalledPack]:
+        """Return installed packs that declare a dependency on the named pack."""
+        return [self._installed[pack_name] for pack_name in self._find_dependents(name)]
+
     def _check_dependencies_met(self, pack: InstalledPack) -> list[str]:
         """Check that all declared pack dependencies are installed and version-compatible.
 
@@ -443,6 +447,10 @@ class PackRegistry:
                         f"for '{name}': {exc}"
                     )
         return errors
+
+    def check_dependents_compatible(self, name: str, new_version: str) -> list[str]:
+        """Return compatibility errors for dependents if the pack changed version."""
+        return self._check_dependents_compatible(name, new_version)
 
     # ------------------------------------------------------------------
     # Enable/Disable (tenant-scoped)
