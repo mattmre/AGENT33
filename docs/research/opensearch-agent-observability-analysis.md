@@ -6,14 +6,16 @@
 **Revision:** rev-2 (broadened scope — strategic backbone, not just observability)
 
 > **rev-3 framing note (2026-04-29):** The operator has proposed a product
-> split. Under that split, this entire plan targets **AGENTS33** (the
-> enterprise orchestration platform), not AGENT33 (the singular autonomous
-> agent product). See `docs/research/agent33-vs-agents33-product-split.md`
-> for the strategic case and the open structural questions. The phase
-> plan, tier matrices, and Path X / Y / Z fork below all become AGENTS33
-> concerns; AGENT33 is unaffected by them. This header note is the only
-> change made to this doc as a result — the body is preserved as the
-> founding roadmap for AGENTS33 once the split is confirmed.
+> split. Under that split, this entire plan targets **TIKNAS** — the
+> internal codename for the enterprise orchestration platform that will
+> launch publicly as **AGENTS33** on `agents33.com` — not AGENT33 (the
+> singular autonomous agent product). See
+> `docs/research/agent33-vs-tiknas-product-split.md` for the strategic
+> case, the naming convention, and the open structural questions. The
+> phase plan, tier matrices, and Path X / Y / Z fork below all become
+> TIKNAS concerns; AGENT33 is unaffected by them. This header note is
+> the only change made to this doc as a result — the body is preserved
+> as the founding roadmap for TIKNAS once the split is confirmed.
 
 ## 1. Framing
 
