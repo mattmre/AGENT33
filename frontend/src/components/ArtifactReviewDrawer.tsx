@@ -3,6 +3,13 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
+import { getCockpitArtifactsForWorkspace } from "../data/cockpitArtifacts";
+import { getActivityEventsByArtifactId, getActivityEventsForWorkspace } from "../data/cockpitActivity";
+import { getCommandBlocksByArtifactId, getCommandBlocksForWorkspace } from "../data/commandBlocks";
+import {
+  buildCockpitOpsSafetySnapshot,
+  getCockpitOpsSafetyRecordsByArtifactId
+} from "../data/cockpitOpsSafety";
 import {
   ARTIFACT_DRAWER_SECTIONS,
   type ArtifactDrawerSectionId
@@ -38,6 +45,21 @@ export function ArtifactReviewDrawer({
     ARTIFACT_DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? ARTIFACT_DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
+  const artifacts = getCockpitArtifactsForWorkspace(workspace.id);
+  const activeArtifact = artifacts.find((artifact) => artifact.sectionId === activeSection.id);
+  const commandBlocks = activeArtifact
+    ? getCommandBlocksByArtifactId(getCommandBlocksForWorkspace(workspace.id), activeArtifact.id)
+    : [];
+  const opsSafety = buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId });
+  const allActivityEvents = [...getActivityEventsForWorkspace(workspace.id), ...opsSafety.activityEvents];
+  const activityEvents = activeArtifact
+    ? activeSection.id === "activity"
+      ? allActivityEvents
+      : getActivityEventsByArtifactId(allActivityEvents, activeArtifact.id)
+    : [];
+  const safetyRecords = activeArtifact
+    ? getCockpitOpsSafetyRecordsByArtifactId(opsSafety.records, activeArtifact.id)
+    : [];
 
   function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
     if (controlledActiveSectionId === undefined) {
@@ -107,6 +129,81 @@ export function ArtifactReviewDrawer({
         <span>{activeSection.label}</span>
         <h3>{activeSection.title}</h3>
         <p>{activeSection.body}</p>
+        {activeArtifact ? (
+          <section className="artifact-drawer-artifact-card" aria-label={`${activeSection.label} artifact details`}>
+            <strong>{activeArtifact.title}</strong>
+            <p>{activeArtifact.summary}</p>
+            <dl>
+              <div>
+                <dt>Status</dt>
+                <dd>{activeArtifact.status.replace(/-/g, " ")}</dd>
+              </div>
+              <div>
+                <dt>Review</dt>
+                <dd>{activeArtifact.reviewState.replace(/-/g, " ")}</dd>
+              </div>
+              <div>
+                <dt>Owner</dt>
+                <dd>{activeArtifact.ownerRole}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>{activeArtifact.sourceLabel}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{activeArtifact.timestampLabel}</dd>
+              </div>
+              <div>
+                <dt>Next</dt>
+                <dd>{activeArtifact.nextActionLabel}</dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+        {commandBlocks.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Command block evidence">
+            <h4>Command evidence</h4>
+            {commandBlocks.map((block) => (
+              <article key={block.id}>
+                <strong>{block.commandLabel}</strong>
+                <p>{block.outputSummary}</p>
+                <small>
+                  {block.sourceRole} / {block.status} / {block.exitLabel} / {block.durationLabel} / redaction{" "}
+                  {block.redactionState}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {activityEvents.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Activity evidence">
+            <h4>Activity events</h4>
+            {activityEvents.map((event) => (
+              <article key={event.id}>
+                <strong>{event.title}</strong>
+                <p>{event.summary}</p>
+                <small>
+                  {event.senderRole} to {event.recipientRole} / {event.type} / {event.decisionState}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {safetyRecords.length > 0 ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Safety evidence">
+            <h4>Safety signals</h4>
+            {safetyRecords.map((record) => (
+              <article key={record.id}>
+                <strong>{record.title}</strong>
+                <p>{record.summary}</p>
+                <small>
+                  {record.status} / {record.sourceLabel}
+                </small>
+              </article>
+            ))}
+          </section>
+        ) : null}
         <dl>
           <div>
             <dt>Workspace</dt>

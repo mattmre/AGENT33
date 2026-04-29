@@ -1817,6 +1817,35 @@ button:disabled {
   margin: 0.4rem 0 0;
 }
 
+.artifact-drawer-artifact-card,
+.artifact-drawer-evidence-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 12px;
+  background: rgba(11, 30, 39, 0.38);
+}
+
+.artifact-drawer-evidence-list h4 {
+  margin: 0;
+  color: #f7ead1;
+}
+
+.artifact-drawer-evidence-list article {
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(125, 211, 252, 0.1);
+}
+
+.artifact-drawer-evidence-list small {
+  color: #6fa8b8;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .artifact-drawer-panel div {
   display: grid;
   gap: 0.12rem;
