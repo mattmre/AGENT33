@@ -102,6 +102,43 @@ function mockApiRequest(): void {
         }
       });
     }
+    if (path === "/v1/model-health") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/model-health",
+        data: {
+          overall_state: "ready",
+          summary: "2 local runtimes ready with 4 detected models.",
+          ready_provider_count: 2,
+          attention_provider_count: 0,
+          total_model_count: 4,
+          providers: [
+            {
+              provider: "ollama",
+              label: "Ollama",
+              state: "available",
+              ok: true,
+              base_url: "http://localhost:11434",
+              model_count: 2,
+              message: "Detected 2 local Ollama models.",
+              action: "Choose a detected Ollama model for local workflows."
+            },
+            {
+              provider: "lm-studio",
+              label: "LM Studio",
+              state: "available",
+              ok: true,
+              base_url: "http://localhost:1234/v1",
+              model_count: 2,
+              message: "Detected 2 LM Studio models.",
+              action: "Choose a detected LM Studio model for local workflows."
+            }
+          ]
+        }
+      });
+    }
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -110,6 +147,12 @@ function mockApiRequest(): void {
       data: {}
     });
   });
+}
+
+function getLocalRuntimePanel(label: string): HTMLElement {
+  const panel = screen.getByText(label).closest(".local-runtime-panel");
+  expect(panel).not.toBeNull();
+  return panel as HTMLElement;
 }
 
 describe("ModelConnectionWizardPanel provider setup v2", () => {
@@ -172,7 +215,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
 
-    expect(await screen.findByText("Detected 2 local Ollama models.")).toBeInTheDocument();
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected Ollama models" }));
     await user.click(detectedModels.getByRole("button", { name: /llama3.2:3b/ }));
 
@@ -183,6 +227,41 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
         path: "/v1/ollama/status",
         query: undefined
       })
+    );
+  });
+
+  it("shows unified local model health and refreshes with edited local URLs", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("One place to see what can run now")).toBeInTheDocument();
+    expect(screen.getByText("2 local runtimes ready with 4 detected models.")).toBeInTheDocument();
+    const healthKpis = screen.getByLabelText("Local runtime readiness");
+    expect(within(healthKpis).getByText("4")).toBeInTheDocument();
+    expect(within(healthKpis).getByText("models detected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const baseUrlInput = screen.getByLabelText("Base URL");
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://127.0.0.1:1234");
+    await user.click(screen.getByRole("button", { name: "Refresh local health" }));
+
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/model-health",
+          query: { lm_studio_base_url: "http://127.0.0.1:1234/v1" }
+        })
+      )
     );
   });
 
@@ -199,7 +278,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
-    await screen.findByText("Detected 2 local Ollama models.");
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Test connection" }));
 
     expect(await screen.findByText(/Ollama is ready at http:\/\/localhost:11434/)).toBeInTheDocument();
@@ -225,7 +305,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
 
     expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:1234/v1");
-    expect(await screen.findByText("Detected 2 LM Studio models.")).toBeInTheDocument();
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
     await user.click(detectedModels.getByRole("button", { name: /mistral-nemo-instruct/ }));
 
@@ -252,7 +333,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
-    await screen.findByText("Detected 2 LM Studio models.");
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
     await user.click(detectedModels.getByRole("button", { name: /qwen2.5-coder-7b-instruct/ }));
     await user.click(screen.getByRole("button", { name: "Test connection" }));
@@ -278,7 +360,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
-    await screen.findByText("Detected 2 LM Studio models.");
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const baseUrlInput = screen.getByLabelText("Base URL");
     await user.clear(baseUrlInput);
     await user.type(baseUrlInput, "http://127.0.0.1:1234");
