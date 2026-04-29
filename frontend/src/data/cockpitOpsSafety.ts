@@ -176,7 +176,7 @@ function getProcessStatus(tone: OperationsTimelineTone, status: string): Cockpit
     const normalized = status.trim().toLowerCase();
     return normalized === "failed" || normalized === "error" || normalized === "rejected" ? "blocked" : "needs-review";
   }
-  return "needs-review";
+  return "watching";
 }
 
 function getProcessArtifactKind(status: CockpitOpsSafetyRecordStatus): CockpitArtifactKind {

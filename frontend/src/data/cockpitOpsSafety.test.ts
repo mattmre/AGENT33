@@ -184,6 +184,29 @@ describe("cockpit operations/safety adapter", () => {
     });
   });
 
+  it("treats neutral process states as watched activity instead of risk", () => {
+    const snapshot = buildCockpitOpsSafetySnapshot({
+      workspaceId: "solo-builder",
+      permissionModeId: "ask",
+      processes: [
+        createProcess({
+          id: "queued-run",
+          status: "queued",
+          name: "Queued run"
+        })
+      ]
+    });
+
+    expect(getCockpitOpsSafetyRecordsByKind(snapshot.records, "operation-process")).toEqual([
+      expect.objectContaining({
+        status: "watching",
+        severity: "info",
+        relatedArtifactId: "solo-builder-activity",
+        title: "Queued run"
+      })
+    ]);
+  });
+
   it("keeps restricted mode blocked even without operations or approvals", () => {
     const snapshot = buildCockpitOpsSafetySnapshot({
       workspaceId: "research-build",
