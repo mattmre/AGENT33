@@ -46,7 +46,7 @@ export function CockpitProjectDashboard({
   const artifacts = opsSafety.artifacts;
   const safetyCta = getSafetyGateCta(opsSafety, permissionModeId);
   const safetySignals = getTopSafetyGateRecords(opsSafety.records, 4);
-  const priorityGateRecords = getTopSafetyGateRecords(opsSafety.records, 3);
+  const priorityGateRecords = safetySignals.slice(0, 3);
 
   return (
     <section className="cockpit-project-dashboard" aria-label="Project cockpit dashboard">

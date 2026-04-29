@@ -1727,6 +1727,10 @@ button:disabled {
   align-content: start;
 }
 
+.safety-cta-primary {
+  border-color: rgba(48, 213, 200, 0.24);
+}
+
 .safety-cta-warning {
   border-color: rgba(251, 191, 36, 0.32);
 }
