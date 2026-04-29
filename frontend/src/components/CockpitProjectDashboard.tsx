@@ -2,6 +2,8 @@ import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
+import type { CockpitArtifact } from "../data/cockpitArtifacts";
+import { buildCockpitOpsSafetySnapshot } from "../data/cockpitOpsSafety";
 
 interface CockpitProjectDashboardProps {
   workspace: WorkspaceSessionSummary;
@@ -23,6 +25,10 @@ function getRecommendedAction(workspace: WorkspaceSessionSummary): string {
   return "Start with a guided workflow so AGENT33 can create the first safe task plan.";
 }
 
+function getArtifactStatusLabel(artifact: CockpitArtifact): string {
+  return `${artifact.status.replace(/-/g, " ")} / ${artifact.reviewState.replace(/-/g, " ")}`;
+}
+
 export function CockpitProjectDashboard({
   workspace,
   permissionModeId,
@@ -34,6 +40,9 @@ export function CockpitProjectDashboard({
   const taskCounts = getWorkspaceTaskCounts(workspace.id);
   const activeTaskCount = taskCounts.running + taskCounts.review + taskCounts.blocked;
   const attentionTaskLabel = activeTaskCount === 1 ? "1 task needs attention" : `${activeTaskCount} tasks need attention`;
+  const opsSafety = buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId });
+  const artifacts = opsSafety.artifacts;
+  const safetySignals = opsSafety.records.slice(0, 4);
 
   return (
     <section className="cockpit-project-dashboard" aria-label="Project cockpit dashboard">
@@ -78,23 +87,72 @@ export function CockpitProjectDashboard({
         </article>
       </div>
 
-      <div className="cockpit-dashboard-artifacts" aria-label="Recent artifact placeholders">
-        <article>
-          <span>Plan</span>
-          <strong>{workspace.template} task plan</strong>
-          <p>Assumptions, risks, and validation commands will collect here as tasks run.</p>
-        </article>
-        <article>
-          <span>Validation</span>
-          <strong>Checks not run yet</strong>
-          <p>Test, lint, build, and review results will appear after a session produces evidence.</p>
-        </article>
-        <article>
-          <span>Outcome</span>
-          <strong>No PR or package linked</strong>
-          <p>The done state will point to a PR, artifact package, or blocker once execution starts.</p>
-        </article>
-      </div>
+      <section className="cockpit-dashboard-timeline" aria-label="Artifact timeline">
+        <div className="cockpit-dashboard-section-heading">
+          <div>
+            <span className="eyebrow">Artifacts</span>
+            <h3>Review timeline</h3>
+          </div>
+          <p>Typed evidence cards show owner, review state, timestamp, and the next safe action.</p>
+        </div>
+        <div className="cockpit-dashboard-artifacts">
+          {artifacts.map((artifact) => (
+            <article key={artifact.id} className={`artifact-card artifact-card-${artifact.status}`}>
+              <span>{artifact.kind}</span>
+              <strong>{artifact.title}</strong>
+              <p>{artifact.summary}</p>
+              <dl className="artifact-card-meta">
+                <div>
+                  <dt>Status</dt>
+                  <dd>{getArtifactStatusLabel(artifact)}</dd>
+                </div>
+                <div>
+                  <dt>Owner</dt>
+                  <dd>{artifact.ownerRole}</dd>
+                </div>
+                <div>
+                  <dt>Source</dt>
+                  <dd>{artifact.sourceLabel}</dd>
+                </div>
+                <div>
+                  <dt>Updated</dt>
+                  <dd>{artifact.timestampLabel}</dd>
+                </div>
+              </dl>
+              <p className="artifact-card-next-action">Next: {artifact.nextActionLabel}</p>
+              <button
+                type="button"
+                aria-label={`Review ${artifact.kind} artifact: ${artifact.title}`}
+                onClick={onReviewCurrentWork}
+              >
+                Review current work
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="cockpit-dashboard-safety-signals" aria-label="Safety and coordination signals">
+        <div className="cockpit-dashboard-section-heading">
+          <div>
+            <span className="eyebrow">Coordination</span>
+            <h3>{opsSafety.summary.primaryMessage}</h3>
+          </div>
+          <p>{opsSafety.summary.nextAction}</p>
+        </div>
+        <div className="cockpit-dashboard-signal-grid">
+          {safetySignals.map((signal) => (
+            <article key={signal.id} className={`cockpit-safety-signal signal-${signal.status}`}>
+              <span>{signal.kind.replace(/-/g, " ")}</span>
+              <strong>{signal.title}</strong>
+              <p>{signal.summary}</p>
+              <small>
+                {signal.sourceLabel} {"->"} {signal.relatedArtifactKind} artifact
+              </small>
+            </article>
+          ))}
+        </div>
+      </section>
     </section>
   );
 }

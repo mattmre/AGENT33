@@ -19,9 +19,17 @@ describe("CockpitProjectDashboard", () => {
 
     expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Multi-Agent Shipyard")).toBeInTheDocument();
-    expect(screen.getByText("PR-first implementation")).toBeInTheDocument();
+    expect(screen.getAllByText("PR-first implementation")).toHaveLength(2);
     expect(screen.getByText("3 tasks need attention")).toBeInTheDocument();
-    expect(screen.getByText("No PR or package linked")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Artifact timeline" })).toBeInTheDocument();
+    expect(screen.getByText("Review timeline")).toBeInTheDocument();
+    expect(screen.getByText("Artifact package ready")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review outcome artifact: Artifact package ready" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Workspace template adapter").length).toBeGreaterThan(1);
+    expect(screen.getByRole("region", { name: "Safety and coordination signals" })).toBeInTheDocument();
+    expect(screen.getByText("1 cockpit item needs review.")).toBeInTheDocument();
   });
 
   it("routes dashboard actions through the existing cockpit surfaces", async () => {
