@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
@@ -32,6 +32,10 @@ type ArtifactReviewDrawerUncontrolledProps = ArtifactReviewDrawerBaseProps & {
 
 type ArtifactReviewDrawerProps = ArtifactReviewDrawerControlledProps | ArtifactReviewDrawerUncontrolledProps;
 
+function formatEvidenceLabel(value: string): string {
+  return value.replace(/-/g, " ");
+}
+
 export function ArtifactReviewDrawer({
   workspace,
   permissionModeId,
@@ -45,21 +49,38 @@ export function ArtifactReviewDrawer({
     ARTIFACT_DRAWER_SECTIONS.find((section) => section.id === activeSectionId) ?? ARTIFACT_DRAWER_SECTIONS[0];
   const permissionMode = getPermissionMode(permissionModeId);
   const activeTabId = `artifact-drawer-tab-${activeSection.id}`;
-  const artifacts = getCockpitArtifactsForWorkspace(workspace.id);
-  const activeArtifact = artifacts.find((artifact) => artifact.sectionId === activeSection.id);
-  const commandBlocks = activeArtifact
-    ? getCommandBlocksByArtifactId(getCommandBlocksForWorkspace(workspace.id), activeArtifact.id)
-    : [];
-  const opsSafety = buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId });
-  const allActivityEvents = [...getActivityEventsForWorkspace(workspace.id), ...opsSafety.activityEvents];
-  const activityEvents = activeArtifact
-    ? activeSection.id === "activity"
-      ? allActivityEvents
-      : getActivityEventsByArtifactId(allActivityEvents, activeArtifact.id)
-    : [];
-  const safetyRecords = activeArtifact
-    ? getCockpitOpsSafetyRecordsByArtifactId(opsSafety.records, activeArtifact.id)
-    : [];
+  const artifacts = useMemo(() => getCockpitArtifactsForWorkspace(workspace.id), [workspace.id]);
+  const activeArtifact = useMemo(
+    () => artifacts.find((artifact) => artifact.sectionId === activeSection.id),
+    [activeSection.id, artifacts]
+  );
+  const commandBlocksForWorkspace = useMemo(() => getCommandBlocksForWorkspace(workspace.id), [workspace.id]);
+  const commandBlocks = useMemo(
+    () => (activeArtifact ? getCommandBlocksByArtifactId(commandBlocksForWorkspace, activeArtifact.id) : []),
+    [activeArtifact, commandBlocksForWorkspace]
+  );
+  const opsSafety = useMemo(
+    () => buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId }),
+    [permissionModeId, workspace.id]
+  );
+  const baseActivityEvents = useMemo(() => getActivityEventsForWorkspace(workspace.id), [workspace.id]);
+  const allActivityEvents = useMemo(
+    () => [...baseActivityEvents, ...opsSafety.activityEvents],
+    [baseActivityEvents, opsSafety.activityEvents]
+  );
+  const activityEvents = useMemo(
+    () =>
+      activeArtifact
+        ? activeSection.id === "activity"
+          ? allActivityEvents
+          : getActivityEventsByArtifactId(allActivityEvents, activeArtifact.id)
+        : [],
+    [activeArtifact, activeSection.id, allActivityEvents]
+  );
+  const safetyRecords = useMemo(
+    () => (activeArtifact ? getCockpitOpsSafetyRecordsByArtifactId(opsSafety.records, activeArtifact.id) : []),
+    [activeArtifact, opsSafety.records]
+  );
 
   function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
     if (controlledActiveSectionId === undefined) {
@@ -136,11 +157,11 @@ export function ArtifactReviewDrawer({
             <dl>
               <div>
                 <dt>Status</dt>
-                <dd>{activeArtifact.status.replace(/-/g, " ")}</dd>
+                <dd>{formatEvidenceLabel(activeArtifact.status)}</dd>
               </div>
               <div>
                 <dt>Review</dt>
-                <dd>{activeArtifact.reviewState.replace(/-/g, " ")}</dd>
+                <dd>{formatEvidenceLabel(activeArtifact.reviewState)}</dd>
               </div>
               <div>
                 <dt>Owner</dt>
@@ -169,8 +190,8 @@ export function ArtifactReviewDrawer({
                 <strong>{block.commandLabel}</strong>
                 <p>{block.outputSummary}</p>
                 <small>
-                  {block.sourceRole} / {block.status} / {block.exitLabel} / {block.durationLabel} / redaction{" "}
-                  {block.redactionState}
+                  {block.sourceRole} / {formatEvidenceLabel(block.status)} / {block.exitLabel} /{" "}
+                  {block.durationLabel} / redaction {formatEvidenceLabel(block.redactionState)}
                 </small>
               </article>
             ))}
@@ -184,7 +205,8 @@ export function ArtifactReviewDrawer({
                 <strong>{event.title}</strong>
                 <p>{event.summary}</p>
                 <small>
-                  {event.senderRole} to {event.recipientRole} / {event.type} / {event.decisionState}
+                  {event.senderRole} to {event.recipientRole} / {formatEvidenceLabel(event.type)} /{" "}
+                  {formatEvidenceLabel(event.decisionState)}
                 </small>
               </article>
             ))}
@@ -198,7 +220,7 @@ export function ArtifactReviewDrawer({
                 <strong>{record.title}</strong>
                 <p>{record.summary}</p>
                 <small>
-                  {record.status} / {record.sourceLabel}
+                  {formatEvidenceLabel(record.status)} / {record.sourceLabel}
                 </small>
               </article>
             ))}
