@@ -124,8 +124,18 @@ describe("cockpit operations/safety adapter", () => {
       relatedArtifactId: "test-review-approval"
     });
     expect(snapshot.activityEvents.filter((event) => event.type === "approval")).toEqual([
-      expect.objectContaining({ decisionState: "blocked", relatedArtifactId: "test-review-risk" }),
-      expect.objectContaining({ decisionState: "pending", relatedArtifactId: "test-review-approval" })
+      expect.objectContaining({
+        decisionState: "blocked",
+        relatedArtifactId: "test-review-risk",
+        createdAtLabel: "Requested 1.5 h ago",
+        expiresAtLabel: "Expires in 30 min"
+      }),
+      expect.objectContaining({
+        decisionState: "pending",
+        relatedArtifactId: "test-review-approval",
+        createdAtLabel: "Requested 1.5 h ago",
+        expiresAtLabel: "Expires in 30 min"
+      })
     ]);
   });
 

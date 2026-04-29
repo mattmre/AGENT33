@@ -24,6 +24,8 @@ describe("cockpit activity events", () => {
       title: "Approval needed: Prepare merge handoff",
       summary: "Merge-safe summary and final status.",
       timestampLabel: "Template",
+      createdAtLabel: "Requested 15 min ago",
+      expiresAtLabel: "Expires in 45 min",
       relatedTaskId: "quality-merge",
       relatedArtifactId: "test-review-approval",
       nextActionLabel: "Approve, reject, or ask for a safer route"
@@ -32,7 +34,9 @@ describe("cockpit activity events", () => {
     expect(event).toMatchObject({
       decisionState: "pending",
       recipientRole: "Operator",
-      relatedTaskId: "quality-merge"
+      relatedTaskId: "quality-merge",
+      createdAtLabel: "Requested 15 min ago",
+      expiresAtLabel: "Expires in 45 min"
     });
     expect(Object.keys(event)).not.toContain("message");
     expect(Object.keys(event)).not.toContain("transcript");
@@ -83,6 +87,8 @@ describe("cockpit activity events", () => {
       "shipyard-command-shipyard-scout",
       "shipyard-command-shipyard-build"
     ]);
+    expect(handoffs.map((event) => event.sequenceIndex)).toEqual([2, 3]);
+    expect(handoffs.every((event) => event.isInterAgentHandoff)).toBe(true);
   });
 
   it("filters events by artifact id for drawer sections", () => {
@@ -118,7 +124,12 @@ describe("cockpit activity events", () => {
       type: "validation",
       severity: "success",
       decisionState: "pending",
-      relatedArtifactId: "shipyard-outcome"
+      relatedArtifactId: "shipyard-outcome",
+      validationDetails: [
+        expect.objectContaining({ name: "Implementation evidence", status: "pass" }),
+        expect.objectContaining({ name: "Validation commands", status: "pass" }),
+        expect.objectContaining({ name: "Reviewer handoff", status: "pass" })
+      ]
     });
   });
 

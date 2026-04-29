@@ -286,7 +286,26 @@ describe("cockpit artifact view models", () => {
     expect(artifactsByKind.test).toMatchObject({
       status: "needs-review",
       reviewState: "needs-review",
-      relatedTaskIds: ["research-convert"]
+      relatedTaskIds: ["research-convert"],
+      validationItems: [
+        expect.objectContaining({ name: "Scope checks", status: "pass" }),
+        expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+        expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+      ]
+    });
+  });
+
+  it("adds validation details and outcome handoff state for completed work", () => {
+    const artifactsByKind = getCockpitArtifactsByKind("shipyard");
+
+    expect(artifactsByKind.test.validationItems).toEqual([
+      expect.objectContaining({ name: "Scope checks", status: "pass" }),
+      expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+      expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+    ]);
+    expect(artifactsByKind.outcome).toMatchObject({
+      outcomeState: "package-ready",
+      handoffState: "confirmed"
     });
   });
 

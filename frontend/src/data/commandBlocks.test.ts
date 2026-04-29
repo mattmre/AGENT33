@@ -31,6 +31,7 @@ describe("cockpit command blocks", () => {
       exitCode: 0,
       timestampLabel: "Just now",
       durationMs: 2000,
+      traceId: "trace-lint-1",
       redactionState: "not-required",
       outputSummary: "TypeScript completed without errors.",
       relatedArtifactId: "shipyard-command",
@@ -44,7 +45,9 @@ describe("cockpit command blocks", () => {
       status: "failed",
       exitCode: 1,
       timestampLabel: "Just now",
+      traceId: "trace-test-1",
       redactionState: "redacted",
+      failureSummary: "One test assertion failed",
       outputSummary: "One test failed; full output was redacted for review.",
       relatedArtifactId: "shipyard-command",
       relatedTaskId: "shipyard-review"
@@ -53,13 +56,16 @@ describe("cockpit command blocks", () => {
     expect(success).toMatchObject({
       exitLabel: "Exit 0",
       durationLabel: "2 s",
+      traceId: "trace-lint-1",
       nextActionLabel: "Review the linked artifact"
     });
     expect(failure).toMatchObject({
       exitLabel: "Exit 1",
       durationLabel: "Duration not recorded",
       redactionState: "redacted",
-      nextActionLabel: "Inspect the failure summary"
+      traceId: "trace-test-1",
+      failureSummary: "One test assertion failed",
+      nextActionLabel: "Investigate failure: One test assertion failed"
     });
   });
 
@@ -72,6 +78,10 @@ describe("cockpit command blocks", () => {
     expect(blocks.map((block) => block.sourceRole)).toEqual(["Scout", "Builder"]);
     expect(blocks.every((block) => block.status === "running")).toBe(true);
     expect(blocks.every((block) => block.redactionState === "not-required")).toBe(true);
+    expect(blocks.map((block) => block.traceId)).toEqual([
+      "shipyard-trace-shipyard-scout",
+      "shipyard-trace-shipyard-build"
+    ]);
   });
 
   it("maps blocked tasks into blocked command review records", () => {
@@ -80,6 +90,8 @@ describe("cockpit command blocks", () => {
     expect(blocks.find((block) => block.relatedTaskId === "quality-merge")).toMatchObject({
       status: "blocked",
       redactionState: "review-required",
+      traceId: "test-review-trace-quality-merge",
+      failureSummary: "Prepare merge handoff is blocked before command evidence can complete.",
       nextActionLabel: "Resolve the blocker before rerunning"
     });
   });
