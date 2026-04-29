@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGENT-33 Rich Review Deck - Storyboards and Mockups</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --bg-2: #0c1830;
+      --panel: #0f1d34;
+      --panel-2: #15284a;
+      --panel-3: #1c335e;
+      --text: #edf3ff;
+      --muted: #9cb2d2;
+      --accent: #68d7ff;
+      --accent-2: #7ee787;
+      --accent-3: #c797ff;
+      --warn: #ffbf6d;
+      --danger: #ff7b72;
+      --border: rgba(255, 255, 255, 0.12);
+      --shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 20% 0%, #153563 0%, transparent 35%),
+        radial-gradient(circle at 100% 0%, #1d2454 0%, transparent 28%),
+        linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .deck {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      display: none;
+      height: 100%;
+      padding: 44px 52px 88px;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 20px;
+    }
+
+    .slide.active {
+      display: grid;
+    }
+
+    .eyebrow {
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.08;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 4vw, 4.2rem);
+      max-width: 1040px;
+    }
+
+    h2 {
+      font-size: clamp(1.9rem, 3vw, 3rem);
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      color: var(--accent);
+    }
+
+    p, li, .meta {
+      font-size: 1rem;
+      line-height: 1.45;
+    }
+
+    .lead {
+      max-width: 1000px;
+      font-size: 1.14rem;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      margin-bottom: 10px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .good { color: var(--accent-2); }
+    .warn { color: var(--warn); }
+    .risk { color: var(--danger); }
+    .info { color: var(--accent); }
+    .purple { color: var(--accent-3); }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .mockup {
+      background: linear-gradient(180deg, #0d1525 0%, #101b2e 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      min-height: 320px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .mockup-window {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      background: #0e1728;
+      overflow: hidden;
+      display: grid;
+      min-height: 100%;
+    }
+
+    .window-top {
+      background: #0b1320;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.18);
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 420px;
+    }
+
+    .sidebar {
+      background: #0b1423;
+      padding: 16px 14px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .brand {
+      padding: 10px 12px;
+      background: rgba(104, 215, 255, 0.08);
+      border: 1px solid rgba(104, 215, 255, 0.18);
+      border-radius: 14px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .nav-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .nav-item.active {
+      color: var(--text);
+      background: rgba(126, 231, 135, 0.1);
+      border: 1px solid rgba(126, 231, 135, 0.22);
+    }
+
+    .main {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    }
+
+    .hero-card,
+    .content-card,
+    .signal-card,
+    .mini-card {
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      padding: 14px;
+    }
+
+    .hero-card {
+      display: grid;
+      gap: 10px;
+      min-height: 116px;
+    }
+
+    .mockup-title {
+      font-size: 1.12rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .mockup-sub {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .cta-row,
+    .status-row,
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .cta {
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #183055;
+    }
+
+    .cta.primary {
+      background: linear-gradient(180deg, #1790c9, #126a9d);
+      color: white;
+    }
+
+    .input-bar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      color: var(--muted);
+    }
+
+    .two-pane {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 12px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .progress-bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 62%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .storyboard {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+
+    .frame {
+      display: grid;
+      gap: 10px;
+    }
+
+    .frame-box {
+      min-height: 190px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .frame-title {
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: var(--accent);
+    }
+
+    .wireline,
+    .wireblock {
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .wireline { height: 10px; }
+    .wireblock { min-height: 48px; }
+
+    .frame-note {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .phase-board {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .phase-card {
+      min-height: 220px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .phase-card strong {
+      color: var(--accent);
+      font-size: 1rem;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .compare .card h3 {
+      margin-bottom: 12px;
+    }
+
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .score {
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .score strong {
+      display: block;
+      font-size: 1.4rem;
+      color: var(--accent-2);
+      margin-bottom: 6px;
+    }
+
+    .review-banner {
+      padding: 12px 16px;
+      border-radius: 14px;
+      background: rgba(255, 191, 109, 0.08);
+      border: 1px solid rgba(255, 191, 109, 0.18);
+      color: #ffe0b4;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 18px;
+      background: rgba(7, 17, 31, 0.9);
+      border-top: 1px solid var(--border);
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent); }
+
+    .counter {
+      color: var(--muted);
+      min-width: 100px;
+    }
+
+    .spacer { flex: 1; }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 1200px) {
+      .grid.two,
+      .grid.three,
+      .grid.four,
+      .compare,
+      .storyboard,
+      .phase-board,
+      .score-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .app-shell,
+      .two-pane {
+        grid-template-columns: 1fr;
+      }
+
+      .slide {
+        padding: 30px 22px 88px;
+        overflow-y: auto;
+      }
+    }
+
+    @media print {
+      html, body {
+        overflow: visible;
+        background: white;
+        color: black;
+      }
+
+      .slide,
+      .slide.active {
+        display: grid;
+        page-break-after: always;
+        min-height: 100vh;
+        background: white;
+        color: black;
+      }
+
+      .actions { display: none; }
+      .card, .mockup, .phase-card, .frame-box, .score {
+        box-shadow: none;
+        border-color: #cccccc;
+        background: white;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="eyebrow">AGENT-33 / Rich Product Review</div>
+      <h1>Executive summary, storyboard, and mockup deck for pre-sprint review</h1>
+      <p class="lead">
+        This deck is built for visual review. It combines executive framing, the three panel-sweep updates,
+        phase-by-phase UI implications, storyboarded user journeys, and in-browser mockups of the product
+        surfaces expected from the current final phase plan.
+      </p>
+      <div class="grid two">
+        <div class="card">
+          <h3>What this deck is for</h3>
+          <ul>
+            <li>Review the actual product changes visually rather than as text only.</li>
+            <li>See how layman-first UX, operator tooling, and containment rules show up on screen.</li>
+            <li>Identify weaknesses before sprint commencement.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>How to read it</h3>
+          <div class="pill-row">
+            <span class="pill good">Executive summary</span>
+            <span class="pill info">Storyboard scenes</span>
+            <span class="pill purple">UI mockups</span>
+            <span class="pill warn">Weakness checkpoints</span>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Audience: Product Management / Design / Architecture</span>
+        <span>Source: final review-ready phase plan + 3 sweep artifacts</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Executive summary</div>
+      <h2>The product shift in one slide</h2>
+      <div class="compare">
+        <div class="card">
+          <h3>Before this plan</h3>
+          <ul>
+            <li>Too many settings and opaque internal controls</li>
+            <li>Too little first-run guidance</li>
+            <li>Weak relationship between UI and system truth</li>
+            <li>Advanced capability threatened to dominate the default path</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>After this plan</h3>
+          <ul>
+            <li>Layman-default entry with guided onboarding</li>
+            <li>Ask -> progress -> answer -> why as the first visible value loop</li>
+            <li>Operator view as progressive disclosure, not default clutter</li>
+            <li>Prototype and improvement capabilities explicitly contained</li>
+          </ul>
+        </div>
+      </div>
+      <div class="score-grid">
+        <div class="score"><strong>1</strong>Plan is final-review-ready</div>
+        <div class="score"><strong>2</strong>Three expert sweeps preserved</div>
+        <div class="score"><strong>3</strong>First-run UX now explicitly scoped</div>
+        <div class="score"><strong>4</strong>Official lock still gated by Layer 0</div>
+      </div>
+      <div class="footer">
+        <span>PM takeaway</span>
+        <span>Proceed into sprint planning with a visual, critique-ready product frame</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Storyboard</div>
+      <h2>Storyboard: the first 10 minutes of a new user</h2>
+      <div class="storyboard">
+        <div class="frame">
+          <div class="frame-box">
+            <div class="frame-title">1. Install + connect model</div>
+            <div class="wireblock"></div>
+            <div class="wireline" style="width:80%"></div>
+            <div class="wireline" style="width:60%"></div>
+            <div class="chip good">Simple setup wizard</div>
+          </div>
+          <div class="frame-note">No architecture docs required. Minimal decisions.</div>
+        </div>
+        <div class="frame">
+          <div class="frame-box">
+            <div class="frame-title">2. Choose role</div>
+            <div class="wireblock"></div>
+            <div class="wireblock" style="min-height:36px"></div>
+            <div class="chip info">Layman role preselected</div>
+          </div>
+          <div class="frame-note">Operator capability exists, but it is not the default.</div>
+        </div>
+        <div class="frame">
+          <div class="frame-box">
+            <div class="frame-title">3. Ask first question</div>
+            <div class="wireblock" style="min-height:62px"></div>
+            <div class="wireline" style="width:92%"></div>
+            <div class="cta primary">Ask AGENT-33</div>
+          </div>
+          <div class="frame-note">Single-entry ask surface, no subsystem vocabulary.</div>
+        </div>
+        <div class="frame">
+          <div class="frame-box">
+            <div class="frame-title">4. Watch progress</div>
+            <div class="wireline" style="width:58%"></div>
+            <div class="wireblock" style="min-height:52px"></div>
+            <div class="chip warn">Approval wait if needed</div>
+          </div>
+          <div class="frame-note">Task name, stage, and state are visible in user language.</div>
+        </div>
+        <div class="frame">
+          <div class="frame-box">
+            <div class="frame-title">5. Get answer + why</div>
+            <div class="wireblock" style="min-height:64px"></div>
+            <div class="wireline" style="width:88%"></div>
+            <div class="chip purple">Confidence caveat in plain language</div>
+          </div>
+          <div class="frame-note">No raw status tokens; the "why" carries the caveat.</div>
+        </div>
+      </div>
+      <div class="review-banner">Review prompt: Is any step here still too technical, too sparse, or too dependent on hidden assumptions?</div>
+      <div class="footer">
+        <span>Storyboarding goal</span>
+        <span>Make the first-run experience concrete enough to critique before build starts</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 1 / onboarding</div>
+      <h2>Mockup: first-run onboarding and model connection</h2>
+      <div class="mockup">
+        <div class="mockup-window">
+          <div class="window-top">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div>AGENT-33 Setup</div>
+            <div>Step 1 of 4</div>
+          </div>
+          <div class="app-shell">
+            <div class="sidebar">
+              <div class="brand">AGENT-33</div>
+              <div class="nav-item active">1. Connect model</div>
+              <div class="nav-item">2. Choose role</div>
+              <div class="nav-item">3. First task</div>
+              <div class="nav-item">4. Finish</div>
+            </div>
+            <div class="main">
+              <div class="hero-card">
+                <div class="mockup-title">Connect a model in under 2 minutes</div>
+                <div class="mockup-sub">Default setup avoids jargon. Advanced provider controls remain hidden until requested.</div>
+                <div class="chip-row">
+                  <span class="chip good">Recommended: OpenAI-compatible endpoint</span>
+                  <span class="chip info">Simple credentials flow</span>
+                </div>
+              </div>
+              <div class="content-card stack">
+                <div class="input-bar"><span>API endpoint or provider</span><span class="chip">Auto-detect</span></div>
+                <div class="input-bar"><span>API key / token</span><span class="chip">Secure input</span></div>
+                <div class="input-bar"><span>Model selection</span><span class="chip">Default recommended</span></div>
+              </div>
+              <div class="cta-row">
+                <div class="cta primary">Continue</div>
+                <div class="cta">Test connection</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>What this mockup represents</h3>
+          <ul>
+            <li>Explicit first-run path from zero to value</li>
+            <li>Minimal required setup steps</li>
+            <li>Layman-default posture</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Review for weakness</h3>
+          <ul>
+            <li>Is connection setup still too technical?</li>
+            <li>Do we need stronger defaults or prefilled provider guidance?</li>
+            <li>Should role choice happen before model connection?</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Linked plan area</span>
+        <span>Phase 3 onboarding model and first-run exit criterion</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 2 / layman shell</div>
+      <h2>Mockup: default layman home screen and ask surface</h2>
+      <div class="mockup">
+        <div class="mockup-window">
+          <div class="window-top">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div>AGENT-33 / Layman View</div>
+            <div>Role: Layman</div>
+          </div>
+          <div class="app-shell">
+            <div class="sidebar">
+              <div class="brand">Home</div>
+              <div class="nav-item active">Ask AGENT-33</div>
+              <div class="nav-item">Recent answers</div>
+              <div class="nav-item">My approvals</div>
+              <div class="nav-item">Need help?</div>
+            </div>
+            <div class="main">
+              <div class="hero-card">
+                <div class="mockup-title">What do you want AGENT-33 to do?</div>
+                <div class="mockup-sub">Describe the task in plain language. The system will handle the internal agent workflow for you.</div>
+              </div>
+              <div class="input-bar">
+                <span>Example: "Review our fundraising motion and tell me the top next priority."</span>
+                <span class="cta primary">Send</span>
+              </div>
+              <div class="two-pane">
+                <div class="content-card stack">
+                  <div class="mockup-title">Suggested starter workflows</div>
+                  <div class="chip-row">
+                    <span class="chip">Research a repo</span>
+                    <span class="chip">Summarize a plan</span>
+                    <span class="chip">Prepare a review deck</span>
+                    <span class="chip">Create a workstream brief</span>
+                  </div>
+                </div>
+                <div class="content-card stack">
+                  <div class="mockup-title">Plain-language promise</div>
+                  <div class="mockup-sub">You will see progress, waits, and answers explained without internal system jargon.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Review question</span>
+        <span>Do the suggested workflows empower new users quickly enough?</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 3 / progress and answer</div>
+      <h2>Mockup: progress, answer, and "why not more confidence"</h2>
+      <div class="mockup">
+        <div class="mockup-window">
+          <div class="window-top">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div>AGENT-33 / Task Run</div>
+            <div>Run #A33-0142</div>
+          </div>
+          <div class="main">
+            <div class="hero-card">
+              <div class="mockup-title">Review our fundraising plan and tell me the top next priority</div>
+              <div class="status-row">
+                <span class="chip good">Running</span>
+                <span class="chip">Current stage: synthesizing findings</span>
+                <span class="chip">Estimated next update: soon</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+            </div>
+            <div class="two-pane">
+              <div class="content-card stack">
+                <div class="mockup-title">Answer</div>
+                <div class="mockup-sub">Top next priority: finish the backbone gate batch and keep the first public surface limited to the layman ask -> answer -> why loop.</div>
+              </div>
+              <div class="content-card stack">
+                <div class="mockup-title">Why this answer</div>
+                <div class="mockup-sub">This recommendation is strongest because the plan and all three panel sweeps converged on fixing first-run usability without letting unproven architecture leak into public UX.</div>
+                <div class="chip-row">
+                  <span class="chip warn">Confidence caveat: explanation depth depends on Gate 4 completion</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>UI rule illustrated</h3>
+          <ul>
+            <li>Confidence caveats live inside the explanation.</li>
+            <li>Raw `low_confidence` is not shown as the main output.</li>
+            <li>Progress is task-centric, not subsystem-centric.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Review for weakness</h3>
+          <ul>
+            <li>Does the confidence caveat need stronger action guidance?</li>
+            <li>Should "why this answer" be split from "what to do next"?</li>
+            <li>Is the progress state too vague or just right?</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Linked plan area</span>
+        <span>Phase 3 layman flow, approval UX expectations, and status vocabulary treatment</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 4 / approval and blocked states</div>
+      <h2>Mockup: approval-wait and blocked-run explanation states</h2>
+      <div class="grid two">
+        <div class="mockup">
+          <div class="mockup-window">
+            <div class="window-top">
+              <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+              <div>Approval Required</div>
+              <div>Plain-language state</div>
+            </div>
+            <div class="main">
+              <div class="hero-card">
+                <div class="mockup-title">We need your approval to continue</div>
+                <div class="mockup-sub">AGENT-33 is ready to make a change that could affect repo artifacts. Nothing will happen until you approve.</div>
+                <div class="chip-row">
+                  <span class="chip warn">Why waiting: file changes would be written</span>
+                </div>
+              </div>
+              <div class="cta-row">
+                <div class="cta primary">Approve</div>
+                <div class="cta">Not now</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mockup">
+          <div class="mockup-window">
+            <div class="window-top">
+              <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+              <div>Blocked</div>
+              <div>User-language state</div>
+            </div>
+            <div class="main">
+              <div class="hero-card">
+                <div class="mockup-title">This run is blocked on missing information</div>
+                <div class="mockup-sub">AGENT-33 cannot proceed because the model connection is incomplete. Finish setup or switch to an available model.</div>
+                <div class="chip-row">
+                  <span class="chip risk">Blocked reason: model not reachable</span>
+                </div>
+              </div>
+              <div class="cta-row">
+                <div class="cta primary">Fix setup</div>
+                <div class="cta">See details</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Review question</span>
+        <span>Are these states explanatory enough, or do they still feel like internal workflow leakage?</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 5 / operator inbox</div>
+      <h2>Mockup: operator dashboard and inbox shell</h2>
+      <div class="mockup">
+        <div class="mockup-window">
+          <div class="window-top">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div>AGENT-33 / Operator Workspace</div>
+            <div>Opt-in surface</div>
+          </div>
+          <div class="app-shell">
+            <div class="sidebar">
+              <div class="brand">Operator</div>
+              <div class="nav-item active">Inbox</div>
+              <div class="nav-item">Runs</div>
+              <div class="nav-item">Evidence</div>
+              <div class="nav-item">Replay</div>
+            </div>
+            <div class="main">
+              <div class="grid two">
+                <div class="signal-card">
+                  <div class="mockup-title">Approval requests</div>
+                  <div class="mockup-sub">2 waiting</div>
+                </div>
+                <div class="signal-card">
+                  <div class="mockup-title">Blocked runs</div>
+                  <div class="mockup-sub">1 needs intervention</div>
+                </div>
+                <div class="signal-card">
+                  <div class="mockup-title">Low-confidence notices</div>
+                  <div class="mockup-sub">3 need review</div>
+                </div>
+                <div class="signal-card">
+                  <div class="mockup-title">Promotion review items</div>
+                  <div class="mockup-sub">Reserved slot — inactive until Phase 7</div>
+                </div>
+              </div>
+              <div class="content-card stack">
+                <div class="mockup-title">Current queue</div>
+                <div class="mini-card">Run A33-0142 — approval needed for repo write</div>
+                <div class="mini-card">Run A33-0143 — insufficient evidence, operator review suggested</div>
+                <div class="mini-card">Run A33-0144 — blocked on browser evidence bundle</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Review question</span>
+        <span>Is the operator shell valuable without overwhelming the product or leaking future-phase complexity too early?</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Mockup 6 / evidence ladder</div>
+      <h2>Mockup: evidence ladder and replay drill-down</h2>
+      <div class="mockup">
+        <div class="mockup-window">
+          <div class="window-top">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div>Judgment + Evidence</div>
+            <div>Summary-first</div>
+          </div>
+          <div class="two-pane" style="padding:18px;">
+            <div class="stack">
+              <div class="content-card">
+                <div class="mockup-title">Judgment summary</div>
+                <div class="mockup-sub">Recommendation is supported by the final phase plan, three panel sweeps, and the gate sequencing rationale.</div>
+              </div>
+              <div class="content-card">
+                <div class="mockup-title">Level 1 - Summary</div>
+                <div class="mockup-sub">High-level answer suitable for layman users.</div>
+              </div>
+              <div class="content-card">
+                <div class="mockup-title">Level 2 - Cited artifacts</div>
+                <div class="mockup-sub">Links to final plan, sweep artifacts, and supporting research.</div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="content-card">
+                <div class="mockup-title">Level 3 - Replay spans</div>
+                <div class="mockup-sub">Checkpoint-linked review path for operators.</div>
+              </div>
+              <div class="content-card">
+                <div class="mockup-title">Level 4 - Challenged assumptions</div>
+                <div class="mockup-sub">What remains uncertain, advisory only, or blocked by gate completion.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Review question</span>
+        <span>Does this evidence ladder feel understandable, or does it still need simplification for PM or layman-facing use?</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Phase storyboard</div>
+      <h2>Phase-by-phase storyboard: what becomes visible when</h2>
+      <div class="phase-board">
+        <div class="phase-card">
+          <strong>Phase 1</strong>
+          <div>Shared contracts and runtime substrate</div>
+          <div class="chip info">Mostly invisible to users</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 2</strong>
+          <div>Approval vocabulary, pause/block semantics, intervention meanings</div>
+          <div class="chip warn">Defines state language for UI</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 3</strong>
+          <div>Layman shell, operator inbox, onboarding, evidence ladder, replay surface</div>
+          <div class="chip good">First major visible product phase</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 4</strong>
+          <div>Checkpoint, replay, resume, rollback mechanics behind the explanation surface</div>
+          <div class="chip info">Supports trust depth</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 5</strong>
+          <div>Memory, lineage, telemetry, retrieval explanations</div>
+          <div class="chip warn">Advisory signals only</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 6</strong>
+          <div>Environment specialists and browser/computer-use evidence</div>
+          <div class="chip risk">Bounded, not default</div>
+        </div>
+        <div class="phase-card">
+          <strong>Phase 7</strong>
+          <div>Improvement sandbox, promotion lifecycle, rollback and containment</div>
+          <div class="chip purple">Operator opt-in only</div>
+        </div>
+      </div>
+      <div class="review-banner">Review prompt: Are we showing enough value in Phase 3, or do stakeholders want more visible capability earlier?</div>
+      <div class="footer">
+        <span>Use for sequencing feedback</span>
+        <span>This slide is meant to surface phase-order concerns before sprint commitment</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Panel evolution</div>
+      <h2>How the three sweeps evolved the plan</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Sweep 1</h3>
+          <ul>
+            <li>Made the plan architected and measurable</li>
+            <li>Pulled UX out of vague bullets</li>
+            <li>Introduced cross-gate discipline</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Sweep 2</h3>
+          <ul>
+            <li>Closed missing interface contracts</li>
+            <li>Clarified replay, rollout, and rollback semantics</li>
+            <li>Strengthened progressive disclosure and Gate 4 posture</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Sweep 3</h3>
+          <ul>
+            <li>Focused entirely on first-run quality</li>
+            <li>Made layman view the default</li>
+            <li>Closed prototype-exposure and user-language gaps</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Executive readout</span>
+        <span>The remaining work shifted from architecture direction to product-detail quality</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Weakness review</div>
+      <h2>Where to focus your critique</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Layman onboarding</h3>
+          <ul>
+            <li>Is the connect-model flow still too technical?</li>
+            <li>Should role choice be simpler or more guided?</li>
+            <li>Are starter workflows concrete enough?</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>UI language</h3>
+          <ul>
+            <li>Are progress and confidence explanations understandable?</li>
+            <li>Do blocked and approval states still feel operationally dense?</li>
+            <li>What phrasing would still confuse a non-expert?</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Scope and promise</h3>
+          <ul>
+            <li>Is Slice 1 ambitious enough?</li>
+            <li>Is any critical capability being delayed too long?</li>
+            <li>What would PM want to see visually sooner?</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Discussion prompt</span>
+        <span>This is the critique slide to use in review sessions</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Executive close</div>
+      <h2>Decision recommendation before sprint commencement</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Approve now</h3>
+          <ul>
+            <li>Proceed with the current review-ready plan</li>
+            <li>Use Layer 0 backbone work plus Slice 1 product definition as the sprint split</li>
+            <li>Preserve layman-default entry and operator opt-in as non-negotiables</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Do not approve yet</h3>
+          <ul>
+            <li>Unconditional roadmap lock</li>
+            <li>Public prototype exposure before Gate 4 explanation depth exists</li>
+            <li>Any attempt to make advanced controls the day-one UI identity</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Final recommendation</span>
+        <span>Use this deck for visual review, collect critique, then start sprint planning on the validated scope</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="actions">
+    <button id="prevBtn" type="button">Previous</button>
+    <button id="nextBtn" type="button">Next</button>
+    <span class="counter" id="counter">1 / 12</span>
+    <div class="spacer"></div>
+    <span class="small">Use arrow keys, Page Up/Page Down, or print to export.</span>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    let index = 0;
+
+    function render() {
+      slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+      counter.textContent = `${index + 1} / ${slides.length}`;
+      prevBtn.disabled = index === 0;
+      nextBtn.disabled = index === slides.length - 1;
+    }
+
+    function next() {
+      if (index < slides.length - 1) {
+        index += 1;
+        render();
+      }
+    }
+
+    function prev() {
+      if (index > 0) {
+        index -= 1;
+        render();
+      }
+    }
+
+    nextBtn.addEventListener("click", next);
+    prevBtn.addEventListener("click", prev);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        event.preventDefault();
+        next();
+      } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        prev();
+      } else if (event.key === "Home") {
+        index = 0;
+        render();
+      } else if (event.key === "End") {
+        index = slides.length - 1;
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

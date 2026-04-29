@@ -52,6 +52,38 @@
 
 ---
 
+## Council final audit
+
+| Panel set | Scope | Preserved in | Key preserved findings |
+|---|---|---|---|
+| Council-of-experts final audit | Final strategic audit across the preserved research corpus | `council-final-audit-2026-04-22.md` | Verdict: PASS WITH CONDITIONS; the direction is strong enough for a gated phased roadmap draft, but official plan lock is blocked on six spikes covering contracts, compact state, telemetry, memory lifecycle, browser evidence, and self-improvement containment |
+
+---
+
+## Roadmap synthesis
+
+| Synthesis set | Scope | Preserved in | Key preserved findings |
+|---|---|---|---|
+| Gated phased roadmap draft | Convert the preserved corpus and council verdict into a conditional roadmap skeleton | `gated-phased-roadmap-draft-2026-04-22.md` | The roadmap is now organized into six conditional phases with explicit spike gates, preserving the specialist-cadre + shared-harness direction without pretending the unresolved contracts are already settled |
+| Roadmap panel refinement synthesis | Critique and broaden the gated roadmap draft through architecture, UI, DX, and backend lenses | `roadmap-panel-refinement-synthesis-2026-04-22.md` | The roadmap should split Phase A, narrow Phase B around evidence and judgment flows, separate domain/use-case/adapter/infrastructure concerns, and rewrite all six gates as measurable lock criteria |
+| Roadmap gate spike scope | Convert the six roadmap gates into explicit validation-spike scopes | `roadmap-gate-spike-scope-2026-04-22.md` | Gate 1, Gate 2, and Gate 4 are the recommended first design briefs because contracts, frozen state, and memory precedence form the backbone for the remaining gate work |
+| Gate 1 detailed spike brief | Define the shared contract family for invocation, progress, result, error, and handoff objects | `roadmap-gate1-event-handoff-brief-2026-04-22.md` | Gate 1 should produce a versioned schema pack with explicit event-family partitioning, structured errors, and proven cross-cadre reuse rather than a single blob contract |
+| Gate 2 detailed spike brief | Define the checkpoint unit, frozen handoff bundle, and replay / repair semantics | `roadmap-gate2-frozen-handoff-brief-2026-04-22.md` | Gate 2 should separate checkpoint unit from handoff bundle, persist only the minimal durable truth, and prove inspect / replay / repair / resume / rollback from compact artifacts |
+| Gate 3 detailed spike brief | Define telemetry for context pressure, routing, skill activation, and operator burden | `roadmap-gate3-telemetry-brief-2026-04-22.md` | Gate 3 should require durable, replay-usable telemetry with explicit why-routed and why-activated explanations, while keeping anomaly scores advisory rather than authoritative |
+| Gate 4 detailed spike brief | Define memory classes, precedence, provenance, and correction semantics | `roadmap-gate4-memory-precedence-brief-2026-04-22.md` | Gate 4 should enforce a memory taxonomy and precedence matrix where operator directives, policy refs, and frozen snapshots outrank fuzzy recall, with explicit why-retrieved introspection |
+| Gate 5 detailed spike brief | Define canonical evidence and watchdog semantics for environment specialists | `roadmap-gate5-browser-evidence-brief-2026-04-22.md` | Gate 5 should require a dedicated environment evidence bundle, operator-readable watchdog labels, replay attachments, and redaction-aware auditability without making environment artifacts ambient shared memory |
+| Gate 6 detailed spike brief | Define promotion, rollback, and containment rules for improvement assets | `roadmap-gate6-improvement-containment-brief-2026-04-22.md` | Gate 6 should require a strict proposal-to-promotion lifecycle, promotion scorecards, evaluation harnesses, rollback ancestry, and explicit prohibition on silent self-mutation |
+| Gate brief consistency audit | Cross-check all six gate briefs for dependency alignment and hidden conflicts | `roadmap-gate-brief-consistency-audit-2026-04-22.md` | The six-brief set passed with minor harmonization: Gate 2 now carries policy/contract refs more explicitly, Gate 3 explanations are replay-linked, and Gate 6 promotion records are lineage/rollback-linked |
+| Backbone gate workstream decomposition | Turn Gate 1, Gate 2, and Gate 4 into sequenced execution workstreams | `roadmap-backbone-gate-workstreams-2026-04-22.md` | The backbone program should begin with contract object boundaries, event/status semantics, checkpoint/handoff units, and memory taxonomy before proving replay examples or deeper retrieval-policy lifecycle rules |
+| Backbone workstream batch 1 | Select the first bounded execution batch from the backbone program | `roadmap-backbone-workstream-batch1-2026-04-22.md` | Batch 1 should cover G1-W1, G1-W2, G2-W1, and G4-W1 so the program has stable contract, event, frozen-state, and memory-taxonomy vocabulary before deeper validation work |
+| G1-W1 contract boundaries | Define the object inventory and owned-field boundaries for the Gate 1 contract family | `roadmap-g1w1-contract-boundaries-2026-04-22.md` | The runtime contract family should stabilize around `InvocationEnvelope`, `ProgressEvent`, `ResultEnvelope`, `HandoffBundle`, and `ErrorEnvelope`, each with explicit owned vs excluded fields and shared reference types |
+| Final review plan | Integrate the roadmap, gate program, architecture, UX, and containment posture into one review-ready phase plan | `final-phase-plan-for-review-2026-04-22.md` | The final plan is organized around Layer 0 validation and Layer 1 implementation, with a stronger Phase 3 product surface, explicit cross-phase interfaces, and hardened rollback/containment language |
+| Final plan panel audit synthesis | Preserve the three-panel expert audit of the final review plan | `final-phase-plan-panel-audit-synthesis-2026-04-22.md` | The final plan was revised after architecture, UX, and risk panels converged on stronger Layer 0 gates, a more explicit layman/operator surface model, and harder rollback / containment semantics |
+| Final plan rerun panel sweep | Re-run the three expert panels against the current post-revision final plan text | `final-phase-plan-rerun-panel-sweep-2026-04-22.md` | The rerun panels converged that the plan was already review-ready in principle and only needed small-surface fixes: two missing interface contracts, UX clarification for progress/progressive disclosure/Gate 4 posture, and tighter GO/integration and Phase 7 containment validation language |
+| Final plan final sweep | Run the third and final three-panel sweep with extra emphasis on layman-first onboarding and default-path clarity | `final-phase-plan-final-sweep-2026-04-22.md` | The final sweep converged on first-run clarity rather than structural change: explicit onboarding and model-connection path, layman-default view, plain-language treatment of layman-visible statuses, reserved forward-phase inbox slots, and internal-only exposure for the thin pre-slice prototype |
+
+---
+
 ## Preservation outcome
 
 The current panel-derived work product is now preserved through:
