@@ -10,6 +10,7 @@ import {
   buildCockpitOpsSafetySnapshot,
   getCockpitOpsSafetyRecordsByArtifactId
 } from "../data/cockpitOpsSafety";
+import { formatGateLabel, groupSafetyRecordsByStatus } from "../data/safetyGatePresentation";
 import {
   ARTIFACT_DRAWER_SECTIONS,
   type ArtifactDrawerSectionId
@@ -31,10 +32,6 @@ type ArtifactReviewDrawerUncontrolledProps = ArtifactReviewDrawerBaseProps & {
 };
 
 type ArtifactReviewDrawerProps = ArtifactReviewDrawerControlledProps | ArtifactReviewDrawerUncontrolledProps;
-
-function formatEvidenceLabel(value: string): string {
-  return value.replace(/-/g, " ");
-}
 
 export function ArtifactReviewDrawer({
   workspace,
@@ -81,6 +78,7 @@ export function ArtifactReviewDrawer({
     () => (activeArtifact ? getCockpitOpsSafetyRecordsByArtifactId(opsSafety.records, activeArtifact.id) : []),
     [activeArtifact, opsSafety.records]
   );
+  const safetyRecordGroups = useMemo(() => groupSafetyRecordsByStatus(safetyRecords), [safetyRecords]);
 
   function selectSection(sectionId: ArtifactDrawerSectionId, shouldFocus = false): void {
     if (controlledActiveSectionId === undefined) {
@@ -157,11 +155,11 @@ export function ArtifactReviewDrawer({
             <dl>
               <div>
                 <dt>Status</dt>
-                <dd>{formatEvidenceLabel(activeArtifact.status)}</dd>
+                <dd>{formatGateLabel(activeArtifact.status)}</dd>
               </div>
               <div>
                 <dt>Review</dt>
-                <dd>{formatEvidenceLabel(activeArtifact.reviewState)}</dd>
+                <dd>{formatGateLabel(activeArtifact.reviewState)}</dd>
               </div>
               <div>
                 <dt>Owner</dt>
@@ -190,8 +188,8 @@ export function ArtifactReviewDrawer({
                 <strong>{block.commandLabel}</strong>
                 <p>{block.outputSummary}</p>
                 <small>
-                  {block.sourceRole} / {formatEvidenceLabel(block.status)} / {block.exitLabel} /{" "}
-                  {block.durationLabel} / redaction {formatEvidenceLabel(block.redactionState)}
+                  {block.sourceRole} / {formatGateLabel(block.status)} / {block.exitLabel} / {block.durationLabel} /
+                  redaction {formatGateLabel(block.redactionState)}
                 </small>
               </article>
             ))}
@@ -205,8 +203,8 @@ export function ArtifactReviewDrawer({
                 <strong>{event.title}</strong>
                 <p>{event.summary}</p>
                 <small>
-                  {event.senderRole} to {event.recipientRole} / {formatEvidenceLabel(event.type)} /{" "}
-                  {formatEvidenceLabel(event.decisionState)}
+                  {event.senderRole} to {event.recipientRole} / {formatGateLabel(event.type)} /{" "}
+                  {formatGateLabel(event.decisionState)}
                 </small>
               </article>
             ))}
@@ -214,15 +212,26 @@ export function ArtifactReviewDrawer({
         ) : null}
         {safetyRecords.length > 0 ? (
           <section className="artifact-drawer-evidence-list" aria-label="Safety evidence">
-            <h4>Safety signals</h4>
-            {safetyRecords.map((record) => (
-              <article key={record.id}>
-                <strong>{record.title}</strong>
-                <p>{record.summary}</p>
-                <small>
-                  {formatEvidenceLabel(record.status)} / {record.sourceLabel}
-                </small>
-              </article>
+            <div className="artifact-drawer-gate-context">
+              <span>Permission gate</span>
+              <strong>{permissionMode.headline}</strong>
+              <p>{permissionMode.reviewGate}</p>
+            </div>
+            {safetyRecordGroups.map((group) => (
+              <div key={group.status} className={`safety-record-group safety-record-group-${group.status}`}>
+                <h5>{group.heading}</h5>
+                <p>{group.description}</p>
+                {group.records.map((record) => (
+                  <article key={record.id} className={`safety-record safety-record-${record.status}`}>
+                    <strong>{record.title}</strong>
+                    <p>{record.summary}</p>
+                    <p className="safety-record-next-action">Next: {record.nextActionLabel}</p>
+                    <small>
+                      {formatGateLabel(record.status)} / {record.sourceLabel}
+                    </small>
+                  </article>
+                ))}
+              </div>
             ))}
           </section>
         ) : null}
