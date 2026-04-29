@@ -1723,6 +1723,107 @@ button:disabled {
   padding: 0.45rem 0.7rem;
 }
 
+.cockpit-dashboard-safety-card {
+  align-content: start;
+}
+
+.safety-cta-warning {
+  border-color: rgba(251, 191, 36, 0.32);
+}
+
+.safety-cta-danger {
+  border-color: rgba(248, 113, 113, 0.38);
+}
+
+.safety-gate-indicator {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-left: 4px solid #30d5c8;
+  border-radius: 12px;
+  background: rgba(11, 30, 39, 0.36);
+}
+
+.safety-gate-indicator-safe {
+  border-left-color: #7dd3fc;
+}
+
+.safety-gate-indicator-guided {
+  border-left-color: #30d5c8;
+}
+
+.safety-gate-indicator-active {
+  border-left-color: #f6bd60;
+}
+
+.safety-gate-indicator-review {
+  border-left-color: #c4b5fd;
+}
+
+.safety-gate-indicator-locked {
+  border-left-color: #fb7185;
+}
+
+.safety-gate-indicator-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.safety-gate-indicator-copy p {
+  margin: 0;
+}
+
+.safety-gate-indicator-compact {
+  gap: 0.4rem;
+}
+
+.safety-gate-badges,
+.cockpit-dashboard-gate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.safety-gate-badge,
+.safety-gate-row {
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 999px;
+  background: rgba(4, 12, 18, 0.48);
+  color: #d9edf4;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.safety-gate-row {
+  border-radius: 10px;
+}
+
+.safety-gate-badge-blocked,
+.safety-gate-row-blocked {
+  border-color: rgba(248, 113, 113, 0.42);
+  color: #fecaca;
+}
+
+.safety-gate-badge-needs-review,
+.safety-gate-row-needs-review {
+  border-color: rgba(251, 191, 36, 0.38);
+  color: #f7ead1;
+}
+
+.safety-gate-badge-watching,
+.safety-gate-row-watching {
+  border-color: rgba(48, 213, 200, 0.34);
+  color: #b8f3ee;
+}
+
+.safety-gate-badge-clear,
+.safety-gate-row-clear {
+  border-color: rgba(134, 239, 172, 0.34);
+  color: #bbf7d0;
+}
+
 .artifact-card-meta {
   display: grid;
   gap: 0.35rem;
@@ -1844,6 +1945,26 @@ button:disabled {
   color: #6fa8b8;
   font-size: 0.72rem;
   line-height: 1.35;
+}
+
+.artifact-drawer-gate-context,
+.safety-record-group {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.safety-record-group {
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(125, 211, 252, 0.1);
+}
+
+.safety-record-group h5 {
+  margin: 0;
+  color: #e2f1f8;
+}
+
+.safety-record-next-action {
+  color: #d8c27a;
 }
 
 .artifact-drawer-panel div {

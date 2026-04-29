@@ -42,4 +42,17 @@ describe("ArtifactReviewDrawer", () => {
     expect(screen.getByRole("region", { name: "Activity evidence" })).toBeInTheDocument();
     expect(screen.getByText("Run checks")).toBeInTheDocument();
   });
+
+  it("groups approval safety evidence by permission gate status", async () => {
+    const user = userEvent.setup();
+    render(<ArtifactReviewDrawer workspace={getWorkspaceSession("solo-builder")} permissionModeId="ask" />);
+
+    await user.click(screen.getByRole("tab", { name: "Approval" }));
+
+    expect(screen.getByRole("region", { name: "Safety evidence" })).toBeInTheDocument();
+    expect(screen.getByText("Confirm before tools or changes run.")).toBeInTheDocument();
+    expect(screen.getByText("Needs review")).toBeInTheDocument();
+    expect(screen.getByText("These items need an operator decision before AGENT33 continues.")).toBeInTheDocument();
+    expect(screen.getByText("Next: User approval before commands, writes, or external changes")).toBeInTheDocument();
+  });
 });

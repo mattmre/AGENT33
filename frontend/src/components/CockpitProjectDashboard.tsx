@@ -4,6 +4,8 @@ import type { WorkspaceSessionSummary } from "../data/workspaces";
 import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
 import type { CockpitArtifact } from "../data/cockpitArtifacts";
 import { buildCockpitOpsSafetySnapshot } from "../data/cockpitOpsSafety";
+import { getSafetyGateCta, getTopSafetyGateRecords } from "../data/safetyGatePresentation";
+import { SafetyGateIndicator } from "./SafetyGateIndicator";
 
 interface CockpitProjectDashboardProps {
   workspace: WorkspaceSessionSummary;
@@ -42,7 +44,9 @@ export function CockpitProjectDashboard({
   const attentionTaskLabel = activeTaskCount === 1 ? "1 task needs attention" : `${activeTaskCount} tasks need attention`;
   const opsSafety = buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId });
   const artifacts = opsSafety.artifacts;
-  const safetySignals = opsSafety.records.slice(0, 4);
+  const safetyCta = getSafetyGateCta(opsSafety, permissionModeId);
+  const safetySignals = getTopSafetyGateRecords(opsSafety.records, 4);
+  const priorityGateRecords = getTopSafetyGateRecords(opsSafety.records, 3);
 
   return (
     <section className="cockpit-project-dashboard" aria-label="Project cockpit dashboard">
@@ -77,12 +81,20 @@ export function CockpitProjectDashboard({
           </button>
         </article>
 
-        <article className="cockpit-dashboard-card">
+        <article className={`cockpit-dashboard-card cockpit-dashboard-safety-card safety-cta-${safetyCta.intent}`}>
           <span className="eyebrow">Safety gate</span>
-          <strong>{permissionMode.headline}</strong>
-          <p>{permissionMode.reviewGate}</p>
+          <strong>{opsSafety.summary.primaryMessage}</strong>
+          <p>{opsSafety.summary.nextAction}</p>
+          <SafetyGateIndicator permissionModeId={permissionModeId} opsSafetyRecords={opsSafety.records} isCompact />
+          <div className="cockpit-dashboard-gate-list" aria-label="Top safety gate records">
+            {priorityGateRecords.map((record) => (
+              <span key={record.id} className={`safety-gate-row safety-gate-row-${record.status}`}>
+                {record.title}: {record.nextActionLabel}
+              </span>
+            ))}
+          </div>
           <button type="button" onClick={onOpenSafety}>
-            Review approvals
+            {safetyCta.label}
           </button>
         </article>
       </div>
