@@ -47,5 +47,14 @@ describe("permission action gates", () => {
       tone: "locked"
     });
   });
+
+  it("throws descriptive errors for unknown runtime inputs", () => {
+    expect(() => getPermissionActionGate("missing" as never, "start-workflow")).toThrow(
+      /Unknown permission mode ID "missing"/
+    );
+    expect(() => getPermissionActionGate("ask", "missing-action" as never)).toThrow(
+      /Unknown permission action "missing-action"/
+    );
+  });
 });
 

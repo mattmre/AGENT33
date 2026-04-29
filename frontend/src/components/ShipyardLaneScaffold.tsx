@@ -70,9 +70,16 @@ export function ShipyardLaneScaffold({
             onClick={onOpenWorkflows}
             disabled={!workflowGate.allowed}
             aria-label={workflowGate.allowed ? "Launch workflow" : `Launch workflow locked: ${workflowGate.reason}`}
+            aria-describedby="shipyard-workflow-gate"
           >
             Launch workflow
           </button>
+          <span
+            id="shipyard-workflow-gate"
+            className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}
+          >
+            {workflowGate.reason}
+          </span>
           <button type="button" onClick={onOpenSafety}>
             Check approvals
           </button>

@@ -73,6 +73,10 @@ describe("ShipyardLaneScaffold", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /Launch workflow locked: Restricted mode keeps workflow launch locked/i })).toBeDisabled();
+    const launchButton = screen.getByRole("button", {
+      name: /Launch workflow locked: Restricted mode keeps workflow launch locked/i
+    });
+    expect(launchButton).toBeDisabled();
+    expect(launchButton).toHaveAccessibleDescription("Restricted mode keeps workflow launch locked.");
   });
 });

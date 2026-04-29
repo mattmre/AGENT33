@@ -55,6 +55,9 @@ describe("WorkspaceTaskBoard", () => {
     );
 
     expect(screen.getByRole("button", { name: /Choose workflow locked: Observe only keeps workflow launch read-only/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Choose workflow locked/i })).toHaveAccessibleDescription(
+      "Observe only keeps workflow launch read-only until you choose a more active mode."
+    );
     expect(screen.getByText("Command run")).toBeInTheDocument();
     expect(screen.getByText("Observe only blocks command execution.")).toBeInTheDocument();
     expect(screen.getByText("Observe only cannot approve actions.")).toBeInTheDocument();

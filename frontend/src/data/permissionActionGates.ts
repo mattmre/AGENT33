@@ -1,4 +1,4 @@
-import type { PermissionModeId } from "./permissionModes";
+import { PERMISSION_MODE_IDS, type PermissionModeId } from "./permissionModes";
 
 export const PERMISSION_ACTION_CATEGORIES = [
   "review-artifact",
@@ -169,10 +169,24 @@ export function getPermissionActionGate(
   modeId: PermissionModeId,
   action: PermissionActionCategory
 ): PermissionActionGate {
-  const gate = ACTION_GATE_MATRIX[modeId][action];
+  const modeGates = ACTION_GATE_MATRIX[modeId];
+  if (!modeGates) {
+    throw new Error(
+      `Unknown permission mode ID "${modeId}" in getPermissionActionGate. Known mode IDs: ${PERMISSION_MODE_IDS.join(", ")}.`
+    );
+  }
+
+  const gate = modeGates[action];
+  const label = ACTION_LABELS[action];
+  if (!gate || !label) {
+    throw new Error(
+      `Unknown permission action "${action}" for mode "${modeId}" in getPermissionActionGate. Known actions: ${PERMISSION_ACTION_CATEGORIES.join(", ")}.`
+    );
+  }
+
   return {
     action,
-    label: ACTION_LABELS[action],
+    label,
     ...gate
   };
 }

@@ -49,9 +49,16 @@ export function WorkspaceTaskBoard({
             onClick={onOpenWorkflows}
             disabled={!workflowGate.allowed}
             aria-label={workflowGate.allowed ? "Choose workflow" : `Choose workflow locked: ${workflowGate.reason}`}
+            aria-describedby="workspace-board-workflow-gate"
           >
             Choose workflow
           </button>
+          <span
+            id="workspace-board-workflow-gate"
+            className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}
+          >
+            {workflowGate.reason}
+          </span>
           <button type="button" onClick={onOpenSafety}>
             Review approvals
           </button>

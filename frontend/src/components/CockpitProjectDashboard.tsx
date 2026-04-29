@@ -83,10 +83,14 @@ export function CockpitProjectDashboard({
             onClick={onOpenWorkflows}
             disabled={!workflowGate.allowed}
             aria-label={workflowGate.allowed ? "Choose workflow" : `Choose workflow locked: ${workflowGate.reason}`}
+            aria-describedby="cockpit-dashboard-workflow-gate"
           >
             Choose workflow
           </button>
-          <span className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}>
+          <span
+            id="cockpit-dashboard-workflow-gate"
+            className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}
+          >
             {workflowGate.tone === "approval-required" ? "Approval required" : workflowGate.reason}
           </span>
         </article>
