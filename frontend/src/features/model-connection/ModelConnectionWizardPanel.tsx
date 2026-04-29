@@ -516,7 +516,7 @@ export function ModelConnectionWizardPanel({
       }
 
       if (selectedPresetId === "lm-studio") {
-        const status = await loadLMStudioStatus(getLMStudioBaseUrlOverride());
+        const status = await loadLMStudioStatus(form.baseUrl);
         const selectedModel = stripLmStudioModelRef(form.defaultModel);
         const hasSelectedModel =
           status?.models.some((model) => model.name === selectedModel) ?? false;
