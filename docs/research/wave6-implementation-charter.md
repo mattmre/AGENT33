@@ -69,8 +69,8 @@ Rejected for Wave 6:
 | Drawer scaffold | `frontend/src/components/ArtifactReviewDrawer.tsx` | Render section content from artifact/event models while preserving tab accessibility and URL state. |
 | Drawer section ids | `frontend/src/data/artifactDrawerSections.ts` | Keep as the section registry and map sections to model filters. |
 | URL state | `frontend/src/lib/cockpitUrlState.ts` | Preserve `view`, `workspace`, `permission`, and `drawer` deep links. |
+| Operations/session state | `frontend/src/features/operations-hub/OperationsHubPanel.tsx`, `frontend/src/features/sessions/runSummary.ts` | Feed existing process/session evidence into artifacts where the current data shape supports it. |
 | Safety approvals | `frontend/src/features/safety-center/SafetyCenterPanel.tsx` | Produce or adapt approval artifacts after shared models exist. |
-| Sessions/run summaries | `frontend/src/features/sessions/runSummary.ts` | Reuse run evidence for outcome and validation artifacts where feasible. |
 
 ## Wave 6 P0 backlog
 
@@ -90,7 +90,7 @@ Create typed frontend models for:
 Acceptance criteria:
 
 1. Models have stable ids, workspace id, source label, owner role, timestamp, status, review state, and next action where relevant.
-2. Adapters can map existing static workspace/task data into a realistic artifact set.
+2. Adapters can map existing static workspace/task data plus available Operations, Sessions, and Safety data into a realistic artifact set.
 3. Unknown or missing input produces explicit empty-state artifacts, not silent success-shaped defaults.
 4. Unit tests cover valid data, missing optional data, empty workspace state, and invalid workspace ids.
 
@@ -128,7 +128,18 @@ Acceptance criteria:
 2. Mailbox/activity items are not raw chat transcript dumps.
 3. Tests cover handoff, blocker, approval, and review-comment events.
 
-### 4. Dashboard artifact timeline/cards
+### 4. Operations and safety adapter bridge
+
+Adapt existing Operations, Sessions, and Safety evidence into the shared artifact model before dashboard and drawer rendering depend on demo-only data.
+
+Acceptance criteria:
+
+1. Operations/session state can produce at least status, validation, log, or outcome artifacts where existing data supports it.
+2. Safety approvals can produce approval artifacts and blocked-task explanations where existing data supports it.
+3. Missing backend evidence is represented as an explicit "not available yet" artifact, not as a fake success.
+4. Tests cover available evidence, missing evidence, and approval/blocker mapping.
+
+### 5. Dashboard artifact timeline/cards
 
 Replace static dashboard artifact placeholders with model-driven cards.
 
@@ -139,7 +150,7 @@ Acceptance criteria:
 3. Cards can open the relevant drawer section.
 4. Tests cover artifact-rich, empty, blocked, and completed workspace states.
 
-### 5. Right review drawer v2
+### 6. Right review drawer v2
 
 Render useful content for Plan, Command Blocks, Logs, Tests, Risks, Approval, Activity/Mailbox, and Outcome from shared models.
 
@@ -147,10 +158,10 @@ Acceptance criteria:
 
 1. Existing ARIA tab behavior, keyboard support, URL state, and mobile scroll behavior remain intact.
 2. Each section renders model-driven content or an explicit useful empty state.
-3. Command blocks and activity/mailbox events use their typed models.
+3. Command blocks and activity/mailbox events use their typed models after the command/activity model slices have merged; until then, sections must show explicit empty states rather than placeholders that imply live execution.
 4. Tests cover section rendering, keyboard navigation, controlled state, empty sections, and invalid drawer URL fallback.
 
-### 6. Permission-gated cockpit actions
+### 7. Permission-gated cockpit actions
 
 Turn permission mode from descriptive copy into visible action affordances.
 
@@ -163,7 +174,7 @@ Acceptance criteria:
 5. Restricted mode leaves only guidance and triage actions available.
 6. Tests cover action-state output for every permission mode.
 
-### 7. PR/artifact/blocker done state
+### 8. PR/artifact/blocker done state
 
 Every session/run summary should end in a beginner-readable state:
 
@@ -178,24 +189,32 @@ Acceptance criteria:
 3. Blocked outcome includes who/what unblocks it.
 4. Tests cover PR-ready, package-ready, blocked, and no-run states.
 
+### 9. Neglected-module P0 hardening guardrails
+
+Close the highest-risk neglected-module issues without derailing the artifact/review focus.
+
+Acceptance criteria:
+
+1. Incomplete messaging integrations are removed, clearly demoted to "coming soon," or routed to the real model/provider setup path; they must not show fake connection success.
+2. Improvement Loops gets main-panel test coverage for preset switching, one-click launch, cadence display, API failures, and credential gates.
+3. Spawner gets frontend test coverage for its existing empty state, create workflow path, child agent validation, execution tree status, error display, and no-token states.
+4. Spawner work remains test/coverage hardening only; agent discovery, safe defaults, examples, abort/recovery, and visual workflow redesign remain later-wave candidates.
+
 ## P1 backlog
 
 1. Help Assistant topics for workspace templates, task lanes, permissions, drawer sections, and done states.
-2. Operations Hub adapter so process/session state feeds artifact cards instead of remaining isolated.
-3. Safety Center adapter so approvals produce approval artifacts and blocked-task explanations.
-4. Targeted accessibility tests for cockpit dashboard-to-drawer flow.
-5. Responsive smoke coverage or a documented manual checklist for drawer/card behavior.
-6. Main-panel coverage for Improvement Loops.
-7. Frontend coverage for Spawner's existing flow without redesigning it.
+2. Targeted accessibility tests for cockpit dashboard-to-drawer flow.
+3. Responsive smoke coverage or a documented manual checklist for drawer/card behavior.
+4. Follow-up setup recovery copy for Connect Center and MCP Health.
+5. Tool Fabric "use this" or "compose this" affordance after discovery.
 
 ## P2 backlog
 
-1. Tool Fabric "use this" or "compose this" affordance after discovery.
-2. Pack Marketplace install progress, uninstall, rollback, and prerequisite states.
-3. Outcomes/Impact dashboard interpretation and drill-down.
-4. Runtime/provider readiness blockers surfaced in cockpit.
-5. Workspace template configurations that seed starter tasks.
-6. Role-intake "not sure" quiz and richer complex-project follow-up.
+1. Pack Marketplace install progress, uninstall, rollback, and prerequisite states.
+2. Outcomes/Impact dashboard interpretation and drill-down.
+3. Runtime/provider readiness blockers surfaced in cockpit.
+4. Workspace template configurations that seed starter tasks.
+5. Role-intake "not sure" quiz and richer complex-project follow-up.
 
 ## PR sequence
 
@@ -206,11 +225,13 @@ Each slice must use a fresh worktree from latest `origin/main`, open one PR, res
 | 1 | Artifact view-model adapters | new `frontend/src/data/cockpitArtifacts.ts`, tests | Foundation for dashboard, drawer, outcome, safety, and task-board wiring. |
 | 2 | Command block models | `cockpitArtifacts.ts` or `frontend/src/data/commandBlocks.ts`, tests | Command evidence is core to BridgeSpace-style review and drawer content. |
 | 3 | Mailbox/activity models | `cockpitArtifacts.ts` or `frontend/src/data/cockpitActivity.ts`, tests | Coordination events power activity/mailbox and lane handoffs. |
-| 4 | Dashboard artifact timeline/cards | `CockpitProjectDashboard.tsx`, dashboard tests, small CSS additions | Replaces the most visible placeholders after models exist. |
-| 5 | Review drawer v2 | `ArtifactReviewDrawer.tsx`, drawer tests, `artifactDrawerSections.ts` if needed | Makes the right drawer useful without breaking current deep links. |
-| 6 | Permission-gated cockpit actions | `permissionModes.ts`, new action-gate helper, cockpit/dashboard/task-board tests | Converts permission labels into visible behavior after action targets exist. |
-| 7 | PR/artifact/blocker done state | artifact outcome adapters, dashboard/drawer/task-board tests | Gives every session a clear completion or blocker state. |
-| 8 | Observability and quality pass | focused tests, a11y coverage, docs touch-ups only as needed | Tightens trace/timing/validation/status coverage after behavior lands. |
+| 4 | Operations and safety adapter bridge | operations/session/safety adapters, tests | Prevents dashboard/drawer work from becoming demo-only artifact theater. |
+| 5 | Dashboard artifact timeline/cards | `CockpitProjectDashboard.tsx`, dashboard tests, small CSS additions | Replaces the most visible placeholders after models and adapters exist. |
+| 6 | Review drawer v2 | `ArtifactReviewDrawer.tsx`, drawer tests, `artifactDrawerSections.ts` if needed | Makes the right drawer useful without breaking current deep links. |
+| 7 | Permission-gated cockpit actions | `permissionModes.ts`, new action-gate helper, cockpit/dashboard/task-board tests | Converts permission labels into visible behavior after action targets exist. |
+| 8 | PR/artifact/blocker done state | artifact outcome adapters, dashboard/drawer/task-board tests | Gives every session a clear completion or blocker state. |
+| 9 | Neglected-module P0 hardening | Messaging Setup, Improvement Loops tests, Spawner tests | Closes P0 trust/coverage gaps without taking over the artifact wave. |
+| 10 | Observability and quality pass | focused tests, a11y coverage, docs touch-ups only as needed | Tightens trace/timing/validation/status coverage after behavior lands. |
 
 ## Rotation and scope-control rules
 
