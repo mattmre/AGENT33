@@ -61,6 +61,12 @@ interface ConfigSnapshot {
   baseline: ModelConnectionBaseline;
   hasStoredKey: boolean;
   storedKeyHint: string;
+  localRuntimeBaseUrls: LocalRuntimeBaseUrls;
+}
+
+interface LocalRuntimeBaseUrls {
+  ollama: string;
+  lmStudio: string;
 }
 
 interface OllamaModelEntry {
@@ -97,6 +103,7 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
   const groups = asRecord(root.groups);
   const llm = asRecord(groups.llm);
   const ollama = asRecord(groups.ollama);
+  const lmStudio = asRecord(groups.lm_studio);
   const storedKeyHint =
     readString(llm.openrouter_api_key) || readString(llm.openrouter_api_key_redacted);
 
@@ -113,7 +120,11 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
         readString(llm.openrouter_app_category) || DEFAULT_MODEL_CONNECTION_BASELINE.appCategory
     },
     hasStoredKey: storedKeyHint.trim() !== "",
-    storedKeyHint
+    storedKeyHint,
+    localRuntimeBaseUrls: {
+      ollama: readString(ollama.ollama_base_url),
+      lmStudio: readString(lmStudio.lm_studio_base_url)
+    }
   };
 }
 
@@ -224,6 +235,10 @@ export function ModelConnectionWizardPanel({
   );
   const [hasStoredKey, setHasStoredKey] = useState(false);
   const [storedKeyHint, setStoredKeyHint] = useState("");
+  const [localRuntimeBaseUrls, setLocalRuntimeBaseUrls] = useState<LocalRuntimeBaseUrls>({
+    ollama: "",
+    lmStudio: ""
+  });
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaRuntimeStatus | null>(null);
   const [lmStudioStatus, setLMStudioStatus] = useState<LMStudioRuntimeStatus | null>(null);
@@ -289,6 +304,7 @@ export function ModelConnectionWizardPanel({
         if (configResult.value.ok) {
           const snapshot = buildConfigSnapshot(configResult.value.data);
           setBaseline(snapshot.baseline);
+          setLocalRuntimeBaseUrls(snapshot.localRuntimeBaseUrls);
           setForm((current) => ({ ...current, ...snapshot.baseline, apiKey: "" }));
           setSelectedPresetId(inferProviderPresetId(snapshot.baseline.baseUrl));
           setHasStoredKey(snapshot.hasStoredKey);
@@ -334,7 +350,16 @@ export function ModelConnectionWizardPanel({
 
   function selectProviderPreset(preset: ProviderPreset): void {
     setSelectedPresetId(preset.id);
-    setForm((current) => applyProviderPresetToForm(current, preset));
+    setForm((current) => {
+      const next = applyProviderPresetToForm(current, preset);
+      if (preset.id === "ollama" && localRuntimeBaseUrls.ollama.trim()) {
+        next.baseUrl = localRuntimeBaseUrls.ollama;
+      }
+      if (preset.id === "lm-studio" && localRuntimeBaseUrls.lmStudio.trim()) {
+        next.baseUrl = localRuntimeBaseUrls.lmStudio;
+      }
+      return next;
+    });
     setSaveStatus(null);
     setProbeStatus(null);
     setOllamaStatus(null);
@@ -344,15 +369,19 @@ export function ModelConnectionWizardPanel({
   function getOllamaBaseUrlOverride(): string | undefined {
     const preset = getProviderPreset("ollama");
     const current = normalizeOllamaBaseUrl(form.baseUrl);
-    const presetDefault = normalizeOllamaBaseUrl(preset?.baseUrlDefault ?? "");
-    return current && current !== presetDefault ? form.baseUrl : undefined;
+    const configured = normalizeOllamaBaseUrl(
+      localRuntimeBaseUrls.ollama || preset?.baseUrlDefault || ""
+    );
+    return current && current !== configured ? form.baseUrl : undefined;
   }
 
   function getLMStudioBaseUrlOverride(): string | undefined {
     const preset = getProviderPreset("lm-studio");
     const current = normalizeLmStudioBaseUrl(form.baseUrl);
-    const presetDefault = normalizeLmStudioBaseUrl(preset?.baseUrlDefault ?? "");
-    return current && current !== presetDefault ? form.baseUrl : undefined;
+    const configured = normalizeLmStudioBaseUrl(
+      localRuntimeBaseUrls.lmStudio || preset?.baseUrlDefault || ""
+    );
+    return current && current !== configured ? form.baseUrl : undefined;
   }
 
   async function loadOllamaStatus(baseUrl?: string): Promise<OllamaRuntimeStatus | null> {
