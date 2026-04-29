@@ -38,6 +38,10 @@ def _get_pack_registry(request: Request) -> Any:
 
 def _record_to_summary(record: Any) -> MarketplacePackSummary:
     """Convert a marketplace record to API summary form."""
+    latest = next(
+        (version for version in record.versions if version.version == record.latest_version),
+        record.versions[0] if record.versions else None,
+    )
     return MarketplacePackSummary(
         name=record.name,
         description=record.description,
@@ -47,6 +51,7 @@ def _record_to_summary(record: Any) -> MarketplacePackSummary:
         latest_version=record.latest_version,
         versions_count=len(record.versions),
         sources=sorted({version.source_name for version in record.versions}),
+        trust_level=latest.trust_level if latest else None,
     )
 
 

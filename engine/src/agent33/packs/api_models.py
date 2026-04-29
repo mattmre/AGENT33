@@ -167,6 +167,7 @@ class MarketplacePackSummary(BaseModel):
     latest_version: str
     versions_count: int = 0
     sources: list[str] = Field(default_factory=list)
+    trust_level: TrustLevel | None = None
 
 
 class MarketplacePackDetail(BaseModel):

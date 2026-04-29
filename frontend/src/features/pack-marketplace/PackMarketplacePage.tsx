@@ -56,7 +56,14 @@ function formatStatus(value: string): string {
 }
 
 function formatTrust(value: string | null): string {
-  return value ? value.replace(/_/g, " ") : "Unknown";
+  if (!value) {
+    return "Unknown";
+  }
+  return value
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function filterMatches(pack: MarketplacePackSummary, query: string): boolean {
@@ -113,6 +120,68 @@ function assessmentLabel(assessment: QualityAssessment | null): string | null {
     return null;
   }
   return `${assessment.label} quality · ${Math.round(assessment.overall_score * 100)}%`;
+}
+
+function normalizeBadgeValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+}
+
+function trustTone(value: string | null | undefined): string {
+  const normalized = normalizeBadgeValue(value ?? "unknown");
+  if (["official", "verified", "community", "untrusted", "imported"].includes(normalized)) {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function qualityTone(value: string | null | undefined): string {
+  const normalized = normalizeBadgeValue(value ?? "unknown");
+  if (["excellent", "high", "medium", "low"].includes(normalized)) {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function versionTrustLevel(pack: MarketplacePackDetail, selectedVersion: string): string | null {
+  const selected =
+    pack.versions.find((version) => version.version === selectedVersion) ?? pack.versions[0] ?? null;
+  return selected?.trust_level ?? null;
+}
+
+function versionSkillCount(pack: MarketplacePackDetail, selectedVersion: string): number {
+  const selected =
+    pack.versions.find((version) => version.version === selectedVersion) ?? pack.versions[0] ?? null;
+  return selected?.skills_count ?? 0;
+}
+
+function TrustBadge({
+  level,
+  showUnknown = false
+}: {
+  level: string | null | undefined;
+  showUnknown?: boolean;
+}): JSX.Element | null {
+  if (!level && !showUnknown) {
+    return null;
+  }
+
+  return (
+    <span className={`marketplace-pill trust-${trustTone(level)}`}>
+      {formatTrust(level ?? null)} trust
+    </span>
+  );
+}
+
+function QualityBadge({ assessment }: { assessment: QualityAssessment | null | undefined }): JSX.Element | null {
+  if (!assessment) {
+    return null;
+  }
+
+  return (
+    <span className={`marketplace-pill quality-${qualityTone(assessment.label)}`}>
+      {assessment.label} quality
+    </span>
+  );
 }
 
 function canSubmitForCuration(curation: CurationRecord | null): boolean {
@@ -191,6 +260,15 @@ function PackDetailPanel({
   const curationQuality = qualityLabel(curation);
   const canSubmit = isInstalled && canSubmitForCuration(curation);
   const previewQuality = assessmentLabel(quality);
+  const selectedTrustLevel = versionTrustLevel(pack, selectedVersion);
+  const selectedSkillCount = versionSkillCount(pack, selectedVersion);
+  const trustSummary = trust
+    ? trust.allowed
+      ? "Allowed by installed-pack policy"
+      : `Blocked by policy: ${trust.reason || "review required"}`
+    : selectedTrustLevel
+      ? `${formatTrust(selectedTrustLevel)} marketplace provenance`
+      : "No signed provenance published yet";
 
   return (
     <aside className="pack-marketplace-detail" aria-label={`Details for ${pack.name}`}>
@@ -212,9 +290,43 @@ function PackDetailPanel({
           <div className="pack-marketplace-badges">
             {curation?.featured && <span className="marketplace-pill featured">Featured</span>}
             {curation?.verified && <span className="marketplace-pill verified">Verified</span>}
+            <TrustBadge level={selectedTrustLevel} showUnknown />
+            <QualityBadge assessment={curation?.quality ?? quality} />
             {isInstalled && <span className="marketplace-pill installed">Installed</span>}
             <span className="marketplace-pill neutral">{pack.latest_version}</span>
           </div>
+
+          <section className="pack-marketplace-preview">
+            <div className="pack-marketplace-preview-header">
+              <h3>Beginner preview</h3>
+              <span className="marketplace-pill preview">Preview before install</span>
+            </div>
+            <dl>
+              <div>
+                <dt>Trust</dt>
+                <dd>{trustSummary}</dd>
+              </div>
+              <div>
+                <dt>Setup</dt>
+                <dd>
+                  Installs {selectedSkillCount} skill{selectedSkillCount !== 1 ? "s" : ""} from{" "}
+                  {pack.sources.length > 0 ? pack.sources.join(", ") : "marketplace"}.
+                </dd>
+              </div>
+              <div>
+                <dt>Outcome</dt>
+                <dd>Install only - no auto-run. Launch workflows after reviewing setup.</dd>
+              </div>
+              <div>
+                <dt>Review</dt>
+                <dd>
+                  {curationQuality ??
+                    previewQuality ??
+                    (curation?.verified ? "Verified by marketplace curation" : "Not curated yet")}
+                </dd>
+              </div>
+            </dl>
+          </section>
 
           <dl className="pack-marketplace-metadata">
             <dt>Author</dt>
@@ -735,6 +847,11 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
                 <span>{pack.description || "No description available."}</span>
                 <div className="pack-marketplace-badges">
                   <span className="marketplace-pill featured">Featured</span>
+                  {curationByPack[pack.name]?.verified && (
+                    <span className="marketplace-pill verified">Verified</span>
+                  )}
+                  <TrustBadge level={pack.trust_level} />
+                  <QualityBadge assessment={curationByPack[pack.name]?.quality} />
                   <span className="marketplace-pill neutral">{pack.latest_version}</span>
                 </div>
               </button>
@@ -836,8 +953,11 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
                       <span className="marketplace-pill neutral">
                         {pack.versions_count} version{pack.versions_count !== 1 ? "s" : ""}
                       </span>
+                      <TrustBadge level={pack.trust_level} />
+                      <QualityBadge assessment={curation?.quality} />
                       {installed && <span className="marketplace-pill installed">Installed</span>}
                       {curation?.featured && <span className="marketplace-pill featured">Featured</span>}
+                      {curation?.verified && <span className="marketplace-pill verified">Verified</span>}
                       {curation && !curation.featured && (
                         <span className="marketplace-pill neutral">
                           {formatStatus(curation.status)}

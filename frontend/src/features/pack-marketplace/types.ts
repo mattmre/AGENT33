@@ -7,6 +7,7 @@ export interface MarketplacePackSummary {
   latest_version: string;
   versions_count: number;
   sources: string[];
+  trust_level?: string | null;
 }
 
 export interface MarketplacePackVersionInfo {

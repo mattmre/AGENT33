@@ -48,7 +48,8 @@ describe("PackMarketplacePage", () => {
               category: "analytics",
               latest_version: "2.0.0",
               versions_count: 2,
-              sources: ["core"]
+              sources: ["core"],
+              trust_level: "verified"
             }
           ],
           count: 1
@@ -143,6 +144,8 @@ describe("PackMarketplacePage", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
     expect(screen.getAllByRole("button", { name: /open details for analytics-pack/i })).toHaveLength(2);
     expect(screen.getAllByText("Featured").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Verified trust").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("high quality").length).toBeGreaterThan(0);
     expect(screen.getByText("Installed")).toBeInTheDocument();
   });
 
@@ -161,7 +164,8 @@ describe("PackMarketplacePage", () => {
               category: "automation",
               latest_version: "1.4.0",
               versions_count: 2,
-              sources: ["community"]
+              sources: ["community"],
+              trust_level: "verified"
             }
           ],
           count: 1
@@ -285,6 +289,11 @@ describe("PackMarketplacePage", () => {
     render(<PackMarketplacePage token="session-token" apiKey={null} />);
 
     await user.click(await screen.findByRole("button", { name: /open details for alpha-pack/i }));
+    expect(await screen.findByText("Beginner preview")).toBeInTheDocument();
+    expect(screen.getByText("Verified marketplace provenance")).toBeInTheDocument();
+    expect(screen.getByText(/Installs 3 skills from community/i)).toBeInTheDocument();
+    expect(screen.getByText("Install only - no auto-run. Launch workflows after reviewing setup.")).toBeInTheDocument();
+
     await user.click(await screen.findByRole("button", { name: /install selected version/i }));
 
     expect(await screen.findByText("Installed alpha-pack 1.4.0")).toBeInTheDocument();
