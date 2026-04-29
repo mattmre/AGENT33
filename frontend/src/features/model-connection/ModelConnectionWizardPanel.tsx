@@ -539,10 +539,13 @@ export function ModelConnectionWizardPanel({
       const health = parseLocalModelHealth(result.data);
       setLocalModelHealth(health);
       return health;
-    } catch {
+    } catch (error) {
       const health: LocalModelHealth = {
         overallState: "unavailable",
-        summary: "Could not check local model health. Confirm the engine is reachable.",
+        summary:
+          error instanceof Error
+            ? `Could not check local model health: ${error.message}`
+            : "Could not check local model health. Confirm the engine is reachable.",
         readyProviderCount: 0,
         attentionProviderCount: 0,
         totalModelCount: 0,

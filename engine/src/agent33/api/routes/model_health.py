@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query
 
@@ -14,16 +14,23 @@ from agent33.services.model_health import (
     UnifiedModelHealthResponse,
 )
 
+if TYPE_CHECKING:
+    from agent33.services.lm_studio_readiness import LMStudioReadinessService
+    from agent33.services.ollama_readiness import OllamaReadinessService
+else:
+    LMStudioReadinessService = object
+    OllamaReadinessService = object
+
 router = APIRouter(prefix="/v1/model-health", tags=["model-health"])
 
 
 def get_model_health_service(
     ollama_service: Annotated[
-        Any,
+        OllamaReadinessService,
         Depends(get_ollama_readiness_service),
     ],
     lm_studio_service: Annotated[
-        Any,
+        LMStudioReadinessService,
         Depends(get_lm_studio_readiness_service),
     ],
 ) -> ModelHealthService:

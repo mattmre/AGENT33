@@ -149,6 +149,12 @@ function mockApiRequest(): void {
   });
 }
 
+function getLocalRuntimePanel(label: string): HTMLElement {
+  const panel = screen.getByText(label).closest(".local-runtime-panel");
+  expect(panel).not.toBeNull();
+  return panel as HTMLElement;
+}
+
 describe("ModelConnectionWizardPanel provider setup v2", () => {
   beforeEach(() => {
     apiRequestMock.mockReset();
@@ -209,7 +215,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
 
-    expect((await screen.findAllByText("Detected 2 local Ollama models.")).length).toBeGreaterThan(0);
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected Ollama models" }));
     await user.click(detectedModels.getByRole("button", { name: /llama3.2:3b/ }));
 
@@ -237,7 +244,9 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
 
     expect(await screen.findByText("One place to see what can run now")).toBeInTheDocument();
     expect(screen.getByText("2 local runtimes ready with 4 detected models.")).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
+    const healthKpis = screen.getByLabelText("Local runtime readiness");
+    expect(within(healthKpis).getByText("4")).toBeInTheDocument();
+    expect(within(healthKpis).getByText("models detected")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
     const baseUrlInput = screen.getByLabelText("Base URL");
@@ -269,7 +278,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
-    await screen.findAllByText("Detected 2 local Ollama models.");
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Test connection" }));
 
     expect(await screen.findByText(/Ollama is ready at http:\/\/localhost:11434/)).toBeInTheDocument();
@@ -295,7 +305,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
 
     expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:1234/v1");
-    expect((await screen.findAllByText("Detected 2 LM Studio models.")).length).toBeGreaterThan(0);
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
     await user.click(detectedModels.getByRole("button", { name: /mistral-nemo-instruct/ }));
 
@@ -322,7 +333,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
-    await screen.findAllByText("Detected 2 LM Studio models.");
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
     await user.click(detectedModels.getByRole("button", { name: /qwen2.5-coder-7b-instruct/ }));
     await user.click(screen.getByRole("button", { name: "Test connection" }));
@@ -348,7 +360,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /LM Studio/ }));
-    await screen.findAllByText("Detected 2 LM Studio models.");
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const baseUrlInput = screen.getByLabelText("Base URL");
     await user.clear(baseUrlInput);
     await user.type(baseUrlInput, "http://127.0.0.1:1234");

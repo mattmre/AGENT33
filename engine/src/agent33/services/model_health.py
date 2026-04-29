@@ -78,8 +78,18 @@ class ModelHealthService:
             return_exceptions=True,
         )
         providers = [
-            self._coerce_ollama_result(results[0], checked_at),
-            self._coerce_lm_studio_result(results[1], checked_at),
+            self._coerce_result(
+                results[0],
+                checked_at,
+                provider="ollama",
+                label="Ollama",
+            ),
+            self._coerce_result(
+                results[1],
+                checked_at,
+                provider="lm-studio",
+                label="LM Studio",
+            ),
         ]
         ready_provider_count = sum(1 for provider in providers if provider.ok)
         attention_provider_count = sum(
@@ -140,25 +150,28 @@ class ModelHealthService:
         )
 
     @staticmethod
-    def _coerce_ollama_result(
-        result: OllamaStatusResponse | BaseException,
+    def _coerce_result(
+        result: OllamaStatusResponse | LMStudioStatusResponse | BaseException,
         checked_at: datetime,
+        *,
+        provider: LocalModelProvider,
+        label: str,
     ) -> LocalModelProviderHealth:
         if isinstance(result, BaseException):
             return LocalModelProviderHealth(
-                provider="ollama",
-                label="Ollama",
+                provider=provider,
+                label=label,
                 state="error",
                 ok=False,
                 base_url="",
                 default_model="",
                 checked_at=checked_at,
-                message=f"Could not check Ollama: {result}",
-                action="Check the Ollama runtime configuration.",
+                message=f"Could not check {label}: {result}",
+                action=f"Check the {label} runtime configuration.",
             )
         return LocalModelProviderHealth(
-            provider="ollama",
-            label="Ollama",
+            provider=provider,
+            label=label,
             state=result.state,
             ok=result.ok,
             base_url=result.base_url,
@@ -166,37 +179,7 @@ class ModelHealthService:
             checked_at=result.checked_at,
             model_count=result.count,
             message=result.message,
-            action=ModelHealthService._action_for_state("Ollama", result.state),
-        )
-
-    @staticmethod
-    def _coerce_lm_studio_result(
-        result: LMStudioStatusResponse | BaseException,
-        checked_at: datetime,
-    ) -> LocalModelProviderHealth:
-        if isinstance(result, BaseException):
-            return LocalModelProviderHealth(
-                provider="lm-studio",
-                label="LM Studio",
-                state="error",
-                ok=False,
-                base_url="",
-                default_model="",
-                checked_at=checked_at,
-                message=f"Could not check LM Studio: {result}",
-                action="Check the LM Studio runtime configuration.",
-            )
-        return LocalModelProviderHealth(
-            provider="lm-studio",
-            label="LM Studio",
-            state=result.state,
-            ok=result.ok,
-            base_url=result.base_url,
-            default_model=result.default_model,
-            checked_at=result.checked_at,
-            model_count=result.count,
-            message=result.message,
-            action=ModelHealthService._action_for_state("LM Studio", result.state),
+            action=ModelHealthService._action_for_state(label, result.state),
         )
 
     @staticmethod
