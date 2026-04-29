@@ -26,8 +26,8 @@ POST-CLUSTER roadmap slices
 |---|------|------|-------------------|------------|--------|
 | R0 | Audit merged review feedback and planning drift | research/docs | `session128-s1-review-remediation` | — | complete |
 | R1 | Follow-up PR: pack/session lifecycle hardening | code/test | `session128-s1-review-remediation` | R0 | complete (merged as `#409`, fresh-main verified) |
-| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | PR open as `#410`, awaiting review |
-| R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | queued |
+| R2 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes | code/test/docs | `session128-s2-penv2-hardening` | R1 merged | complete (merged as `#410`, fresh-main verified) |
+| R3 | POST-CLUSTER — Pack marketplace web UI | product/frontend | `session128-s3-pack-marketplace` | R2 merged | research/scope lock active |
 | R4 | POST-CLUSTER — Community submissions | ecosystem/runtime | `session128-s4-community-submissions` | R3 merged | queued |
 
 ## Resume Protocol
@@ -162,6 +162,13 @@ after the remediation PRs land.
 - the clean forward-looking baseline remains
   `worktrees/session127-s12-pack-marketplace`
 - start from a fresh worktree again after R2 merges
+
+**Fresh-main audit confirmed on `5de4f78`:**
+- marketplace backend APIs are already merged and usable on main
+- the old forward-looking worktree contains research/backend context but no
+  delivered marketplace frontend feature
+- the remaining work is a frontend/UI slice that should reuse existing app
+  patterns and the merged marketplace endpoints
 
 ---
 

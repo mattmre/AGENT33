@@ -97,9 +97,19 @@
   - `mypy engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py --config-file engine/pyproject.toml`
 - Opened PR `#410` (`Session 128: harden P-ENV v2 startup reliability`) from
   branch `session128-s2-penv2-hardening`.
-- Next step: review CI/comments on `#410`, land any follow-up fixes, merge it,
-  verify `main` from a fresh worktree, and then start the marketplace slice
-  from fresh `main`.
+- Squash-merged PR `#410` (`Session 128: harden P-ENV v2 startup reliability`)
+  and verified the merged result from fresh `origin/main` at `5de4f78`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session128-s3-pack-marketplace`
+  on branch `session128-s3-pack-marketplace` from the verified merged baseline.
+- Ran a fresh marketplace planning audit and confirmed:
+  - backend marketplace APIs are already merged and usable on main
+  - the old `session127-s12-pack-marketplace` worktree provides research
+    context but not the delivered frontend UI
+  - the remaining R3 work is a frontend marketplace feature slice
+- Wrote the R3 scope lock to
+  `docs/research/session128-r3-pack-marketplace-scope.md`.
+- Next step: implement the marketplace frontend in this fresh worktree, validate
+  it, and open the dedicated R3 PR before moving to community submissions.
 
 ## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
 
