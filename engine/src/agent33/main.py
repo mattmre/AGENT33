@@ -42,6 +42,7 @@ from agent33.api.routes import (
     ingestion,
     insights,
     knowledge,
+    lm_studio,
     marketplace,
     mcp,
     mcp_proxy,
@@ -2091,6 +2092,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await _ollama_readiness_svc.aclose()
         logger.info("ollama_readiness_service_shutdown")
 
+    _lm_studio_readiness_svc: Any = getattr(app.state, "lm_studio_readiness_service", None)
+    if _lm_studio_readiness_svc is not None:
+        await _lm_studio_readiness_svc.aclose()
+        logger.info("lm_studio_readiness_service_shutdown")
+
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
     if shutdown_multimodal_service is not None:
         await shutdown_multimodal_service.shutdown_voice_sessions()
@@ -2431,6 +2437,7 @@ app.include_router(context.router)
 app.include_router(operator.router)
 app.include_router(openrouter.router)
 app.include_router(ollama.router)
+app.include_router(lm_studio.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)

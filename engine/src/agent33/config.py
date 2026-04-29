@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     default_model: str = ""
     ollama_base_url: str = "http://ollama:11434"
     ollama_default_model: str = "llama3.2:3b"
+    lm_studio_base_url: str = "http://localhost:1234/v1"
+    lm_studio_default_model: str = "local-model"
 
     # Local "Heretic" & Ultra-Sparse Orchestration
     # (optimized for single RTX 3090 - 24GB VRAM).
@@ -615,6 +617,11 @@ class Settings(BaseSettings):
     def runtime_ollama_base_url(self) -> str:
         """Return the Ollama URL that runtime code should use."""
         return resolve_runtime_service_url(self.ollama_base_url)
+
+    @property
+    def runtime_lm_studio_base_url(self) -> str:
+        """Return the LM Studio URL that runtime code should use."""
+        return resolve_runtime_service_url(self.lm_studio_base_url)
 
     @field_validator("control_plane_backend")
     @classmethod

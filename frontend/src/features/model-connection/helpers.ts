@@ -119,6 +119,14 @@ export function normalizeOllamaBaseUrl(baseUrl: string): string {
   return trimmed.toLowerCase().endsWith("/v1") ? trimmed.slice(0, -3).replace(/\/+$/, "") : trimmed;
 }
 
+export function normalizeLmStudioBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (!trimmed || trimmed.toLowerCase().endsWith("/v1")) {
+    return trimmed;
+  }
+  return `${trimmed}/v1`;
+}
+
 export function formatOllamaModelRef(modelName: string): string {
   const trimmed = modelName.trim();
   return trimmed.startsWith("ollama/") ? trimmed : `ollama/${trimmed}`;
@@ -127,6 +135,14 @@ export function formatOllamaModelRef(modelName: string): string {
 export function stripOllamaModelRef(modelRef: string): string {
   const trimmed = modelRef.trim();
   return trimmed.startsWith("ollama/") ? trimmed.slice("ollama/".length) : trimmed;
+}
+
+export function formatLmStudioModelRef(modelName: string): string {
+  return modelName.trim();
+}
+
+export function stripLmStudioModelRef(modelRef: string): string {
+  return modelRef.trim();
 }
 
 export function getModelReadinessLabel(
