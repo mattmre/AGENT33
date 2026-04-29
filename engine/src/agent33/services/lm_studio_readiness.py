@@ -113,8 +113,9 @@ class LMStudioReadinessService:
                     default_model=self._settings.lm_studio_default_model,
                     checked_at=checked_at,
                     message=(
-                        "LM Studio base URL overrides must use http(s) and point to the "
-                        "configured runtime host, localhost, or host.docker.internal."
+                        "LM Studio base URL overrides must use http(s) and either exactly "
+                        "match the configured runtime base URL or point to localhost, "
+                        "host.docker.internal, or a loopback IP address."
                     ),
                 )
 

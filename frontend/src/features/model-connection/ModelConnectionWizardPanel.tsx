@@ -341,6 +341,20 @@ export function ModelConnectionWizardPanel({
     setLMStudioStatus(null);
   }
 
+  function getOllamaBaseUrlOverride(): string | undefined {
+    const preset = getProviderPreset("ollama");
+    const current = normalizeOllamaBaseUrl(form.baseUrl);
+    const presetDefault = normalizeOllamaBaseUrl(preset?.baseUrlDefault ?? "");
+    return current && current !== presetDefault ? form.baseUrl : undefined;
+  }
+
+  function getLMStudioBaseUrlOverride(): string | undefined {
+    const preset = getProviderPreset("lm-studio");
+    const current = normalizeLmStudioBaseUrl(form.baseUrl);
+    const presetDefault = normalizeLmStudioBaseUrl(preset?.baseUrlDefault ?? "");
+    return current && current !== presetDefault ? form.baseUrl : undefined;
+  }
+
   async function loadOllamaStatus(baseUrl?: string): Promise<OllamaRuntimeStatus | null> {
     if (!hasCredentials) {
       setOllamaStatus(null);
@@ -412,10 +426,10 @@ export function ModelConnectionWizardPanel({
       return;
     }
     if (selectedPresetId === "ollama") {
-      void loadOllamaStatus();
+      void loadOllamaStatus(getOllamaBaseUrlOverride());
     }
     if (selectedPresetId === "lm-studio") {
-      void loadLMStudioStatus();
+      void loadLMStudioStatus(getLMStudioBaseUrlOverride());
     }
     // Run when the operator enters a local runtime path; manual refresh handles base URL edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -485,7 +499,7 @@ export function ModelConnectionWizardPanel({
     setProbeStatus({ tone: "info", message: "Testing model connection..." });
     try {
       if (selectedPresetId === "ollama") {
-        const status = await loadOllamaStatus();
+        const status = await loadOllamaStatus(getOllamaBaseUrlOverride());
         const selectedModel = stripOllamaModelRef(form.defaultModel);
         const hasSelectedModel =
           status?.models.some((model) => model.name === selectedModel) ?? false;
@@ -502,7 +516,7 @@ export function ModelConnectionWizardPanel({
       }
 
       if (selectedPresetId === "lm-studio") {
-        const status = await loadLMStudioStatus();
+        const status = await loadLMStudioStatus(getLMStudioBaseUrlOverride());
         const selectedModel = stripLmStudioModelRef(form.defaultModel);
         const hasSelectedModel =
           status?.models.some((model) => model.name === selectedModel) ?? false;
@@ -617,7 +631,7 @@ export function ModelConnectionWizardPanel({
               </div>
               <button
                 type="button"
-                onClick={() => void loadOllamaStatus()}
+                onClick={() => void loadOllamaStatus(getOllamaBaseUrlOverride())}
                 disabled={!hasCredentials || isLoadingOllama}
               >
                 {isLoadingOllama ? "Checking..." : "Refresh Ollama"}
@@ -661,7 +675,7 @@ export function ModelConnectionWizardPanel({
               </div>
               <button
                 type="button"
-                onClick={() => void loadLMStudioStatus()}
+                onClick={() => void loadLMStudioStatus(getLMStudioBaseUrlOverride())}
                 disabled={!hasCredentials || isLoadingLMStudio}
               >
                 {isLoadingLMStudio ? "Checking..." : "Refresh LM Studio"}
