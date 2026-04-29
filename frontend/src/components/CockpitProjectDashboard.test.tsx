@@ -24,6 +24,9 @@ describe("CockpitProjectDashboard", () => {
     expect(screen.getByRole("region", { name: "Artifact timeline" })).toBeInTheDocument();
     expect(screen.getByText("Review timeline")).toBeInTheDocument();
     expect(screen.getByText("Artifact package ready")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review outcome artifact: Artifact package ready" })
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Workspace template adapter").length).toBeGreaterThan(1);
     expect(screen.getByRole("region", { name: "Safety and coordination signals" })).toBeInTheDocument();
     expect(screen.getByText("1 cockpit item needs review.")).toBeInTheDocument();

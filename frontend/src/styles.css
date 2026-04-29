@@ -1616,7 +1616,7 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: start;
+  align-items: flex-start;
 }
 
 .cockpit-dashboard-hero h2,
@@ -1648,6 +1648,7 @@ button:disabled {
 
 .cockpit-dashboard-status span,
 .cockpit-dashboard-artifacts span,
+.cockpit-safety-signal span,
 .artifact-drawer-panel span {
   color: #6fa8b8;
   font-size: 0.68rem;

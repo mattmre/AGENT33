@@ -120,7 +120,11 @@ export function CockpitProjectDashboard({
                 </div>
               </dl>
               <p className="artifact-card-next-action">Next: {artifact.nextActionLabel}</p>
-              <button type="button" onClick={onReviewCurrentWork}>
+              <button
+                type="button"
+                aria-label={`Review ${artifact.kind} artifact: ${artifact.title}`}
+                onClick={onReviewCurrentWork}
+              >
                 Review current work
               </button>
             </article>
