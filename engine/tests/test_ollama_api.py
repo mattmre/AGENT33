@@ -92,7 +92,9 @@ class TestOllamaRouteAuth:
 
 class TestOllamaStatusRoute:
     def test_returns_available_models(self, operator_read_client: TestClient) -> None:
-        service, fetcher = _service([_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())])
+        service, fetcher = _service(
+            [_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())]
+        )
         app.state.ollama_readiness_service = service
 
         resp = operator_read_client.get(
@@ -148,7 +150,9 @@ class TestOllamaStatusRoute:
         assert "unexpected payload" in data["message"]
 
     def test_models_endpoint_returns_model_list(self, operator_read_client: TestClient) -> None:
-        service, _ = _service([_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())])
+        service, _ = _service(
+            [_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())]
+        )
         app.state.ollama_readiness_service = service
 
         resp = operator_read_client.get("/v1/ollama/models")

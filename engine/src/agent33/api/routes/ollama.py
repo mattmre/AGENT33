@@ -20,7 +20,11 @@ router = APIRouter(prefix="/v1/ollama", tags=["ollama"])
 def get_ollama_readiness_service(request: Request) -> OllamaReadinessService:
     """Return the shared Ollama readiness service, creating it lazily."""
 
-    svc: OllamaReadinessService | None = getattr(request.app.state, "ollama_readiness_service", None)
+    svc: OllamaReadinessService | None = getattr(
+        request.app.state,
+        "ollama_readiness_service",
+        None,
+    )
     if svc is None:
         svc = OllamaReadinessService(settings=settings)
         request.app.state.ollama_readiness_service = svc

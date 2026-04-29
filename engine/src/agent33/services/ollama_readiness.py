@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 from pydantic import BaseModel, Field
 
-from agent33.config import Settings
+if TYPE_CHECKING:
+    from agent33.config import Settings
 
 
 class OllamaModelDetails(BaseModel):
@@ -181,7 +182,9 @@ class OllamaReadinessService:
             digest=str(item["digest"]) if item.get("digest") is not None else None,
             details=OllamaModelDetails(
                 family=str(details["family"]) if details.get("family") is not None else None,
-                families=[str(family) for family in families] if isinstance(families, list) else [],
+                families=(
+                    [str(family) for family in families] if isinstance(families, list) else []
+                ),
                 format=str(details["format"]) if details.get("format") is not None else None,
                 parameter_size=(
                     str(details["parameter_size"])
