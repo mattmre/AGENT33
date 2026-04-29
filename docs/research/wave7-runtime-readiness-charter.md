@@ -31,8 +31,8 @@ Wave 7 is the odd-wave research gate for making AGENT33 feel like a usable local
 | --- | --- | --- |
 | Ollama | Official API docs list `/api/tags` for local models, `/api/ps` for running models, `/api/version` for version checks, `/api/chat`, `/api/generate`, and `/api/embed` style operations. See [Ollama API docs](https://github.com/ollama/ollama/blob/main/docs/api.md). | Wave 8 should probe `/api/version` for identity and `/api/tags` for model availability; optional running-model state can follow via `/api/ps`. |
 | Ollama browser CORS | Browser calls from a separate localhost frontend can fail unless `OLLAMA_ORIGINS` permits that origin. | Treat CORS as a user-facing readiness state. Do not silently label it as “not installed.” Prefer backend/server-side probes where available. |
-| LM Studio | LM Studio exposes OpenAI-compatible endpoints including `GET /v1/models`, `POST /v1/responses`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/completions`. See [LM Studio OpenAI-compatible endpoints](https://lmstudio.ai/docs/app/api/endpoints/openai). | Wave 8 should probe `/v1/models` and reuse OpenAI-compatible request shapes. |
-| LM Studio headless | LM Studio supports background operation through `llmster`, `lms daemon up`, and `lms server start`; JIT loading affects whether `/v1/models` lists all downloaded models or only loaded models. See [LM Studio headless docs](https://lmstudio.ai/docs/app/api/headless). | UI copy must distinguish “server not running,” “server running with no model loaded,” and “model can be JIT loaded.” |
+| LM Studio | Current LM Studio docs list OpenAI-compatible endpoints including `GET /v1/models`, `POST /v1/responses`, `POST /v1/chat/completions`, `POST /v1/embeddings`, and `POST /v1/completions`. See [LM Studio OpenAI-compatible endpoints](https://lmstudio.ai/docs/app/api/endpoints/openai). | Wave 8 should probe `/v1/models` first and reuse OpenAI-compatible request shapes; it does not need to implement Responses API support to complete readiness detection. |
+| LM Studio headless | Current LM Studio docs describe `llmster` as the recommended GUI-less daemon and use `lms daemon up` / `lms server start` commands for daemon/server startup; JIT loading affects whether `/v1/models` lists all downloaded models or only loaded models. See [LM Studio headless docs](https://lmstudio.ai/docs/app/api/headless). | UI copy must distinguish “server not running,” “server running with no model loaded,” and “model can be JIT loaded.” |
 
 ## Wave 8 implementation sequence
 
@@ -53,7 +53,7 @@ Wave 7 is the odd-wave research gate for making AGENT33 feel like a usable local
 4. Display CORS and browser-reachability failures as separate setup issues when the frontend probe cannot access a server the backend may be able to reach.
 5. Do not automatically pull or download models in Wave 8; provide copyable commands and explicit next actions instead.
 6. Keep OpenRouter probe behavior intact and avoid making cloud provider setup depend on local runtime availability.
-7. Normalize local runtime base URLs before probing or saving. Ollama native checks should use the root URL (`http://localhost:11434`) for `/api/*`; OpenAI-compatible chat calls may append `/v1` only at the call site. Avoid creating `.../v1/v1` when a user starts from the existing preset.
+7. Normalize local runtime base URLs to the root before probing or saving, such as `http://localhost:11434` for Ollama or `http://localhost:1234` for LM Studio. Provider-specific paths (`/api/*`) and version suffixes (`/v1`) should be appended at the call site or inside the provider client. Avoid creating `.../v1/v1` when a user starts from an existing preset.
 8. Add focused tests for success, timeout, malformed response, missing model, “server up but no model loaded,” and local base URL normalization states.
 
 ## Stop and continue gates
