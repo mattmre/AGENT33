@@ -2757,6 +2757,9 @@ button:disabled {
 }
 
 .workflow-starter-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
   margin-top: 0.6rem;
   color: #bbf7d0;
   font-size: 0.9rem;

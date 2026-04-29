@@ -157,7 +157,26 @@ function buildSteps(form: StarterForm): WorkflowStarterRequest["steps"] {
   ];
 }
 
-function buildWorkflow(form: StarterForm): WorkflowStarterRequest {
+function packContextLabel(draft: WorkflowStarterDraft | null): string {
+  return draft?.sourcePack ? ` from ${draft.sourcePack}` : "";
+}
+
+function sourceTags(draft: WorkflowStarterDraft | null): string[] {
+  if (!draft) {
+    return [];
+  }
+
+  return [
+    draft.sourcePack ? `pack:${draft.sourcePack}` : null,
+    draft.sourcePackVersion ? `pack-version:${draft.sourcePackVersion}` : null,
+    draft.sourceOutcomeId ? `outcome:${draft.sourceOutcomeId}` : null
+  ].filter((tag): tag is string => tag !== null);
+}
+
+function buildWorkflow(
+  form: StarterForm,
+  draft: WorkflowStarterDraft | null = null
+): WorkflowStarterRequest {
   const fallbackName = `${form.kind}-${Date.now().toString(36)}`;
   const name = slugify(form.name) || slugify(form.goal) || fallbackName;
   return {
@@ -192,7 +211,7 @@ function buildWorkflow(form: StarterForm): WorkflowStarterRequest {
     },
     metadata: {
       author: form.author.trim() || "operator",
-      tags: ["operator-starter", form.kind]
+      tags: ["operator-starter", form.kind, ...sourceTags(draft)]
     }
   };
 }
@@ -259,8 +278,9 @@ export function WorkflowStarterPanel({
         resolveWorkflows(query, token, apiKey),
         discoverSkills(query, token, apiKey)
       ]);
-      onResult("Workflow Starter - Resolve Workflows", workflowResult);
-      onResult("Workflow Starter - Discover Skills", skillResult);
+      const contextLabel = packContextLabel(initialDraft);
+      onResult(`Workflow Starter - Resolve Workflows${contextLabel}`, workflowResult);
+      onResult(`Workflow Starter - Discover Skills${contextLabel}`, skillResult);
       const workflows = asWorkflowResolutionResponse(workflowResult.data);
       const skills = asSkillDiscoveryResponse(skillResult.data);
       if (!workflowResult.ok || workflows === null) {
@@ -273,7 +293,7 @@ export function WorkflowStarterPanel({
       }
       setWorkflowMatches(workflows.matches);
       setSkillMatches(skills.matches);
-      setWorkflowPreview(buildWorkflow(form));
+      setWorkflowPreview(buildWorkflow(form, initialDraft));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown workflow starter error";
       setError(message);
@@ -287,12 +307,12 @@ export function WorkflowStarterPanel({
       setError("Describe the workflow goal first.");
       return;
     }
-    const workflow = workflowPreview ?? buildWorkflow(form);
+    const workflow = workflowPreview ?? buildWorkflow(form, initialDraft);
     setError("");
     setLoadingAction("create");
     try {
       const result = await createWorkflow(workflow, token, apiKey);
-      onResult("Workflow Starter - Create Workflow", result);
+      onResult(`Workflow Starter - Create Workflow${packContextLabel(initialDraft)}`, result);
       const response = asWorkflowCreateResponse(result.data);
       if (!result.ok || response === null) {
         setError(`Workflow creation failed (${result.status})`);
@@ -330,7 +350,15 @@ export function WorkflowStarterPanel({
             a validated workflow definition and points you to matching templates and skills.
           </p>
           {initialDraft?.sourceLabel ? (
-            <p className="workflow-starter-source">Loaded starter: {initialDraft.sourceLabel}</p>
+            <div className="workflow-starter-source">
+              <span>Loaded starter: {initialDraft.sourceLabel}</span>
+              {initialDraft.sourcePack ? (
+                <span>
+                  Pack: {initialDraft.sourcePack}
+                  {initialDraft.sourcePackVersion ? ` v${initialDraft.sourcePackVersion}` : ""}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="workflow-starter-badge">Loop-ready</div>

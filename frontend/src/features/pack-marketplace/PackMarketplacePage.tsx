@@ -191,7 +191,10 @@ function buildOutcomeWorkflowDraft(
     output: deliverables || `Artifacts from ${manifest.presentation.title || manifest.name}`,
     schedule: "",
     author: pack.author || manifest.author || "operator",
-    sourceLabel: `Outcome pack: ${manifest.presentation.title || manifest.name}`
+    sourceLabel: `Outcome pack: ${manifest.presentation.title || manifest.name}`,
+    sourcePack: pack.name,
+    sourcePackVersion: pack.latest_version,
+    sourceOutcomeId: manifest.name
   };
 }
 
