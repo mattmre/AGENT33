@@ -1,127 +1,52 @@
 # Next Session Briefing
 
-Last updated: 2026-04-28 (UX overhaul implementation wave merged through PR `#454`)
+Last updated: 2026-04-29 (publication sweep, salvage backup, and handoff refresh)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
-- **Open PRs**: 0
-- **Latest merged implementation PR**: `#454` (`feat(frontend): quarantine advanced controls`)
-- **Latest handoff refresh**: this document update after the `#449`-`#454` UX overhaul wave
-- **Latest commit on main**: `5179e0e`
-- **Cumulative implementation PRs merged through this wave**: 454
-- **All Phases P01-P72**: COMPLETE
-- **POST-1 (Foundation & Baseline)**: COMPLETE
-- **POST-2 (SkillsBench Competitiveness)**: COMPLETE
-- **POST-3 (Pack Ecosystem)**: COMPLETE
-- **POST-4 (Interruption & Self-Improvement)**: COMPLETE through PR `#406`
-- **POST-CLUSTER (Distribution & Ecosystem Growth)**: COMPLETE through the tracked follow-up and Operator UX expansion waves (`#433`, `#435`-`#447`)
-- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md` plus the UX backlog in `docs/research/ux-overhaul-backlog-2026-04-27.md`
-- **Security scan posture**: the Trivy/admin-override burden was removed in PR `#418`; treat any new repo-level scan failures as regressions, not accepted baseline drift
+- **Open PRs**: `#502` (`Planning: OpenSearch / TIKNAS product split + scaffolding bootstrap`), `#477` (`build(deps): bump aquasecurity/trivy-action from 0.35.0 to 0.36.0`)
+- **Latest merged implementation PR**: `#509` (`feat(security): persist reviews and scan webhooks`)
+- **Latest handoff refresh**: this document update after the 2026-04-29 publication sweep
+- **Latest commit on main**: `5bb586c`
+- **Current merged session log**: `docs/sessions/session-134-2026-04-29-publication-sweep.md`
+- **Roadmap posture**: the tracked roadmap, ingestion hardening queue, Operator UX expansion, and first UX overhaul wave are all merged on `main`; no canonical execution queue is currently open
 
-## What Sessions 130-132 And The Final Follow-up Wave Delivered
+## What Session 134 Did
 
-| PR | Commit | Slice | Description |
-|----|--------|-------|-------------|
-| #414 | `f016b35` | POST-CLUSTER | community pack submission and resubmission flow |
-| #415 | `e8cd352` | monitoring | P68-Lite outcomes monitoring verification plus health endpoint |
-| #416 | `1cd556a` | POST-4 follow-up | `PausedInvocation` persistence across restarts |
-| #417 | `9da0f9d` | planning | SSE schema-v2 migration-path document |
-| #418 | `cb11b73` | security | Trivy CVE fixes to remove routine admin-override merges |
-| #419 | `9e0dadb` | ingestion | Evolver Sprint 0 clean-room guardrails and ingestion stub |
-| #420 | `35ab23e` | ingestion | candidate state model (`CANDIDATE -> VALIDATED -> PUBLISHED -> REVOKED`) |
-| #421 | `e9c2f24` | ingestion | candidate publication pipeline |
-| #422 | `0c0c615` | ingestion | mailbox/heartbeat pilot |
-| #423 | `a2a4582` | ingestion | lifecycle verbs and operator UX |
-| #424 | `9352715` | ingestion | detect-only skills doctor |
-| #425 | `a1670d3` | research preservation | durable research corpus index and panel-output ledger |
-| #426 | `729d9ca` | OpenRouter | runtime/config/operator/frontend integration and hardening |
-| #427 | `860daf0` | ingestion | persisted mailbox inbox events |
-| #428 | `6e327ae` | planning | refresh post-merge handoff queue |
-| #429 | `5e2e241` | ingestion | harden journal retention and task-metrics durability |
-| #430 | `48626e2` | operator UX | deepen ingestion review/history UX and notification hooks |
-| #431 | `f11b9ae` | SSE v2 | add backend schema-v2 foundation with version gating |
-| #432 | `ee7461a` | skills integration | register published ingestion skills into runtime discovery |
-| #433 | `cc4845a` | SkillsBench | report smoke regressions in CTRF/CI summaries |
+- Audited local history and found 111 local branches whose tip commits were not present on any remote ref.
+- Pushed all 111 unpublished branch tips to `origin` and set upstream tracking so the machine-local history now exists on GitHub.
+- Preserved substantive dirty-worktree state on dedicated salvage branches:
+  - `salvage/root-research-wrap-20260429` (`16043b8`)
+  - `salvage/session128-s3-docs-20260429` (`234cbd0`)
+  - `salvage/session132-council-audit-20260429` (`b1f87bb`)
+  - `salvage/session132-t1-wip-20260429` (`42a1519`)
+  - `salvage/session133-s1-scope-20260429` (`ca340e1`)
+- Verified that the remaining dirt on disk is mostly transient worktree noise (`.coverage`, `test.db`, `engine/var/`, `var/`) plus root-checkout OpenRouter file copies already represented by merged PR `#426`.
 
-## What The Operator UX / Agent OS Expansion Delivered
+## Immediate Priority Queue
 
-| PR | Commit | Slice | Description |
-|----|--------|-------|-------------|
-| #434 | `6015674` | planning | refresh final wrap-up queue state |
-| #435 | `7837389` | Start Here | first-run onboarding control plane with readiness/remediation guidance |
-| #436 | `53e77d1` | Review Queue | top-level ingestion review queue with search and safety filters |
-| #437 | `71a8075` | Safety Center | plain-language tool approvals surface |
-| #438 | `3a02c46` | Skill Wizard | operator-authored skill draft/install flow |
-| #439 | `5bb283c` | Workflow Starter | guided workflow creation from plain-language goals |
-| #440 | `8e08f6d` | Tool Fabric | objective-based tool/skill/workflow resolution |
-| #441 | `61c5d16` | Agent OS | contained Linux operator runtime foundation |
-| #442 | `990fcc7` | Improvement Loops | governed recurring research/improvement loop builder |
-| #443 | `705e3d9` | MCP Health | MCP bridge/proxy/sync health center |
-| #444 | `4865c1c` | Navigation | grouped operator navigation by job-to-be-done |
-| #445 | `99019e3` | MCP actions | live MCP sync/validate/reload operator actions |
-| #446 | `751933e` | Agent OS sessions | named Agent OS session workspaces and lifecycle controls |
-| #447 | `cf8d68a` | Research launchers | one-click competitive, UX, and Agent OS research schedules |
-
-## What The UX Overhaul Research And First Implementation Wave Delivered
-
-| PR | Commit | Slice | Description |
-|----|--------|-------|-------------|
-| #449 | `9c7f6e` | UX research | 10-persona expert-panel research plus 125-item UX improvement backlog |
-| #450 | `fe27f94` | Outcome Home | outcome-first Start Here shell, readiness guidance, and workflow draft routing |
-| #451 | `8fde809` | Workflow Catalog | searchable/filterable catalog of baked-in workflow systems with detail routing |
-| #452 | `4a3aead` | Model setup | plain-language Model Connection Wizard with OpenRouter defaults, save, probe, and catalog handoff |
-| #453 | `710a2ae` | Run Timeline | human-readable Operations Hub timeline, work/attention/done counts, and selected-process action feed |
-| #454 | `5179e0e` | Advanced quarantine | Beginner/Pro operator mode, quarantined raw control plane, safer route cards, global Pro search, and raw endpoint warnings |
-
-## Current Roadmap Posture
-
-- **Roadmap authority**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
-- **Current execution queue**: none from the tracked roadmap, Operator UX expansion, or first UX overhaul implementation wave
-- **Current merged session log**: `docs/sessions/session-133-2026-04-27-ux-overhaul.md`
-- **Recovery note**: stale root checkouts may still have out-of-date planning docs; recover from a fresh `origin/main` worktree, then read this file, `task_plan.md`, and `progress.md`
-- **Immediate implementation focus**: no open PRs after this closed cycle — PRs `#425`-`#433`, `#435`-`#447`, and `#449`-`#454` are merged and CI-verified; start any new work from a new scope lock on updated `origin/main`
-- **Recommended next UX wave**: continue from the remaining backlog items: demo/sample project mode, role-based start paths, guided idea/product brief intake, unified Connect area, recent outcomes feed, workflow result pages, persona-specific templates, install/setup hardening, Agent OS container UX polish, and support/education surfaces.
-
-## Queue Status
-
-- The prior queue (`ingestion hardening -> operator UX depth -> SSE schema v2 -> skills-system integration -> SkillsBench follow-up`) is **COMPLETE** on `main`.
-- The Operator UX rescue / Agent OS / MCP / recurring research queue is **COMPLETE** on `main` through `#447`.
-- The first UX overhaul queue (`expert-panel research -> Outcome Home -> Workflow Catalog -> Model Connection Wizard -> Run Timeline -> Advanced quarantine`) is **COMPLETE** on `main` through `#454`.
-- Queue/handoff docs should now be read as closed-cycle references rather than an open implementation prompt.
-- If implementation resumes, start from a fresh `origin/main` worktree and create a new scoped plan from the remaining items in `docs/research/ux-overhaul-backlog-2026-04-27.md`.
+1. Decide whether open PR `#502` is still the active planning thread or should be replaced by a fresh scope lock from current `origin/main`.
+2. Triage the five salvage branches and classify each as:
+   - merge-worthy follow-up,
+   - cherry-pick source, or
+   - archival backup only.
+3. Clean transient artifacts from historical worktrees and prune any disposable worktrees once the salvage-branch review is complete.
+4. If new implementation resumes, start from a fresh `origin/main` worktree and scope against `docs/research/ux-overhaul-backlog-2026-04-27.md` plus any selected salvage-branch material.
 
 ## Key References
 
-- `docs/phases/PHASE-PLAN-POST-P72-2026.md` - canonical POST-P72 roadmap and active queue
-- `task_plan.md` - current queue pointer plus historical execution trail
-- `progress.md` - merged milestones and fresh-main verification log
-- `docs/research/sse-schema-v2-migration-path.md` - required migration contract before any v2 stream work starts
+- `docs/sessions/session-134-2026-04-29-publication-sweep.md` - session-wrap record for the publication sweep
+- `docs/research/ux-overhaul-backlog-2026-04-27.md` - remaining UX backlog after the merged wave through `#454`
 - `docs/research/research-corpus-index-2026-04-21.md` - preserved research corpus index added in PR `#425`
 - `docs/research/panel-output-ledger-2026-04-21.md` - preserved panel-output ledger added in PR `#425`
-- `engine/src/agent33/ingestion/journal.py` - durable journal retention/expiry implementation surface
+- `task_plan.md` - current queue pointer plus historical execution trail
+- `progress.md` - merged milestones and verification log
 - `engine/src/agent33/ingestion/mailbox.py` - merged mailbox/runtime behavior
 - `engine/src/agent33/ingestion/mailbox_persistence.py` - persisted mailbox store added in PR `#427`
+- `engine/src/agent33/ingestion/journal.py` - durable journal retention/expiry implementation surface
 - `engine/src/agent33/ingestion/metrics.py` - persisted task-metrics storage and history queries
-- `engine/src/agent33/ingestion/notifications.py` - webhook-style operator notification hooks for ingestion events
-- `engine/tests/test_ingestion_journal.py` - focused retention and tenant-journal coverage
-- `engine/tests/test_ingestion_mailbox.py` - focused regression coverage for the ingestion mailbox stack
-- `engine/tests/test_sse_versioning.py` - SSE version-gating and pinned-schema coverage
-- `engine/tests/test_workflow_sse.py` - workflow stream payload compatibility coverage
-- `engine/tests/test_skills.py` - runtime skill-registry ingestion coverage
-- `engine/tests/test_bench_cli.py` - SkillsBench CLI reporting coverage
-- `engine/tests/test_skillsbench_regression.py` - regression-threshold and comparison coverage
-- `frontend/src/App.tsx` - grouped operator navigation
-- `frontend/src/features/onboarding/` - Start Here onboarding control plane
-- `frontend/src/features/safety-center/` - tool approvals Safety Center
-- `frontend/src/features/skill-wizard/` - operator skill authoring wizard
-- `frontend/src/features/workflow-starter/` - guided workflow starter
-- `frontend/src/features/tool-fabric/` - adaptive tool fabric resolver
-- `frontend/src/features/outcome-home/` - outcome-first Start Here shell and launchable workflow systems
-- `frontend/src/features/workflow-catalog/` - searchable workflow catalog and workflow-starter draft routing
-- `frontend/src/features/model-connection/` - plain-language model/provider connection wizard
-- `frontend/src/features/advanced/` - Beginner/Pro mode and raw control-plane quarantine wrapper
-- `frontend/src/features/operations-hub/OperationsHubPanel.tsx` - Run Timeline over operations state
-- `frontend/src/features/improvement-loops/` - improvement loops and research launchers
-- `frontend/src/features/mcp-health/` - MCP Health Center and operator actions
-- `engine/Dockerfile.agent-os`, `scripts/agent-os.ps1`, `scripts/agent-os.sh`, and `docs/operators/agent-os-runtime.md` - Agent OS runtime and session lifecycle
+- `frontend/src/features/outcome-home/` - outcome-first launch surface from the UX overhaul wave
+- `frontend/src/features/workflow-catalog/` - searchable workflow catalog
+- `frontend/src/features/model-connection/` - plain-language provider/model connection wizard
+- `frontend/src/features/advanced/` - Beginner/Pro mode and quarantined raw control-plane wrapper
