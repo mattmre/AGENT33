@@ -8,11 +8,13 @@ import {
   fetchMarketplaceCategories,
   fetchMarketplacePackDetail,
   fetchMarketplacePacks,
+  fetchPackOutcomeManifests,
   fetchPackQualityAssessment,
   fetchPackTrust,
   installMarketplacePack,
   submitPackForCuration
 } from "./api";
+import type { StarterKind, WorkflowStarterDraft } from "../workflow-starter/types";
 import type {
   CurationRecord,
   InstalledPackDetail,
@@ -21,6 +23,7 @@ import type {
   MarketplacePackDetail,
   MarketplacePackSummary,
   MarketplacePackVersionInfo,
+  OutcomePackManifest,
   QualityAssessment,
   PackTrustResponse
 } from "./types";
@@ -28,6 +31,7 @@ import type {
 interface PackMarketplacePageProps {
   token: string | null;
   apiKey: string | null;
+  onOpenWorkflowStarter?: (draft?: WorkflowStarterDraft) => void;
 }
 
 interface CategoryOption {
@@ -154,6 +158,43 @@ function versionSkillCount(pack: MarketplacePackDetail, selectedVersion: string)
   return selected?.skills_count ?? 0;
 }
 
+function starterKindForOutcomePack(manifest: OutcomePackManifest): StarterKind {
+  if (manifest.kind === "improvement-loop") {
+    return "improvement-loop";
+  }
+  if (manifest.kind === "automation-loop") {
+    return "automation-loop";
+  }
+
+  const searchable = `${manifest.category ?? ""} ${(manifest.tags ?? []).join(" ")}`.toLowerCase();
+  if (searchable.includes("research") || searchable.includes("security") || searchable.includes("review")) {
+    return "research";
+  }
+  return "automation-loop";
+}
+
+function buildOutcomeWorkflowDraft(
+  manifest: OutcomePackManifest,
+  pack: MarketplacePackDetail
+): WorkflowStarterDraft {
+  const primaryWorkflow = manifest.workflows[0];
+  const deliverables =
+    manifest.presentation.expected_deliverables && manifest.presentation.expected_deliverables.length > 0
+      ? manifest.presentation.expected_deliverables.join("; ")
+      : (manifest.artifacts ?? []).map((artifact) => artifact.name).join("; ");
+
+  return {
+    id: `outcome-${manifest.name}`,
+    name: primaryWorkflow?.name ?? manifest.name,
+    goal: manifest.presentation.summary || manifest.description,
+    kind: starterKindForOutcomePack(manifest),
+    output: deliverables || `Artifacts from ${manifest.presentation.title || manifest.name}`,
+    schedule: "",
+    author: pack.author || manifest.author || "operator",
+    sourceLabel: `Outcome pack: ${manifest.presentation.title || manifest.name}`
+  };
+}
+
 function TrustBadge({
   level,
   showUnknown = false
@@ -223,8 +264,12 @@ function PackDetailPanel({
   submissionFeedbackTone,
   qualityLoading,
   qualityError,
+  outcomeLaunchPending,
+  outcomeLaunchFeedback,
+  canLaunchOutcome,
   onVersionChange,
   onInstall,
+  onLaunchOutcome,
   onSubmitForCuration,
   onClose
 }: {
@@ -245,8 +290,12 @@ function PackDetailPanel({
   submissionFeedbackTone: "success" | "error" | null;
   qualityLoading: boolean;
   qualityError: string | null;
+  outcomeLaunchPending: boolean;
+  outcomeLaunchFeedback: string | null;
+  canLaunchOutcome: boolean;
   onVersionChange: (value: string) => void;
   onInstall: () => void;
+  onLaunchOutcome: () => void;
   onSubmitForCuration: () => void;
   onClose: () => void;
 }): JSX.Element | null {
@@ -449,7 +498,20 @@ function PackDetailPanel({
                   ? "Installing..."
                   : "Install selected version"}
             </button>
+            {canLaunchOutcome && isInstalled && (
+              <button
+                type="button"
+                className="pack-marketplace-secondary"
+                disabled={outcomeLaunchPending}
+                onClick={onLaunchOutcome}
+              >
+                {outcomeLaunchPending ? "Preparing starter..." : "Launch outcome starter"}
+              </button>
+            )}
             {installFeedback && <p className="pack-marketplace-feedback">{installFeedback}</p>}
+            {outcomeLaunchFeedback && (
+              <p className="pack-marketplace-feedback">{outcomeLaunchFeedback}</p>
+            )}
           </div>
 
           {installedDetailError && <p className="pack-marketplace-error">{installedDetailError}</p>}
@@ -538,7 +600,11 @@ function PackDetailPanel({
   );
 }
 
-export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps): JSX.Element {
+export function PackMarketplacePage({
+  token,
+  apiKey,
+  onOpenWorkflowStarter
+}: PackMarketplacePageProps): JSX.Element {
   const [packs, setPacks] = useState<MarketplacePackSummary[]>([]);
   const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
   const [curationByPack, setCurationByPack] = useState<Record<string, CurationRecord>>({});
@@ -563,6 +629,8 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
   const [submissionFeedbackTone, setSubmissionFeedbackTone] = useState<"success" | "error" | null>(null);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityError, setQualityError] = useState<string | null>(null);
+  const [outcomeLaunchPending, setOutcomeLaunchPending] = useState(false);
+  const [outcomeLaunchFeedback, setOutcomeLaunchFeedback] = useState<string | null>(null);
 
   const loadMarketplace = useCallback(async () => {
     setLoading(true);
@@ -739,6 +807,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
     setSubmissionFeedback(null);
     setSubmissionFeedbackTone(null);
     setQualityError(null);
+    setOutcomeLaunchFeedback(null);
   };
 
   const handleInstall = async (): Promise<void> => {
@@ -779,6 +848,34 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       setInstallFeedback(err instanceof Error ? err.message : "Install failed");
     } finally {
       setInstallPending(false);
+    }
+  };
+
+  const handleLaunchOutcome = async (): Promise<void> => {
+    if (!selectedPackDetail || !onOpenWorkflowStarter) {
+      return;
+    }
+
+    setOutcomeLaunchPending(true);
+    setOutcomeLaunchFeedback(null);
+
+    try {
+      const outcomeResponse = await fetchPackOutcomeManifests(
+        token,
+        apiKey,
+        selectedPackDetail.name
+      );
+      const firstOutcome = outcomeResponse.packs[0];
+      if (!firstOutcome) {
+        setOutcomeLaunchFeedback("This pack does not bundle outcome starters yet.");
+        return;
+      }
+
+      onOpenWorkflowStarter(buildOutcomeWorkflowDraft(firstOutcome.manifest, selectedPackDetail));
+    } catch (err) {
+      setOutcomeLaunchFeedback(err instanceof Error ? err.message : "Outcome starter failed");
+    } finally {
+      setOutcomeLaunchPending(false);
     }
   };
 
@@ -999,8 +1096,12 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
           submissionFeedbackTone={submissionFeedbackTone}
           qualityLoading={qualityLoading}
           qualityError={qualityError}
+          outcomeLaunchPending={outcomeLaunchPending}
+          outcomeLaunchFeedback={outcomeLaunchFeedback}
+          canLaunchOutcome={Boolean(onOpenWorkflowStarter)}
           onVersionChange={setSelectedVersion}
           onInstall={() => void handleInstall()}
+          onLaunchOutcome={() => void handleLaunchOutcome()}
           onSubmitForCuration={() => void handleSubmitForCuration()}
           onClose={() => setSelectedPackName(null)}
         />

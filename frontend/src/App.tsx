@@ -604,7 +604,11 @@ export default function App(): JSX.Element {
 
         {activeTab === "marketplace" && (
           <div className="consumer-marketplace-layout">
-            <PackMarketplacePage token={token || null} apiKey={apiKey || null} />
+            <PackMarketplacePage
+              token={token || null}
+              apiKey={apiKey || null}
+              onOpenWorkflowStarter={openWorkflowStarter}
+            />
           </div>
         )}
 
