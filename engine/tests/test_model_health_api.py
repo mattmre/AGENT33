@@ -128,9 +128,7 @@ class TestModelHealthRoute:
 
     def test_summarizes_ready_local_runtimes(self, operator_read_client: TestClient) -> None:
         ollama_fetcher, lm_studio_fetcher = _install_services(
-            ollama_responses=[
-                _OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())
-            ],
+            ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
             ],
@@ -174,9 +172,7 @@ class TestModelHealthRoute:
         operator_read_client: TestClient,
     ) -> None:
         ollama_fetcher, lm_studio_fetcher = _install_services(
-            ollama_responses=[
-                _OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())
-            ],
+            ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
             ],
@@ -200,9 +196,7 @@ class TestModelHealthRoute:
         operator_read_client: TestClient,
     ) -> None:
         ollama_fetcher, lm_studio_fetcher = _install_services(
-            ollama_responses=[
-                _OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())
-            ],
+            ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
             ],
