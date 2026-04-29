@@ -103,8 +103,8 @@ function createPlanArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact 
   return createArtifact(snapshot, "plan", {
     title: task.title,
     summary: task.outcome,
-    status: task.status === "todo" ? "ready" : "running",
-    reviewState: task.status === "todo" ? "not-started" : "in-progress",
+    status: "ready",
+    reviewState: "not-started",
     ownerRole: task.ownerRole,
     evidenceState: "template",
     nextActionLabel: "Review scope and assumptions",
