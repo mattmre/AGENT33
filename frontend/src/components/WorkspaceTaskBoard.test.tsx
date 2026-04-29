@@ -45,7 +45,8 @@ describe("WorkspaceTaskBoard", () => {
     await user.click(screen.getByRole("button", { name: "Use starter: Guided build plan" }));
     await user.click(screen.getByRole("button", { name: "Review approvals" }));
 
-    expect(onOpenWorkflows).toHaveBeenNthCalledWith(1);
+    expect(onOpenWorkflows).toHaveBeenCalledTimes(2);
+    expect(onOpenWorkflows.mock.calls[0]).toEqual([]);
     expect(onOpenWorkflows).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
