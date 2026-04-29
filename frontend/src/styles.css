@@ -1708,6 +1708,10 @@ button:disabled {
   line-height: 1.4;
 }
 
+.cockpit-dashboard-artifacts .artifact-card-next-action {
+  color: #d8c27a;
+}
+
 .cockpit-dashboard-card button,
 .cockpit-dashboard-artifacts button {
   justify-self: start;

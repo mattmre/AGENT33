@@ -120,8 +120,9 @@ export function CockpitProjectDashboard({
                   <dd>{artifact.timestampLabel}</dd>
                 </div>
               </dl>
+              <p className="artifact-card-next-action">Next: {artifact.nextActionLabel}</p>
               <button type="button" onClick={onReviewCurrentWork}>
-                {artifact.nextActionLabel}
+                Review current work
               </button>
             </article>
           ))}
