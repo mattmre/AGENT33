@@ -167,10 +167,13 @@ function createDecisionEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTask
   });
 }
 
-function createHandoffEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
+function createHandoffEvent(
+  snapshot: ActivityTaskSnapshot,
+  task: WorkspaceTaskCard,
+  sequenceIndex: number
+): CockpitActivityEvent {
   const artifact = findArtifactForTask(snapshot.artifacts, task, ["command", "log", "activity"]);
   const commandBlock = getCommandBlocksByTaskId(snapshot.commandBlocks, task.id)[0];
-  const sequenceIndex = snapshot.tasks.findIndex((candidate) => candidate.id === task.id) + 1;
 
   return createCockpitActivityEvent({
     id: `${snapshot.workspaceId}-activity-handoff-${task.id}`,
@@ -255,7 +258,11 @@ function createBlockerEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskC
   });
 }
 
-function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTaskCard): CockpitActivityEvent {
+function createValidationEvent(
+  snapshot: ActivityTaskSnapshot,
+  task: WorkspaceTaskCard,
+  sequenceIndex: number
+): CockpitActivityEvent {
   const artifact = findArtifactForTask(snapshot.artifacts, task, ["outcome", "test"]);
 
   return createCockpitActivityEvent({
@@ -268,7 +275,7 @@ function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTa
     title: task.title,
     summary: task.outcome,
     timestampLabel: snapshot.timestampLabel,
-    sequenceIndex: snapshot.tasks.findIndex((candidate) => candidate.id === task.id) + 1,
+    sequenceIndex,
     validationDetails: getValidationItemsForTask(task),
     relatedTaskId: task.id,
     relatedArtifactId: artifact?.id,
@@ -277,18 +284,20 @@ function createValidationEvent(snapshot: ActivityTaskSnapshot, task: WorkspaceTa
 }
 
 export function buildActivityEventsFromTasks(snapshot: ActivityTaskSnapshot): ReadonlyArray<CockpitActivityEvent> {
-  return snapshot.tasks.flatMap((task) => {
+  return snapshot.tasks.flatMap((task, index) => {
+    const sequenceIndex = index + 1;
+
     switch (task.status) {
       case "todo":
         return [createDecisionEvent(snapshot, task)];
       case "running":
-        return [createHandoffEvent(snapshot, task)];
+        return [createHandoffEvent(snapshot, task, sequenceIndex)];
       case "review":
         return createReviewEvents(snapshot, task);
       case "blocked":
         return [createBlockerEvent(snapshot, task)];
       case "complete":
-        return [createValidationEvent(snapshot, task)];
+        return [createValidationEvent(snapshot, task, sequenceIndex)];
       default: {
         const unexpectedStatus: never = task.status;
         throw new Error(`Unhandled workspace task status: ${unexpectedStatus}`);

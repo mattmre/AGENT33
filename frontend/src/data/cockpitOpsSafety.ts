@@ -182,7 +182,7 @@ function formatApprovalExpiresAtLabel(expiresAt: string | null, now: number): st
     return "Expiry unknown";
   }
 
-  const minutes = Math.round((timestamp - now) / 60_000);
+  const minutes = Math.max(0, Math.ceil((timestamp - now) / 60_000));
   if (minutes <= 0) {
     return "Expired or expiring now";
   }
