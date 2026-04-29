@@ -17,9 +17,13 @@ describe("WorkspaceTaskBoard", () => {
     );
 
     expect(screen.getByRole("region", { name: "Multi-Agent Shipyard task board" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Multi-Agent Shipyard recommended starters" })).toBeInTheDocument();
+    expect(screen.getByText("Multi-agent slice orchestration")).toBeInTheDocument();
+    expect(screen.getByText(/Starts with Break work into lanes/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Running tasks" })).toBeInTheDocument();
     expect(screen.getByText("Build the next slice")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Workspace agent roster" })).toBeInTheDocument();
+    expect(screen.getByText(/Who does what in Multi-Agent Shipyard/)).toBeInTheDocument();
     expect(screen.getByText("Sequences work and prevents PR drift.")).toBeInTheDocument();
   });
 
@@ -38,9 +42,18 @@ describe("WorkspaceTaskBoard", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Choose workflow" }));
+    await user.click(screen.getByRole("button", { name: "Use starter: Guided build plan" }));
     await user.click(screen.getByRole("button", { name: "Review approvals" }));
 
-    expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
+    expect(onOpenWorkflows).toHaveBeenCalledTimes(2);
+    expect(onOpenWorkflows.mock.calls[0]).toEqual([]);
+    expect(onOpenWorkflows).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        id: "solo-guided-build",
+        sourceLabel: "Workspace template: Guided build plan"
+      })
+    );
     expect(onOpenSafety).toHaveBeenCalledTimes(1);
   });
 
@@ -55,6 +68,10 @@ describe("WorkspaceTaskBoard", () => {
     );
 
     expect(screen.getByRole("button", { name: /Choose workflow locked: Observe only keeps workflow launch read-only/i })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: /Use starter locked: .*Observe only keeps workflow launch read-only/i })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /Use starter locked: .*Guided build plan/i })).toHaveAccessibleDescription(
+      "Observe only keeps workflow launch read-only until you choose a more active mode."
+    );
     expect(screen.getByRole("button", { name: /Choose workflow locked/i })).toHaveAccessibleDescription(
       "Observe only keeps workflow launch read-only until you choose a more active mode."
     );

@@ -330,7 +330,7 @@ export function WorkflowStarterPanel({
             a validated workflow definition and points you to matching templates and skills.
           </p>
           {initialDraft?.sourceLabel ? (
-            <p className="workflow-starter-source">Loaded from Outcome Home: {initialDraft.sourceLabel}</p>
+            <p className="workflow-starter-source">Loaded starter: {initialDraft.sourceLabel}</p>
           ) : null}
         </div>
         <div className="workflow-starter-badge">Loop-ready</div>

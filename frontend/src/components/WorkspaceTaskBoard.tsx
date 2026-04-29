@@ -4,6 +4,11 @@ import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionActionGate, type PermissionActionCategory } from "../data/permissionActionGates";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import {
+  buildWorkspaceTemplateStarterDraft,
+  getWorkspaceTemplateStarters
+} from "../data/workspaceTemplateStarters";
+import type { WorkflowStarterDraft } from "../features/workflow-starter/types";
+import {
   WORKSPACE_TASK_STATUS_LABELS,
   WORKSPACE_TASK_STATUSES,
   getWorkspaceBoard,
@@ -14,7 +19,7 @@ interface WorkspaceTaskBoardProps {
   workspace: WorkspaceSessionSummary;
   permissionModeId: PermissionModeId;
   onOpenSafety: () => void;
-  onOpenWorkflows: () => void;
+  onOpenWorkflows: (draft?: WorkflowStarterDraft) => void;
 }
 
 const TASK_ACTION_BY_STATUS: Record<(typeof WORKSPACE_TASK_STATUSES)[number], PermissionActionCategory> = {
@@ -33,6 +38,7 @@ export function WorkspaceTaskBoard({
 }: WorkspaceTaskBoardProps): JSX.Element {
   const board = getWorkspaceBoard(workspace.id);
   const tasksByStatus = useMemo(() => groupWorkspaceTasksByStatus(board.tasks), [board.tasks]);
+  const templateStarters = getWorkspaceTemplateStarters(workspace.id);
   const workflowGate = getPermissionActionGate(permissionModeId, "start-workflow");
 
   return (
@@ -46,7 +52,7 @@ export function WorkspaceTaskBoard({
         <div className="workspace-board-actions" aria-label="Workspace board actions">
           <button
             type="button"
-            onClick={onOpenWorkflows}
+            onClick={() => onOpenWorkflows()}
             disabled={!workflowGate.allowed}
             aria-label={workflowGate.allowed ? "Choose workflow" : `Choose workflow locked: ${workflowGate.reason}`}
             aria-describedby="workspace-board-workflow-gate"
@@ -64,6 +70,42 @@ export function WorkspaceTaskBoard({
           </button>
         </div>
       </header>
+
+      <section className="workspace-template-starters" aria-label={`${workspace.template} recommended starters`}>
+        <div className="workspace-template-starters-header">
+          <h3>Recommended starters</h3>
+          <p>Pick a beginner-safe workflow that already knows this template, role, and first task.</p>
+        </div>
+        <div className="workspace-template-starter-grid">
+          {templateStarters.map((starter) => {
+            const beginsWithTask = board.tasks.find((task) => task.id === starter.beginsWithTaskId);
+
+            return (
+              <article key={starter.id} className="workspace-template-starter-card">
+                <span>{starter.assignedRole}</span>
+                <strong>{starter.label}</strong>
+                <p>{starter.description}</p>
+                <small>
+                  Starts with {beginsWithTask?.title ?? starter.beginsWithTaskId} / {starter.nextActionLabel}
+                </small>
+                <button
+                  type="button"
+                  onClick={() => onOpenWorkflows(buildWorkspaceTemplateStarterDraft(starter))}
+                  disabled={!workflowGate.allowed}
+                  aria-label={
+                    workflowGate.allowed
+                      ? `Use starter: ${starter.label}`
+                      : `Use starter locked: ${starter.label}. ${workflowGate.reason}`
+                  }
+                  aria-describedby="workspace-board-workflow-gate"
+                >
+                  Use starter
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="workspace-board-grid">
         <div className="workspace-kanban" aria-label="Workspace task lanes">
@@ -101,7 +143,7 @@ export function WorkspaceTaskBoard({
         <aside className="workspace-agent-roster" aria-label="Workspace agent roster">
           <div className="workspace-roster-header">
             <h3>Agent roster</h3>
-            <p>BridgeSpace-style roles for this workspace template.</p>
+            <p>Who does what in {workspace.template}: each role owns a starter task and a reviewable output.</p>
           </div>
           {board.agents.map((agent) => (
             <article key={agent.id} className="workspace-agent-card">
