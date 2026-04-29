@@ -558,12 +558,14 @@ export default function App(): JSX.Element {
           <div className="consumer-operations-layout">
             <ShipyardLaneScaffold
               workspace={selectedWorkspace}
+              permissionModeId={permissionModeId}
               onOpenSafety={() => setActiveTab("safety")}
               onOpenWorkflows={() => setActiveTab("starter")}
             />
             <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
               <WorkspaceTaskBoard
                 workspace={selectedWorkspace}
+                permissionModeId={permissionModeId}
                 onOpenSafety={() => setActiveTab("safety")}
                 onOpenWorkflows={() => setActiveTab("starter")}
               />

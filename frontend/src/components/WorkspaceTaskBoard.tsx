@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 
+import type { PermissionModeId } from "../data/permissionModes";
+import { getPermissionActionGate, type PermissionActionCategory } from "../data/permissionActionGates";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import {
   WORKSPACE_TASK_STATUS_LABELS,
@@ -10,17 +12,28 @@ import {
 
 interface WorkspaceTaskBoardProps {
   workspace: WorkspaceSessionSummary;
+  permissionModeId: PermissionModeId;
   onOpenSafety: () => void;
   onOpenWorkflows: () => void;
 }
 
+const TASK_ACTION_BY_STATUS: Record<(typeof WORKSPACE_TASK_STATUSES)[number], PermissionActionCategory> = {
+  todo: "start-workflow",
+  running: "run-command",
+  review: "approve-action",
+  complete: "review-artifact",
+  blocked: "approve-action"
+};
+
 export function WorkspaceTaskBoard({
   workspace,
+  permissionModeId,
   onOpenSafety,
   onOpenWorkflows
 }: WorkspaceTaskBoardProps): JSX.Element {
   const board = getWorkspaceBoard(workspace.id);
   const tasksByStatus = useMemo(() => groupWorkspaceTasksByStatus(board.tasks), [board.tasks]);
+  const workflowGate = getPermissionActionGate(permissionModeId, "start-workflow");
 
   return (
     <section className="workspace-board" aria-label={`${workspace.name} task board`}>
@@ -31,7 +44,12 @@ export function WorkspaceTaskBoard({
           <p>{workspace.goal}</p>
         </div>
         <div className="workspace-board-actions" aria-label="Workspace board actions">
-          <button type="button" onClick={onOpenWorkflows}>
+          <button
+            type="button"
+            onClick={onOpenWorkflows}
+            disabled={!workflowGate.allowed}
+            aria-label={workflowGate.allowed ? "Choose workflow" : `Choose workflow locked: ${workflowGate.reason}`}
+          >
             Choose workflow
           </button>
           <button type="button" onClick={onOpenSafety}>
@@ -53,13 +71,21 @@ export function WorkspaceTaskBoard({
                 {laneTasks.length === 0 ? (
                   <p className="workspace-empty-lane">No tasks yet.</p>
                 ) : null}
-                {laneTasks.map((task) => (
-                  <article key={task.id} className={`workspace-task-card workspace-task-card--${task.status}`}>
-                    <span>{task.ownerRole}</span>
-                    <h4>{task.title}</h4>
-                    <p>{task.outcome}</p>
-                  </article>
-                ))}
+                {laneTasks.map((task) => {
+                  const taskGate = getPermissionActionGate(permissionModeId, TASK_ACTION_BY_STATUS[task.status]);
+
+                  return (
+                    <article key={task.id} className={`workspace-task-card workspace-task-card--${task.status}`}>
+                      <span>{task.ownerRole}</span>
+                      <h4>{task.title}</h4>
+                      <p>{task.outcome}</p>
+                      <div className={`workspace-task-gate workspace-task-gate-${taskGate.tone}`}>
+                        <strong>{taskGate.label}</strong>
+                        <small>{taskGate.reason}</small>
+                      </div>
+                    </article>
+                  );
+                })}
               </section>
             );
           })}

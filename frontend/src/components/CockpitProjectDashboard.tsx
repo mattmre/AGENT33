@@ -1,5 +1,6 @@
 import type { PermissionModeId } from "../data/permissionModes";
 import { getPermissionMode } from "../data/permissionModes";
+import { getPermissionActionGate } from "../data/permissionActionGates";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
 import type { CockpitArtifact } from "../data/cockpitArtifacts";
@@ -47,6 +48,7 @@ export function CockpitProjectDashboard({
   const safetyCta = getSafetyGateCta(opsSafety, permissionModeId);
   const safetySignals = getTopSafetyGateRecords(opsSafety.records, 4);
   const priorityGateRecords = safetySignals.slice(0, 3);
+  const workflowGate = getPermissionActionGate(permissionModeId, "start-workflow");
 
   return (
     <section className="cockpit-project-dashboard" aria-label="Project cockpit dashboard">
@@ -76,9 +78,17 @@ export function CockpitProjectDashboard({
           <span className="eyebrow">Recommended next action</span>
           <strong>Use a guided workflow</strong>
           <p>Route the current project through a prebuilt starter instead of raw JSON or endpoint setup.</p>
-          <button type="button" onClick={onOpenWorkflows}>
+          <button
+            type="button"
+            onClick={onOpenWorkflows}
+            disabled={!workflowGate.allowed}
+            aria-label={workflowGate.allowed ? "Choose workflow" : `Choose workflow locked: ${workflowGate.reason}`}
+          >
             Choose workflow
           </button>
+          <span className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}>
+            {workflowGate.tone === "approval-required" ? "Approval required" : workflowGate.reason}
+          </span>
         </article>
 
         <article className={`cockpit-dashboard-card cockpit-dashboard-safety-card safety-cta-${safetyCta.intent}`}>

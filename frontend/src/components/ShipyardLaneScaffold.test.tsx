@@ -10,6 +10,7 @@ describe("ShipyardLaneScaffold", () => {
     render(
       <ShipyardLaneScaffold
         workspace={getWorkspaceSession("shipyard")}
+        permissionModeId="pr-first"
         onOpenWorkflows={vi.fn()}
         onOpenSafety={vi.fn()}
       />
@@ -31,6 +32,7 @@ describe("ShipyardLaneScaffold", () => {
     render(
       <ShipyardLaneScaffold
         workspace={getWorkspaceSession("solo-builder")}
+        permissionModeId="ask"
         onOpenWorkflows={vi.fn()}
         onOpenSafety={vi.fn()}
       />
@@ -48,6 +50,7 @@ describe("ShipyardLaneScaffold", () => {
     render(
       <ShipyardLaneScaffold
         workspace={getWorkspaceSession("test-review")}
+        permissionModeId="workspace"
         onOpenWorkflows={onOpenWorkflows}
         onOpenSafety={onOpenSafety}
       />
@@ -58,5 +61,18 @@ describe("ShipyardLaneScaffold", () => {
 
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenSafety).toHaveBeenCalledTimes(1);
+  });
+
+  it("locks workflow launch in restricted mode with an explanatory label", () => {
+    render(
+      <ShipyardLaneScaffold
+        workspace={getWorkspaceSession("test-review")}
+        permissionModeId="restricted"
+        onOpenWorkflows={vi.fn()}
+        onOpenSafety={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Launch workflow locked: Restricted mode keeps workflow launch locked/i })).toBeDisabled();
   });
 });
