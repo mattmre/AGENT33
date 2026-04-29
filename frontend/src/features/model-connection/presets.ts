@@ -118,7 +118,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     needsApiKey: false,
     recommendedModels: [
       {
-        id: "local-model",
+        id: "lmstudio/local-model",
         name: "Loaded LM Studio model",
         badgeLabel: "Use loaded model",
         description: "Matches the model currently served by LM Studio.",
@@ -127,7 +127,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         isFree: true
       },
       {
-        id: "qwen2.5-coder-7b-instruct",
+        id: "lmstudio/qwen2.5-coder-7b-instruct",
         name: "Qwen2.5 Coder 7B Instruct",
         badgeLabel: "Starter coder",
         description: "A practical local coding choice if you have it downloaded.",

@@ -28,6 +28,10 @@ function mockApiRequest(): void {
             ollama: {
               ollama_base_url: "http://localhost:11434",
               ollama_default_model: "qwen2.5-coder:7b"
+            },
+            lm_studio: {
+              lm_studio_base_url: "http://localhost:1234/v1",
+              lm_studio_default_model: "qwen2.5-coder-7b-instruct"
             }
           }
         }
@@ -64,6 +68,35 @@ function mockApiRequest(): void {
               name: "llama3.2:3b",
               size: 2_000_000_000,
               details: { parameter_size: "3B", quantization_level: "Q4_0" }
+            }
+          ]
+        }
+      });
+    }
+    if (path === "/v1/lm-studio/status") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/lm-studio/status",
+        data: {
+          provider: "lm-studio",
+          state: "available",
+          ok: true,
+          base_url: "http://localhost:1234/v1",
+          message: "Detected 2 LM Studio models.",
+          models: [
+            {
+              id: "qwen2.5-coder-7b-instruct",
+              name: "qwen2.5-coder-7b-instruct",
+              owned_by: "lmstudio",
+              context_length: 32_768
+            },
+            {
+              id: "mistral-nemo-instruct",
+              name: "mistral-nemo-instruct",
+              owned_by: "lmstudio",
+              context_length: 128_000
             }
           ]
         }
@@ -173,6 +206,91 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     await waitFor(() =>
       expect(apiRequestMock).not.toHaveBeenCalledWith(
         expect.objectContaining({ path: "/v1/openrouter/probe" })
+      )
+    );
+  });
+
+  it("shows detected LM Studio models and preserves the /v1 base URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+
+    expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:1234/v1");
+    expect(await screen.findByText("Detected 2 LM Studio models.")).toBeInTheDocument();
+    const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
+    await user.click(detectedModels.getByRole("button", { name: /mistral-nemo-instruct/ }));
+
+    expect(screen.getByLabelText("Default model")).toHaveValue("lmstudio/mistral-nemo-instruct");
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/v1/lm-studio/status",
+        query: undefined
+      })
+    );
+  });
+
+  it("uses LM Studio status for the local connection test", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    await screen.findByText("Detected 2 LM Studio models.");
+    const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
+    await user.click(detectedModels.getByRole("button", { name: /qwen2.5-coder-7b-instruct/ }));
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(await screen.findByText(/LM Studio is ready at http:\/\/localhost:1234\/v1/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiRequestMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/v1/openrouter/probe" })
+      )
+    );
+  });
+
+  it("passes an LM Studio override only when the operator edits the configured URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    await screen.findByText("Detected 2 LM Studio models.");
+    const baseUrlInput = screen.getByLabelText("Base URL");
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://127.0.0.1:1234");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/lm-studio/status",
+          query: { base_url: "http://127.0.0.1:1234/v1" }
+        })
       )
     );
   });

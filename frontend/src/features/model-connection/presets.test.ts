@@ -33,7 +33,8 @@ describe("provider presets", () => {
     }
     expect(getProviderPreset("openrouter")?.baseUrlDefault).toContain("/v1");
     expect(getProviderPreset("ollama")?.baseUrlDefault).toBe("http://localhost:11434");
-    expect(getProviderPreset("lm-studio")?.baseUrlDefault).toContain("/v1");
+    expect(getProviderPreset("lm-studio")?.baseUrlDefault).toBe("http://localhost:1234/v1");
+    expect(getProviderPreset("lm-studio")?.needsApiKey).toBe(false);
   });
 
   it("looks up and infers presets from base URLs", () => {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -98,6 +99,7 @@ class OllamaReadinessService:
         self._timeout_seconds = timeout_seconds
         self._fetcher = fetcher or self._fetch
         self._client: httpx.AsyncClient | None = None
+        self._client_lock = asyncio.Lock()
 
     async def status(self, base_url: str | None = None) -> OllamaStatusResponse:
         """Return service reachability and available local model metadata."""
@@ -189,15 +191,18 @@ class OllamaReadinessService:
     async def aclose(self) -> None:
         """Close the pooled HTTP client when the application shuts down."""
 
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        async with self._client_lock:
+            if self._client is not None:
+                await self._client.aclose()
+                self._client = None
 
     async def _fetch(self, url: str) -> _OllamaFetchResult:
         try:
-            if self._client is None or self._client.is_closed:
-                self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
-            response = await self._client.get(url)
+            async with self._client_lock:
+                if self._client is None or self._client.is_closed:
+                    self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
+                client = self._client
+            response = await client.get(url)
             payload = response.json()
             return _OllamaFetchResult(status_code=response.status_code, payload=payload)
         except (httpx.HTTPError, ValueError) as exc:

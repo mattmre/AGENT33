@@ -22,10 +22,13 @@ import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
   buildOpenRouterConfigChanges,
   buildOpenRouterProbePayload,
+  formatLmStudioModelRef,
   formatOllamaModelRef,
   getModelReadinessLabel,
+  normalizeLmStudioBaseUrl,
   normalizeOllamaBaseUrl,
   normalizeConfiguredValue,
+  stripLmStudioModelRef,
   stripOllamaModelRef,
   type ModelConnectionBaseline,
   type ModelConnectionForm
@@ -58,6 +61,12 @@ interface ConfigSnapshot {
   baseline: ModelConnectionBaseline;
   hasStoredKey: boolean;
   storedKeyHint: string;
+  localRuntimeBaseUrls: LocalRuntimeBaseUrls;
+}
+
+interface LocalRuntimeBaseUrls {
+  ollama: string;
+  lmStudio: string;
 }
 
 interface OllamaModelEntry {
@@ -75,11 +84,26 @@ interface OllamaRuntimeStatus {
   models: OllamaModelEntry[];
 }
 
+interface LMStudioModelEntry {
+  name: string;
+  ownedBy: string;
+  contextLength: number | null;
+}
+
+interface LMStudioRuntimeStatus {
+  state: "available" | "empty" | "unavailable" | "error";
+  ok: boolean;
+  baseUrl: string;
+  message: string;
+  models: LMStudioModelEntry[];
+}
+
 function buildConfigSnapshot(data: unknown): ConfigSnapshot {
   const root = asRecord(data);
   const groups = asRecord(root.groups);
   const llm = asRecord(groups.llm);
   const ollama = asRecord(groups.ollama);
+  const lmStudio = asRecord(groups.lm_studio);
   const storedKeyHint =
     readString(llm.openrouter_api_key) || readString(llm.openrouter_api_key_redacted);
 
@@ -96,7 +120,11 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
         readString(llm.openrouter_app_category) || DEFAULT_MODEL_CONNECTION_BASELINE.appCategory
     },
     hasStoredKey: storedKeyHint.trim() !== "",
-    storedKeyHint
+    storedKeyHint,
+    localRuntimeBaseUrls: {
+      ollama: readString(ollama.ollama_base_url),
+      lmStudio: readString(lmStudio.lm_studio_base_url)
+    }
   };
 }
 
@@ -146,6 +174,41 @@ function parseOllamaModel(data: unknown): OllamaModelEntry | null {
   };
 }
 
+function parseLMStudioRuntimeStatus(data: unknown): LMStudioRuntimeStatus {
+  const root = asRecord(data);
+  const models = Array.isArray(root.models)
+    ? root.models
+        .map(parseLMStudioModel)
+        .filter((model): model is LMStudioModelEntry => model !== null)
+    : [];
+  const state = readString(root.state);
+  const normalizedState =
+    state === "available" || state === "empty" || state === "unavailable" || state === "error"
+      ? state
+      : "error";
+
+  return {
+    state: normalizedState,
+    ok: root.ok === true,
+    baseUrl: readString(root.base_url),
+    message: readString(root.message) || "Could not read LM Studio status.",
+    models
+  };
+}
+
+function parseLMStudioModel(data: unknown): LMStudioModelEntry | null {
+  const root = asRecord(data);
+  const name = readString(root.name) || readString(root.id);
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    ownedBy: readString(root.owned_by),
+    contextLength: readNumber(root.context_length)
+  };
+}
+
 function formatModelSize(size: number | null): string {
   if (size === null || size <= 0) {
     return "size unknown";
@@ -172,8 +235,13 @@ export function ModelConnectionWizardPanel({
   );
   const [hasStoredKey, setHasStoredKey] = useState(false);
   const [storedKeyHint, setStoredKeyHint] = useState("");
+  const [localRuntimeBaseUrls, setLocalRuntimeBaseUrls] = useState<LocalRuntimeBaseUrls>({
+    ollama: "",
+    lmStudio: ""
+  });
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaRuntimeStatus | null>(null);
+  const [lmStudioStatus, setLMStudioStatus] = useState<LMStudioRuntimeStatus | null>(null);
   const [modelSearch, setModelSearch] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState<ProviderPresetId>("openrouter");
   const [loadStatus, setLoadStatus] = useState<StatusMessage>({
@@ -185,6 +253,7 @@ export function ModelConnectionWizardPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [isProbing, setIsProbing] = useState(false);
   const [isLoadingOllama, setIsLoadingOllama] = useState(false);
+  const [isLoadingLMStudio, setIsLoadingLMStudio] = useState(false);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const effectiveHasKey = form.removeStoredKey ? false : hasStoredKey || form.apiKey.trim() !== "";
@@ -203,6 +272,11 @@ export function ModelConnectionWizardPanel({
   );
   const ollamaModels = ollamaStatus?.models ?? [];
   const liveOllamaModelRefs = ollamaModels.map((model) => formatOllamaModelRef(model.name));
+  const lmStudioModels = lmStudioStatus?.models ?? [];
+  const liveLMStudioModelRefs = lmStudioModels.map((model) => formatLmStudioModelRef(model.name));
+  const isOllamaSelected = selectedPresetId === "ollama";
+  const isLMStudioSelected = selectedPresetId === "lm-studio";
+  const isLocalModelCatalog = isOllamaSelected || isLMStudioSelected;
 
   useEffect(() => {
     if (!hasCredentials) {
@@ -230,6 +304,7 @@ export function ModelConnectionWizardPanel({
         if (configResult.value.ok) {
           const snapshot = buildConfigSnapshot(configResult.value.data);
           setBaseline(snapshot.baseline);
+          setLocalRuntimeBaseUrls(snapshot.localRuntimeBaseUrls);
           setForm((current) => ({ ...current, ...snapshot.baseline, apiKey: "" }));
           setSelectedPresetId(inferProviderPresetId(snapshot.baseline.baseUrl));
           setHasStoredKey(snapshot.hasStoredKey);
@@ -275,10 +350,38 @@ export function ModelConnectionWizardPanel({
 
   function selectProviderPreset(preset: ProviderPreset): void {
     setSelectedPresetId(preset.id);
-    setForm((current) => applyProviderPresetToForm(current, preset));
+    setForm((current) => {
+      const next = applyProviderPresetToForm(current, preset);
+      if (preset.id === "ollama" && localRuntimeBaseUrls.ollama.trim()) {
+        next.baseUrl = localRuntimeBaseUrls.ollama;
+      }
+      if (preset.id === "lm-studio" && localRuntimeBaseUrls.lmStudio.trim()) {
+        next.baseUrl = localRuntimeBaseUrls.lmStudio;
+      }
+      return next;
+    });
     setSaveStatus(null);
     setProbeStatus(null);
     setOllamaStatus(null);
+    setLMStudioStatus(null);
+  }
+
+  function getOllamaBaseUrlOverride(): string | undefined {
+    const preset = getProviderPreset("ollama");
+    const current = normalizeOllamaBaseUrl(form.baseUrl);
+    const configured = normalizeOllamaBaseUrl(
+      localRuntimeBaseUrls.ollama || preset?.baseUrlDefault || ""
+    );
+    return current && current !== configured ? form.baseUrl : undefined;
+  }
+
+  function getLMStudioBaseUrlOverride(): string | undefined {
+    const preset = getProviderPreset("lm-studio");
+    const current = normalizeLmStudioBaseUrl(form.baseUrl);
+    const configured = normalizeLmStudioBaseUrl(
+      localRuntimeBaseUrls.lmStudio || preset?.baseUrlDefault || ""
+    );
+    return current && current !== configured ? form.baseUrl : undefined;
   }
 
   async function loadOllamaStatus(baseUrl?: string): Promise<OllamaRuntimeStatus | null> {
@@ -314,12 +417,50 @@ export function ModelConnectionWizardPanel({
     }
   }
 
+  async function loadLMStudioStatus(baseUrl?: string): Promise<LMStudioRuntimeStatus | null> {
+    if (!hasCredentials) {
+      setLMStudioStatus(null);
+      return null;
+    }
+    setIsLoadingLMStudio(true);
+    try {
+      const result = await apiRequest({
+        method: "GET",
+        path: "/v1/lm-studio/status",
+        token,
+        apiKey,
+        query: baseUrl ? { base_url: normalizeLmStudioBaseUrl(baseUrl) } : undefined
+      });
+      onResult("Model Wizard - LM Studio Status", result);
+      const status = parseLMStudioRuntimeStatus(result.data);
+      setLMStudioStatus(status);
+      return status;
+    } catch (error) {
+      const status: LMStudioRuntimeStatus = {
+        state: "error",
+        ok: false,
+        baseUrl: baseUrl ? normalizeLmStudioBaseUrl(baseUrl) : lmStudioStatus?.baseUrl ?? "",
+        message: error instanceof Error ? error.message : "Could not check LM Studio status.",
+        models: []
+      };
+      setLMStudioStatus(status);
+      return status;
+    } finally {
+      setIsLoadingLMStudio(false);
+    }
+  }
+
   useEffect(() => {
-    if (selectedPresetId !== "ollama" || !hasCredentials) {
+    if (!hasCredentials) {
       return;
     }
-    void loadOllamaStatus();
-    // Run when the operator enters the Ollama path; manual refresh handles base URL edits.
+    if (selectedPresetId === "ollama") {
+      void loadOllamaStatus(getOllamaBaseUrlOverride());
+    }
+    if (selectedPresetId === "lm-studio") {
+      void loadLMStudioStatus(getLMStudioBaseUrlOverride());
+    }
+    // Run when the operator enters a local runtime path; manual refresh handles base URL edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCredentials, selectedPresetId]);
 
@@ -387,7 +528,7 @@ export function ModelConnectionWizardPanel({
     setProbeStatus({ tone: "info", message: "Testing model connection..." });
     try {
       if (selectedPresetId === "ollama") {
-        const status = await loadOllamaStatus();
+        const status = await loadOllamaStatus(getOllamaBaseUrlOverride());
         const selectedModel = stripOllamaModelRef(form.defaultModel);
         const hasSelectedModel =
           status?.models.some((model) => model.name === selectedModel) ?? false;
@@ -399,6 +540,23 @@ export function ModelConnectionWizardPanel({
             : status?.ok
               ? `Ollama is running, but ${selectedModel || "the selected model"} is not installed.`
               : status?.message ?? "Ollama connection failed."
+        });
+        return;
+      }
+
+      if (selectedPresetId === "lm-studio") {
+        const status = await loadLMStudioStatus(getLMStudioBaseUrlOverride());
+        const selectedModel = stripLmStudioModelRef(form.defaultModel);
+        const hasSelectedModel =
+          status?.models.some((model) => model.name === selectedModel) ?? false;
+        const ok = status?.ok === true && hasSelectedModel;
+        setProbeStatus({
+          tone: ok ? "success" : "error",
+          message: ok
+            ? `LM Studio is ready at ${status.baseUrl}. Model: ${form.defaultModel}.`
+            : status?.ok
+              ? `LM Studio is running, but ${selectedModel || "the selected model"} is not listed.`
+              : status?.message ?? "LM Studio connection failed."
         });
         return;
       }
@@ -489,7 +647,7 @@ export function ModelConnectionWizardPanel({
               </button>
             ))}
           </div>
-          {selectedPresetId === "ollama" ? (
+          {isOllamaSelected ? (
             <div className="local-runtime-panel">
               <div>
                 <strong>Local Ollama status</strong>
@@ -502,7 +660,7 @@ export function ModelConnectionWizardPanel({
               </div>
               <button
                 type="button"
-                onClick={() => void loadOllamaStatus()}
+                onClick={() => void loadOllamaStatus(getOllamaBaseUrlOverride())}
                 disabled={!hasCredentials || isLoadingOllama}
               >
                 {isLoadingOllama ? "Checking..." : "Refresh Ollama"}
@@ -526,6 +684,49 @@ export function ModelConnectionWizardPanel({
                       >
                         <strong>{model.name}</strong>
                         <small>{meta || "Local Ollama model"}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {isLMStudioSelected ? (
+            <div className="local-runtime-panel">
+              <div>
+                <strong>Local LM Studio status</strong>
+                <p>
+                  {isLoadingLMStudio
+                    ? "Checking LM Studio..."
+                    : lmStudioStatus?.message ??
+                      "Check whether the LM Studio local server is running and listing models."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadLMStudioStatus(getLMStudioBaseUrlOverride())}
+                disabled={!hasCredentials || isLoadingLMStudio}
+              >
+                {isLoadingLMStudio ? "Checking..." : "Refresh LM Studio"}
+              </button>
+              {lmStudioModels.length > 0 ? (
+                <div className="local-runtime-models" role="group" aria-label="Detected LM Studio models">
+                  {lmStudioModels.map((model) => {
+                    const modelRef = formatLmStudioModelRef(model.name);
+                    const meta = [
+                      model.ownedBy,
+                      model.contextLength ? `${formatOpenRouterNumber(model.contextLength)} context` : ""
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <button
+                        type="button"
+                        key={model.name}
+                        className={form.defaultModel === modelRef ? "active" : ""}
+                        aria-pressed={form.defaultModel === modelRef}
+                        onClick={() => updateField("defaultModel", modelRef)}
+                      >
+                        <strong>{model.name}</strong>
+                        <small>{meta || "LM Studio local model"}</small>
                       </button>
                     );
                   })}
@@ -557,10 +758,14 @@ export function ModelConnectionWizardPanel({
             />
           </label>
           <datalist id="model-wizard-model-options">
-            {selectedPresetId === "ollama"
+            {isOllamaSelected
               ? liveOllamaModelRefs.map((modelRef) => (
                   <option key={modelRef} value={modelRef}>{stripOllamaModelRef(modelRef)}</option>
                 ))
+              : isLMStudioSelected
+                ? liveLMStudioModelRefs.map((modelRef) => (
+                    <option key={modelRef} value={modelRef}>{stripLmStudioModelRef(modelRef)}</option>
+                  ))
               : models.slice(0, 80).map((model) => (
                   <option key={model.id} value={model.id}>{model.name}</option>
                 ))}
@@ -627,15 +832,21 @@ export function ModelConnectionWizardPanel({
           <div>
             <p className="eyebrow">Model catalog</p>
             <h3 id="model-catalog-preview-title">
-              {selectedPresetId === "ollama" ? "Detected Ollama models" : "Available OpenRouter models"}
+              {isOllamaSelected
+                ? "Detected Ollama models"
+                : isLMStudioSelected
+                  ? "Detected LM Studio models"
+                  : "Available OpenRouter models"}
             </h3>
             <p>
-              {selectedPresetId === "ollama"
+              {isOllamaSelected
                 ? "Use detected local models after starting Ollama. No prompts or secrets are sent during this check."
+                : isLMStudioSelected
+                  ? "Use detected local models after starting the LM Studio server. No prompts or secrets are sent during this check."
                 : "Use search to find coding, free, long-context, or moderated model options."}
             </p>
           </div>
-          {selectedPresetId !== "ollama" ? (
+          {!isLocalModelCatalog ? (
             <label>
             Search models
             <input
@@ -647,7 +858,7 @@ export function ModelConnectionWizardPanel({
           ) : null}
         </div>
         <div className="model-catalog-grid">
-          {selectedPresetId === "ollama"
+          {isOllamaSelected
             ? ollamaModels.map((model) => {
                 const modelRef = formatOllamaModelRef(model.name);
                 return (
@@ -662,6 +873,21 @@ export function ModelConnectionWizardPanel({
                   </button>
                 );
               })
+            : isLMStudioSelected
+              ? lmStudioModels.map((model) => {
+                  const modelRef = formatLmStudioModelRef(model.name);
+                  return (
+                    <button type="button" key={model.name} onClick={() => updateField("defaultModel", modelRef)}>
+                      <strong>{model.name}</strong>
+                      <span>{modelRef}</span>
+                      <small>
+                        {[model.ownedBy, model.contextLength ? `${formatOpenRouterNumber(model.contextLength)} context` : ""]
+                          .filter(Boolean)
+                          .join(" · ") || "LM Studio local model"}
+                      </small>
+                    </button>
+                  );
+                })
             : filteredModels.map((model) => (
                 <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
                   <strong>{model.name}</strong>
