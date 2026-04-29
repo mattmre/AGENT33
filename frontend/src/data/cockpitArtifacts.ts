@@ -26,6 +26,18 @@ export type CockpitArtifactReviewState =
   | "not-required";
 export type CockpitArtifactEvidenceState = "template" | "adapted" | "empty";
 export type CockpitArtifactOwnerRole = WorkspaceAgentRole | "Operator";
+export type OutcomeCompletionState = "pr-ready" | "package-ready" | "blocked" | "not-run";
+
+export interface OutcomeCompletion {
+  readonly state: OutcomeCompletionState;
+  readonly task?: WorkspaceTaskCard;
+  readonly title: string;
+  readonly summary: string;
+  readonly status: CockpitArtifactStatus;
+  readonly reviewState: CockpitArtifactReviewState;
+  readonly evidenceState: CockpitArtifactEvidenceState;
+  readonly nextActionLabel: string;
+}
 
 export interface CockpitArtifact {
   readonly id: string;
@@ -80,8 +92,72 @@ function getFirstTaskByStatus(board: WorkspaceBoard, status: WorkspaceTaskCard["
   return board.tasks.find((task) => task.status === status);
 }
 
+function getTasksByStatus(board: WorkspaceBoard, status: WorkspaceTaskCard["status"]): ReadonlyArray<WorkspaceTaskCard> {
+  return board.tasks.filter((task) => task.status === status);
+}
+
 function getFirstTaskOwnedByRole(board: WorkspaceBoard, role: WorkspaceAgentRole): WorkspaceTaskCard | undefined {
   return board.tasks.find((task) => task.ownerRole === role);
+}
+
+function taskMentionsPullRequest(task: WorkspaceTaskCard): boolean {
+  const searchableText = `${task.title} ${task.outcome}`.toLowerCase();
+  return /\b(pr|pull request)\b/.test(searchableText);
+}
+
+export function detectOutcomeCompletion(board: WorkspaceBoard): OutcomeCompletion {
+  const blockedTask = getFirstTaskByStatus(board, "blocked");
+  if (blockedTask) {
+    return {
+      state: "blocked",
+      task: blockedTask,
+      title: "Blocked with required action",
+      summary: `${blockedTask.title}: ${blockedTask.outcome}`,
+      status: "blocked",
+      reviewState: "blocked",
+      evidenceState: "template",
+      nextActionLabel: "Resolve blocker before marking work done"
+    };
+  }
+
+  const completeTasks = getTasksByStatus(board, "complete");
+  const prReadyTask = completeTasks.find((task) => taskMentionsPullRequest(task));
+  const completeTask = prReadyTask ?? completeTasks[0];
+  if (!completeTask) {
+    return {
+      state: "not-run",
+      title: "No PR or artifact package linked",
+      summary: "Completed sessions should end as PR ready, artifact package ready, or blocked with a clear action.",
+      status: "not-available",
+      reviewState: "not-started",
+      evidenceState: "empty",
+      nextActionLabel: "Run a task to produce an outcome"
+    };
+  }
+
+  if (prReadyTask) {
+    return {
+      state: "pr-ready",
+      task: completeTask,
+      title: "PR ready",
+      summary: completeTask.outcome,
+      status: "done",
+      reviewState: "approved",
+      evidenceState: "template",
+      nextActionLabel: "Open the PR-ready handoff"
+    };
+  }
+
+  return {
+    state: "package-ready",
+    task: completeTask,
+    title: "Artifact package ready",
+    summary: completeTask.outcome,
+    status: "done",
+    reviewState: "approved",
+    evidenceState: "template",
+    nextActionLabel: "Review the completed handoff"
+  };
 }
 
 function createPlanArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
@@ -276,44 +352,17 @@ function createActivityArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtif
 }
 
 function createOutcomeArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const completeTask = getFirstTaskByStatus(snapshot.board, "complete");
-  const blockedTask = getFirstTaskByStatus(snapshot.board, "blocked");
-
-  if (blockedTask) {
-    return createArtifact(snapshot, "outcome", {
-      title: "Blocked with required action",
-      summary: `${blockedTask.title}: ${blockedTask.outcome}`,
-      status: "blocked",
-      reviewState: "blocked",
-      ownerRole: blockedTask.ownerRole,
-      evidenceState: "template",
-      nextActionLabel: "Resolve blocker before marking work done",
-      relatedTaskIds: [blockedTask.id]
-    });
-  }
-
-  if (!completeTask) {
-    return createArtifact(snapshot, "outcome", {
-      title: "No PR or artifact package linked",
-      summary: "Completed sessions should end as PR ready, artifact package ready, or blocked with a clear action.",
-      status: "not-available",
-      reviewState: "not-started",
-      ownerRole: "Operator",
-      evidenceState: "empty",
-      nextActionLabel: "Run a task to produce an outcome",
-      relatedTaskIds: []
-    });
-  }
+  const outcome = detectOutcomeCompletion(snapshot.board);
 
   return createArtifact(snapshot, "outcome", {
-    title: "Artifact package ready",
-    summary: completeTask.outcome,
-    status: "done",
-    reviewState: "approved",
-    ownerRole: completeTask.ownerRole,
-    evidenceState: "template",
-    nextActionLabel: "Review the completed handoff",
-    relatedTaskIds: [completeTask.id]
+    title: outcome.title,
+    summary: outcome.summary,
+    status: outcome.status,
+    reviewState: outcome.reviewState,
+    ownerRole: outcome.task?.ownerRole ?? "Operator",
+    evidenceState: outcome.evidenceState,
+    nextActionLabel: outcome.nextActionLabel,
+    relatedTaskIds: outcome.task ? [outcome.task.id] : []
   });
 }
 

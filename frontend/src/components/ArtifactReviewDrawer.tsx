@@ -235,6 +235,21 @@ export function ArtifactReviewDrawer({
             ))}
           </section>
         ) : null}
+        {activeSection.id === "outcome" && activeArtifact ? (
+          <section className="artifact-drawer-evidence-list" aria-label="Outcome handoff">
+            <h4>{activeArtifact.title}</h4>
+            <p>{activeArtifact.summary}</p>
+            <p className="safety-record-next-action">Next: {activeArtifact.nextActionLabel}</p>
+            <small>
+              {formatGateLabel(activeArtifact.status)} / {formatGateLabel(activeArtifact.reviewState)} /{" "}
+              {activeArtifact.relatedTaskIds.length === 0
+                ? "No linked task yet"
+                : `${activeArtifact.relatedTaskIds.length} linked task${
+                    activeArtifact.relatedTaskIds.length === 1 ? "" : "s"
+                  }`}
+            </small>
+          </section>
+        ) : null}
         <dl>
           <div>
             <dt>Workspace</dt>
