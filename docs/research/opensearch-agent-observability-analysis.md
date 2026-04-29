@@ -1,28 +1,55 @@
-# OpenSearch 3.6 Agent Observability — Integration Analysis
+# OpenSearch 3.6 + Agentic Platform Backbone — Integration Analysis
 
-**Status:** Draft / planning. Local only — not yet committed.
+**Status:** Draft / planning. Local only.
 **Branch:** `claude/plan-analysis-tool-yAI8I`
 **Date:** 2026-04-29
-**Author:** Planning pass (Claude Code)
+**Revision:** rev-2 (broadened scope — strategic backbone, not just observability)
 
 ## 1. Framing
 
-We are not adopting "all of OpenSearch." We are adopting the parts of the
-OpenSearch 3.6 stack that move three specific needles:
+The original framing of this doc was "use OpenSearch for observability." That
+frame is too narrow for where we want AGENT-33 to land.
 
-1. **Agent introspection** — what happened during a session, at the span level,
-   across LLM calls, tool calls, retrieval, and sub-agent invocations.
-2. **Workflow refinement** — the ability to look at a failed or slow run,
-   form a hypothesis, query the corpus, and feed the answer back into our
+The revised vision is an **AI management / orchestration / refinement OS**:
+
+- A library of canned workflows and canned agents, each with declared
+  capabilities, costs, and provenance.
+- A meta-monitoring layer that sees every agent, every tool call, every
+  retrieval, every workflow step across the fleet — at enterprise scale
+  (thousands of agents, hundreds of users).
+- A search and analytics surface where every session is a queryable,
+  rankable, replayable record.
+- An extensible platform we can resell, embed in client systems, or operate
+  ourselves.
+
+In that frame the question is no longer "should we wire OpenSearch to our
+TraceCollector?" — it is "what is the right backbone for an agentic
+platform we plan to scale and sell, and how much of our existing stack do we
+keep vs replace?"
+
+This document answers that question with three things:
+1. A revised adopt / evaluate / reject matrix for OpenSearch 3.6 capabilities,
+   reopened per operator direction.
+2. A competitive landscape — the OSS projects already doing this work, with
+   honest comparisons.
+3. Decision matrices for the swap-out questions
+   (`AgentRuntime` vs alternatives; `pgvector` vs k-NN; etc.).
+
+The three original needles still hold, but they are now sub-goals of the
+platform vision:
+
+1. **Agent introspection** — span-level visibility across LLM calls, tool
+   calls, retrieval, sub-agents.
+2. **Workflow refinement** — hypothesis-driven debugging fed back into our
    review / improvement loop (Phases 15, 17, 20).
 3. **Session-as-search-corpus** — sessions become first-class searchable
-   records with proper text + vector + structured query, replacing our current
-   in-memory `TraceCollector` + file-backed `OrchestrationStateStore` path.
+   records with proper text + vector + structured query.
 
-OpenSearch 3.6 is the first LTS release of the project and the agent-tracing
-work is built on standard OpenTelemetry semantic conventions
-(`gen_ai.*`). That makes it a stable, vendor-neutral substrate to bet on, not
-a proprietary detour.
+OpenSearch 3.6 is the first LTS release of the project. Its agent-tracing
+work is built on standard OpenTelemetry semantic conventions (`gen_ai.*`),
+which makes it a stable, vendor-neutral substrate. That stability matters
+more than feature parity in any single area — we are picking a substrate to
+build on for years, not a tool to use for one quarter.
 
 ## 2. The "is this real?" question, settled
 
@@ -82,46 +109,246 @@ no trace map.**
 So the gap to close is: ship a real exporter, ship persistence, ship the UI.
 Most of that already exists in OpenSearch 3.6 — we should not rebuild it.
 
-## 4. Shortlist — what to integrate, why, in priority order
+## 4. Revised tier matrix (rev-2)
 
-### Tier A — Adopt (clearly wins; replaces or fills a real gap)
+The original rev-1 tiers were challenged by the operator on two grounds:
+former Tier C should adopt, not evaluate; and Tier D should be reopened
+because the goal is to rebuild the backbone, not preserve our current
+internals out of inertia. The new matrix reflects that direction with
+explicit decision gates rather than blind acceptance — "reopen" is not the
+same as "adopt unconditionally."
 
-| # | OpenSearch capability | Replaces / fills |
+### Tier A — Adopt (high confidence; fills real gaps)
+
+| # | Capability | Replaces / fills |
 |---|---|---|
-| A1 | **Agent Traces (Dashboards plugin + OTel ingest)** | The missing exporter on `tracing.py`. The missing trace-tree / Gantt / span-detail UI. The missing per-session token + cost rollup. |
-| A2 | **OpenSearch Observability Stack bundle** (OTel Collector + Data Prepper + OpenSearch + Dashboards) | Our absent backend. Ships as a single deployable. |
-| A3 | **Dashboards Investigation** (3.6 feature: hypothesis, duration tracking, telemetry, log rerun) | Phase 15 review walk-throughs, Phase 20 lessons-learned capture. Today these are markdown notes; here they become structured artifacts attached to a trace. |
-| A4 | **PPL + Query Insights + Top-N visualisations** | "Search our sessions" use case. Today we have BM25 + pgvector over memory docs; PPL gives operators a queryable language over the trace corpus directly, plus query-perf insights. |
-| A5 | **Application Performance Monitoring (RED metrics, auto service topology)** | Hand-built `MetricsCollector` + `InsightsEngine`. APM auto-derives the agent-to-tool-to-model topology from spans. |
+| A1 | **Agent Traces** (Dashboards plugin + OTel ingest) | Missing exporter on `tracing.py`. Missing trace-tree / Gantt / span-detail UI. Missing per-session token + cost rollup. |
+| A2 | **Observability Stack bundle** (OTel Collector + Data Prepper + OpenSearch + Dashboards) | Absent backend. Ships as a single deployable. |
+| A3 | **Dashboards Investigation** | Phase 15 review walk-throughs, Phase 20 lessons-learned capture. Markdown → structured artifact attached to trace. |
+| A4 | **PPL + Query Insights + Top-N visualisations** | "Search our sessions" use case. Replaces ad-hoc SQL/log queries. |
+| A5 | **APM (RED metrics + auto service topology)** | Hand-built `MetricsCollector` + `InsightsEngine`. |
+| A6 | **Alerting plugin** | Migrate `AlertManager` rules to OpenSearch monitors. Webhooks loop back to `automation/webhooks` for HITL. |
+| A7 | **Anomaly Detection** | Failure-rate spikes, token-usage outliers, tool-latency drift, auth-failure clustering. |
+| A8 | **Search Relevance Workbench (Recall@K, MRR, DCG@K)** | Objective RAG quality bar wired to `evaluation/`. |
 
-### Tier B — Adopt but smaller blast radius
+### Tier B — Adopt with explicit decision gates (formerly Tier C)
 
-| # | Capability | Notes |
+These move from "evaluate" to "adopt as default direction" per operator
+direction, but each carries a **kill-switch criterion** that must be checked
+before code changes ship. Adopting without gates is the substitution
+anti-pattern.
+
+| # | Capability | Adoption gate |
 |---|---|---|
-| B1 | **Alerting plugin** | Migrate `AlertManager` rules to OpenSearch monitors. Alert webhooks loop back to our `automation/webhooks` so HITL escalation still flows through the engine. |
-| B2 | **Anomaly Detection** | Detectors for: failure-rate spikes (per `gen_ai.failure.category`), token-usage outliers per session, tool-latency drift vs trailing-7d baseline, auth-failure clustering per tenant. |
-| B3 | **Search Relevance Workbench (Recall@K, MRR, DCG@K)** | Wire against GT-01..GT-07 golden cases in `evaluation/`. Adds an objective measure to RAG changes. |
+| B1 | **k-NN with 1-bit quantisation + vector prefetch** as **pgvector replacement** | Benchmark gate: against GT-01..GT-07 + a synthetic 1M-doc workload, k-NN must show **≥10% Recall@10 improvement at equal-or-better p95 latency**, OR ≥30% storage reduction at equal recall. If neither, keep pgvector and document. |
+| B2 | **ML Commons Agentic Memory (semantic + hybrid memory APIs)** as **memory backend replacement** | API parity gate: it must support our existing memory features — per-tenant scoping, retention tiers, observation/summary ingestion, and progressive recall — without losing functionality. Spike implementation must run for 2 weeks against shadow traffic before full cutover. |
+| B3 | **OpenSearch Launchpad** for local dev provisioning | Cost-benefit gate: only adopt if onboarding time-to-first-trace drops by ≥50% vs current docker-compose. |
 
-### Tier C — Evaluate, don't adopt blind
+### Tier C — Reopened with mandatory decision matrices (formerly Tier D)
 
-| # | Capability | Why evaluate |
+Per operator direction, every former Tier D item is reopened. None of these
+should be adopted on the strength of "OpenSearch ships it"; each gets a
+matrix comparison against the best-in-class alternative before any code
+moves. The matrices live in §6.
+
+| # | Capability | Mandatory comparison |
 |---|---|---|
-| C1 | **ML Commons Agentic Memory (semantic + hybrid memory APIs)** | Overlaps `engine/src/agent33/memory/`. Could be a stronger long-term memory backend than pgvector + BM25, but only if it gives us multi-tenant routing and per-session retention controls. Spike, don't adopt. |
-| C2 | **k-NN with 1-bit quantisation + vector prefetch** | Possible pgvector replacement (32× compression, +24% recall, −15% latency claimed). Benchmark against our golden cases. **Decision gate:** only consider replacing pgvector if Workbench shows ≥10% recall improvement at equal-or-better p95 latency. |
-| C3 | **OpenSearch Launchpad** (AI-powered local provisioning) | Could replace parts of our docker-compose bootstrap. Low value if we're already running. Reconsider if onboarding friction shows up. |
+| C1 | **ML Commons V2 Chat Agent** as `AgentRuntime` replacement | Matrix: vs current AgentRuntime + LangGraph + Claude Agent SDK + CrewAI. **OpenSearch's offering is not assumed to win.** |
+| C2 | **Plan-Execute-Reflect agents** as workflow-engine replacement | Matrix: vs current DAG executor + LangGraph + CrewAI Crews + AutoGen GroupChat. |
+| C3 | **Security Analytics** (SIEM) as security-event substrate | Matrix: vs current `security/` + Wazuh + Falco. Determine whether adoption broadens or narrows our security posture. |
+| C4 | **SQL endpoint + Prometheus rules via SQL** as ops query layer | Matrix: vs current API + Prometheus + Grafana path. Decide whether SQL adds power or duplicates surface. |
+| C5 | **Field-Level Security + gRPC auth** as authz substrate | Matrix: vs current `AuthMiddleware`. Multi-tenant routing requirements drive this — do not collapse FLS unless a clear operational simplification exists. |
+| C6 | **Terraform anomaly automation** as infra-as-code layer | Matrix: only relevant after we adopt IaC at all. Defer until that decision is made. |
 
-### Tier D — Reject for our scope
+### Tier D — Hard reject (unchanged)
 
-| # | Capability | Reason |
+These remain rejected because they are out of scope for an AI-platform
+product, not because they overlap our internals:
+
+- **None at this revision.** Every former rejection has been promoted to
+  Tier B or C. Document any new rejections inline with reasoning when they
+  arise.
+
+## 5. Competitive landscape — what already exists in this space
+
+This is the most important section of rev-2. Before deciding to build the
+"agentic platform backbone" on OpenSearch, we have to be honest about who is
+already shipping that backbone and how much of it is overlap.
+
+### 5.1 LLM / agent observability platforms
+
+| Project | Stars | License | Self-host | Verdict for AGENT-33 |
+|---|---|---|---|---|
+| **Langfuse** | ~21k | MIT | Yes (battle-tested) | **The elephant in the room.** Tracing, evals, prompt management, datasets, playground, annotations. OTel-native ingest. Already does ~80% of what "AGENT-33 + OpenSearch Agent Traces" would do for the observability layer. Strongest single-project alternative to building on OS for this slice. |
+| **Arize Phoenix** | ~4–5k | Elastic v2 | Yes (notebook + Docker) | OTel-native, strong on evals + prompt playground. Notebook-first. Less enterprise-grade than Langfuse, more researcher-grade. |
+| **AgentOps** | ~3–4k | MIT | Yes | Multi-agent specific. Time-travel debugging is a real differentiator. Less general than Langfuse. |
+| **OpenLLMetry / Traceloop** | ~3–4k | Apache 2.0 | Backend-agnostic | Pure decorator library that emits OTel spans. **Not a platform** — pairs with Langfuse / Phoenix / OS as the emit-side SDK. Likely useful in any path. |
+| **Helicone** | ~3–4k | Apache 2.0 | Yes (proxy model) | Proxy-based capture. Different shape — sits between app and LLM. Does not fit our internal-instrumentation model as cleanly. |
+| **LangSmith** | n/a | Closed | No (SaaS) | Strongest agent observability product, but closed source. Not viable for a self-host / resell platform. |
+
+### 5.2 Full agentic platforms (workflow + agents + dashboards)
+
+| Project | Stars | License | Self-host | Verdict for AGENT-33 |
+|---|---|---|---|---|
+| **Dify** | ~90k+ | Dify OSS (Apache-derived w/ multi-tenant clause) | Yes | **The other elephant.** Workflow builder, RAG, agent definitions, dashboards, datasets, evals, API publishing. Closest existing match to the "AI management OS" vision. Must be evaluated explicitly as build-on-top-of vs build-against. |
+| **Langflow** (DataStax) | ~40–60k | MIT | Yes | Visual flow builder for LangChain/LangGraph. Strong frontend, weaker on observability and evals. |
+| **Flowise** | ~30k+ | Apache 2.0 | Yes | Visual builder, LangChain-based. Lighter weight than Dify, less platform. |
+| **n8n** | ~70k+ | Sustainable Use License | Yes | Generic workflow automation with AI nodes. Adjacent rather than direct competitor — the workflow primitives are the win. |
+| **AutoGen Studio** | (part of AutoGen ~30k) | MIT | Yes | UI for Microsoft AutoGen. Multi-agent orchestration UI. Research-grade. |
+
+### 5.3 "Agent OS" experiments
+
+These define the design space rather than offer a drop-in option:
+
+| Project | Stars | Notes |
 |---|---|---|
-| D1 | ML Commons V2 chat agent | Competes with `AgentRuntime`. Would balkanise our agent-definitions JSON catalogue. We use OpenSearch as the *observability* substrate, not the agent runtime. |
-| D2 | Plan-Execute-Reflect agents | Same reason as D1. Our DAG workflow engine is already the orchestrator. |
-| D3 | Security Analytics (SIEM) | Out of scope. `security/` covers prompt-injection + auth. Adding SIEM-grade detector packs is a different product. |
-| D4 | SQL endpoint, Prometheus rules via SQL | Duplicates our existing metrics + API path. |
-| D5 | Field-Level Security, gRPC auth | `AuthMiddleware` already handles tenant scoping at the API edge. |
-| D6 | Terraform anomaly automation | We do not manage infra-as-code; premature. |
+| **AIOS (agiresearch)** | research-grade | Kernel abstraction over LLM/memory/storage/tools. Academic reference design. |
+| **SmythOS SRE** | medium | Cloud-native runtime with 40+ production components, OS-level abstractions over LLMs/vector DBs/storage/caching. Closest to "agentic OS" as a product. |
+| **Rivet agent-os** | small/medium | WASM + V8 isolate runtime. Solves the "fast cold start" sandbox problem. Different layer than what we need. |
+| **awesome-agentOS** | n/a | Curated list of related projects. Useful as a discovery surface. |
 
-## 5. Target architecture
+### 5.4 Agent runtime frameworks (the C1 / C2 matrix candidates)
+
+| Project | Stars | License | Notes |
+|---|---|---|---|
+| **LangChain + LangGraph** | ~97k | MIT | Dominant ecosystem. LangGraph is the stateful-workflow piece. |
+| **CrewAI** | ~30k | MIT | Role-based multi-agent. A2A protocol support. |
+| **AutoGen** | ~30k+ | MIT | Microsoft. GroupChat / actor model. |
+| **Strands Agents** | early | Apache 2.0 | AWS, deeply Bedrock-coupled. Less portable. |
+| **Claude Agent SDK** | early | Open | Extracted from Claude Code. Closest model fit for our existing Anthropic-heavy stack. |
+| **OpenSearch ML Commons V2 Chat Agent** | bundled in OS | Apache 2.0 | Notably absent from every 2026 framework comparison we found — it's positioned as observability-adjacent, not as a top-tier agent runtime. |
+
+### 5.5 Honest read of the landscape
+
+Three things stand out:
+
+1. **OpenSearch is the strongest pick for the indexing / search / dashboards
+   / anomaly-detection layer.** PPL, Query Insights, k-NN at scale, and
+   Dashboards Investigation have no OSS equivalents at the same maturity.
+2. **OpenSearch is not the strongest pick for the agent runtime layer.** ML
+   Commons V2 doesn't appear in serious framework comparisons. LangGraph,
+   Claude Agent SDK, and CrewAI are where the runtime mind-share has
+   consolidated.
+3. **Langfuse and Dify already exist and already do much of what we want.**
+   Pretending they don't and rebuilding on raw OpenSearch is a
+   multi-quarter detour.
+
+The strategic implication is in §7.
+
+## 6. Decision matrices for the swap-out questions
+
+Each Tier B and Tier C item gets a matrix here. None of these are decided —
+they are the work to be done before any code change ships.
+
+### 6.1 `AgentRuntime` replacement (Tier C1)
+
+Comparison axes — the same axes apply across all candidates so the result is
+a real ranking, not a feature-checklist beauty contest.
+
+| Axis | Current AgentRuntime | LangGraph | Claude Agent SDK | CrewAI | ML Commons V2 |
+|---|---|---|---|---|---|
+| Multi-tenancy | First-class (`tenant_id` everywhere) | Manual | Manual | Manual | Index-level |
+| Capability taxonomy | 25-entry P/I/V/R/X catalogue | Tool-level only | Tool-level only | Tool-level only | Plugin-level |
+| Skills / progressive disclosure | L0/L1/L2 injector | n/a | n/a | n/a | n/a |
+| Agent-definition format | JSON, file-loaded | Python code | Python code | Python code | OS API |
+| Streaming + retry parity | `run_stream()` w/ regression contracts | LangGraph streams | SDK streams | Crew streams | OS streams |
+| Workflow integration | DAG via `workflows/` | Native | Manual | Native | Manual |
+| Observability hook | TraceCollector (today) | LangSmith / OTel | OTel | OTel | OS native |
+| Cost model | Effort-routing telemetry | Manual | Manual | Manual | OS metering |
+| Production maturity | In-house | Very high | High (new) | High | Lower |
+| Resell / embed friendliness | Ours, full control | License compatible | License compatible | License compatible | Tied to OS |
+
+**Decision rule:** rank each axis 1–5, weight axes by importance to the
+platform vision (multi-tenancy, observability hook, resell friendliness
+weighted highest), and pick the top-2 to spike. Do not pick on a single
+axis.
+
+### 6.2 Workflow engine replacement (Tier C2)
+
+Axes: stateful checkpoint, resume-after-failure, parallel groups, conditional
+branching, sub-workflow composition, observability hook, expression
+language, retries+timeouts policy, multi-tenancy, codebase footprint.
+
+Candidates: current `workflows/` DAG executor, LangGraph, AutoGen GroupChat,
+CrewAI Crews, Plan-Execute-Reflect agents.
+
+### 6.3 Memory backend replacement (Tier B2)
+
+Axes: vector recall, hybrid (BM25 + vector) RRF support, per-tenant scoping,
+retention tiers, ingestion throughput, observation-summarisation hook,
+progressive-recall API, embedding-cache integration, multi-region, cost.
+
+Candidates: current `memory/` (pgvector + BM25 + RAG), ML Commons Agentic
+Memory, Letta (formerly MemGPT), Zep, Mem0.
+
+### 6.4 Vector substrate replacement (Tier B1)
+
+Axes: recall@K against GT cases, p50/p95/p99 latency, storage footprint,
+update throughput, ANN algorithm choice, GPU acceleration, multi-tenancy,
+license.
+
+Candidates: current pgvector, OpenSearch k-NN with 1-bit quantisation,
+Weaviate, Qdrant, Milvus.
+
+### 6.5 Authz substrate (Tier C5)
+
+Axes: tenant isolation guarantees, audit trail, integration with our
+`AuthMiddleware`, blast radius of misconfiguration, ease of multi-tenant
+routing, RBAC complexity.
+
+Candidates: current `AuthMiddleware`, OpenSearch FLS + gRPC auth, OPA
+policy layer.
+
+### 6.6 Security event substrate (Tier C3)
+
+Axes: prompt-injection coverage, auth-failure detection, tenant isolation,
+SIEM integration, alert routing.
+
+Candidates: current `security/` (prompt injection + allowlists), OpenSearch
+Security Analytics, Wazuh, Falco.
+
+## 7. Strategic fork — Langfuse vs OpenSearch vs both
+
+This is the question rev-2 has to put on the table:
+
+**Path X — Build on OpenSearch only.** Treat OpenSearch as the unified
+backbone for traces, search, indexing, anomaly detection, dashboards,
+alerting. Build our own UI shell on top.
+- *Pros:* Single backend. LTS support. Strongest at-scale search.
+- *Cons:* Reinvent the LLM-observability UX (trace evals, prompt mgmt,
+  dataset workflows) that Langfuse already ships. Bigger frontend effort.
+
+**Path Y — Build on Langfuse + Dify only.** Adopt Langfuse for observability
+and Dify for the platform layer. Skip OpenSearch.
+- *Pros:* Fastest time-to-product. Two strong projects to compose.
+- *Cons:* Inherits both projects' constraints. Langfuse uses ClickHouse +
+  Postgres, not OpenSearch — search/PPL is out. No first-class anomaly
+  detection. Dify has its own opinions about workflow + agent shapes that
+  may not match ours.
+
+**Path Z — Compose: Langfuse for observability UX, OpenSearch for
+search/anomaly/dashboards backbone, our engine on top.** Use Langfuse as the
+LLM-trace UI; export the same OTel spans into OpenSearch for PPL queries,
+Dashboards Investigation, anomaly detection, and Search Relevance
+Workbench. Treat them as complementary layers, not competitors.
+- *Pros:* Each tool used at its strength. Operators get Langfuse's polished
+  trace UI for day-to-day; engineers get OpenSearch's power for fleet-scale
+  analytics.
+- *Cons:* Two backends to operate. Slight duplication of trace storage.
+
+**Recommendation (open for operator override):** Path Z is the strongest
+default. It uses Langfuse where Langfuse already wins (trace UX, evals,
+prompt management) and OpenSearch where OpenSearch already wins (PPL, k-NN
+at scale, anomaly detection, dashboards). It also reduces the "rip out our
+backend" surface area — most of our existing code (AgentRuntime, workflows,
+memory) stays, and we add two complementary substrates underneath.
+
+If the operator decision is Path X (OpenSearch only), the phase plan in §9
+needs an additional Phase OS-3.5 for "build the LLM-trace UI we would have
+gotten from Langfuse." That is a real cost and should be sized before the
+choice is locked.
+
+## 8. Target architecture (Path Z draft)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -167,10 +394,31 @@ Most of that already exists in OpenSearch 3.6 — we should not rebuild it.
 Codex CLI / Copilot CLI sessions feed in only if we ship the optional shim
 (see Phase OS-2). They are explicitly preview-quality.
 
-## 6. Phased plan
+## 9. Phased plan
 
 Each phase is sized to be a single PR or a tight pair of PRs. None of this
-gets pushed yet.
+gets pushed yet. Rev-2 adds Phase OS-0 — the landscape spike has to land
+before any code change.
+
+### Phase OS-0 — Decision spike (no production code)
+
+**Goal:** retire the open questions in §7 and §6 with evidence, not opinion.
+
+**Deliverables:**
+- Stand up Langfuse self-host locally (docker compose). Send a real AGENT-33
+  session through it via OTel decorators. Capture screenshots, latency, UX
+  notes.
+- Stand up OpenSearch 3.6 + Dashboards locally. Send the same session
+  through it. Capture the same evidence.
+- Stand up Dify locally. Recreate one canned workflow we already have.
+  Document where Dify's primitives match vs diverge from our DAG.
+- Run the matrices in §6 with rough scoring (1–5 per axis, weighted). At
+  least axes 6.1 (AgentRuntime), 6.3 (memory), 6.4 (vector) before any
+  Tier B/C decision is locked.
+- Output: `docs/research/opensearch-spike-results.md` with hard data.
+
+**Exit criteria:** the operator can pick Path X / Y / Z (§7) on evidence,
+not on this doc's recommendation.
 
 ### Phase OS-1 — Telemetry backbone (foundation)
 
@@ -256,7 +504,7 @@ reachable" are exactly the shallow pattern CLAUDE.md flags.
 
 Spike only — produce a comparison memo. No production wiring.
 
-## 7. Risks and unresolved decisions
+## 10. Risks and unresolved decisions
 
 1. **Docker footprint.** Full observability stack is heavy. Must remain an
    opt-in compose profile, not part of the default `docker compose up` path.
@@ -273,37 +521,80 @@ Spike only — produce a comparison memo. No production wiring.
    collide with whatever the other agent is doing. This doc deliberately
    lives under `docs/research/` for that reason.
 
-## 8. Out of scope (named explicitly)
+## 11. Out of scope (named explicitly)
 
-- Replacing `AgentRuntime` with ML Commons agents.
+Rev-2 narrows this list because most of the original rejections are now in
+Tier C with mandatory matrices.
+
 - Self-hosting OpenSearch in production tenants by default. We ship a
   compose profile; ops owners decide managed vs self-hosted.
-- Security Analytics SIEM rule packs.
-- Dashboard duplication in our own React tree (we embed instead).
+- Dashboard duplication in our own React tree where Dashboards Investigation
+  + Langfuse already cover the use case (we embed / link out instead).
+- Replacing battle-tested OSS components with hand-built equivalents when
+  the OSS project is healthy and licence-compatible. The `simplify` rule.
 
-## 9. Open questions for the operator
+## 12. Open questions for the operator
 
-These should be answered before Phase OS-3 starts. Local notes for now —
+These should be answered during Phase OS-0. Local notes for now —
 nothing pushed.
 
-1. Self-hosted OpenSearch (compose) vs managed AWS OpenSearch Service?
+**Strategic (block Phase OS-1):**
+1. **Path X / Y / Z (§7):** OpenSearch only, Langfuse + Dify only, or
+   compose Path Z? Recommendation: Path Z. Operator choice locks the rest
+   of the plan.
+2. **AgentRuntime replacement (Tier C1):** keep current, swap to LangGraph,
+   swap to Claude Agent SDK, swap to ML Commons V2, or run a 4-way spike?
+3. **Memory backend replacement (Tier B2):** keep pgvector + BM25, or run
+   the parity gate against ML Commons Agentic Memory?
+
+**Tactical (block Phase OS-3):**
+4. Self-hosted OpenSearch (compose) vs managed AWS OpenSearch Service?
    Affects the auth path (SigV4 vs basic / OIDC).
-2. Tenant model: per-tenant index, or shared with field-level filtering?
-3. Phase OS-5: parallel-forever, or pgvector-replacement-as-goal?
-4. Codex / Copilot shim — Phase OS-2 priority, or punt to a later wave?
+5. Tenant model: per-tenant index, or shared with field-level filtering?
+6. Codex / Copilot shim — Phase OS-2 priority, or punt to a later wave?
 
-## 10. Sources
+**Productisation (block any resell story):**
+7. Do we want the resulting platform to be open source, source-available,
+   or proprietary? Affects which OSS licences we can build on (Dify's
+   multi-tenant clause, Langfuse MIT, OpenSearch Apache 2.0, n8n SUL).
+8. Do we publish AGENT-33 packs (canned workflows, canned agents) as a
+   marketplace? If yes, packaging format becomes a Phase OS-3 concern.
 
+## 13. Sources
+
+OpenSearch 3.6 + Agent Traces:
 - OpenSearch 3.6 release notes — `github.com/opensearch-project/opensearch-build/blob/main/release-notes/opensearch-release-notes-3.6.0.md`
 - AWS unified observability blog (Agent Traces ingest details, SDK package
   name, `gen_ai.*` semantic conventions) —
   `aws.amazon.com/blogs/big-data/unified-observability-in-amazon-opensearch-service-metrics-traces-and-ai-agent-debugging-in-a-single-interface/`
-- Claude Code observability docs (OTLP env vars) —
-  `code.claude.com/docs/en/agent-sdk/observability`
 - OpenSearch trace getting-started — `docs.opensearch.org/latest/observing-your-data/trace/getting-started/`
 - AWS OpenSearch AI observability docs — `docs.aws.amazon.com/opensearch-service/latest/developerguide/observability-ai.html`
 
-## 11. Codebase touch-list (for the eventual implementation phase)
+Claude Code OTLP path:
+- Claude Code observability docs (OTLP env vars) —
+  `code.claude.com/docs/en/agent-sdk/observability`
+
+Competitive landscape (rev-2 research):
+- Langfuse — `github.com/langfuse/langfuse` (~21k stars, MIT)
+- Arize Phoenix — `github.com/arize-ai/phoenix`
+- Dify — `github.com/langgenius/dify` (~90k+ stars)
+- Langflow — DataStax; visual LangGraph builder (~40–60k stars)
+- Flowise — `flowiseai.com` (~30k stars)
+- AIOS — `github.com/agiresearch/AIOS`
+- SmythOS SRE — `github.com/SmythOS/sre`
+- Rivet agent-os — `github.com/rivet-dev/agent-os`
+- awesome-agentOS — `github.com/Egv2/awesome-agentOS`
+- OpenLLMetry / Traceloop — Apache 2.0 OTel decorator library
+- AgentOps — multi-agent observability (~3–4k stars)
+
+Agent runtime frameworks (Tier C1 matrix candidates):
+- LangGraph + LangChain — ~97k stars, MIT
+- CrewAI — ~30k stars, MIT, A2A protocol
+- AutoGen — ~30k+ stars, MIT
+- Strands Agents — AWS, Bedrock-coupled
+- Claude Agent SDK — extracted from Claude Code
+
+## 14. Codebase touch-list (for the eventual implementation phase)
 
 Files this work would touch, so a future implementer can scope quickly:
 
