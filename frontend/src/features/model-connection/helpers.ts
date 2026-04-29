@@ -114,6 +114,21 @@ export function buildOpenRouterProbePayload(form: ModelConnectionForm): Record<s
   return payload;
 }
 
+export function normalizeOllamaBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  return trimmed.toLowerCase().endsWith("/v1") ? trimmed.slice(0, -3).replace(/\/+$/, "") : trimmed;
+}
+
+export function formatOllamaModelRef(modelName: string): string {
+  const trimmed = modelName.trim();
+  return trimmed.startsWith("ollama/") ? trimmed : `ollama/${trimmed}`;
+}
+
+export function stripOllamaModelRef(modelRef: string): string {
+  const trimmed = modelRef.trim();
+  return trimmed.startsWith("ollama/") ? trimmed.slice("ollama/".length) : trimmed;
+}
+
 export function getModelReadinessLabel(
   hasCredentials: boolean,
   hasStoredKey: boolean,

@@ -4,7 +4,10 @@ import {
   DEFAULT_MODEL_CONNECTION_BASELINE,
   buildOpenRouterConfigChanges,
   buildOpenRouterProbePayload,
+  formatOllamaModelRef,
   getModelReadinessLabel,
+  normalizeOllamaBaseUrl,
+  stripOllamaModelRef,
   type ModelConnectionForm
 } from "./helpers";
 
@@ -36,6 +39,13 @@ describe("model connection helpers", () => {
     expect(payload.default_model).toBe("openrouter/qwen/qwen3-32b");
     expect(payload.openrouter_api_key).toBe("sk-test");
     expect(payload.openrouter_base_url).toBe(DEFAULT_MODEL_CONNECTION_BASELINE.baseUrl);
+  });
+
+  it("normalizes native Ollama URLs without touching OpenAI-compatible providers", () => {
+    expect(normalizeOllamaBaseUrl("http://localhost:11434/v1")).toBe("http://localhost:11434");
+    expect(normalizeOllamaBaseUrl("http://localhost:11434/")).toBe("http://localhost:11434");
+    expect(formatOllamaModelRef("qwen2.5-coder:7b")).toBe("ollama/qwen2.5-coder:7b");
+    expect(stripOllamaModelRef("ollama/qwen2.5-coder:7b")).toBe("qwen2.5-coder:7b");
   });
 
   it("summarizes model readiness in user-facing states", () => {

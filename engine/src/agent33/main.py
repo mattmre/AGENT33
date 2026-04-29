@@ -50,6 +50,7 @@ from agent33.api.routes import (
     migrations,
     moa,
     multimodal,
+    ollama,
     openrouter,
     operations,
     operations_hub,
@@ -2085,6 +2086,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("spawner_service_shutdown_failed", exc_info=True)
 
+    _ollama_readiness_svc: Any = getattr(app.state, "ollama_readiness_service", None)
+    if _ollama_readiness_svc is not None:
+        await _ollama_readiness_svc.aclose()
+        logger.info("ollama_readiness_service_shutdown")
+
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
     if shutdown_multimodal_service is not None:
         await shutdown_multimodal_service.shutdown_voice_sessions()
@@ -2424,6 +2430,7 @@ app.include_router(sessions.router)
 app.include_router(context.router)
 app.include_router(operator.router)
 app.include_router(openrouter.router)
+app.include_router(ollama.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)

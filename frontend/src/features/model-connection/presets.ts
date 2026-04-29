@@ -78,7 +78,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     description: "Run a model on your own computer. Leave the API key blank by default.",
     bestFor: "Private local testing",
     setupTime: "5 min",
-    baseUrlDefault: "http://localhost:11434/v1",
+    baseUrlDefault: "http://localhost:11434",
     apiKeyLabel: "Local API key",
     apiKeyPlaceholder: "Leave blank for Ollama",
     apiKeyHint: "Most Ollama setups do not need a key. Start Ollama before testing.",
