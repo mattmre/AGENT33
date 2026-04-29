@@ -3,7 +3,6 @@ import { getPermissionMode } from "../data/permissionModes";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
 import type { CockpitArtifact } from "../data/cockpitArtifacts";
-import { getCockpitArtifactsForWorkspace } from "../data/cockpitArtifacts";
 import { buildCockpitOpsSafetySnapshot } from "../data/cockpitOpsSafety";
 
 interface CockpitProjectDashboardProps {
@@ -41,8 +40,8 @@ export function CockpitProjectDashboard({
   const taskCounts = getWorkspaceTaskCounts(workspace.id);
   const activeTaskCount = taskCounts.running + taskCounts.review + taskCounts.blocked;
   const attentionTaskLabel = activeTaskCount === 1 ? "1 task needs attention" : `${activeTaskCount} tasks need attention`;
-  const artifacts = getCockpitArtifactsForWorkspace(workspace.id);
   const opsSafety = buildCockpitOpsSafetySnapshot({ workspaceId: workspace.id, permissionModeId });
+  const artifacts = opsSafety.artifacts;
   const safetySignals = opsSafety.records.slice(0, 4);
 
   return (
