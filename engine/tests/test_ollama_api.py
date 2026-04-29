@@ -149,6 +149,41 @@ class TestOllamaStatusRoute:
         assert data["ok"] is False
         assert "unexpected payload" in data["message"]
 
+    def test_blocks_unsafe_base_url_override(self, operator_read_client: TestClient) -> None:
+        service, fetcher = _service(
+            [_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())]
+        )
+        app.state.ollama_readiness_service = service
+
+        resp = operator_read_client.get(
+            "/v1/ollama/status",
+            params={"base_url": "http://metadata.google.internal/computeMetadata/v1"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["state"] == "error"
+        assert data["ok"] is False
+        assert fetcher.calls == []
+
+    def test_ignores_models_without_usable_names(self, operator_read_client: TestClient) -> None:
+        service, _ = _service(
+            [
+                _OllamaFetchResult(
+                    status_code=200,
+                    payload={"models": [{"digest": "sha256:missing-name"}]},
+                )
+            ]
+        )
+        app.state.ollama_readiness_service = service
+
+        resp = operator_read_client.get("/v1/ollama/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["state"] == "empty"
+        assert data["count"] == 0
+
     def test_models_endpoint_returns_model_list(self, operator_read_client: TestClient) -> None:
         service, _ = _service(
             [_OllamaFetchResult(status_code=200, payload=_sample_tags_payload())]

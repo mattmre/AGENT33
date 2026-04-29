@@ -281,7 +281,7 @@ export function ModelConnectionWizardPanel({
     setOllamaStatus(null);
   }
 
-  async function loadOllamaStatus(baseUrl = form.baseUrl): Promise<OllamaRuntimeStatus | null> {
+  async function loadOllamaStatus(baseUrl?: string): Promise<OllamaRuntimeStatus | null> {
     if (!hasCredentials) {
       setOllamaStatus(null);
       return null;
@@ -293,7 +293,7 @@ export function ModelConnectionWizardPanel({
         path: "/v1/ollama/status",
         token,
         apiKey,
-        query: { base_url: normalizeOllamaBaseUrl(baseUrl) }
+        query: baseUrl ? { base_url: normalizeOllamaBaseUrl(baseUrl) } : undefined
       });
       onResult("Model Wizard - Ollama Status", result);
       const status = parseOllamaRuntimeStatus(result.data);
@@ -303,7 +303,7 @@ export function ModelConnectionWizardPanel({
       const status: OllamaRuntimeStatus = {
         state: "error",
         ok: false,
-        baseUrl: normalizeOllamaBaseUrl(baseUrl),
+        baseUrl: baseUrl ? normalizeOllamaBaseUrl(baseUrl) : ollamaStatus?.baseUrl ?? "",
         message: error instanceof Error ? error.message : "Could not check Ollama status.",
         models: []
       };

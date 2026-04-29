@@ -2086,6 +2086,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("spawner_service_shutdown_failed", exc_info=True)
 
+    _ollama_readiness_svc: Any = getattr(app.state, "ollama_readiness_service", None)
+    if _ollama_readiness_svc is not None:
+        await _ollama_readiness_svc.aclose()
+        logger.info("ollama_readiness_service_shutdown")
+
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
     if shutdown_multimodal_service is not None:
         await shutdown_multimodal_service.shutdown_voice_sessions()

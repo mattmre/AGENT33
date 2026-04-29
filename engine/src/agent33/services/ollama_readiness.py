@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from ipaddress import ip_address
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
@@ -70,6 +72,8 @@ class _OllamaFetchResult:
 
 FetchOllamaPayload = Callable[[str], Awaitable[_OllamaFetchResult]]
 
+_ALLOWED_OLLAMA_OVERRIDE_HOSTS = {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+
 
 def normalize_ollama_base_url(base_url: str) -> str:
     """Return the Ollama root URL used for native /api/* readiness probes."""
@@ -93,14 +97,29 @@ class OllamaReadinessService:
         self._settings = settings
         self._timeout_seconds = timeout_seconds
         self._fetcher = fetcher or self._fetch
+        self._client: httpx.AsyncClient | None = None
 
     async def status(self, base_url: str | None = None) -> OllamaStatusResponse:
         """Return service reachability and available local model metadata."""
 
         checked_at = datetime.now(UTC)
-        resolved_base_url = normalize_ollama_base_url(
-            base_url or self._settings.runtime_ollama_base_url
-        )
+        configured_base_url = normalize_ollama_base_url(self._settings.runtime_ollama_base_url)
+        resolved_base_url = configured_base_url
+        if base_url is not None and base_url.strip():
+            resolved_base_url = normalize_ollama_base_url(base_url)
+            if not self._is_safe_override_base_url(resolved_base_url, configured_base_url):
+                return OllamaStatusResponse(
+                    state="error",
+                    ok=False,
+                    base_url=resolved_base_url,
+                    default_model=self._settings.ollama_default_model,
+                    checked_at=checked_at,
+                    message=(
+                        "Ollama base URL overrides must use http(s) and point to the "
+                        "configured runtime host, localhost, or host.docker.internal."
+                    ),
+                )
+
         result = await self._fetcher(f"{resolved_base_url}/api/tags")
         if result.error or result.status_code != 200:
             detail = result.error or f"HTTP {result.status_code}"
@@ -125,7 +144,14 @@ class OllamaReadinessService:
                 message="Ollama responded, but /api/tags returned an unexpected payload.",
             )
 
-        models = [self._normalize_model(item) for item in raw_models if isinstance(item, dict)]
+        models: list[OllamaModelSummary] = []
+        for item in raw_models:
+            if not isinstance(item, dict):
+                continue
+            model = self._normalize_model(item)
+            if model is not None:
+                models.append(model)
+
         if not models:
             return OllamaStatusResponse(
                 state="empty",
@@ -160,22 +186,52 @@ class OllamaReadinessService:
             message=status.message,
         )
 
+    async def aclose(self) -> None:
+        """Close the pooled HTTP client when the application shuts down."""
+
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
     async def _fetch(self, url: str) -> _OllamaFetchResult:
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.get(url)
-                payload = response.json()
-                return _OllamaFetchResult(status_code=response.status_code, payload=payload)
+            if self._client is None or self._client.is_closed:
+                self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
+            response = await self._client.get(url)
+            payload = response.json()
+            return _OllamaFetchResult(status_code=response.status_code, payload=payload)
         except (httpx.HTTPError, ValueError) as exc:
             return _OllamaFetchResult(status_code=None, error=str(exc))
 
     @staticmethod
-    def _normalize_model(item: dict[str, Any]) -> OllamaModelSummary:
+    def _is_safe_override_base_url(base_url: str, configured_base_url: str) -> bool:
+        if base_url == configured_base_url:
+            return True
+
+        parsed = urlparse(base_url)
+        if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+            return False
+
+        host = parsed.hostname.lower()
+        if host in _ALLOWED_OLLAMA_OVERRIDE_HOSTS:
+            return True
+
+        try:
+            return ip_address(host).is_loopback
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _normalize_model(item: dict[str, Any]) -> OllamaModelSummary | None:
+        resolved_name = str(item.get("name") or item.get("model") or "").strip()
+        if not resolved_name:
+            return None
+
         raw_details = item.get("details")
         details: dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
         families = details.get("families")
         return OllamaModelSummary(
-            name=str(item.get("name") or item.get("model") or ""),
+            name=resolved_name,
             model=str(item["model"]) if item.get("model") is not None else None,
             modified_at=str(item["modified_at"]) if item.get("modified_at") is not None else None,
             size=item.get("size") if isinstance(item.get("size"), int) else None,

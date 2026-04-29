@@ -19,7 +19,18 @@ function mockApiRequest(): void {
         status: 200,
         durationMs: 5,
         url: "http://localhost/v1/operator/config",
-        data: { groups: { llm: {}, ollama: {} } }
+        data: {
+          groups: {
+            llm: {
+              default_model: "openrouter/auto",
+              openrouter_base_url: "https://openrouter.ai/api/v1"
+            },
+            ollama: {
+              ollama_base_url: "http://localhost:11434",
+              ollama_default_model: "qwen2.5-coder:7b"
+            }
+          }
+        }
       });
     }
     if (path === "/v1/openrouter/models") {
@@ -137,7 +148,7 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       expect.objectContaining({
         method: "GET",
         path: "/v1/ollama/status",
-        query: { base_url: "http://localhost:11434" }
+        query: undefined
       })
     );
   });
