@@ -1709,6 +1709,44 @@ button:disabled {
   line-height: 1.4;
 }
 
+.permission-action-chip,
+.workspace-task-gate {
+  display: grid;
+  gap: 0.15rem;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 10px;
+  background: rgba(4, 12, 18, 0.42);
+  color: #b7dbe5;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.permission-action-chip {
+  justify-self: start;
+}
+
+.permission-action-chip-available,
+.workspace-task-gate-available {
+  border-color: rgba(48, 213, 200, 0.28);
+}
+
+.permission-action-chip-approval-required,
+.workspace-task-gate-approval-required {
+  border-color: rgba(251, 191, 36, 0.36);
+  color: #f7ead1;
+}
+
+.permission-action-chip-locked,
+.workspace-task-gate-locked {
+  border-color: rgba(248, 113, 113, 0.36);
+  color: #fecaca;
+}
+
+.workspace-task-gate small {
+  color: inherit;
+}
+
 .cockpit-dashboard-artifacts .artifact-card-next-action {
   color: #d8c27a;
 }

@@ -74,6 +74,7 @@ describe("CockpitProjectDashboard", () => {
     expect(screen.getAllByText("1 cockpit safety item blocked.")).toHaveLength(2);
     expect(screen.getByLabelText("Blocked: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unlock a safer mode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Choose workflow locked: Restricted mode keeps workflow launch locked/i })).toBeDisabled();
     expect(screen.getByText(/Restricted \/ high-risk locked: Unlock a safer mode before running high-risk actions/i)).toBeInTheDocument();
   });
 });

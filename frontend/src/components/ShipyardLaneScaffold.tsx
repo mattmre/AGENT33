@@ -1,3 +1,5 @@
+import type { PermissionModeId } from "../data/permissionModes";
+import { getPermissionActionGate } from "../data/permissionActionGates";
 import type { WorkspaceSessionSummary } from "../data/workspaces";
 import {
   WORKSPACE_TASK_STATUS_LABELS,
@@ -17,6 +19,7 @@ const SHIPYARD_ROLE_OUTPUTS: Record<WorkspaceAgentRole, string> = {
 
 interface ShipyardLaneScaffoldProps {
   workspace: WorkspaceSessionSummary;
+  permissionModeId: PermissionModeId;
   onOpenWorkflows: () => void;
   onOpenSafety: () => void;
 }
@@ -43,10 +46,12 @@ function getLaneStatus(tasks: ReadonlyArray<WorkspaceTaskCard>): string {
 
 export function ShipyardLaneScaffold({
   workspace,
+  permissionModeId,
   onOpenWorkflows,
   onOpenSafety
 }: ShipyardLaneScaffoldProps): JSX.Element {
   const board = getWorkspaceBoard(workspace.id);
+  const workflowGate = getPermissionActionGate(permissionModeId, "start-workflow");
 
   return (
     <section className="shipyard-lanes" aria-label="Shipyard lanes">
@@ -60,9 +65,21 @@ export function ShipyardLaneScaffold({
           </p>
         </div>
         <div className="shipyard-lanes-actions" aria-label="Shipyard lane actions">
-          <button type="button" onClick={onOpenWorkflows}>
+          <button
+            type="button"
+            onClick={onOpenWorkflows}
+            disabled={!workflowGate.allowed}
+            aria-label={workflowGate.allowed ? "Launch workflow" : `Launch workflow locked: ${workflowGate.reason}`}
+            aria-describedby="shipyard-workflow-gate"
+          >
             Launch workflow
           </button>
+          <span
+            id="shipyard-workflow-gate"
+            className={`permission-action-chip permission-action-chip-${workflowGate.tone}`}
+          >
+            {workflowGate.reason}
+          </span>
           <button type="button" onClick={onOpenSafety}>
             Check approvals
           </button>

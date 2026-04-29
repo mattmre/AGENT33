@@ -10,6 +10,7 @@ describe("WorkspaceTaskBoard", () => {
     render(
       <WorkspaceTaskBoard
         workspace={getWorkspaceSession("shipyard")}
+        permissionModeId="pr-first"
         onOpenSafety={vi.fn()}
         onOpenWorkflows={vi.fn()}
       />
@@ -30,6 +31,7 @@ describe("WorkspaceTaskBoard", () => {
     render(
       <WorkspaceTaskBoard
         workspace={getWorkspaceSession("solo-builder")}
+        permissionModeId="ask"
         onOpenSafety={onOpenSafety}
         onOpenWorkflows={onOpenWorkflows}
       />
@@ -40,5 +42,24 @@ describe("WorkspaceTaskBoard", () => {
 
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenSafety).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows permission gate explanations on task actions", () => {
+    render(
+      <WorkspaceTaskBoard
+        workspace={getWorkspaceSession("solo-builder")}
+        permissionModeId="observe"
+        onOpenSafety={vi.fn()}
+        onOpenWorkflows={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Choose workflow locked: Observe only keeps workflow launch read-only/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Choose workflow locked/i })).toHaveAccessibleDescription(
+      "Observe only keeps workflow launch read-only until you choose a more active mode."
+    );
+    expect(screen.getByText("Command run")).toBeInTheDocument();
+    expect(screen.getByText("Observe only blocks command execution.")).toBeInTheDocument();
+    expect(screen.getByText("Observe only cannot approve actions.")).toBeInTheDocument();
   });
 });
