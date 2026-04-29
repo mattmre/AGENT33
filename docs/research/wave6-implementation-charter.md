@@ -36,7 +36,7 @@ Wave 6 will not implement:
 
 ## Skill and governance gate
 
-Evokore-MCP workflow discovery was run before chartering. The relevant adopted guidance is:
+EVOKORE-MCP workflow discovery was run before chartering. The relevant adopted guidance is:
 
 - Build for workflows, not endpoint wrappers.
 - Keep outputs concise and task-oriented.
@@ -49,6 +49,8 @@ Rejected for Wave 6:
 - New external API research. The competitor refresh already captured the relevant market signals.
 
 ## Truth-score synthesis
+
+This table uses the session governance scale: 1 = weak/assumptive, 3 = implementation-plausible, 4 = evidence-backed enough for planning, and 5 = reproducible or directly supported by merged code/docs. It is separate from the fractional persona confidence scores used inside the Wave 5 panel writeups.
 
 | Decision | Truth score | Evidence |
 | --- | ---: | --- |
