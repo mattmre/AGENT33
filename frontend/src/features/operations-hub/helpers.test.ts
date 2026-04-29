@@ -18,6 +18,7 @@ describe("operations hub helpers", () => {
     expect(getStatusClass("running")).toBe("status-running");
     expect(getStatusClass("suspended")).toBe("status-paused");
     expect(getStatusClass("expired")).toBe("status-cancelled");
+    expect(getStatusClass("crashed")).toBe("status-error");
     expect(getStatusClass("success")).toBe("status-ok");
     expect(getStatusClass("failed")).toBe("status-error");
   });

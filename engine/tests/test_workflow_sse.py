@@ -32,8 +32,7 @@ def clear_workflow_state() -> None:
     from agent33.security import auth
 
     def _reset() -> None:
-        workflows._registry.clear()
-        workflows._execution_history.clear()
+        workflows.reset_workflow_state()
         if workflows._scheduler is not None:
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
@@ -424,7 +423,7 @@ class TestWorkflowGraphLiveOverlay:
 
         from agent33.api.routes import workflows
 
-        workflows._execution_history.append(
+        workflows.get_execution_history().append(
             {
                 "run_id": "old-history-run",
                 "workflow_name": workflow_name,
@@ -502,7 +501,7 @@ class TestWorkflowGraphLiveOverlay:
 
         from agent33.api.routes import workflows
 
-        workflows._execution_history.append(
+        workflows.get_execution_history().append(
             {
                 "run_id": "history-run",
                 "workflow_name": workflow_name,

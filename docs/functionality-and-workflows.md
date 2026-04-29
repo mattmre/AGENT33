@@ -44,6 +44,7 @@ Routers mounted:
 
 Persistent (database/backing service):
 - `memory_records` via `LongTermMemory` (PostgreSQL + pgvector)
+- Workflow registry and execution history (`api/routes/workflows.py`) via `OrchestrationStateStore` when `orchestration_state_store_path` is configured
 - Review records (`review/service.py`) via `OrchestrationStateStore` when `orchestration_state_store_path` is configured
 - Trace/failure records (`observability/trace_collector.py`) via `OrchestrationStateStore`
 - Autonomy budgets/enforcers/escalations (`autonomy/service.py`) via `OrchestrationStateStore`
@@ -55,7 +56,6 @@ Persistent (database/backing service):
 - NATS event transport
 
 In-memory only (lost on restart):
-- Workflow registry (`api/routes/workflows.py`)
 - Evaluation runs/baselines/regressions (`evaluation/service.py` + recorder)
 - Auth users and API keys (`api/routes/auth.py`, `security/auth.py`)
 

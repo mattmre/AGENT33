@@ -26,12 +26,10 @@ from agent33.security.auth import create_access_token
 @pytest.fixture(autouse=True)
 def _reset_state() -> None:
     """Reset global state between tests."""
-    workflows._registry.clear()
-    workflows._execution_history.clear()
+    workflows.reset_workflow_state()
     auth._api_keys.clear()
     yield
-    workflows._registry.clear()
-    workflows._execution_history.clear()
+    workflows.reset_workflow_state()
     auth._api_keys.clear()
 
 

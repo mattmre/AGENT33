@@ -20,6 +20,7 @@ from agent33.workflows.dag_layout import compute_dag_layout
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 from agent33.workflows.history import WorkflowExecutionRecord, normalize_execution_record
+from agent33.workflows.state import WorkflowStateService
 
 logger = structlog.get_logger()
 
@@ -35,16 +36,41 @@ _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 # Workflow scheduler instance
 _scheduler: WorkflowScheduler | None = None
 _ws_manager: Any | None = None
+_workflow_state_service: WorkflowStateService | None = None
 
 
 def get_workflow_registry() -> dict[str, WorkflowDefinition]:
     """Expose the workflow registry for internal route composition."""
+    if _workflow_state_service is not None:
+        return _workflow_state_service.registry
     return _registry
 
 
 def get_execution_history() -> deque[dict[str, Any]]:
     """Expose workflow execution history for internal route composition."""
+    if _workflow_state_service is not None:
+        return _workflow_state_service.execution_history
     return _execution_history
+
+
+def set_workflow_state_service(service: WorkflowStateService | None) -> None:
+    """Register the shared workflow state service for route access."""
+    global _workflow_state_service
+    _workflow_state_service = service
+
+
+def reset_workflow_state() -> None:
+    """Clear workflow definitions and execution history."""
+    if _workflow_state_service is not None:
+        _workflow_state_service.clear()
+        return
+    _registry.clear()
+    _execution_history.clear()
+
+
+def _persist_workflow_state() -> None:
+    if _workflow_state_service is not None:
+        _workflow_state_service.persist_state()
 
 
 def set_ws_manager(manager: Any | None) -> None:
@@ -166,7 +192,7 @@ async def list_workflows() -> list[WorkflowSummary]:
             step_count=len(w.steps),
             triggers=w.triggers.model_dump(),
         )
-        for w in _registry.values()
+        for w in get_workflow_registry().values()
     ]
 
 
@@ -217,7 +243,7 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
 
     # Find the execution history entry for this run
     matched: tuple[dict[str, Any], WorkflowExecutionRecord] | None = None
-    for entry in _execution_history:
+    for entry in get_execution_history():
         record = normalize_execution_record(entry)
         if record.run_id != run_id:
             continue
@@ -234,7 +260,7 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
     _entry, record = matched
 
     workflow_name = record.workflow_name
-    workflow = _registry.get(workflow_name)
+    workflow = get_workflow_registry().get(workflow_name)
     if workflow is None:
         raise HTTPException(
             status_code=404,
@@ -258,7 +284,7 @@ async def get_run_dag(run_id: str, req: Request) -> dict[str, Any]:
 @router.get("/{name}", dependencies=[require_scope("workflows:read")])
 async def get_workflow(name: str) -> dict[str, Any]:
     """Get a workflow definition by name."""
-    workflow = _registry.get(name)
+    workflow = get_workflow_registry().get(name)
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
     return workflow.model_dump()
@@ -267,7 +293,7 @@ async def get_workflow(name: str) -> dict[str, Any]:
 @router.get("/{name}/dag", dependencies=[require_scope("workflows:read")])
 async def get_workflow_dag(name: str) -> dict[str, Any]:
     """Return a positioned DAG layout for a workflow definition."""
-    workflow = _registry.get(name)
+    workflow = get_workflow_registry().get(name)
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
 
@@ -291,13 +317,15 @@ async def create_workflow(body: WorkflowCreateRequest, request: Request) -> dict
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if definition.name in _registry:
+    registry = get_workflow_registry()
+    if definition.name in registry:
         raise HTTPException(
             status_code=409,
             detail=f"Workflow '{definition.name}' already exists",
         )
 
-    _registry[definition.name] = definition
+    registry[definition.name] = definition
+    _persist_workflow_state()
     logger.info("workflow_created", name=definition.name, version=definition.version)
 
     return {
@@ -313,7 +341,7 @@ async def schedule_workflow(
     name: str, request: WorkflowScheduleRequest
 ) -> WorkflowScheduleResponse:
     """Schedule a workflow to run on a cron expression or interval."""
-    workflow = _registry.get(name)
+    workflow = get_workflow_registry().get(name)
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
 
@@ -379,7 +407,7 @@ async def get_workflow_history(name: str, req: Request) -> list[WorkflowHistoryE
     """Get execution history for a specific workflow."""
     tenant_id, scopes = get_request_tenant_context(req)
     history: list[WorkflowHistoryEntry] = []
-    for entry in _execution_history:
+    for entry in get_execution_history():
         record = normalize_execution_record(entry)
         if record.workflow_name != name:
             continue
@@ -402,7 +430,7 @@ async def execute_workflow(
     req: Request,
 ) -> dict[str, Any]:
     """Execute a registered workflow."""
-    workflow = _registry.get(name)
+    workflow = get_workflow_registry().get(name)
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{name}' not found")
 
@@ -518,7 +546,7 @@ async def _execute_single(
                 )
             )
         # Record failure in history
-        _execution_history.append(
+        get_execution_history().append(
             WorkflowExecutionRecord(
                 run_id=run_id,
                 workflow_name=name,
@@ -532,13 +560,14 @@ async def _execute_single(
                 tenant_id=tenant_id,
             ).model_dump(mode="json")
         )
+        _persist_workflow_state()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Extract step statuses from result
     step_statuses = {sr.step_id: sr.status for sr in result.step_results}
 
     # Record success in history
-    _execution_history.append(
+    get_execution_history().append(
         WorkflowExecutionRecord(
             run_id=run_id,
             workflow_name=name,
@@ -552,6 +581,7 @@ async def _execute_single(
             tenant_id=tenant_id,
         ).model_dump(mode="json")
     )
+    _persist_workflow_state()
 
     logger.info(
         "workflow_executed",
@@ -648,7 +678,7 @@ async def _allocate_run_id(run_id: str | None, *, ws_manager: Any | None = None)
 
 async def _run_id_exists(run_id: str, *, ws_manager: Any | None = None) -> bool:
     """Return ``True`` when *run_id* is already present in tracked workflow state."""
-    for entry in _execution_history:
+    for entry in get_execution_history():
         if normalize_execution_record(entry).run_id == run_id:
             return True
     return ws_manager is not None and await ws_manager.has_run(run_id)
@@ -674,7 +704,7 @@ async def _scheduled_execution_callback(
 ) -> None:
     """Callback invoked when a scheduled job triggers."""
     logger.info("scheduled_workflow_triggered", workflow_name=workflow_name, job_id=job_id)
-    workflow = _registry.get(workflow_name)
+    workflow = get_workflow_registry().get(workflow_name)
     if workflow is None:
         logger.error("scheduled_workflow_not_found", workflow_name=workflow_name, job_id=job_id)
         return

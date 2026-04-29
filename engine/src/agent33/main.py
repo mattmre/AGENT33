@@ -202,19 +202,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.observability.trace_collector import TraceCollector
     from agent33.release.service import ReleaseService
     from agent33.review.service import ReviewService
+    from agent33.workflows.state import WorkflowStateService
 
     autonomy_service = AutonomyService(state_store=orchestration_state_store)
     release_service = ReleaseService(state_store=orchestration_state_store)
     review_service = ReviewService(state_store=orchestration_state_store)
     trace_collector = TraceCollector(state_store=orchestration_state_store)
+    workflow_state_service = WorkflowStateService(
+        state_store=orchestration_state_store,
+        max_execution_history=1000,
+        registry=workflows.get_workflow_registry(),
+        execution_history=workflows.get_execution_history(),
+    )
     app.state.autonomy_service = autonomy_service
     app.state.release_service = release_service
     app.state.review_service = review_service
     app.state.trace_collector = trace_collector
+    app.state.workflow_state_service = workflow_state_service
     autonomy.set_autonomy_service(autonomy_service)
     releases.set_release_service(release_service)
     reviews.set_review_service(review_service)
     traces.set_trace_collector(trace_collector)
+    workflows.set_workflow_state_service(workflow_state_service)
 
     # -- Redis -------------------------------------------------------------
     from agent33.lifespan.fallbacks import InProcessCache, InProcessMessageBus

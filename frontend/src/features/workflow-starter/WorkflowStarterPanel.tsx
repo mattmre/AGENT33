@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResult } from "../../types";
 import type { OnboardingStatus } from "../onboarding/types";
+import { openOperationsRecoveryPanel } from "../operations-hub/recoveryNavigation";
 import {
   asSkillDiscoveryResponse,
   asWorkflowCreateResponse,
@@ -331,7 +332,7 @@ function getResumeSummary(
     return "A resumable session exists, but the latest record could not be summarized.";
   }
   const purpose = candidate.purpose.trim() || candidate.session_id;
-  return `${purpose} is ${candidate.status} and can be resumed from Operations.`;
+  return `${purpose} is ${candidate.status} and can be resumed from the Session recovery panel in Operations.`;
 }
 
 function buildLaunchReadinessCards(params: {
@@ -341,6 +342,7 @@ function buildLaunchReadinessCards(params: {
   incompleteSessions: WorkflowStarterSessionSummary[] | null;
   onOpenSetup: () => void;
   onOpenOperations: () => void;
+  onOpenRecovery: () => void;
 }): LaunchReadinessCard[] {
   const {
     readinessLoaded,
@@ -348,7 +350,8 @@ function buildLaunchReadinessCards(params: {
     modelHealth,
     incompleteSessions,
     onOpenSetup,
-    onOpenOperations
+    onOpenOperations,
+    onOpenRecovery
   } = params;
   const resumeCandidate = selectResumeCandidate(incompleteSessions);
   const providerReady = findOnboardingStepCompleted(onboardingStatus, "OB-02");
@@ -444,9 +447,9 @@ function buildLaunchReadinessCards(params: {
         ? "Session recovery status could not be loaded from the engine."
         : incompleteSessions.length === 0
           ? "No suspended or crashed session is waiting for recovery."
-          : `${resumeCandidate?.purpose.trim() || resumeCandidate?.session_id || "A prior session"} is ${resumeCandidate?.status || "recoverable"} and was last updated ${resumeCandidate ? formatSessionTimestamp(resumeCandidate.updated_at) : "recently"}.`,
-    actionLabel: incompleteSessions !== null && incompleteSessions.length > 0 ? "Resume from operations" : "Review operations",
-    onAction: onOpenOperations
+          : `${resumeCandidate?.purpose.trim() || resumeCandidate?.session_id || "A prior session"} is ${resumeCandidate?.status || "recoverable"} and was last updated ${resumeCandidate ? formatSessionTimestamp(resumeCandidate.updated_at) : "recently"}. Open the recovery panel before starting a new run.`,
+    actionLabel: incompleteSessions !== null && incompleteSessions.length > 0 ? "Open recovery panel" : "Review operations",
+    onAction: incompleteSessions !== null && incompleteSessions.length > 0 ? onOpenRecovery : onOpenOperations
   };
 
   return [onboardingCard, modelCard, hostExecutionCard, resumeCard];
@@ -485,6 +488,10 @@ export function WorkflowStarterPanel({
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const canBuild = useMemo(() => form.goal.trim() !== "", [form.goal]);
+  const resumeCandidate = useMemo(
+    () => selectResumeCandidate(incompleteSessions),
+    [incompleteSessions]
+  );
 
   useEffect(() => {
     if (initialDraft === null) {
@@ -656,13 +663,18 @@ export function WorkflowStarterPanel({
     }
   }
 
+  function handleOpenRecovery(): void {
+    openOperationsRecoveryPanel(onOpenOperations);
+  }
+
   const launchReadinessCards = buildLaunchReadinessCards({
     readinessLoaded,
     onboardingStatus,
     modelHealth,
     incompleteSessions,
     onOpenSetup,
-    onOpenOperations
+    onOpenOperations,
+    onOpenRecovery: handleOpenRecovery
   });
   const recommendedRuntime = getRecommendedRuntimeLabel(
     onboardingStatus,
@@ -828,7 +840,9 @@ export function WorkflowStarterPanel({
                 </ol>
                 <div className="workflow-starter-actions">
                   <button type="button" onClick={onOpenSpawner}>Open visual spawner</button>
-                  <button type="button" onClick={onOpenOperations}>Open operations hub</button>
+                  <button type="button" onClick={resumeCandidate !== null ? handleOpenRecovery : onOpenOperations}>
+                    {resumeCandidate !== null ? "Open recovery panel" : "Open operations hub"}
+                  </button>
                 </div>
               </>
             )}

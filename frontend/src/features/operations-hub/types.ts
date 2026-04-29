@@ -24,6 +24,29 @@ export interface OperationsHubProcessDetail extends OperationsHubProcessSummary 
 }
 
 export type OperationsHubControlAction = "pause" | "resume" | "cancel";
+export type OperationsHubSessionAction = "resume" | "checkpoint";
+
+export interface RecoverySessionSummary {
+  session_id: string;
+  purpose: string;
+  status: string;
+  started_at: string;
+  updated_at: string;
+  ended_at: string | null;
+  task_count: number;
+  tasks_completed: number;
+  event_count: number;
+  parent_session_id: string | null;
+  tenant_id: string;
+}
+
+export interface RecoveryReplaySummary {
+  total_events: number;
+  by_type: Record<string, number>;
+  duration_seconds: number;
+  first_event_at: string;
+  last_event_at: string;
+}
 
 export type OperationsTimelineTone = "active" | "attention" | "done" | "neutral";
 

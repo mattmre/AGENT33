@@ -371,8 +371,7 @@ def clear_workflow_state() -> Any:
     from agent33.api.routes import workflows
 
     def _reset() -> None:
-        workflows._registry.clear()
-        workflows._execution_history.clear()
+        workflows.reset_workflow_state()
         if workflows._scheduler is not None:
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
