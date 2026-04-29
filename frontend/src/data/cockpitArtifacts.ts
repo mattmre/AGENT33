@@ -85,7 +85,7 @@ function getFirstTaskOwnedByRole(board: WorkspaceBoard, role: WorkspaceAgentRole
 }
 
 function createPlanArtifact(snapshot: CockpitArtifactSnapshot): CockpitArtifact {
-  const task = getFirstTaskByStatus(snapshot.board, "todo") ?? snapshot.board.tasks[0];
+  const task = getFirstTaskByStatus(snapshot.board, "todo");
 
   if (!task) {
     return createArtifact(snapshot, "plan", {

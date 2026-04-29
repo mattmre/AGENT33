@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { ARTIFACT_DRAWER_SECTION_IDS } from "./artifactDrawerSections";
 import {
   COCKPIT_ARTIFACT_KINDS,
+  buildCockpitArtifacts,
   getCockpitArtifactsByKind,
   getCockpitArtifactsForWorkspace
 } from "./cockpitArtifacts";
-import { WORKSPACE_SESSIONS } from "./workspaces";
+import { WORKSPACE_SESSIONS, getWorkspaceSession } from "./workspaces";
 
 describe("cockpit artifact view models", () => {
   it("creates one artifact for every drawer-backed artifact kind", () => {
@@ -47,6 +48,34 @@ describe("cockpit artifact view models", () => {
       status: "not-available",
       reviewState: "not-started",
       title: "No PR or artifact package linked"
+    });
+  });
+
+  it("does not turn a non-planning task into a running plan artifact", () => {
+    const workspace = getWorkspaceSession("solo-builder");
+    const [artifact] = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "completed-build",
+            title: "Completed build",
+            outcome: "A finished task should not be treated as an active plan.",
+            status: "complete",
+            ownerRole: "Builder"
+          }
+        ]
+      }
+    });
+
+    expect(artifact).toMatchObject({
+      kind: "plan",
+      evidenceState: "empty",
+      status: "not-available",
+      reviewState: "not-started",
+      relatedTaskIds: []
     });
   });
 
