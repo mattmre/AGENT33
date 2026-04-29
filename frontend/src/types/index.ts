@@ -34,6 +34,7 @@ export interface SchemaParameter {
 
 export interface SchemaInfo {
   parameters?: SchemaParameter[];
+  headers?: SchemaParameter[];
   body?: {
     description: string;
     example: string;
@@ -50,6 +51,7 @@ export interface OperationConfig {
   schemaInfo?: SchemaInfo;
   defaultPathParams?: Record<string, string>;
   defaultQuery?: Record<string, string>;
+  defaultHeaders?: Record<string, string>;
   defaultBody?: string;
   uxHint?: OperationUxHint;
   presetBinding?: OperationPresetBinding;

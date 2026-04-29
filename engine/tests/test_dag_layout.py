@@ -399,22 +399,33 @@ def writer_client() -> TestClient:
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
-def _register_workflow(client: TestClient, steps: list[dict[str, Any]]) -> None:
+def _register_workflow(client: TestClient, steps: list[dict[str, Any]], route_approval_headers) -> None:
     """Register a test workflow via the API."""
+    payload = {
+        "name": "test-dag",
+        "version": "1.0.0",
+        "steps": steps,
+    }
     resp = client.post(
         "/v1/workflows/",
-        json={
-            "name": "test-dag",
-            "version": "1.0.0",
-            "steps": steps,
-        },
+        json=payload,
+        headers=route_approval_headers(
+            client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest DAG workflow setup",
+        ),
     )
     assert resp.status_code == 201, resp.text
 
 
 class TestWorkflowDagEndpoint:
     def test_get_dag_for_registered_workflow(
-        self, writer_client: TestClient, reader_client: TestClient
+        self,
+        writer_client: TestClient,
+        reader_client: TestClient,
+        route_approval_headers,
     ) -> None:
         _register_workflow(
             writer_client,
@@ -427,6 +438,7 @@ class TestWorkflowDagEndpoint:
                     "depends_on": ["step-a"],
                 },
             ],
+            route_approval_headers,
         )
 
         resp = reader_client.get("/v1/workflows/test-dag/dag")
@@ -469,7 +481,10 @@ class TestRunDagEndpoint:
         assert resp.status_code == 404
 
     def test_get_run_dag_with_execution_history(
-        self, writer_client: TestClient, reader_client: TestClient
+        self,
+        writer_client: TestClient,
+        reader_client: TestClient,
+        route_approval_headers,
     ) -> None:
         """Register a workflow, execute it, then fetch the DAG with run state."""
         _register_workflow(
@@ -477,6 +492,7 @@ class TestRunDagEndpoint:
             [
                 {"id": "step-a", "action": "run-command", "command": "echo hello"},
             ],
+            route_approval_headers,
         )
 
         # Execute the workflow to create a history entry

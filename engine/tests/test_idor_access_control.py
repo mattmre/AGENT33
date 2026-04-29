@@ -128,6 +128,41 @@ class TestAgentScopes:
         assert resp.status_code == 403
         assert "agents:write" in resp.json()["detail"]
 
+    def test_admin_register_agent_requires_approval_token(
+        self,
+        admin_client: TestClient,
+        sample_agent_def,
+    ) -> None:
+        payload = dict(sample_agent_def)
+        payload["name"] = "approved-agent"
+        resp = admin_client.post("/v1/agents/", json=payload)
+        assert resp.status_code == 428
+        detail = resp.json()["detail"]
+        assert detail["approval_id"].startswith("APR-")
+        assert detail["approval_header"] == APPROVAL_TOKEN_HEADER
+
+    def test_admin_can_register_agent_with_approval(
+        self,
+        admin_client: TestClient,
+        sample_agent_def,
+        route_approval_headers,
+    ) -> None:
+        payload = dict(sample_agent_def)
+        payload["name"] = "approved-agent"
+        resp = admin_client.post(
+            "/v1/agents/",
+            json=payload,
+            headers=route_approval_headers(
+                admin_client,
+                route_name="agents.create",
+                operation="create",
+                arguments=payload,
+                details="Pytest admin agent registration",
+            ),
+        )
+        assert resp.status_code == 201
+        assert resp.json()["name"] == "approved-agent"
+
 
 # --- Workflow endpoint scope tests ---
 
@@ -165,6 +200,46 @@ class TestWorkflowScopes:
         )
         assert resp.status_code == 403
         assert "workflows:write" in resp.json()["detail"]
+
+    def test_admin_create_workflow_requires_approval_token(self, admin_client: TestClient) -> None:
+        payload = {
+            "name": "approved-workflow",
+            "version": "1.0.0",
+            "description": "approval required",
+            "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
+            "execution": {"mode": "sequential"},
+        }
+        resp = admin_client.post("/v1/workflows/", json=payload)
+        assert resp.status_code == 428
+        detail = resp.json()["detail"]
+        assert detail["approval_id"].startswith("APR-")
+        assert detail["approval_header"] == APPROVAL_TOKEN_HEADER
+
+    def test_admin_can_create_workflow_with_approval(
+        self,
+        admin_client: TestClient,
+        route_approval_headers,
+    ) -> None:
+        payload = {
+            "name": "approved-workflow",
+            "version": "1.0.0",
+            "description": "approval required",
+            "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
+            "execution": {"mode": "sequential"},
+        }
+        resp = admin_client.post(
+            "/v1/workflows/",
+            json=payload,
+            headers=route_approval_headers(
+                admin_client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=payload,
+                details="Pytest admin workflow registration",
+            ),
+        )
+        assert resp.status_code == 201
+        assert resp.json()["name"] == "approved-workflow"
 
 
 # --- Memory endpoint scope tests ---

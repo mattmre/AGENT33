@@ -24,7 +24,12 @@ def _admin_token() -> str:
 class TestWorkflowLifecycleE2E:
     """Workflow create -> execute -> history -> DAG visualization."""
 
-    def test_create_and_execute_sequential_workflow(self, e2e_client, sample_workflow_def):
+    def test_create_and_execute_sequential_workflow(
+        self,
+        e2e_client,
+        sample_workflow_def,
+        route_approval_headers,
+    ):
         """Register a two-step sequential workflow and execute it.
 
         Verifies that:
@@ -36,9 +41,17 @@ class TestWorkflowLifecycleE2E:
         _, client, _ = e2e_client
         token = _admin_token()
         headers = {"Authorization": f"Bearer {token}"}
+        create_headers = route_approval_headers(
+            client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=sample_workflow_def,
+            details="Pytest E2E workflow setup",
+            authorization=headers["Authorization"],
+        )
 
         # Create workflow
-        resp = client.post("/v1/workflows/", json=sample_workflow_def, headers=headers)
+        resp = client.post("/v1/workflows/", json=sample_workflow_def, headers=create_headers)
         assert resp.status_code == 201
         body = resp.json()
         assert body["name"] == "e2e-test-workflow"
@@ -91,7 +104,12 @@ class TestWorkflowLifecycleE2E:
         assert resp.status_code == 404
         assert "no-such-workflow" in resp.json()["detail"]
 
-    def test_duplicate_workflow_creation_returns_409(self, e2e_client, sample_workflow_def):
+    def test_duplicate_workflow_creation_returns_409(
+        self,
+        e2e_client,
+        sample_workflow_def,
+        route_approval_headers,
+    ):
         """Creating the same workflow twice returns 409 conflict.
 
         Verifies that the in-memory registry enforces uniqueness at the
@@ -106,15 +124,42 @@ class TestWorkflowLifecycleE2E:
         wf_def["name"] = "e2e-dup-workflow"
 
         # First creation
-        resp = client.post("/v1/workflows/", json=wf_def, headers=headers)
+        resp = client.post(
+            "/v1/workflows/",
+            json=wf_def,
+            headers=route_approval_headers(
+                client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=wf_def,
+                details="Pytest E2E workflow setup",
+                authorization=headers["Authorization"],
+            ),
+        )
         assert resp.status_code == 201
 
         # Second creation -- same name
-        resp = client.post("/v1/workflows/", json=wf_def, headers=headers)
+        resp = client.post(
+            "/v1/workflows/",
+            json=wf_def,
+            headers=route_approval_headers(
+                client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=wf_def,
+                details="Pytest E2E workflow duplicate setup",
+                authorization=headers["Authorization"],
+            ),
+        )
         assert resp.status_code == 409
         assert "already exists" in resp.json()["detail"]
 
-    def test_workflow_with_caller_supplied_run_id(self, e2e_client, sample_workflow_def):
+    def test_workflow_with_caller_supplied_run_id(
+        self,
+        e2e_client,
+        sample_workflow_def,
+        route_approval_headers,
+    ):
         """Execute with a caller-supplied run_id and verify it appears in history.
 
         This verifies that the run_id passthrough works end-to-end, which
@@ -127,7 +172,18 @@ class TestWorkflowLifecycleE2E:
         wf_def = dict(sample_workflow_def)
         wf_def["name"] = "e2e-runid-workflow"
 
-        resp = client.post("/v1/workflows/", json=wf_def, headers=headers)
+        resp = client.post(
+            "/v1/workflows/",
+            json=wf_def,
+            headers=route_approval_headers(
+                client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=wf_def,
+                details="Pytest E2E workflow setup",
+                authorization=headers["Authorization"],
+            ),
+        )
         assert resp.status_code == 201
 
         custom_run_id = "e2e-custom-run-12345"
@@ -154,7 +210,12 @@ class TestWorkflowLifecycleE2E:
 class TestWorkflowDAGVisualization:
     """DAG layout endpoint returns positioned nodes for frontend rendering."""
 
-    def test_workflow_dag_returns_positioned_layout(self, e2e_client, sample_workflow_def):
+    def test_workflow_dag_returns_positioned_layout(
+        self,
+        e2e_client,
+        sample_workflow_def,
+        route_approval_headers,
+    ):
         """GET /v1/workflows/{name}/dag returns a layout with nodes and edges.
 
         Verifies the DAG layout computation produces valid output with
@@ -167,7 +228,18 @@ class TestWorkflowDAGVisualization:
         wf_def = dict(sample_workflow_def)
         wf_def["name"] = "e2e-dag-workflow"
 
-        resp = client.post("/v1/workflows/", json=wf_def, headers=headers)
+        resp = client.post(
+            "/v1/workflows/",
+            json=wf_def,
+            headers=route_approval_headers(
+                client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=wf_def,
+                details="Pytest E2E workflow setup",
+                authorization=headers["Authorization"],
+            ),
+        )
         assert resp.status_code == 201
 
         resp = client.get("/v1/workflows/e2e-dag-workflow/dag", headers=headers)

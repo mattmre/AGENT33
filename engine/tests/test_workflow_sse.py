@@ -54,22 +54,30 @@ def _install_manager(manager: WorkflowWSManager) -> None:
     workflows.set_ws_manager(manager)
 
 
-def _seed_workflow(client: TestClient, workflow_name: str) -> None:
+def _seed_workflow(client: TestClient, workflow_name: str, route_approval_headers) -> None:
+    payload = {
+        "name": workflow_name,
+        "version": "1.0.0",
+        "description": "Workflow SSE test",
+        "steps": [
+            {
+                "id": "step-a",
+                "action": "transform",
+                "transform": "inputs",
+            }
+        ],
+        "execution": {"mode": "sequential"},
+    }
     response = client.post(
         "/v1/workflows/",
-        json={
-            "name": workflow_name,
-            "version": "1.0.0",
-            "description": "Workflow SSE test",
-            "steps": [
-                {
-                    "id": "step-a",
-                    "action": "transform",
-                    "transform": "inputs",
-                }
-            ],
-            "execution": {"mode": "sequential"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest workflow SSE setup",
+        ),
     )
     assert response.status_code == 201
 
@@ -382,14 +390,17 @@ class TestWorkflowSSEEndpoint:
 
 
 class TestWorkflowGraphLiveOverlay:
-    def test_graph_route_prefers_live_snapshot_for_requested_run(self) -> None:
+    def test_graph_route_prefers_live_snapshot_for_requested_run(
+        self,
+        route_approval_headers,
+    ) -> None:
         token = create_access_token(
             "workflow-visualizer",
             scopes=["workflows:read", "workflows:write"],
         )
         client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
         workflow_name = "viz-live"
-        _seed_workflow(client, workflow_name)
+        _seed_workflow(client, workflow_name, route_approval_headers)
 
         manager = WorkflowWSManager()
         asyncio.run(
@@ -437,7 +448,10 @@ class TestWorkflowGraphLiveOverlay:
         assert graph["nodes"][0]["id"] == "step-a"
         assert graph["nodes"][0]["status"] == "running"
 
-    def test_graph_route_rejects_live_overlay_for_other_subjects(self) -> None:
+    def test_graph_route_rejects_live_overlay_for_other_subjects(
+        self,
+        route_approval_headers,
+    ) -> None:
         owner_token = create_access_token(
             "workflow-owner",
             scopes=["workflows:read", "workflows:write"],
@@ -454,7 +468,7 @@ class TestWorkflowGraphLiveOverlay:
             headers={"Authorization": f"Bearer {requester_token}"},
         )
         workflow_name = "viz-owned"
-        _seed_workflow(owner_client, workflow_name)
+        _seed_workflow(owner_client, workflow_name, route_approval_headers)
 
         manager = WorkflowWSManager()
         asyncio.run(
@@ -474,14 +488,17 @@ class TestWorkflowGraphLiveOverlay:
 
         assert response.status_code == 404
 
-    def test_graph_route_falls_back_to_history_when_live_run_is_missing(self) -> None:
+    def test_graph_route_falls_back_to_history_when_live_run_is_missing(
+        self,
+        route_approval_headers,
+    ) -> None:
         token = create_access_token(
             "workflow-visualizer",
             scopes=["workflows:read", "workflows:write"],
         )
         client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
         workflow_name = "viz-history"
-        _seed_workflow(client, workflow_name)
+        _seed_workflow(client, workflow_name, route_approval_headers)
 
         from agent33.api.routes import workflows
 

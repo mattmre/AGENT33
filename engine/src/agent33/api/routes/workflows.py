@@ -11,9 +11,11 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from agent33.api.route_approvals import require_route_mutation_approval
 from agent33.automation.scheduler import WorkflowScheduler
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import check_permission, require_scope
+from agent33.tools.approvals import ApprovalRiskTier
 from agent33.workflows.dag_layout import compute_dag_layout
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
@@ -274,10 +276,18 @@ async def get_workflow_dag(name: str) -> dict[str, Any]:
 
 
 @router.post("/", status_code=201, dependencies=[require_scope("workflows:write")])
-async def create_workflow(request: WorkflowCreateRequest) -> dict[str, Any]:
+async def create_workflow(body: WorkflowCreateRequest, request: Request) -> dict[str, Any]:
     """Register a new workflow definition."""
+    require_route_mutation_approval(
+        request,
+        route_name="workflows.create",
+        operation="create",
+        arguments=body.model_dump(mode="json"),
+        details="Workflow registration requires explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     try:
-        definition = WorkflowDefinition.model_validate(request.model_dump())
+        definition = WorkflowDefinition.model_validate(body.model_dump())
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
