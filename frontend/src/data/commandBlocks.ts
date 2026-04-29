@@ -45,6 +45,10 @@ export interface CommandBlockInput {
   readonly nextActionLabel?: string;
 }
 
+type CommandBackedTask = WorkspaceTaskCard & {
+  readonly status: "running" | "blocked";
+};
+
 function assertWorkspaceId(workspaceId: string): asserts workspaceId is WorkspaceSessionId {
   if (!isWorkspaceSessionId(workspaceId)) {
     throw new Error(
@@ -128,10 +132,14 @@ export function createCockpitCommandBlock(input: CommandBlockInput): CockpitComm
   };
 }
 
+function isCommandBackedTask(task: WorkspaceTaskCard): task is CommandBackedTask {
+  return task.status === "running" || task.status === "blocked";
+}
+
 function createTemplateCommandBlock(
   workspaceId: WorkspaceSessionId,
   relatedArtifactId: string,
-  task: WorkspaceTaskCard
+  task: CommandBackedTask
 ): CockpitCommandBlock {
   return createCockpitCommandBlock({
     id: `${workspaceId}-command-${task.id}`,
@@ -140,7 +148,7 @@ function createTemplateCommandBlock(
     sourceRole: task.ownerRole,
     status: task.status === "blocked" ? "blocked" : "running",
     timestampLabel: "Workspace template",
-    redactionState: "review-required",
+    redactionState: task.status === "blocked" ? "review-required" : "not-required",
     outputSummary: `${task.outcome} Command output has not been captured yet.`,
     relatedArtifactId,
     relatedTaskId: task.id
@@ -152,7 +160,7 @@ export function getCommandBlocksForWorkspace(workspaceId: string): ReadonlyArray
 
   const board = getWorkspaceBoard(workspaceId);
   const commandArtifact = getCockpitArtifactsByKind(workspaceId).command;
-  const activeTasks = board.tasks.filter((task) => task.status === "running" || task.status === "blocked");
+  const activeTasks = board.tasks.filter(isCommandBackedTask);
 
   if (activeTasks.length === 0) {
     return [
@@ -171,4 +179,18 @@ export function getCommandBlocksForWorkspace(workspaceId: string): ReadonlyArray
   }
 
   return activeTasks.map((task) => createTemplateCommandBlock(workspaceId, commandArtifact.id, task));
+}
+
+export function getCommandBlocksByArtifactId(
+  blocks: ReadonlyArray<CockpitCommandBlock>,
+  relatedArtifactId: string
+): ReadonlyArray<CockpitCommandBlock> {
+  return blocks.filter((block) => block.relatedArtifactId === relatedArtifactId);
+}
+
+export function getCommandBlocksByTaskId(
+  blocks: ReadonlyArray<CockpitCommandBlock>,
+  relatedTaskId: string
+): ReadonlyArray<CockpitCommandBlock> {
+  return blocks.filter((block) => block.relatedTaskId === relatedTaskId);
 }

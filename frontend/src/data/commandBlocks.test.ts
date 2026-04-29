@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { createCockpitCommandBlock, formatCommandDuration, getCommandBlocksForWorkspace } from "./commandBlocks";
+import {
+  createCockpitCommandBlock,
+  formatCommandDuration,
+  getCommandBlocksByArtifactId,
+  getCommandBlocksByTaskId,
+  getCommandBlocksForWorkspace
+} from "./commandBlocks";
 
 describe("cockpit command blocks", () => {
   it("formats command durations without inventing missing timing", () => {
@@ -63,7 +69,7 @@ describe("cockpit command blocks", () => {
     expect(blocks.every((block) => block.relatedArtifactId === "shipyard-command")).toBe(true);
     expect(blocks.map((block) => block.sourceRole)).toEqual(["Scout", "Builder"]);
     expect(blocks.every((block) => block.status === "running")).toBe(true);
-    expect(blocks.every((block) => block.redactionState === "review-required")).toBe(true);
+    expect(blocks.every((block) => block.redactionState === "not-required")).toBe(true);
   });
 
   it("maps blocked tasks into blocked command review records", () => {
@@ -71,8 +77,22 @@ describe("cockpit command blocks", () => {
 
     expect(blocks.find((block) => block.relatedTaskId === "quality-merge")).toMatchObject({
       status: "blocked",
+      redactionState: "review-required",
       nextActionLabel: "Resolve the blocker before rerunning"
     });
+  });
+
+  it("filters command blocks by linked artifact and task ids", () => {
+    const blocks = getCommandBlocksForWorkspace("shipyard");
+
+    expect(getCommandBlocksByArtifactId(blocks, "shipyard-command")).toHaveLength(2);
+    expect(getCommandBlocksByTaskId(blocks, "shipyard-build")).toMatchObject([
+      {
+        id: "shipyard-command-shipyard-build",
+        relatedArtifactId: "shipyard-command"
+      }
+    ]);
+    expect(getCommandBlocksByTaskId(blocks, "shipyard-review")).toHaveLength(0);
   });
 
   it("returns an explicit not-run block when no task has execution evidence", () => {
