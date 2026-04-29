@@ -1186,6 +1186,24 @@ button:disabled {
   line-height: 1.35;
 }
 
+.workspace-session-starter {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid rgba(48, 213, 200, 0.18);
+  border-radius: 12px;
+  background: rgba(48, 213, 200, 0.08);
+  padding: 0.6rem;
+}
+
+.workspace-session-starter span,
+.workspace-template-starter-card span {
+  color: #6fa8b8;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .workspace-session-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1287,6 +1305,62 @@ button:disabled {
 .workspace-board-actions button:hover {
   background: rgba(48, 213, 200, 0.18);
   color: #fff;
+}
+
+.workspace-template-starters {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid rgba(48, 213, 200, 0.16);
+  border-radius: 16px;
+  background: rgba(48, 213, 200, 0.06);
+  padding: 0.8rem;
+}
+
+.workspace-template-starters-header,
+.workspace-template-starter-card {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.workspace-template-starters-header h3,
+.workspace-template-starters-header p,
+.workspace-template-starter-card p {
+  margin: 0;
+}
+
+.workspace-template-starters-header h3,
+.workspace-template-starter-card strong {
+  color: #f7ead1;
+}
+
+.workspace-template-starters-header p,
+.workspace-template-starter-card p,
+.workspace-template-starter-card small {
+  color: #b7dbe5;
+}
+
+.workspace-template-starter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.65rem;
+}
+
+.workspace-template-starter-card {
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 14px;
+  background: rgba(4, 12, 18, 0.58);
+  padding: 0.7rem;
+}
+
+.workspace-template-starter-card button {
+  justify-self: start;
+  border: 1px solid rgba(48, 213, 200, 0.3);
+  border-radius: 999px;
+  background: rgba(48, 213, 200, 0.1);
+  color: #dff7ff;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .workspace-board-grid {

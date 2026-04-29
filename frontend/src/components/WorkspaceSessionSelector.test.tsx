@@ -18,6 +18,7 @@ describe("WorkspaceSessionSelector", () => {
     expect(screen.getByRole("region", { name: "Workspace session" })).toBeInTheDocument();
     expect(screen.getByText("Local Shipyard")).toBeInTheDocument();
     expect(screen.getByText("Turn a plain-language idea into a guided build plan.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recommended workspace starter" })).toHaveTextContent("Guided build plan");
     expect(screen.getByRole("combobox", { name: "Active project template" })).toHaveValue("solo-builder");
   });
 
@@ -37,11 +38,16 @@ describe("WorkspaceSessionSelector", () => {
     );
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Active project template" }), "shipyard");
-    await user.click(screen.getByRole("button", { name: "Open workflows" }));
+    await user.click(screen.getByRole("button", { name: "Start Guided build plan" }));
     await user.click(screen.getByRole("button", { name: "View runs" }));
 
     expect(onSelectWorkspace).toHaveBeenCalledWith("shipyard");
-    expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
+    expect(onOpenWorkflows).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "solo-guided-build",
+        sourceLabel: "Workspace template: Guided build plan"
+      })
+    );
     expect(onOpenRuns).toHaveBeenCalledTimes(1);
   });
 });

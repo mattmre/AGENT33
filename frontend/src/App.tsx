@@ -267,7 +267,7 @@ export default function App(): JSX.Element {
             selectedWorkspaceId={selectedWorkspaceId}
             onSelectWorkspace={selectWorkspace}
             onOpenRuns={() => setActiveTab("operations")}
-            onOpenWorkflows={() => setActiveTab("starter")}
+            onOpenWorkflows={openWorkflowStarter}
           />
           <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
         </aside>
@@ -560,14 +560,14 @@ export default function App(): JSX.Element {
               workspace={selectedWorkspace}
               permissionModeId={permissionModeId}
               onOpenSafety={() => setActiveTab("safety")}
-              onOpenWorkflows={() => setActiveTab("starter")}
+              onOpenWorkflows={openWorkflowStarter}
             />
             <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
               <WorkspaceTaskBoard
                 workspace={selectedWorkspace}
                 permissionModeId={permissionModeId}
                 onOpenSafety={() => setActiveTab("safety")}
-                onOpenWorkflows={() => setActiveTab("starter")}
+                onOpenWorkflows={openWorkflowStarter}
               />
             </div>
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
