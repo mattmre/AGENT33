@@ -1,6 +1,6 @@
 # AGENT33 vs TIKNAS — Product Split Analysis
 
-**Status:** Draft / planning. Local only.
+**Status:** Draft / planning.
 **Branch:** `claude/plan-analysis-tool-yAI8I`
 **Date:** 2026-04-29
 **Companion:** `docs/research/opensearch-agent-observability-analysis.md` (rev-2)
@@ -244,13 +244,12 @@ here.
 5. **Run Phase OS-0 (decision spike)** in TIKNAS. Pick Path X / Y / Z.
 6. **AGENT33 continues its current roadmap unchanged.**
 
-## 12. What stays local until the operator approves
+## 12. What stays in draft form until the operator approves
 
 This doc and the rev-2 OpenSearch doc (`opensearch-agent-observability-
-analysis.md`). Neither has been pushed. Neither should be pushed until the
-split is confirmed and the looped agent on the other machine has been
-informed — otherwise we risk the looped agent stepping on the
-restructure.
+analysis.md`). Neither should be published until the split is confirmed
+and the looped agent on the other machine has been informed, otherwise
+we risk the looped agent stepping on the restructure.
 
 ## 13. Sources informing this split
 

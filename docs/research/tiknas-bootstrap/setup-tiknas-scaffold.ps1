@@ -16,7 +16,8 @@
          infrastructure/, docs/research/, docs/phases/).
       4. Copies the founding planning docs from D:\GITHUB\AGENT33\docs\
          research\ if that path exists (otherwise prints a TODO).
-      5. Runs `git init` and creates a single initial commit.
+      5. Runs `git init` when needed and creates a single initial commit
+         for a fresh repository.
 
     What this script deliberately does NOT do:
       - It does NOT push.
@@ -32,7 +33,9 @@
     docs. Default: D:\GITHUB\AGENT33. Pass -SkipDocCopy to skip.
 
 .PARAMETER Force
-    Allow scaffolding into an existing non-empty directory.
+    Allow scaffolding into an existing non-empty directory without
+    overwriting existing scaffold files. Imported planning docs may be
+    overwritten during import.
 
 .PARAMETER SkipDocCopy
     Skip copying planning docs from AGENT33.
@@ -48,7 +51,7 @@
     Companion docs:
       - docs/research/agent33-vs-tiknas-product-split.md
       - docs/research/opensearch-agent-observability-analysis.md
-    Both are local-only (unpushed) on the AGENT33 branch above.
+    Both are draft planning docs in the AGENT33 worktree above.
 #>
 
 [CmdletBinding()]
@@ -131,7 +134,8 @@ function Write-IfMissing {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
-    Set-Content -Path $full -Value $Body -Encoding UTF8 -NoNewline
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($full, $Body, $utf8NoBom)
     Write-Created $full
 }
 
@@ -205,12 +209,13 @@ Phase OS-0 is run.
 | Observability | In-memory + file | Langfuse + OpenSearch (Phase OS-0 decision) |
 | License | Open (MIT-leaning) | Source-available + commercial enterprise (TBD Q4) |
 
-## Local-only
+## Publication status
 
-This scaffold was created locally and is not pushed. The decision to
-push (and create the GitHub remote) is gated on operator approval of the
-split — see the AGENT33 branch ``claude/plan-analysis-tool-yAI8I`` for
-the planning conversation that produced this layout.
+This scaffold is intended to stay private until the operator approves
+the split. The decision to publish it and create the GitHub remote is
+gated on operator approval — see the AGENT33 branch
+``claude/plan-analysis-tool-yAI8I`` for the planning conversation that
+produced this layout.
 "@
 Write-IfMissing 'README.md' $readme
 
@@ -520,24 +525,39 @@ Write-Section "Git initialization"
 
 Push-Location $Root
 try {
-    if (Test-Path '.git') {
-        Write-Host "    git repo already initialized; skipping git init." -ForegroundColor DarkGray
-    } else {
-        git init --initial-branch=main 2>&1 | Out-Host
+    $isGitRepo = $false
+    try {
+        $null = git rev-parse --is-inside-work-tree 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $isGitRepo = $true
+        }
+    } catch {
+        $isGitRepo = $false
     }
 
-    $status = git status --porcelain 2>&1
-    if (-not $status) {
-        Write-Host "    Working tree already clean; nothing to commit." -ForegroundColor DarkGray
+    if ($isGitRepo) {
+        Write-Host "    git repository already exists here; skipping git init and auto-commit." -ForegroundColor DarkGray
     } else {
-        git add . 2>&1 | Out-Host
-        $commitMsg = "chore: initial TIKNAS scaffolding (v0, local-only)`n`n" +
-                     "Internal codename TIKNAS for the enterprise agent orchestration`n" +
-                     "platform that will launch publicly as AGENTS33 on agents33.com.`n`n" +
-                     "Scaffolded by docs/research/tiknas-bootstrap/setup-tiknas-scaffold.ps1`n" +
-                     "from AGENT33 branch claude/plan-analysis-tool-yAI8I.`n`n" +
-                     "Status: scaffolding only. No code, no remote, no push."
-        git commit -m $commitMsg 2>&1 | Out-Host
+        git init 2>&1 | Out-Host
+        git checkout -b main 2>&1 | Out-Host
+    }
+
+    if ($isGitRepo) {
+        Write-Host "    Existing repository detected; leaving commit history unchanged." -ForegroundColor DarkGray
+    } else {
+        $status = git status --porcelain 2>&1
+        if (-not $status) {
+            Write-Host "    Working tree already clean; nothing to commit." -ForegroundColor DarkGray
+        } else {
+            git add . 2>&1 | Out-Host
+            $commitMsg = "chore: initial TIKNAS scaffolding (v0)`n`n" +
+                         "Internal codename TIKNAS for the enterprise agent orchestration`n" +
+                         "platform that will launch publicly as AGENTS33 on agents33.com.`n`n" +
+                         "Scaffolded by docs/research/tiknas-bootstrap/setup-tiknas-scaffold.ps1`n" +
+                         "from AGENT33 branch claude/plan-analysis-tool-yAI8I.`n`n" +
+                         "Status: scaffolding only. No code, no remote, no push."
+            git commit -m $commitMsg 2>&1 | Out-Host
+        }
     }
 } finally {
     Pop-Location
@@ -557,5 +577,5 @@ Write-Host "    3. Run Phase OS-0 decision spike (stand up Langfuse +"
 Write-Host "       OpenSearch + Dify locally, score the matrices)."
 Write-Host "    4. Decide whether to create a GitHub remote."
 Write-Host ""
-Write-Host "  Nothing has been pushed. Nothing has touched AGENT33." -ForegroundColor DarkGray
+Write-Host "  Nothing has been published. Nothing has touched AGENT33." -ForegroundColor DarkGray
 Write-Host ""

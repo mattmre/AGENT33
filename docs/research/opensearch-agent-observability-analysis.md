@@ -1,6 +1,6 @@
 # OpenSearch 3.6 + Agentic Platform Backbone — Integration Analysis
 
-**Status:** Draft / planning. Local only.
+**Status:** Draft / planning.
 **Branch:** `claude/plan-analysis-tool-yAI8I`
 **Date:** 2026-04-29
 **Revision:** rev-2 (broadened scope — strategic backbone, not just observability)
@@ -408,9 +408,9 @@ Codex CLI / Copilot CLI sessions feed in only if we ship the optional shim
 
 ## 9. Phased plan
 
-Each phase is sized to be a single PR or a tight pair of PRs. None of this
-gets pushed yet. Rev-2 adds Phase OS-0 — the landscape spike has to land
-before any code change.
+Each phase is sized to be a single PR or a tight pair of PRs. Nothing in
+this plan should be published yet. Rev-2 adds Phase OS-0 — the landscape
+spike has to land before any code change.
 
 ### Phase OS-0 — Decision spike (no production code)
 
@@ -547,8 +547,8 @@ Tier C with mandatory matrices.
 
 ## 12. Open questions for the operator
 
-These should be answered during Phase OS-0. Local notes for now —
-nothing pushed.
+These should be answered during Phase OS-0. Draft notes for now — not
+ready for publication.
 
 **Strategic (block Phase OS-1):**
 1. **Path X / Y / Z (§7):** OpenSearch only, Langfuse + Dify only, or

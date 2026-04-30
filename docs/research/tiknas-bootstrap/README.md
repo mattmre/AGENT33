@@ -14,9 +14,10 @@ that becomes TIKNAS's founding plan is in
 note).
 
 This bootstrap creates the v0 directory structure, the minimal
-scaffolding files, and an initial git commit. It does **not** push,
-**not** create a GitHub remote, **not** install anything, and **not**
-touch your existing AGENT33 worktree.
+scaffolding files, and a first git commit when the target is a fresh
+repository. It does **not** create a GitHub remote, does **not**
+install anything, and does **not** touch your existing AGENT33
+worktree.
 
 ## Run on Windows
 
@@ -57,8 +58,8 @@ To re-run safely on top of an existing scaffold:
 4. Copies the two founding planning docs from
    `D:\GITHUB\AGENT33\docs\research\` (or `-Agent33Source`) if found.
    Otherwise prints a TODO.
-5. `git init --initial-branch=main`, stages everything, makes one
-   initial local-only commit.
+5. `git init`, switches to `main`, stages everything, and makes one
+   initial commit when the target is a fresh repository.
 
 ## What the script deliberately doesn't do
 
@@ -82,7 +83,7 @@ The script prints these too. Summary:
 
 - The planning doc import depends on you having the
   `claude/plan-analysis-tool-yAI8I` branch fetched in your AGENT33
-  worktree, since that's where the docs currently live (unpushed).
+  worktree, since that's where the draft planning docs currently live.
   If the branch isn't there yet, the script falls back to a manual TODO
   message.
 - The looped agent on the other machine doesn't know about this split
