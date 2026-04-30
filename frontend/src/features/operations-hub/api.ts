@@ -8,7 +8,9 @@ import type {
   OperationsHubProcessAction,
   OperationsHubProcessDetail,
   OperationsHubProcessSummary,
-  OperationsHubResponse
+  OperationsHubResponse,
+  RecoveryReplaySummary,
+  RecoverySessionSummary
 } from "./types";
 
 interface ProcessSummaryCandidate {
@@ -47,6 +49,33 @@ interface IngestionAssetHistoryEntryCandidate {
   reason: string;
   details: unknown;
   occurred_at: string;
+}
+
+interface RecoverySessionSummaryCandidate {
+  session_id: string;
+  purpose: string;
+  status: string;
+  started_at: string;
+  updated_at: string;
+  ended_at: string | null;
+  task_count: number;
+  tasks_completed: number;
+  event_count: number;
+  parent_session_id: string | null;
+  tenant_id: string;
+}
+
+interface RecoveryReplaySummaryCandidate {
+  total_events: number;
+  by_type: Record<string, unknown>;
+  duration_seconds: number;
+  first_event_at: string;
+  last_event_at: string;
+}
+
+interface CheckpointResponseCandidate {
+  status: string;
+  session_id: string;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -92,6 +121,41 @@ function isIngestionAsset(value: unknown): value is IngestionAssetCandidate {
   );
 }
 
+function isRecoverySessionSummary(value: unknown): value is RecoverySessionSummaryCandidate {
+  if (!isObject(value)) {
+    return false;
+  }
+  return (
+    typeof value.session_id === "string" &&
+    typeof value.purpose === "string" &&
+    typeof value.status === "string" &&
+    typeof value.started_at === "string" &&
+    typeof value.updated_at === "string" &&
+    isStringOrNull(value.ended_at) &&
+    typeof value.task_count === "number" &&
+    typeof value.tasks_completed === "number" &&
+    typeof value.event_count === "number" &&
+    isStringOrNull(value.parent_session_id) &&
+    typeof value.tenant_id === "string"
+  );
+}
+
+function isRecoveryReplaySummary(value: unknown): value is RecoveryReplaySummaryCandidate {
+  if (!isObject(value) || !isObject(value.by_type)) {
+    return false;
+  }
+  return (
+    typeof value.total_events === "number" &&
+    typeof value.duration_seconds === "number" &&
+    typeof value.first_event_at === "string" &&
+    typeof value.last_event_at === "string"
+  );
+}
+
+function isCheckpointResponse(value: unknown): value is CheckpointResponseCandidate {
+  return isObject(value) && typeof value.status === "string" && typeof value.session_id === "string";
+}
+
 function toProcessSummary(value: unknown): OperationsHubProcessSummary | null {
   if (!isProcessSummary(value)) {
     return null;
@@ -130,6 +194,46 @@ function toIngestionAsset(value: unknown): IngestionAssetSummary | null {
     revoked_at: value.revoked_at,
     revocation_reason: value.revocation_reason,
     metadata
+  };
+}
+
+function toRecoverySessionSummary(value: unknown): RecoverySessionSummary | null {
+  if (!isRecoverySessionSummary(value)) {
+    return null;
+  }
+  return {
+    session_id: value.session_id,
+    purpose: value.purpose,
+    status: value.status,
+    started_at: value.started_at,
+    updated_at: value.updated_at,
+    ended_at: value.ended_at,
+    task_count: value.task_count,
+    tasks_completed: value.tasks_completed,
+    event_count: value.event_count,
+    parent_session_id: value.parent_session_id,
+    tenant_id: value.tenant_id
+  };
+}
+
+function toRecoveryReplaySummary(value: unknown): RecoveryReplaySummary | null {
+  if (!isRecoveryReplaySummary(value)) {
+    return null;
+  }
+  const byType = Object.entries(value.by_type).every(
+    ([key, count]) => typeof key === "string" && typeof count === "number"
+  )
+    ? (value.by_type as Record<string, number>)
+    : null;
+  if (byType === null) {
+    return null;
+  }
+  return {
+    total_events: value.total_events,
+    by_type: byType,
+    duration_seconds: value.duration_seconds,
+    first_event_at: value.first_event_at,
+    last_event_at: value.last_event_at
   };
 }
 
@@ -259,6 +363,28 @@ export function asIngestionAssetList(data: unknown): IngestionAssetSummary[] | n
   return assets.length === data.length ? assets : null;
 }
 
+export function asRecoverySessionSummary(data: unknown): RecoverySessionSummary | null {
+  return toRecoverySessionSummary(data);
+}
+
+export function asRecoverySessionSummaries(data: unknown): RecoverySessionSummary[] | null {
+  if (!Array.isArray(data)) {
+    return null;
+  }
+  const sessions = data
+    .map((item) => toRecoverySessionSummary(item))
+    .filter((item): item is RecoverySessionSummary => item !== null);
+  return sessions.length === data.length ? sessions : null;
+}
+
+export function asRecoveryReplaySummary(data: unknown): RecoveryReplaySummary | null {
+  return toRecoveryReplaySummary(data);
+}
+
+export function isRecoveryCheckpointResponse(data: unknown): data is CheckpointResponseCandidate {
+  return isCheckpointResponse(data);
+}
+
 export async function fetchOperationsHub(token: string, apiKey: string): Promise<ApiResult> {
   return apiRequest({
     method: "GET",
@@ -302,6 +428,57 @@ export async function fetchReviewQueue(token: string, apiKey: string): Promise<A
   return apiRequest({
     method: "GET",
     path: "/v1/ingestion/review-queue",
+    token,
+    apiKey
+  });
+}
+
+export async function fetchIncompleteSessions(token: string, apiKey: string): Promise<ApiResult> {
+  return apiRequest({
+    method: "GET",
+    path: "/v1/sessions/incomplete",
+    token,
+    apiKey
+  });
+}
+
+export async function fetchReplaySummary(
+  sessionId: string,
+  token: string,
+  apiKey: string
+): Promise<ApiResult> {
+  return apiRequest({
+    method: "GET",
+    path: "/v1/sessions/{session_id}/replay/summary",
+    pathParams: { session_id: sessionId },
+    token,
+    apiKey
+  });
+}
+
+export async function resumeIncompleteSession(
+  sessionId: string,
+  token: string,
+  apiKey: string
+): Promise<ApiResult> {
+  return apiRequest({
+    method: "POST",
+    path: "/v1/sessions/{session_id}/resume",
+    pathParams: { session_id: sessionId },
+    token,
+    apiKey
+  });
+}
+
+export async function checkpointSession(
+  sessionId: string,
+  token: string,
+  apiKey: string
+): Promise<ApiResult> {
+  return apiRequest({
+    method: "POST",
+    path: "/v1/sessions/{session_id}/checkpoint",
+    pathParams: { session_id: sessionId },
     token,
     apiKey
   });

@@ -28,6 +28,15 @@ class ApprovalReason(StrEnum):
 
     TOOL_POLICY_ASK = "tool_policy_ask"
     SUPERVISED_DESTRUCTIVE = "supervised_destructive"
+    ROUTE_MUTATION = "route_mutation"
+
+
+class ApprovalRiskTier(StrEnum):
+    """Risk class used for approval batching and token presets."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 def _new_approval_id() -> str:
@@ -46,6 +55,8 @@ class ToolApprovalRequest(BaseModel):
     requested_by: str = ""
     tenant_id: str = ""
     details: str = ""
+    arguments: dict[str, object] = Field(default_factory=dict)
+    risk_tier: ApprovalRiskTier = ApprovalRiskTier.MEDIUM
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     reviewed_by: str = ""
@@ -77,6 +88,8 @@ class ToolApprovalService:
         requested_by: str = "",
         tenant_id: str = "",
         details: str = "",
+        arguments: dict[str, object] | None = None,
+        risk_tier: ApprovalRiskTier = ApprovalRiskTier.MEDIUM,
     ) -> ToolApprovalRequest:
         """Create and persist a pending approval request."""
         self._expire_pending()
@@ -88,6 +101,8 @@ class ToolApprovalService:
             requested_by=requested_by,
             tenant_id=tenant_id,
             details=details,
+            arguments=dict(arguments or {}),
+            risk_tier=risk_tier,
             expires_at=datetime.now(UTC) + timedelta(minutes=self._default_ttl_minutes),
         )
         self._requests[req.approval_id] = req
@@ -168,6 +183,25 @@ class ToolApprovalService:
             req.review_note = consumed_note
         self._persist_state()
         return True
+
+    def is_approved(
+        self,
+        approval_id: str,
+        *,
+        tool_name: str,
+        operation: str = "",
+        tenant_id: str = "",
+    ) -> bool:
+        """Return True when an approval is currently approved for the request."""
+        self._expire_pending()
+        req = self._requests.get(approval_id)
+        if req is None or req.status != ApprovalStatus.APPROVED:
+            return False
+        if tenant_id and req.tenant_id != tenant_id:
+            return False
+        if req.tool_name != tool_name:
+            return False
+        return not (req.operation and req.operation != operation)
 
     def _expire_pending(self) -> None:
         now = datetime.now(UTC)

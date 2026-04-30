@@ -39,7 +39,7 @@ def _write_pack(
     dependency_yaml = ""
     if pack_dependencies:
         dependency_items = "\n".join(
-            f"    - name: {dep_name}\n      version_constraint: \"{constraint}\""
+            f'    - name: {dep_name}\n      version_constraint: "{constraint}"'
             for dep_name, constraint in pack_dependencies
         )
         dependency_yaml = f"\ndependencies:\n  packs:\n{dependency_items}\n"

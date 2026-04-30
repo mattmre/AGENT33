@@ -454,6 +454,7 @@ class Settings(BaseSettings):
     synthetic_env_bundle_retention: int = 100
     synthetic_env_bundle_persistence_path: str = "var/synthetic_environment_bundles.json"
     orchestration_state_store_path: str = ""
+    workflow_run_archive_dir: str = "var/workflow-runs"
     process_manager_log_dir: str = "var/process-manager"
     process_manager_max_processes: int = 10
     backup_dir: str = "var/backups"

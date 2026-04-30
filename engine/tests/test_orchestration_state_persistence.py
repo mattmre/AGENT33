@@ -8,6 +8,8 @@ from agent33.observability.trace_models import TraceStatus
 from agent33.release.models import SyncRule
 from agent33.release.service import ReleaseService
 from agent33.services.orchestration_state import OrchestrationStateStore
+from agent33.workflows.definition import WorkflowDefinition
+from agent33.workflows.state import WorkflowStateService
 
 
 def _new_store(path: str) -> OrchestrationStateStore:
@@ -79,3 +81,50 @@ def test_trace_collector_state_restores_after_restart(tmp_path) -> None:
     assert loaded_trace.outcome.status == TraceStatus.FAILED
     failures = restored.list_failures(trace_id=trace.trace_id)
     assert len(failures) == 1
+
+
+def test_workflow_state_restores_after_restart(tmp_path) -> None:
+    path = tmp_path / "orchestration_state.json"
+
+    service = WorkflowStateService(state_store=_new_store(str(path)), max_execution_history=5)
+    definition = WorkflowDefinition.model_validate(
+        {
+            "name": "restart-safe-workflow",
+            "version": "1.0.0",
+            "description": "Workflow persistence test",
+            "steps": [
+                {
+                    "id": "step-1",
+                    "action": "transform",
+                    "transform": "inputs",
+                }
+            ],
+            "execution": {"mode": "sequential"},
+        }
+    )
+    service.registry[definition.name] = definition
+    service.execution_history.append(
+        {
+            "run_id": "run-restart-safe",
+            "workflow_name": definition.name,
+            "trigger_type": "manual",
+            "status": "success",
+            "duration_ms": 12.5,
+            "timestamp": 1234.5,
+            "error": None,
+            "job_id": None,
+            "step_statuses": {"step-1": "success"},
+            "tenant_id": "tenant-a",
+        }
+    )
+    service.persist_state()
+
+    restored = WorkflowStateService(state_store=_new_store(str(path)), max_execution_history=5)
+    restored_definition = restored.registry.get(definition.name)
+    assert restored_definition is not None
+    assert restored_definition.description == "Workflow persistence test"
+    assert len(restored.execution_history) == 1
+    restored_entry = restored.execution_history[0]
+    assert restored_entry["run_id"] == "run-restart-safe"
+    assert restored_entry["workflow_name"] == definition.name
+    assert restored_entry["tenant_id"] == "tenant-a"

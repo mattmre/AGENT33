@@ -202,19 +202,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.observability.trace_collector import TraceCollector
     from agent33.release.service import ReleaseService
     from agent33.review.service import ReviewService
+    from agent33.workflows.run_archive import WorkflowRunArchiveService
+    from agent33.workflows.state import WorkflowStateService
 
     autonomy_service = AutonomyService(state_store=orchestration_state_store)
     release_service = ReleaseService(state_store=orchestration_state_store)
     review_service = ReviewService(state_store=orchestration_state_store)
     trace_collector = TraceCollector(state_store=orchestration_state_store)
+    workflow_run_archive_dir = state_paths.resolve_approved(settings.workflow_run_archive_dir)
+    workflow_run_archive_service = WorkflowRunArchiveService(workflow_run_archive_dir)
+    workflow_state_service = WorkflowStateService(
+        state_store=orchestration_state_store,
+        max_execution_history=1000,
+        registry=workflows.get_workflow_registry(),
+        execution_history=workflows.get_execution_history(),
+    )
     app.state.autonomy_service = autonomy_service
     app.state.release_service = release_service
     app.state.review_service = review_service
     app.state.trace_collector = trace_collector
+    app.state.workflow_run_archive_service = workflow_run_archive_service
+    app.state.workflow_state_service = workflow_state_service
     autonomy.set_autonomy_service(autonomy_service)
     releases.set_release_service(release_service)
     reviews.set_review_service(review_service)
     traces.set_trace_collector(trace_collector)
+    workflows.set_workflow_run_archive_service(workflow_run_archive_service)
+    workflows.set_workflow_state_service(workflow_state_service)
+    logger.info("workflow_run_archive_initialized", path=str(workflow_run_archive_dir))
 
     # -- Redis -------------------------------------------------------------
     from agent33.lifespan.fallbacks import InProcessCache, InProcessMessageBus
@@ -638,6 +653,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             state_store=orchestration_state_store,
         )
     app.state.approval_token_manager = approval_token_manager
+    tool_approvals.set_approval_token_manager(approval_token_manager)
 
     tool_governance = ToolGovernance(
         approval_service=tool_approval_service,
@@ -1228,7 +1244,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- WebSocket manager for workflow events ------------------------------
     from agent33.workflows.ws_manager import WorkflowWSManager
 
-    ws_manager = WorkflowWSManager()
+    ws_manager = WorkflowWSManager(archive_service=workflow_run_archive_service)
     app.state.ws_manager = ws_manager
     workflows.set_ws_manager(ws_manager)
     logger.info("workflow_ws_manager_initialized")
@@ -2083,6 +2099,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.warning("process_manager_service_shutdown_failed", exc_info=True)
 
     workflows.set_ws_manager(None)
+    workflows.set_workflow_run_archive_service(None)
 
     _spawner_svc: Any = getattr(app.state, "spawner_service", None)
     if _spawner_svc is not None:

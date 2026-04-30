@@ -6753,6 +6753,111 @@ button:disabled {
   color: var(--text-soft);
 }
 
+.ops-recovery-panel {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(246, 189, 96, 0.12), transparent 34%),
+    rgba(8, 24, 32, 0.72);
+  padding: 0.95rem;
+}
+
+.ops-recovery-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.ops-recovery-head h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.ops-recovery-head p,
+.ops-recovery-replay p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.ops-recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.ops-recovery-card {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 12px;
+  background: rgba(5, 15, 22, 0.62);
+  padding: 0.85rem;
+}
+
+.ops-recovery-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.ops-recovery-card-head span:first-child,
+.ops-recovery-replay small,
+.ops-recovery-meta dt {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
+.ops-recovery-card-head h4 {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+}
+
+.ops-recovery-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.ops-recovery-meta div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.ops-recovery-meta dd {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.ops-recovery-replay {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.ops-recovery-replay strong {
+  color: #f8fbfd;
+  font-size: 0.88rem;
+}
+
+.ops-recovery-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.ops-recovery-actions button {
+  flex: 1;
+}
+
 .ops-timeline-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7214,6 +7319,7 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .ops-recovery-head,
   .ops-timeline-head {
     flex-direction: column;
   }
@@ -7225,6 +7331,15 @@ button:disabled {
 
   .ops-hub-filters label {
     width: 100%;
+  }
+
+  .ops-recovery-meta,
+  .ops-recovery-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-recovery-actions {
+    display: grid;
   }
 
   .review-panel-head {

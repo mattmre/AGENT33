@@ -18,8 +18,7 @@ def clear_workflow_state():
     from agent33.api.routes import workflows
 
     def _reset() -> None:
-        workflows._registry.clear()
-        workflows._execution_history.clear()
+        workflows.reset_workflow_state()
         if workflows._scheduler is not None:
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
@@ -48,24 +47,32 @@ def reader_client() -> TestClient:
 
 
 @pytest.fixture
-def test_workflow(executor_client: TestClient) -> str:
+def test_workflow(executor_client: TestClient, route_approval_headers) -> str:
     """Create a simple test workflow and return its name."""
     workflow_name = f"test-workflow-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "name": workflow_name,
+        "version": "1.0.0",
+        "description": "Test workflow for scheduling",
+        "steps": [
+            {
+                "id": "simple-step",
+                "action": "transform",
+                "transform": "inputs",
+            }
+        ],
+        "execution": {"mode": "sequential"},
+    }
     resp = executor_client.post(
         "/v1/workflows/",
-        json={
-            "name": workflow_name,
-            "version": "1.0.0",
-            "description": "Test workflow for scheduling",
-            "steps": [
-                {
-                    "id": "simple-step",
-                    "action": "transform",
-                    "transform": "inputs",
-                }
-            ],
-            "execution": {"mode": "sequential"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            executor_client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest workflow scheduling setup",
+        ),
     )
     assert resp.status_code == 201
     return workflow_name
@@ -420,18 +427,30 @@ class TestWorkflowHistory:
         timestamps = [e["timestamp"] for e in history]
         assert timestamps == sorted(timestamps, reverse=True)
 
-    def test_history_empty_for_never_executed_workflow(self, executor_client: TestClient) -> None:
+    def test_history_empty_for_never_executed_workflow(
+        self,
+        executor_client: TestClient,
+        route_approval_headers,
+    ) -> None:
         """History should be empty for workflows that haven't been executed."""
         # Create a workflow but don't execute it
         workflow_name = f"never-executed-{uuid.uuid4().hex[:8]}"
+        payload = {
+            "name": workflow_name,
+            "version": "1.0.0",
+            "steps": [{"id": "step1", "action": "transform", "transform": "inputs"}],
+            "execution": {"mode": "sequential"},
+        }
         executor_client.post(
             "/v1/workflows/",
-            json={
-                "name": workflow_name,
-                "version": "1.0.0",
-                "steps": [{"id": "step1", "action": "transform", "transform": "inputs"}],
-                "execution": {"mode": "sequential"},
-            },
+            json=payload,
+            headers=route_approval_headers(
+                executor_client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=payload,
+                details="Pytest history setup",
+            ),
         )
 
         history_resp = executor_client.get(f"/v1/workflows/{workflow_name}/history")
@@ -439,24 +458,36 @@ class TestWorkflowHistory:
         history = history_resp.json()
         assert len(history) == 0
 
-    def test_history_includes_error_information(self, executor_client: TestClient) -> None:
+    def test_history_includes_error_information(
+        self,
+        executor_client: TestClient,
+        route_approval_headers,
+    ) -> None:
         """History should capture error information for failed executions."""
         # Create a workflow that will fail
         workflow_name = f"failing-workflow-{uuid.uuid4().hex[:8]}"
+        payload = {
+            "name": workflow_name,
+            "version": "1.0.0",
+            "steps": [
+                {
+                    "id": "failing-step",
+                    "action": "validate",
+                    "inputs": {"invalid": "schema"},
+                }
+            ],
+            "execution": {"mode": "sequential"},
+        }
         executor_client.post(
             "/v1/workflows/",
-            json={
-                "name": workflow_name,
-                "version": "1.0.0",
-                "steps": [
-                    {
-                        "id": "failing-step",
-                        "action": "validate",
-                        "inputs": {"invalid": "schema"},
-                    }
-                ],
-                "execution": {"mode": "sequential"},
-            },
+            json=payload,
+            headers=route_approval_headers(
+                executor_client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=payload,
+                details="Pytest failing workflow setup",
+            ),
         )
 
         # Execute and expect failure

@@ -11,6 +11,7 @@ vi.mock("../../lib/api", () => ({
 }));
 
 import { WorkflowStarterPanel } from "./WorkflowStarterPanel";
+import { OPERATIONS_RECOVERY_FOCUS_STORAGE_KEY } from "../operations-hub/recoveryNavigation";
 
 function renderPanel(overrides: Partial<React.ComponentProps<typeof WorkflowStarterPanel>> = {}) {
   return render(
@@ -171,6 +172,81 @@ describe("WorkflowStarterPanel", () => {
     expect(onResult).toHaveBeenCalledWith(
       "Workflow Starter - Create Workflow from official-outcome-packs",
       expect.objectContaining({ status: 201 })
+    );
+  });
+
+  it("routes recovery calls to the focused Operations recovery panel", async () => {
+    const onOpenOperations = vi.fn();
+    apiRequestMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          overall_complete: true,
+          completed_count: 4,
+          total_count: 4,
+          steps: [
+            {
+              step_id: "OB-02",
+              title: "Model provider connected",
+              completed: true
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          overall_state: "ready",
+          summary: "A local model path is ready.",
+          ready_provider_count: 1,
+          attention_provider_count: 0,
+          total_model_count: 2,
+          providers: [
+            {
+              provider: "ollama",
+              label: "Ollama",
+              state: "available",
+              ok: true,
+              base_url: "http://localhost:11434",
+              model_count: 2,
+              message: "Connected",
+              action: "None"
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          {
+            session_id: "session-42",
+            purpose: "Resume market scan",
+            status: "suspended",
+            started_at: "2026-04-28T14:00:00Z",
+            updated_at: "2026-04-28T15:30:00Z",
+            ended_at: null,
+            task_count: 5,
+            tasks_completed: 3,
+            event_count: 12,
+            parent_session_id: null,
+            tenant_id: "tenant-1"
+          }
+        ]
+      });
+
+    renderPanel({ onOpenOperations });
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh launch checks" }));
+    expect(await screen.findByRole("button", { name: "Open recovery panel" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Open recovery panel" })[0]);
+
+    expect(onOpenOperations).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem(OPERATIONS_RECOVERY_FOCUS_STORAGE_KEY)).toBe(
+      "session-recovery"
     );
   });
 });

@@ -219,4 +219,107 @@ describe("AgentBuilderPage", () => {
     expect(screen.getByText(/patch authoring/i)).toBeInTheDocument();
     expect(screen.getByText(/Review required for file-write, code-execution/i)).toBeInTheDocument();
   });
+
+  it("checks whether the agent exists before choosing the create flow", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.endsWith("/v1/agents/new-agent") && init?.method === "GET") {
+        return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+      }
+      if (url.endsWith("/v1/agents/") && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ status: "registered" }, 201));
+      }
+      if (url.endsWith("/v1/agents/preview-prompt")) {
+        return Promise.resolve(
+          jsonResponse({ system_prompt: "# Identity\nYou are 'new-agent'..." }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled request ${init?.method} ${url}`));
+    });
+
+    render(<AgentBuilderPage token="test-token" />);
+
+    await user.type(screen.getByPlaceholderText("my-agent"), "new-agent");
+    await user.click(screen.getByRole("button", { name: /save agent/i }));
+
+    expect(await screen.findByText("Agent created successfully.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          "http://localhost:8000/v1/agents/new-agent",
+          expect.objectContaining({ method: "GET" }),
+        ],
+        [
+          "http://localhost:8000/v1/agents/",
+          expect.objectContaining({ method: "POST" }),
+        ],
+      ]),
+    );
+    expect(fetchMock.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        [
+          "http://localhost:8000/v1/agents/new-agent",
+          expect.objectContaining({ method: "PUT" }),
+        ],
+      ]),
+    );
+  });
+
+  it("surfaces route approval guidance and retries save with an approval token", async () => {
+    const user = userEvent.setup();
+    let createAttempts = 0;
+
+    fetchMock.mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.endsWith("/v1/agents/reviewed-agent") && init?.method === "GET") {
+        return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+      }
+      if (url.endsWith("/v1/agents/") && init?.method === "POST") {
+        createAttempts += 1;
+        const headers = new Headers(init?.headers);
+        if (createAttempts === 1) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                detail: {
+                  message: "Sensitive route mutation requires approval",
+                  approval_id: "APR-123",
+                  approval_header: "X-Agent33-Approval-Token",
+                },
+              },
+              428,
+            ),
+          );
+        }
+        expect(headers.get("X-Agent33-Approval-Token")).toBe("approval-token-123");
+        return Promise.resolve(jsonResponse({ status: "registered" }, 201));
+      }
+      if (url.endsWith("/v1/agents/preview-prompt")) {
+        return Promise.resolve(
+          jsonResponse({ system_prompt: "# Identity\nYou are 'reviewed-agent'..." }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled request ${init?.method} ${url}`));
+    });
+
+    render(<AgentBuilderPage token="test-token" />);
+
+    await user.type(screen.getByPlaceholderText("my-agent"), "reviewed-agent");
+    await user.click(screen.getByRole("button", { name: /save agent/i }));
+
+    expect(
+      await screen.findByText(/Approval required before creating this agent/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Pending approval:/)).toBeInTheDocument();
+
+    await user.type(
+      screen.getByPlaceholderText(/Paste short-lived approval token from Safety Center/i),
+      "approval-token-123",
+    );
+    await user.click(screen.getByRole("button", { name: /save agent/i }));
+
+    expect(await screen.findByText("Agent created successfully.")).toBeInTheDocument();
+    expect(createAttempts).toBe(2);
+  });
 });

@@ -1,5 +1,5 @@
 import type { ToolApprovalRequest } from "../features/safety-center/types";
-import { buildAttentionQueue } from "../features/safety-center/attentionQueue";
+import { buildAttentionQueue, getPolicyPreset } from "../features/safety-center/attentionQueue";
 import type { OperationsHubProcessSummary, OperationsTimelineTone } from "../features/operations-hub/types";
 import { getStatusLabel, getTimelineTone, summarizeOperations } from "../features/operations-hub/helpers";
 import type { CockpitActivityEvent, CockpitActivitySeverity } from "./cockpitActivity";
@@ -203,7 +203,7 @@ function createApprovalRecords(context: OpsSafetyBuildContext): ReadonlyArray<Co
       kind: "tool-approval",
       status: item.priority === "high" ? "blocked" : "needs-review",
       title: item.title,
-      summary: `${item.reason}. ${item.timeGuidance} ${item.policyPreset}`,
+      summary: `${item.reason}. ${item.timeGuidance} ${approval ? getPolicyPreset(approval) : ""}`,
       sourceLabel: "Safety attention queue",
       relatedArtifactKind: getApprovalArtifactKind(item.priority),
       relatedActivityEventId: `${context.workspaceId}-ops-safety-event-approval-${item.id}`,

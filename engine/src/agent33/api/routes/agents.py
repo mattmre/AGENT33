@@ -30,6 +30,7 @@ from agent33.agents.definition import (
 from agent33.agents.effort import AgentEffort, AgentEffortRouter
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
+from agent33.api.route_approvals import require_route_mutation_approval
 from agent33.config import settings
 from agent33.evaluation.ppack_ab_models import PPackABAssignment
 from agent33.llm.runtime_config import (
@@ -48,6 +49,7 @@ from agent33.observability.metrics import MetricsCollector
 from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import _get_token_payload, require_scope
+from agent33.tools.approvals import ApprovalRiskTier
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 logger = logging.getLogger(__name__)
@@ -637,9 +639,21 @@ async def get_agent(
 async def update_agent(
     name: str,
     definition: AgentDefinition,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> dict[str, Any]:
     """Update an existing agent definition."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.update",
+        operation="update",
+        arguments={
+            "name": name,
+            "definition": definition.model_dump(mode="json"),
+        },
+        details="Agent definition updates require explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     existing = registry.get(name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
@@ -653,9 +667,18 @@ async def update_agent(
 @router.delete("/{name}", status_code=204, dependencies=[require_scope("agents:write")])
 async def delete_agent(
     name: str,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> None:
     """Remove an agent definition from the registry."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.delete",
+        operation="delete",
+        arguments={"name": name},
+        details="Agent definition deletion requires explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     existing = registry.get(name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
@@ -665,9 +688,18 @@ async def delete_agent(
 @router.post("/", status_code=201, dependencies=[require_scope("agents:write")])
 async def register_agent(
     definition: AgentDefinition,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> dict[str, str]:
     """Register a new agent definition."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.create",
+        operation="create",
+        arguments=definition.model_dump(mode="json"),
+        details="Agent definition creation requires explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     registry.register(definition)
     return {"status": "registered", "name": definition.name}
 

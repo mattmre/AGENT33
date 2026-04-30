@@ -9,7 +9,10 @@ from typing import Any
 from agent33.api.routes.autonomy import get_autonomy_service
 from agent33.api.routes.improvements import get_improvement_service
 from agent33.api.routes.traces import get_trace_collector
-from agent33.api.routes.workflows import get_execution_history
+from agent33.api.routes.workflows import (
+    get_execution_history,
+    get_workflow_run_archive_service,
+)
 from agent33.autonomy.models import BudgetState
 from agent33.autonomy.service import BudgetNotFoundError
 from agent33.improvement.models import IntakeStatus
@@ -21,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_INCLUDE = frozenset({"traces", "budgets", "improvements", "workflows"})
 _MAX_LIMIT = 100
+_WORKFLOW_ARCHIVE_EVENT_LIMIT = 200
 
 
 class ProcessNotFoundError(Exception):
@@ -368,18 +372,97 @@ class OperationsHubService:
                 and timestamp == legacy_target_ts
             ):
                 started_at = datetime.fromtimestamp(record.timestamp, UTC)
+                archive_service = get_workflow_run_archive_service()
+                archive_detail = (
+                    archive_service.get_run(record.run_id)
+                    if archive_service is not None and hasattr(archive_service, "get_run")
+                    else None
+                )
+                archive_events = (
+                    archive_service.list_events(
+                        record.run_id,
+                        offset=0,
+                        limit=_WORKFLOW_ARCHIVE_EVENT_LIMIT,
+                    )
+                    if archive_service is not None and hasattr(archive_service, "list_events")
+                    else []
+                )
+                archive_artifacts = (
+                    archive_service.list_artifacts(record.run_id)
+                    if archive_service is not None and hasattr(archive_service, "list_artifacts")
+                    else []
+                )
+                metadata = {
+                    "run_id": record.run_id,
+                    "trigger_type": record.trigger_type,
+                    "duration_ms": record.duration_ms,
+                    "error": record.error,
+                    "job_id": record.job_id,
+                }
+                if isinstance(archive_detail, dict):
+                    run_payload = archive_detail.get("run", {})
+                    if isinstance(run_payload, dict):
+                        if run_payload.get("event_count") is not None:
+                            metadata["event_count"] = run_payload["event_count"]
+                        if run_payload.get("artifact_count") is not None:
+                            metadata["artifact_count"] = run_payload["artifact_count"]
+                        if run_payload.get("owner_subject") is not None:
+                            metadata["owner_subject"] = run_payload["owner_subject"]
+                        archive_metadata = run_payload.get("metadata")
+                        if isinstance(archive_metadata, dict):
+                            if archive_metadata.get("requested_inputs") is not None:
+                                metadata["requested_inputs"] = archive_metadata["requested_inputs"]
+                            if archive_metadata.get("job_id") is not None:
+                                metadata["job_id"] = archive_metadata["job_id"]
+                    if archive_events:
+                        metadata["first_event_at"] = archive_events[0].get("timestamp")
+                        metadata["last_event_at"] = archive_events[-1].get("timestamp")
+                    if archive_detail.get("result") is not None:
+                        metadata["result_payload"] = archive_detail["result"]
+                if archive_artifacts:
+                    metadata["artifact_count"] = len(archive_artifacts)
+                    metadata["artifacts"] = archive_artifacts
                 return {
                     "id": f"workflow:{record.run_id}",
                     "type": "workflow",
                     "status": record.status,
                     "started_at": started_at.isoformat(),
                     "name": record.workflow_name or "workflow",
-                    "metadata": {
-                        "run_id": record.run_id,
-                        "trigger_type": record.trigger_type,
-                        "duration_ms": record.duration_ms,
-                        "error": record.error,
-                        "job_id": record.job_id,
-                    },
+                    "metadata": metadata,
+                    "actions": _workflow_archive_actions(archive_events),
                 }
         raise ProcessNotFoundError(process_id)
+
+
+def _workflow_archive_actions(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for event in events:
+        step_id = str(event.get("step_id", "")).strip()
+        if not step_id:
+            continue
+        action = grouped.setdefault(
+            step_id,
+            {
+                "step_id": step_id,
+                "action_count": 0,
+                "completed_at": None,
+            },
+        )
+        action["action_count"] = int(action["action_count"]) + 1
+        event_type = str(event.get("type", ""))
+        if event_type in {"step_completed", "step_failed", "step_skipped"}:
+            action["completed_at"] = _event_iso_timestamp(event.get("timestamp"))
+
+    def _sort_key(value: dict[str, Any]) -> tuple[int, str]:
+        completed_at = value.get("completed_at")
+        return (0 if completed_at else 1, str(completed_at or value.get("step_id", "")))
+
+    return sorted(grouped.values(), key=_sort_key)
+
+
+def _event_iso_timestamp(value: Any) -> str | None:
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(timestamp, UTC).isoformat()

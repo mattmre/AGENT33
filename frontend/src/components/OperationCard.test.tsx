@@ -346,4 +346,52 @@ describe("OperationCard", () => {
       run_id: "33333333-3333-4333-8333-333333333333"
     });
   });
+
+  it("passes custom headers through the shared request helper", async () => {
+    apiRequestMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      durationMs: 9,
+      url: "/v1/auth/api-keys",
+      data: { key_id: "key-1" }
+    });
+
+    const headerOperation: OperationConfig = {
+      id: "auth-create-api-key",
+      title: "Create API Key",
+      method: "POST",
+      path: "/v1/auth/api-keys",
+      description: "Generate a scoped API key after route approval.",
+      defaultHeaders: { "X-Agent33-Approval-Token": "" },
+      defaultBody: JSON.stringify(
+        {
+          subject: "agent-service",
+          scopes: ["agents:read"]
+        },
+        null,
+        2
+      )
+    };
+
+    render(
+      <OperationCard
+        operation={headerOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    await userEvent.clear(screen.getByLabelText("Headers (JSON)"));
+    await userEvent.type(
+      screen.getByLabelText("Headers (JSON)"),
+      '{\n  "X-Agent33-Approval-Token": "approval-token-123"\n}'
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));
+    expect(apiRequestMock.mock.calls[0][0]).toMatchObject({
+      headers: { "X-Agent33-Approval-Token": "approval-token-123" }
+    });
+  });
 });
