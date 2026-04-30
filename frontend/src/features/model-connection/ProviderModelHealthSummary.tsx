@@ -4,11 +4,12 @@ export type LocalProviderHealthState = "available" | "empty" | "unavailable" | "
 export type LocalModelHealthState = "ready" | "needs_attention" | "unavailable";
 
 export interface LocalProviderHealth {
-  provider: "ollama" | "lm-studio";
+  provider: "ollama" | "lm-studio" | "local-orchestration";
   label: string;
   state: LocalProviderHealthState;
   ok: boolean;
   baseUrl: string;
+  defaultModel: string;
   modelCount: number;
   message: string;
   action: string;
@@ -56,9 +57,14 @@ export function ProviderModelHealthSummary({
 }: ProviderModelHealthSummaryProps): JSX.Element {
   const providers = health?.providers ?? [];
   const selectedLocalProvider =
-    selectedPresetId === "ollama" || selectedPresetId === "lm-studio" ? selectedProviderName : "";
+    selectedPresetId === "ollama" ||
+    selectedPresetId === "lm-studio" ||
+    selectedPresetId === "local-runtime"
+      ? selectedProviderName
+      : "";
   const summary = hasCredentials
-    ? health?.summary ?? "Check Ollama and LM Studio before choosing a local model."
+    ? health?.summary ??
+      "Check Ollama, LM Studio, and the startup runtime before choosing a local model."
     : "Connect engine access first so AGENT-33 can check local model health.";
 
   return (
@@ -104,6 +110,7 @@ export function ProviderModelHealthSummary({
               {provider.modelCount} {provider.modelCount === 1 ? "model" : "models"} detected
               {provider.baseUrl ? ` at ${provider.baseUrl}` : ""}
             </small>
+            {provider.defaultModel ? <small>Configured default: {provider.defaultModel}</small> : null}
             <small>{provider.action}</small>
           </article>
         ))}

@@ -45,7 +45,12 @@ export function connectWorkflowLiveTransport(
 
   let abortController: AbortController | null = null;
   abortController = new AbortController();
-  void streamWorkflowEventsOverSse(API_BASE_URL, options, abortController.signal);
+  void streamWorkflowEventsOverSse(API_BASE_URL, options, abortController.signal).catch((error) => {
+    if (abortController?.signal.aborted || isAbortError(error)) {
+      return;
+    }
+    options.onError?.(toError(error, "Workflow live SSE connection failed"));
+  });
 
   return {
     close: () => {

@@ -624,6 +624,11 @@ class Settings(BaseSettings):
         """Return the LM Studio URL that runtime code should use."""
         return resolve_runtime_service_url(self.lm_studio_base_url)
 
+    @property
+    def runtime_local_orchestration_base_url(self) -> str:
+        """Return the local orchestration URL that runtime code should use."""
+        return resolve_runtime_service_url(self.local_orchestration_base_url)
+
     @field_validator("control_plane_backend")
     @classmethod
     def _validate_control_plane_backend(cls, value: str) -> str:

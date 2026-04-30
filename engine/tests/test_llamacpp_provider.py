@@ -25,6 +25,10 @@ class TestLlamaCppEnabled:
         with patch.object(settings, "local_orchestration_engine", "llamacpp"):
             assert _llamacpp_enabled() is True
 
+    def test_llamacpp_enabled_when_engine_is_vllm(self) -> None:
+        with patch.object(settings, "local_orchestration_engine", "vLLM"):
+            assert _llamacpp_enabled() is True
+
     def test_llamacpp_disabled_when_engine_is_ollama(self) -> None:
         with patch.object(settings, "local_orchestration_engine", "ollama"):
             assert _llamacpp_enabled() is False
@@ -67,12 +71,12 @@ class TestModelRouterRegistration:
 
     @pytest.mark.parametrize(
         "engine_value",
-        ["llama.cpp", "llamacpp"],
+        ["llama.cpp", "llamacpp", "vLLM"],
     )
     def test_model_router_default_provider_is_llamacpp_for_valid_engines(
         self, engine_value: str
     ) -> None:
-        """Both 'llama.cpp' and 'llamacpp' should result in llamacpp as default."""
+        """Local orchestration engines should result in llamacpp as default."""
         with patch.object(settings, "local_orchestration_engine", engine_value):
             assert _llamacpp_enabled() is True
             router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
@@ -102,6 +106,13 @@ class TestResolveDefaultModel:
             patch.object(settings, "local_orchestration_model", "my-local-gguf"),
         ):
             assert _resolve_default_model() == "my-local-gguf"
+
+    def test_returns_local_model_when_vllm_engine(self) -> None:
+        with (
+            patch.object(settings, "local_orchestration_engine", "vLLM"),
+            patch.object(settings, "local_orchestration_model", "my-local-vllm-model"),
+        ):
+            assert _resolve_default_model() == "my-local-vllm-model"
 
     def test_returns_ollama_model_when_engine_is_ollama(self) -> None:
         with (

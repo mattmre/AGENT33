@@ -13,18 +13,25 @@ describe("GlobalSearch", () => {
     vi.unstubAllGlobals()
   })
 
+  function getSearchInput() {
+    return screen.getByRole("searchbox", { name: "Search semantic memory" })
+  }
+
   it("renders a disabled input without a token", () => {
     render(<GlobalSearch token={null} />)
 
-    expect(screen.getByPlaceholderText("Sign in to use memory search")).toBeDisabled()
+    expect(getSearchInput()).toBeDisabled()
+    expect(getSearchInput()).toHaveAttribute("placeholder", "Sign in to use memory search")
   })
 
   it("renders an enabled input with a token", () => {
     render(<GlobalSearch token="jwt-token" />)
 
-    expect(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)...")
-    ).not.toBeDisabled()
+    expect(getSearchInput()).not.toBeDisabled()
+    expect(getSearchInput()).toHaveAttribute(
+      "placeholder",
+      "Search semantic memory, workflows, and notes..."
+    )
   })
 
   it("submits a memory-search request with auth", async () => {
@@ -36,10 +43,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="my-jwt" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "test query{enter}"
-    )
+    await user.type(getSearchInput(), "test query{enter}")
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(fetchMock.mock.calls[0][0]).toContain("/v1/memory/search")
@@ -80,10 +84,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="tok" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "search{enter}"
-    )
+    await user.type(getSearchInput(), "search{enter}")
 
     await waitFor(() => {
       expect(screen.getByText("Memory Results")).toBeInTheDocument()
@@ -101,10 +102,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="tok" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "test{enter}"
-    )
+    await user.type(getSearchInput(), "test{enter}")
 
     await waitFor(() => {
       expect(screen.getByText("No results found.")).toBeInTheDocument()
@@ -121,10 +119,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="tok" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "{enter}"
-    )
+    await user.type(getSearchInput(), "{enter}")
 
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -136,7 +131,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token={null} />)
 
-    expect(screen.getByPlaceholderText("Sign in to use memory search")).toBeDisabled()
+    expect(getSearchInput()).toBeDisabled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -152,10 +147,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="tok" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "query{enter}"
-    )
+    await user.type(getSearchInput(), "query{enter}")
 
     await waitFor(() => {
       expect(screen.getByText("Searching...")).toBeInTheDocument()
@@ -190,10 +182,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     render(<GlobalSearch token="tok" />)
-    await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
-      "search{enter}"
-    )
+    await user.type(getSearchInput(), "search{enter}")
 
     await waitFor(() => {
       expect(screen.getByText(/Tokens: 128/)).toBeInTheDocument()

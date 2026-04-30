@@ -6,13 +6,19 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
+from agent33.api.routes.model_health import get_local_orchestration_readiness_service
 from agent33.config import Settings
 from agent33.main import app
 from agent33.security.auth import create_access_token
 from agent33.services.lm_studio_readiness import (
     LMStudioReadinessService,
     _LMStudioFetchResult,
+)
+from agent33.services.model_health import (
+    LocalOrchestrationReadinessService,
+    _LocalOrchestrationFetchResult,
 )
 from agent33.services.ollama_readiness import (
     OllamaReadinessService,
@@ -44,6 +50,18 @@ class _LMStudioSequenceFetcher:
         return self._responses.pop(0)
 
 
+class _LocalOrchestrationSequenceFetcher:
+    def __init__(self, responses: list[_LocalOrchestrationFetchResult]) -> None:
+        self._responses = responses
+        self.calls: list[str] = []
+
+    async def __call__(self, url: str) -> _LocalOrchestrationFetchResult:
+        self.calls.append(url)
+        if not self._responses:
+            raise AssertionError("No more local orchestration responses configured")
+        return self._responses.pop(0)
+
+
 @pytest.fixture()
 def operator_read_client() -> TestClient:
     token = create_access_token("op-reader", scopes=["operator:read"], tenant_id="test-tenant")
@@ -59,10 +77,17 @@ def no_auth_client() -> TestClient:
 def _restore_readiness_services() -> Any:
     original_ollama = getattr(app.state, "ollama_readiness_service", None)
     original_lm_studio = getattr(app.state, "lm_studio_readiness_service", None)
+    original_local_orchestration = getattr(
+        app.state,
+        "local_orchestration_readiness_service",
+        None,
+    )
     if "ollama_readiness_service" in app.state._state:
         del app.state.ollama_readiness_service
     if "lm_studio_readiness_service" in app.state._state:
         del app.state.lm_studio_readiness_service
+    if "local_orchestration_readiness_service" in app.state._state:
+        del app.state.local_orchestration_readiness_service
     yield
     if original_ollama is not None:
         app.state.ollama_readiness_service = original_ollama
@@ -72,6 +97,10 @@ def _restore_readiness_services() -> Any:
         app.state.lm_studio_readiness_service = original_lm_studio
     elif "lm_studio_readiness_service" in app.state._state:
         del app.state.lm_studio_readiness_service
+    if original_local_orchestration is not None:
+        app.state.local_orchestration_readiness_service = original_local_orchestration
+    elif "local_orchestration_readiness_service" in app.state._state:
+        del app.state.local_orchestration_readiness_service
 
 
 def _ollama_tags_payload() -> dict[str, Any]:
@@ -107,9 +136,14 @@ def _install_services(
     *,
     ollama_responses: list[_OllamaFetchResult],
     lm_studio_responses: list[_LMStudioFetchResult],
-) -> tuple[_OllamaSequenceFetcher, _LMStudioSequenceFetcher]:
+    local_orchestration_responses: list[_LocalOrchestrationFetchResult],
+    local_orchestration_settings: Settings | None = None,
+) -> tuple[_OllamaSequenceFetcher, _LMStudioSequenceFetcher, _LocalOrchestrationSequenceFetcher]:
     ollama_fetcher = _OllamaSequenceFetcher(ollama_responses)
     lm_studio_fetcher = _LMStudioSequenceFetcher(lm_studio_responses)
+    local_orchestration_fetcher = _LocalOrchestrationSequenceFetcher(
+        local_orchestration_responses
+    )
     app.state.ollama_readiness_service = OllamaReadinessService(
         Settings(),
         fetcher=ollama_fetcher,
@@ -118,19 +152,40 @@ def _install_services(
         Settings(),
         fetcher=lm_studio_fetcher,
     )
-    return ollama_fetcher, lm_studio_fetcher
+    app.state.local_orchestration_readiness_service = LocalOrchestrationReadinessService(
+        local_orchestration_settings or Settings(),
+        fetcher=local_orchestration_fetcher,
+    )
+    return ollama_fetcher, lm_studio_fetcher, local_orchestration_fetcher
 
 
 class TestModelHealthRoute:
+    def test_builds_the_local_orchestration_service_lazily(self) -> None:
+        scope = {"type": "http", "app": app}
+        request = Request(scope)
+        if "local_orchestration_readiness_service" in app.state._state:
+            del app.state.local_orchestration_readiness_service
+
+        svc = get_local_orchestration_readiness_service(request)
+
+        assert isinstance(svc, LocalOrchestrationReadinessService)
+        assert app.state.local_orchestration_readiness_service is svc
+
     def test_requires_auth(self, no_auth_client: TestClient) -> None:
         resp = no_auth_client.get("/v1/model-health")
         assert resp.status_code == 401
 
     def test_summarizes_ready_local_runtimes(self, operator_read_client: TestClient) -> None:
-        ollama_fetcher, lm_studio_fetcher = _install_services(
+        ollama_fetcher, lm_studio_fetcher, local_orchestration_fetcher = _install_services(
             ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
+            ],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(
+                    status_code=200,
+                    payload={"data": [{"id": "qwen3-coder-next"}]},
+                )
             ],
         )
 
@@ -139,15 +194,21 @@ class TestModelHealthRoute:
         assert resp.status_code == 200
         data = resp.json()
         assert data["overall_state"] == "ready"
-        assert data["provider_count"] == 2
-        assert data["ready_provider_count"] == 2
-        assert data["total_model_count"] == 3
+        assert data["provider_count"] == 3
+        assert data["ready_provider_count"] == 3
+        assert data["total_model_count"] == 4
         assert data["providers"][0]["provider"] == "ollama"
         assert data["providers"][0]["model_count"] == 1
         assert data["providers"][1]["provider"] == "lm-studio"
         assert data["providers"][1]["model_count"] == 2
+        assert data["providers"][2]["provider"] == "local-orchestration"
+        assert data["providers"][2]["label"] == "llama.cpp"
+        assert data["providers"][2]["model_count"] == 1
         assert ollama_fetcher.calls == ["http://ollama:11434/api/tags"]
         assert lm_studio_fetcher.calls == ["http://localhost:1234/v1/models"]
+        assert local_orchestration_fetcher.calls == [
+            "http://host.docker.internal:8033/v1/models"
+        ]
 
     def test_reports_attention_when_runtime_has_no_models(
         self,
@@ -156,6 +217,9 @@ class TestModelHealthRoute:
         _install_services(
             ollama_responses=[_OllamaFetchResult(status_code=200, payload={"models": []})],
             lm_studio_responses=[_LMStudioFetchResult(status_code=None, error="offline")],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(status_code=None, error="offline")
+            ],
         )
 
         resp = operator_read_client.get("/v1/model-health")
@@ -164,8 +228,8 @@ class TestModelHealthRoute:
         data = resp.json()
         assert data["overall_state"] == "needs_attention"
         assert data["summary"] == (
-            "Local model setup needs attention. Install or load a model, "
-            "or start the offline runtime."
+            "Local model setup needs attention. Install or load a model, or start "
+            "Ollama, LM Studio, or the local orchestration server."
         )
         assert data["ready_provider_count"] == 0
         assert data["attention_provider_count"] == 1
@@ -175,10 +239,16 @@ class TestModelHealthRoute:
         self,
         operator_read_client: TestClient,
     ) -> None:
-        ollama_fetcher, lm_studio_fetcher = _install_services(
+        ollama_fetcher, lm_studio_fetcher, local_orchestration_fetcher = _install_services(
             ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
+            ],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(
+                    status_code=200,
+                    payload={"data": [{"id": "qwen3-coder-next"}]},
+                )
             ],
         )
 
@@ -187,6 +257,7 @@ class TestModelHealthRoute:
             params={
                 "ollama_base_url": "http://localhost:11434/v1",
                 "lm_studio_base_url": "http://127.0.0.1:1234",
+                "local_orchestration_base_url": "http://localhost:8033",
             },
         )
 
@@ -194,15 +265,22 @@ class TestModelHealthRoute:
         assert resp.json()["overall_state"] == "ready"
         assert ollama_fetcher.calls == ["http://localhost:11434/api/tags"]
         assert lm_studio_fetcher.calls == ["http://127.0.0.1:1234/v1/models"]
+        assert local_orchestration_fetcher.calls == ["http://localhost:8033/v1/models"]
 
     def test_unsafe_override_is_reported_without_fetching_provider(
         self,
         operator_read_client: TestClient,
     ) -> None:
-        ollama_fetcher, lm_studio_fetcher = _install_services(
+        ollama_fetcher, lm_studio_fetcher, local_orchestration_fetcher = _install_services(
             ollama_responses=[_OllamaFetchResult(status_code=200, payload=_ollama_tags_payload())],
             lm_studio_responses=[
                 _LMStudioFetchResult(status_code=200, payload=_lm_studio_models_payload())
+            ],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(
+                    status_code=200,
+                    payload={"data": [{"id": "qwen3-coder-next"}]},
+                )
             ],
         )
 
@@ -211,6 +289,7 @@ class TestModelHealthRoute:
             params={
                 "ollama_base_url": "http://metadata.google.internal/computeMetadata/v1",
                 "lm_studio_base_url": "http://localhost:1234/v1",
+                "local_orchestration_base_url": "http://metadata.google.internal/computeMetadata/v1",
             },
         )
 
@@ -219,5 +298,61 @@ class TestModelHealthRoute:
         assert data["overall_state"] == "ready"
         assert data["providers"][0]["state"] == "error"
         assert "base URL overrides" in data["providers"][0]["message"]
+        assert data["providers"][2]["state"] == "error"
+        assert "base URL overrides" in data["providers"][2]["message"]
         assert ollama_fetcher.calls == []
         assert lm_studio_fetcher.calls == ["http://localhost:1234/v1/models"]
+        assert local_orchestration_fetcher.calls == []
+
+    def test_uses_engine_label_for_local_orchestration_runtime(
+        self,
+        operator_read_client: TestClient,
+    ) -> None:
+        _install_services(
+            ollama_responses=[_OllamaFetchResult(status_code=200, payload={"models": []})],
+            lm_studio_responses=[_LMStudioFetchResult(status_code=200, payload={"data": []})],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(
+                    status_code=200,
+                    payload={"data": [{"id": "mixtral-8x7b"}]},
+                )
+            ],
+            local_orchestration_settings=Settings(local_orchestration_engine="vLLM"),
+        )
+
+        resp = operator_read_client.get("/v1/model-health")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["providers"][2]["provider"] == "local-orchestration"
+        assert data["providers"][2]["label"] == "vLLM"
+
+    def test_uses_the_startup_ollama_runtime_when_configured(
+        self,
+        operator_read_client: TestClient,
+    ) -> None:
+        _install_services(
+            ollama_responses=[_OllamaFetchResult(status_code=200, payload={"models": []})],
+            lm_studio_responses=[_LMStudioFetchResult(status_code=200, payload={"data": []})],
+            local_orchestration_responses=[
+                _LocalOrchestrationFetchResult(
+                    status_code=200,
+                    payload={"models": [{"name": "qwen3-coder:latest"}]},
+                )
+            ],
+            local_orchestration_settings=Settings(
+                local_orchestration_engine="ollama",
+                local_orchestration_model="qwen3-coder",
+            ),
+        )
+
+        resp = operator_read_client.get("/v1/model-health")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["providers"][2]["provider"] == "local-orchestration"
+        assert data["providers"][2]["label"] == "Ollama"
+        assert data["providers"][2]["state"] == "available"
+        assert data["providers"][2]["default_model"] == "qwen3-coder"
+        assert data["providers"][2]["base_url"] == "http://ollama:11434"
+        assert data["providers"][2]["message"] == "Detected 1 startup Ollama model."

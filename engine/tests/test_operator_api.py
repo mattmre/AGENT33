@@ -414,6 +414,22 @@ class TestOperatorConfig:
         assert data["groups"]["llm"]["default_model"] == "openrouter/auto"
         assert "default_model" not in data["groups"]["ollama"]
 
+    def test_local_orchestration_config_is_exposed(
+        self, operator_read_client: TestClient
+    ) -> None:
+        svc = _make_operator_service()
+        object.__setattr__(svc._settings, "local_orchestration_base_url", "http://localhost:8033/v1")
+        object.__setattr__(svc._settings, "local_orchestration_model", "qwen3-coder-next")
+        object.__setattr__(svc._settings, "local_orchestration_engine", "vLLM")
+        app.state.operator_service = svc
+
+        resp = operator_read_client.get("/v1/operator/config")
+
+        data = resp.json()
+        assert data["groups"]["local_orchestration"]["local_orchestration_base_url"] == "http://localhost:8033/v1"
+        assert data["groups"]["local_orchestration"]["local_orchestration_model"] == "qwen3-coder-next"
+        assert data["groups"]["local_orchestration"]["local_orchestration_engine"] == "vLLM"
+
 
 # ============================================================================
 # GET /v1/operator/doctor

@@ -126,7 +126,7 @@ describe("IngestionReviewPanel", () => {
     expect(await screen.findByRole("button", { name: /history-pack/i })).toBeInTheDocument();
     expect(await screen.findByText("Marked for review")).toBeInTheDocument();
     expect(screen.getByText("Quarantined")).toBeInTheDocument();
-    expect(screen.getByText("Review required")).toBeInTheDocument();
+    expect(screen.getAllByText("Review required").length).toBeGreaterThan(0);
   });
 
   it("filters review assets by confidence, quarantine, and text", async () => {

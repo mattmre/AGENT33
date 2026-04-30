@@ -20,6 +20,7 @@ const readyHealth: LocalModelHealth = {
       state: "available",
       ok: true,
       baseUrl: "http://localhost:11434",
+      defaultModel: "ollama/qwen2.5-coder:7b",
       modelCount: 2,
       message: "Detected 2 local Ollama models.",
       action: "Choose a detected Ollama model for local workflows."
@@ -30,6 +31,7 @@ const readyHealth: LocalModelHealth = {
       state: "empty",
       ok: false,
       baseUrl: "http://localhost:1234/v1",
+      defaultModel: "",
       modelCount: 0,
       message: "LM Studio is reachable but no models are loaded.",
       action: "Install or load a model in LM Studio, then refresh health."

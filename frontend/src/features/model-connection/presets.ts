@@ -1,7 +1,12 @@
 import { OPENROUTER_STABLE_DEFAULT_MODEL } from "../../lib/openrouterModels";
 import type { ModelConnectionForm } from "./helpers";
 
-export type ProviderPresetId = "openrouter" | "ollama" | "lm-studio" | "custom-openai";
+export type ProviderPresetId =
+  | "openrouter"
+  | "local-runtime"
+  | "ollama"
+  | "lm-studio"
+  | "custom-openai";
 
 export interface ProviderModelRecommendation {
   id: string;
@@ -25,7 +30,12 @@ export interface ProviderPreset {
   apiKeyPlaceholder: string;
   apiKeyHint: string;
   needsApiKey: boolean;
+  engineDefault?: string;
   recommendedModels: ProviderModelRecommendation[];
+}
+
+interface ProviderPresetInferenceOptions {
+  localRuntimeBaseUrl?: string;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -33,8 +43,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: "openrouter",
     name: "OpenRouter",
     badge: "Cloud",
-    description: "Use one API key to reach hosted models. Best first path for most users.",
-    bestFor: "Fastest cloud setup",
+    description: "Use one API key to reach hosted models through a single cloud path, with live catalog checks surfacing free options only when OpenRouter currently offers them.",
+    bestFor: "Fastest cloud setup with live catalog discovery",
     setupTime: "2 min",
     baseUrlDefault: "https://openrouter.ai/api/v1",
     apiKeyLabel: "OpenRouter API key",
@@ -68,6 +78,31 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         capabilities: ["easy"],
         contextLength: null,
         isFree: false
+      }
+    ]
+  },
+  {
+    id: "local-runtime",
+    name: "Startup runtime",
+    badge: "Local",
+    description: "Use the machine's startup model through the runtime already configured here, whether that is llama.cpp, vLLM, Ollama, LM Studio, or another local OpenAI-compatible server.",
+    bestFor: "Fastest local recovery path",
+    setupTime: "1 min",
+    baseUrlDefault: "http://host.docker.internal:8033/v1",
+    apiKeyLabel: "Local runtime key",
+    apiKeyPlaceholder: "Leave blank for local runtime",
+    apiKeyHint: "Use this for llama.cpp, vLLM, or another local OpenAI-compatible server.",
+    needsApiKey: false,
+    engineDefault: "llama.cpp",
+    recommendedModels: [
+      {
+        id: "llamacpp/qwen3-coder-next",
+        name: "Startup model",
+        badgeLabel: "Machine default",
+        description: "Uses the local orchestration model already configured on this machine.",
+        capabilities: ["code", "local", "fast"],
+        contextLength: null,
+        isFree: true
       }
     ]
   },
@@ -176,13 +211,38 @@ export function getProviderPreset(id: string): ProviderPreset | null {
   return PROVIDER_PRESETS.find((preset) => preset.id === id) ?? null;
 }
 
-export function inferProviderPresetId(baseUrl: string): ProviderPresetId {
-  const normalized = baseUrl.trim().toLowerCase();
-  if (normalized.includes("localhost:11434") || normalized.includes("127.0.0.1:11434")) {
+export function inferProviderPresetId(
+  baseUrl: string,
+  options: ProviderPresetInferenceOptions = {}
+): ProviderPresetId {
+  const normalized = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
+  const normalizedLocalRuntimeBaseUrl = options.localRuntimeBaseUrl
+    ? options.localRuntimeBaseUrl.trim().replace(/\/+$/, "").toLowerCase()
+    : "";
+
+  if (normalizedLocalRuntimeBaseUrl && normalized === normalizedLocalRuntimeBaseUrl) {
+    return "local-runtime";
+  }
+  if (
+    normalized.includes("localhost:11434") ||
+    normalized.includes("127.0.0.1:11434") ||
+    normalized.includes("host.docker.internal:11434")
+  ) {
     return "ollama";
   }
-  if (normalized.includes("localhost:1234") || normalized.includes("127.0.0.1:1234")) {
+  if (
+    normalized.includes("localhost:1234") ||
+    normalized.includes("127.0.0.1:1234") ||
+    normalized.includes("host.docker.internal:1234")
+  ) {
     return "lm-studio";
+  }
+  if (
+    normalized.includes("host.docker.internal:8033") ||
+    normalized.includes("localhost:8033") ||
+    normalized.includes("127.0.0.1:8033")
+  ) {
+    return "local-runtime";
   }
   if (normalized.includes("openrouter.ai")) {
     return "openrouter";
@@ -199,6 +259,7 @@ export function applyProviderPresetToForm(
     ...form,
     defaultModel: firstModel?.id ?? form.defaultModel,
     baseUrl: preset.baseUrlDefault,
+    localEngine: preset.engineDefault ?? form.localEngine,
     apiKey: preset.needsApiKey ? form.apiKey : "",
     removeStoredKey: preset.needsApiKey ? form.removeStoredKey : false
   };
