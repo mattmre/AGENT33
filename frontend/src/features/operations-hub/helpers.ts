@@ -15,6 +15,7 @@ const ACTIVE_STATUSES = new Set(["active", "running", "in_progress", "processing
 const ATTENTION_STATUSES = new Set([
   "failed",
   "error",
+  "crashed",
   "rejected",
   "revoked",
   "cancelled",
@@ -52,6 +53,7 @@ export function getStatusClass(status: string): string {
   if (
     normalized === "failed" ||
     normalized === "error" ||
+    normalized === "crashed" ||
     normalized === "rejected" ||
     normalized === "revoked"
   ) {

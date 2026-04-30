@@ -5,6 +5,8 @@ import type {
   InstalledPackSummary,
   MarketplaceCategory,
   MarketplaceInstallResponse,
+  PackOutcomeManifestResponse,
+  PackRecoveryPreviewResponse,
   MarketplacePackDetail,
   MarketplacePackSummary,
   QualityAssessment,
@@ -191,6 +193,33 @@ export async function fetchPackTrust(
     headers: headers(token, apiKey)
   });
   return parseJson<PackTrustResponse>(response, "Pack trust failed");
+}
+
+export async function fetchPackOutcomeManifests(
+  token: string | null,
+  apiKey: string | null,
+  name: string
+): Promise<PackOutcomeManifestResponse> {
+  const response = await fetch(`${baseUrl()}/v1/packs/${encodeURIComponent(name)}/outcome-manifests`, {
+    headers: headers(token, apiKey)
+  });
+  return parseJson<PackOutcomeManifestResponse>(response, "Outcome manifests failed");
+}
+
+export async function fetchPackRecoveryPreview(
+  token: string | null,
+  apiKey: string | null,
+  name: string,
+  targetVersion = ""
+): Promise<PackRecoveryPreviewResponse> {
+  const query = targetVersion ? `?target_version=${encodeURIComponent(targetVersion)}` : "";
+  const response = await fetch(
+    `${baseUrl()}/v1/packs/${encodeURIComponent(name)}/recovery-preview${query}`,
+    {
+      headers: headers(token, apiKey)
+    }
+  );
+  return parseJson<PackRecoveryPreviewResponse>(response, "Pack recovery preview failed");
 }
 
 export async function installMarketplacePack(

@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResult } from "../../types";
+import type { OnboardingStatus } from "../onboarding/types";
+import { openOperationsRecoveryPanel } from "../operations-hub/recoveryNavigation";
 import {
   asSkillDiscoveryResponse,
   asWorkflowCreateResponse,
   asWorkflowResolutionResponse,
+  asWorkflowStarterModelHealth,
+  asWorkflowStarterOnboardingStatus,
+  asWorkflowStarterSessionSummaries,
   createWorkflow,
   discoverSkills,
+  fetchWorkflowStarterIncompleteSessions,
+  fetchWorkflowStarterModelHealth,
+  fetchWorkflowStarterReadiness,
   resolveWorkflows
 } from "./api";
 import type {
   SkillDiscoveryMatch,
   StarterKind,
   WorkflowStarterDraft,
+  WorkflowStarterModelHealth,
+  WorkflowStarterReadinessStatus,
+  WorkflowStarterSessionSummary,
   WorkflowCreateResponse,
   WorkflowResolutionMatch,
   WorkflowStarterRequest
@@ -37,6 +48,15 @@ interface StarterForm {
   author: string;
 }
 
+interface LaunchReadinessCard {
+  id: string;
+  label: string;
+  status: WorkflowStarterReadinessStatus;
+  detail: string;
+  actionLabel: string;
+  onAction: () => void;
+}
+
 const DEFAULT_FORM: StarterForm = {
   name: "",
   goal: "",
@@ -45,6 +65,19 @@ const DEFAULT_FORM: StarterForm = {
   schedule: "",
   author: "operator"
 };
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isApiResultLike(value: unknown): value is ApiResult {
+  return (
+    isObject(value) &&
+    typeof value.status === "number" &&
+    typeof value.ok === "boolean" &&
+    "data" in value
+  );
+}
 
 function slugify(value: string): string {
   return value
@@ -157,7 +190,26 @@ function buildSteps(form: StarterForm): WorkflowStarterRequest["steps"] {
   ];
 }
 
-function buildWorkflow(form: StarterForm): WorkflowStarterRequest {
+function packContextLabel(draft: WorkflowStarterDraft | null): string {
+  return draft?.sourcePack ? ` from ${draft.sourcePack}` : "";
+}
+
+function sourceTags(draft: WorkflowStarterDraft | null): string[] {
+  if (!draft) {
+    return [];
+  }
+
+  return [
+    draft.sourcePack ? `pack:${draft.sourcePack}` : null,
+    draft.sourcePackVersion ? `pack-version:${draft.sourcePackVersion}` : null,
+    draft.sourceOutcomeId ? `outcome:${draft.sourceOutcomeId}` : null
+  ].filter((tag): tag is string => tag !== null);
+}
+
+function buildWorkflow(
+  form: StarterForm,
+  draft: WorkflowStarterDraft | null = null
+): WorkflowStarterRequest {
   const fallbackName = `${form.kind}-${Date.now().toString(36)}`;
   const name = slugify(form.name) || slugify(form.goal) || fallbackName;
   return {
@@ -192,9 +244,223 @@ function buildWorkflow(form: StarterForm): WorkflowStarterRequest {
     },
     metadata: {
       author: form.author.trim() || "operator",
-      tags: ["operator-starter", form.kind]
+      tags: ["operator-starter", form.kind, ...sourceTags(draft)]
     }
   };
+}
+
+function findPendingOnboardingStep(status: OnboardingStatus | null): string {
+  const nextStep = status?.steps.find((step) => !step.completed);
+  return nextStep?.title ?? "";
+}
+
+function findOnboardingStepCompleted(status: OnboardingStatus | null, stepId: string): boolean | null {
+  const step = status?.steps.find((item) => item.step_id === stepId);
+  return step?.completed ?? null;
+}
+
+function selectResumeCandidate(
+  sessions: WorkflowStarterSessionSummary[] | null
+): WorkflowStarterSessionSummary | null {
+  if (sessions === null || sessions.length === 0) {
+    return null;
+  }
+  return [...sessions].sort((left, right) => {
+    const leftAt = Date.parse(left.updated_at);
+    const rightAt = Date.parse(right.updated_at);
+    return Number.isFinite(rightAt) && Number.isFinite(leftAt) ? rightAt - leftAt : 0;
+  })[0] ?? null;
+}
+
+function formatSessionTimestamp(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+  return new Date(timestamp).toLocaleString();
+}
+
+function statusLabel(status: WorkflowStarterReadinessStatus): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "attention":
+      return "Needs attention";
+    default:
+      return "Unknown";
+  }
+}
+
+function getRecommendedRuntimeLabel(
+  onboardingStatus: OnboardingStatus | null,
+  modelHealth: WorkflowStarterModelHealth | null,
+  readinessLoaded: boolean
+): string {
+  if (!readinessLoaded) {
+    return "Refresh launch checks to inspect a live runtime.";
+  }
+  const providerReady = findOnboardingStepCompleted(onboardingStatus, "OB-02");
+  if (modelHealth === null) {
+    return providerReady === true
+      ? "A model provider is registered. Refresh again for local runtime detail."
+      : "Runtime readiness is unavailable.";
+  }
+  const readyProvider = modelHealth.providers.find((provider) => provider.state === "available");
+  if (readyProvider) {
+    return `${readyProvider.label} is ready with ${readyProvider.modelCount} detected ${
+      readyProvider.modelCount === 1 ? "model" : "models"
+    }.`;
+  }
+  return providerReady === true ? `A model provider is registered. ${modelHealth.summary}` : modelHealth.summary;
+}
+
+function getResumeSummary(
+  sessions: WorkflowStarterSessionSummary[] | null,
+  readinessLoaded: boolean
+): string {
+  if (!readinessLoaded) {
+    return "Refresh launch checks to see whether a suspended or crashed run should be resumed first.";
+  }
+  if (sessions === null) {
+    return "Resume status is unavailable.";
+  }
+  if (sessions.length === 0) {
+    return "No suspended or crashed session is waiting for recovery.";
+  }
+  const candidate = selectResumeCandidate(sessions);
+  if (candidate === null) {
+    return "A resumable session exists, but the latest record could not be summarized.";
+  }
+  const purpose = candidate.purpose.trim() || candidate.session_id;
+  return `${purpose} is ${candidate.status} and can be resumed from the Session recovery panel in Operations.`;
+}
+
+function buildLaunchReadinessCards(params: {
+  readinessLoaded: boolean;
+  onboardingStatus: OnboardingStatus | null;
+  modelHealth: WorkflowStarterModelHealth | null;
+  incompleteSessions: WorkflowStarterSessionSummary[] | null;
+  onOpenSetup: () => void;
+  onOpenOperations: () => void;
+  onOpenRecovery: () => void;
+}): LaunchReadinessCard[] {
+  const {
+    readinessLoaded,
+    onboardingStatus,
+    modelHealth,
+    incompleteSessions,
+    onOpenSetup,
+    onOpenOperations,
+    onOpenRecovery
+  } = params;
+  const resumeCandidate = selectResumeCandidate(incompleteSessions);
+  const providerReady = findOnboardingStepCompleted(onboardingStatus, "OB-02");
+  const localModelReady = modelHealth?.overallState === "ready" && modelHealth.readyProviderCount > 0;
+  const modelReady = providerReady === true || localModelReady;
+  const onboardingReady = onboardingStatus?.overall_complete === true;
+  const nextOnboardingFix = findPendingOnboardingStep(onboardingStatus);
+
+  const onboardingCard: LaunchReadinessCard = {
+    id: "operator-readiness",
+    label: "Operator and workspace readiness",
+    status: !readinessLoaded
+      ? "unknown"
+      : onboardingStatus === null
+        ? "unknown"
+        : onboardingReady
+          ? "ready"
+          : "attention",
+    detail: !readinessLoaded
+      ? "Refresh launch checks to inspect the live onboarding checklist."
+      : onboardingStatus === null
+        ? "Onboarding status could not be loaded from the engine."
+        : onboardingReady
+          ? `${onboardingStatus.completed_count} of ${onboardingStatus.total_count} onboarding checks are complete.`
+          : `${onboardingStatus.completed_count} of ${onboardingStatus.total_count} onboarding checks are complete. Next fix: ${nextOnboardingFix || "review setup guidance"}.`,
+    actionLabel: onboardingReady ? "Review setup" : "Open setup",
+    onAction: onOpenSetup
+  };
+
+  const modelCard: LaunchReadinessCard = {
+    id: "model-readiness",
+    label: "Model readiness",
+    status: !readinessLoaded
+      ? "unknown"
+      : modelReady
+          ? "ready"
+        : providerReady === false
+          ? "attention"
+          : modelHealth === null
+            ? "unknown"
+          : "attention",
+    detail: !readinessLoaded
+      ? "Refresh launch checks to inspect local and provider-backed model paths."
+      : modelHealth === null
+        ? providerReady === true
+          ? "At least one provider is registered. Refresh again if you want the local runtime summary."
+          : "Model health could not be loaded from the engine."
+        : providerReady === true
+          ? `A model provider is registered. ${modelHealth.summary}`
+          : modelHealth.summary,
+    actionLabel: modelReady ? "Review setup" : "Open setup",
+    onAction: onOpenSetup
+  };
+
+  const hostExecutionCard: LaunchReadinessCard = {
+    id: "host-execution",
+    label: "Host execution posture",
+    status: !readinessLoaded
+      ? "unknown"
+      : onboardingStatus === null
+        ? "unknown"
+        : resumeCandidate !== null || !modelReady || !onboardingReady
+          ? "attention"
+          : "ready",
+    detail: !readinessLoaded
+      ? "Host execution stays opt-in until you refresh live launch checks."
+      : onboardingStatus === null
+        ? "Host execution remains opt-in until launch prerequisites can be confirmed."
+        : resumeCandidate !== null
+          ? "Finish or resume the existing incomplete run before starting another host-backed loop."
+          : !modelReady
+            ? "Host execution remains opt-in until a runnable model path is available."
+            : !onboardingReady
+              ? "Host execution remains opt-in until core onboarding checks are complete."
+              : "Core prerequisites are ready. Host execution is still operator-triggered and review-gated.",
+    actionLabel: "Open operations hub",
+    onAction: onOpenOperations
+  };
+
+  const resumeCard: LaunchReadinessCard = {
+    id: "resume-path",
+    label: "Resume prior work",
+    status: !readinessLoaded
+      ? "unknown"
+      : incompleteSessions === null
+        ? "unknown"
+        : incompleteSessions.length > 0
+          ? "attention"
+          : "ready",
+    detail: !readinessLoaded
+      ? "Refresh launch checks to see whether a suspended or crashed session should be resumed."
+      : incompleteSessions === null
+        ? "Session recovery status could not be loaded from the engine."
+        : incompleteSessions.length === 0
+          ? "No suspended or crashed session is waiting for recovery."
+          : `${resumeCandidate?.purpose.trim() || resumeCandidate?.session_id || "A prior session"} is ${resumeCandidate?.status || "recoverable"} and was last updated ${resumeCandidate ? formatSessionTimestamp(resumeCandidate.updated_at) : "recently"}. Open the recovery panel before starting a new run.`,
+    actionLabel: incompleteSessions !== null && incompleteSessions.length > 0 ? "Open recovery panel" : "Review operations",
+    onAction: incompleteSessions !== null && incompleteSessions.length > 0 ? onOpenRecovery : onOpenOperations
+  };
+
+  return [onboardingCard, modelCard, hostExecutionCard, resumeCard];
+}
+
+function getLaunchBadgeLabel(cards: LaunchReadinessCard[], readinessLoaded: boolean): string {
+  if (!readinessLoaded) {
+    return "Live launch checks available";
+  }
+  const readyCount = cards.filter((card) => card.status === "ready").length;
+  return `${readyCount} of ${cards.length} checks ready`;
 }
 
 export function WorkflowStarterPanel({
@@ -212,10 +478,20 @@ export function WorkflowStarterPanel({
   const [workflowMatches, setWorkflowMatches] = useState<WorkflowResolutionMatch[]>([]);
   const [skillMatches, setSkillMatches] = useState<SkillDiscoveryMatch[]>([]);
   const [loadingAction, setLoadingAction] = useState<"recommend" | "create" | null>(null);
+  const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [error, setError] = useState("");
+  const [readinessError, setReadinessError] = useState("");
+  const [readinessLoaded, setReadinessLoaded] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
+  const [modelHealth, setModelHealth] = useState<WorkflowStarterModelHealth | null>(null);
+  const [incompleteSessions, setIncompleteSessions] = useState<WorkflowStarterSessionSummary[] | null>(null);
 
   const hasCredentials = token.trim() !== "" || apiKey.trim() !== "";
   const canBuild = useMemo(() => form.goal.trim() !== "", [form.goal]);
+  const resumeCandidate = useMemo(
+    () => selectResumeCandidate(incompleteSessions),
+    [incompleteSessions]
+  );
 
   useEffect(() => {
     if (initialDraft === null) {
@@ -246,6 +522,84 @@ export function WorkflowStarterPanel({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  async function refreshLaunchReadiness(): Promise<void> {
+    if (!hasCredentials) {
+      return;
+    }
+
+    setLoadingReadiness(true);
+    setReadinessError("");
+    try {
+      const [onboardingResult, modelHealthResult, incompleteSessionsResult] =
+        await Promise.allSettled([
+          fetchWorkflowStarterReadiness(token, apiKey),
+          fetchWorkflowStarterModelHealth(token, apiKey),
+          fetchWorkflowStarterIncompleteSessions(token, apiKey)
+        ]);
+
+      const onboardingPayload =
+        onboardingResult.status === "fulfilled" && isApiResultLike(onboardingResult.value)
+          ? onboardingResult.value
+          : null;
+      const modelPayload =
+        modelHealthResult.status === "fulfilled" && isApiResultLike(modelHealthResult.value)
+          ? modelHealthResult.value
+          : null;
+      const incompletePayload =
+        incompleteSessionsResult.status === "fulfilled" && isApiResultLike(incompleteSessionsResult.value)
+          ? incompleteSessionsResult.value
+          : null;
+
+      if (onboardingPayload !== null) {
+        onResult("Workflow Starter - Onboarding Readiness", onboardingPayload);
+      }
+      if (modelPayload !== null) {
+        onResult("Workflow Starter - Model Health", modelPayload);
+      }
+      if (incompletePayload !== null) {
+        onResult("Workflow Starter - Incomplete Sessions", incompletePayload);
+      }
+
+      const nextOnboardingStatus =
+        onboardingPayload?.ok === true
+          ? asWorkflowStarterOnboardingStatus(onboardingPayload.data)
+          : null;
+      const nextModelHealth =
+        modelPayload?.ok === true ? asWorkflowStarterModelHealth(modelPayload.data) : null;
+      const nextIncompleteSessions =
+        incompletePayload?.ok === true
+          ? asWorkflowStarterSessionSummaries(incompletePayload.data)
+          : null;
+
+      setOnboardingStatus(nextOnboardingStatus);
+      setModelHealth(nextModelHealth);
+      setIncompleteSessions(nextIncompleteSessions);
+      setReadinessLoaded(true);
+
+      const failedChecks = [
+        nextOnboardingStatus === null ? "onboarding" : null,
+        nextModelHealth === null ? "model health" : null,
+        nextIncompleteSessions === null ? "session recovery" : null
+      ].filter((label): label is string => label !== null);
+
+      if (failedChecks.length > 0) {
+        setReadinessError(
+          `Some launch checks could not be loaded: ${failedChecks.join(", ")}. Unknown cards stay neutral until the next refresh.`
+        );
+      }
+    } catch (loadError) {
+      setReadinessLoaded(true);
+      setOnboardingStatus(null);
+      setModelHealth(null);
+      setIncompleteSessions(null);
+      setReadinessError(
+        loadError instanceof Error ? loadError.message : "Launch checks could not be refreshed."
+      );
+    } finally {
+      setLoadingReadiness(false);
+    }
+  }
+
   async function handleRecommend(): Promise<void> {
     if (!canBuild) {
       setError("Describe the workflow goal first.");
@@ -259,8 +613,9 @@ export function WorkflowStarterPanel({
         resolveWorkflows(query, token, apiKey),
         discoverSkills(query, token, apiKey)
       ]);
-      onResult("Workflow Starter - Resolve Workflows", workflowResult);
-      onResult("Workflow Starter - Discover Skills", skillResult);
+      const contextLabel = packContextLabel(initialDraft);
+      onResult(`Workflow Starter - Resolve Workflows${contextLabel}`, workflowResult);
+      onResult(`Workflow Starter - Discover Skills${contextLabel}`, skillResult);
       const workflows = asWorkflowResolutionResponse(workflowResult.data);
       const skills = asSkillDiscoveryResponse(skillResult.data);
       if (!workflowResult.ok || workflows === null) {
@@ -273,7 +628,7 @@ export function WorkflowStarterPanel({
       }
       setWorkflowMatches(workflows.matches);
       setSkillMatches(skills.matches);
-      setWorkflowPreview(buildWorkflow(form));
+      setWorkflowPreview(buildWorkflow(form, initialDraft));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown workflow starter error";
       setError(message);
@@ -287,12 +642,12 @@ export function WorkflowStarterPanel({
       setError("Describe the workflow goal first.");
       return;
     }
-    const workflow = workflowPreview ?? buildWorkflow(form);
+    const workflow = workflowPreview ?? buildWorkflow(form, initialDraft);
     setError("");
     setLoadingAction("create");
     try {
       const result = await createWorkflow(workflow, token, apiKey);
-      onResult("Workflow Starter - Create Workflow", result);
+      onResult(`Workflow Starter - Create Workflow${packContextLabel(initialDraft)}`, result);
       const response = asWorkflowCreateResponse(result.data);
       if (!result.ok || response === null) {
         setError(`Workflow creation failed (${result.status})`);
@@ -307,6 +662,26 @@ export function WorkflowStarterPanel({
       setLoadingAction(null);
     }
   }
+
+  function handleOpenRecovery(): void {
+    openOperationsRecoveryPanel(onOpenOperations);
+  }
+
+  const launchReadinessCards = buildLaunchReadinessCards({
+    readinessLoaded,
+    onboardingStatus,
+    modelHealth,
+    incompleteSessions,
+    onOpenSetup,
+    onOpenOperations,
+    onOpenRecovery: handleOpenRecovery
+  });
+  const recommendedRuntime = getRecommendedRuntimeLabel(
+    onboardingStatus,
+    modelHealth,
+    readinessLoaded
+  );
+  const resumeSummary = getResumeSummary(incompleteSessions, readinessLoaded);
 
   if (!hasCredentials) {
     return (
@@ -327,13 +702,24 @@ export function WorkflowStarterPanel({
           <h2>Workflow Starter</h2>
           <p>
             Start research, improvement, and repeatable operator loops from a goal. AGENT-33 builds
-            a validated workflow definition and points you to matching templates and skills.
+            a validated workflow definition and lets you pull live launch checks before handing work
+            over to the engine.
           </p>
           {initialDraft?.sourceLabel ? (
-            <p className="workflow-starter-source">Loaded from Outcome Home: {initialDraft.sourceLabel}</p>
+            <div className="workflow-starter-source">
+              <span>Loaded starter: {initialDraft.sourceLabel}</span>
+              {initialDraft.sourcePack ? (
+                <span>
+                  Pack: {initialDraft.sourcePack}
+                  {initialDraft.sourcePackVersion ? ` v${initialDraft.sourcePackVersion}` : ""}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
-        <div className="workflow-starter-badge">Loop-ready</div>
+        <div className="workflow-starter-badge">
+          {loadingReadiness ? "Refreshing launch checks..." : getLaunchBadgeLabel(launchReadinessCards, readinessLoaded)}
+        </div>
       </header>
 
       <div className="workflow-starter-grid">
@@ -398,6 +784,31 @@ export function WorkflowStarterPanel({
           ) : null}
 
           <div className="workflow-starter-card">
+            <div className="outcome-section-head">
+              <div>
+                <h3>Launch readiness</h3>
+                <p>Use live engine checks before you create or hand off a new loop.</p>
+              </div>
+              <button type="button" onClick={() => void refreshLaunchReadiness()} disabled={loadingReadiness}>
+                {loadingReadiness ? "Refreshing..." : "Refresh launch checks"}
+              </button>
+            </div>
+            {readinessError ? <p className="ops-hub-error" role="alert">{readinessError}</p> : null}
+            <div className="outcome-readiness-grid" aria-label="Workflow launch readiness">
+              {launchReadinessCards.map((card) => (
+                <article className={`outcome-readiness-card ${card.status}`} key={card.id}>
+                  <span>{statusLabel(card.status)}</span>
+                  <h3>{card.label}</h3>
+                  <p>{card.detail}</p>
+                  <button type="button" onClick={card.onAction}>
+                    {card.actionLabel}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="workflow-starter-card">
             <h3>Recommended workflow</h3>
             {workflowPreview === null ? (
               <p>Describe a goal and choose Recommend plan to preview the workflow.</p>
@@ -411,6 +822,14 @@ export function WorkflowStarterPanel({
                   <span className="detail-label">Steps</span>
                   <span>{workflowPreview.steps.length}</span>
                 </div>
+                <div className="detail-field">
+                  <span className="detail-label">Recommended runtime</span>
+                  <span>{recommendedRuntime}</span>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-label">Resume before relaunch</span>
+                  <span>{resumeSummary}</span>
+                </div>
                 <ol className="workflow-step-list">
                   {workflowPreview.steps.map((step) => (
                     <li key={step.id}>
@@ -421,7 +840,9 @@ export function WorkflowStarterPanel({
                 </ol>
                 <div className="workflow-starter-actions">
                   <button type="button" onClick={onOpenSpawner}>Open visual spawner</button>
-                  <button type="button" onClick={onOpenOperations}>Open operations hub</button>
+                  <button type="button" onClick={resumeCandidate !== null ? handleOpenRecovery : onOpenOperations}>
+                    {resumeCandidate !== null ? "Open recovery panel" : "Open operations hub"}
+                  </button>
                 </div>
               </>
             )}

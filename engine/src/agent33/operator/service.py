@@ -258,6 +258,10 @@ class OperatorService:
                 "ollama_base_url": s.ollama_base_url,
                 "ollama_default_model": s.ollama_default_model,
             },
+            "lm_studio": {
+                "lm_studio_base_url": s.lm_studio_base_url,
+                "lm_studio_default_model": s.lm_studio_default_model,
+            },
             "llm": {
                 "default_model": s.default_model,
                 "openai_api_key": _redact(s.openai_api_key),

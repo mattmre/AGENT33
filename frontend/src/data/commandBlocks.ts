@@ -22,7 +22,9 @@ export interface CockpitCommandBlock {
   readonly timestampLabel: string;
   readonly durationMs?: number;
   readonly durationLabel: string;
+  readonly traceId?: string;
   readonly redactionState: CommandBlockRedactionState;
+  readonly failureSummary?: string;
   readonly outputSummary: string;
   readonly relatedArtifactId: string;
   readonly relatedTaskId?: string;
@@ -38,7 +40,9 @@ export interface CommandBlockInput {
   readonly exitCode?: number;
   readonly timestampLabel: string;
   readonly durationMs?: number;
+  readonly traceId?: string;
   readonly redactionState: CommandBlockRedactionState;
+  readonly failureSummary?: string;
   readonly outputSummary: string;
   readonly relatedArtifactId: string;
   readonly relatedTaskId?: string;
@@ -93,12 +97,15 @@ function getExitLabel(status: CommandBlockStatus, exitCode: number | undefined):
   return "No exit code yet";
 }
 
-function getDefaultNextAction(status: CommandBlockStatus): string {
+function getDefaultNextAction(status: CommandBlockStatus, failureSummary: string | undefined): string {
   if (status === "success") {
     return "Review the linked artifact";
   }
 
   if (status === "failed") {
+    if (failureSummary) {
+      return `Investigate failure: ${failureSummary}`;
+    }
     return "Inspect the failure summary";
   }
 
@@ -131,11 +138,13 @@ export function createCockpitCommandBlock(input: CommandBlockInput): CockpitComm
     timestampLabel: input.timestampLabel,
     durationMs: input.durationMs,
     durationLabel: formatCommandDuration(input.durationMs),
+    traceId: input.traceId,
     redactionState: input.redactionState,
+    failureSummary: input.failureSummary,
     outputSummary: input.outputSummary,
     relatedArtifactId: input.relatedArtifactId,
     relatedTaskId: input.relatedTaskId,
-    nextActionLabel: input.nextActionLabel ?? getDefaultNextAction(input.status)
+    nextActionLabel: input.nextActionLabel ?? getDefaultNextAction(input.status, input.failureSummary)
   };
 }
 
@@ -156,7 +165,10 @@ function createTemplateCommandBlock(
     sourceRole: task.ownerRole,
     status: task.status === "blocked" ? "blocked" : "running",
     timestampLabel,
+    traceId: `${workspaceId}-trace-${task.id}`,
     redactionState: task.status === "blocked" ? "review-required" : "not-required",
+    failureSummary:
+      task.status === "blocked" ? `${task.title} is blocked before command evidence can complete.` : undefined,
     outputSummary: `${task.outcome} Command output has not been captured yet.`,
     relatedArtifactId,
     relatedTaskId: task.id

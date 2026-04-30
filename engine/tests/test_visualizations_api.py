@@ -20,8 +20,7 @@ def clear_workflow_state():
     from agent33.api.routes import workflows
 
     def _reset() -> None:
-        workflows._registry.clear()
-        workflows._execution_history.clear()
+        workflows.reset_workflow_state()
         if workflows._scheduler is not None:
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
@@ -79,115 +78,139 @@ def no_scope_client() -> TestClient:
 
 
 @pytest.fixture
-def simple_workflow(writer_client: TestClient) -> str:
+def simple_workflow(writer_client: TestClient, route_approval_headers) -> str:
     """Create a simple linear workflow and return its name."""
     workflow_name = f"test-viz-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "name": workflow_name,
+        "version": "1.0.0",
+        "description": "Simple workflow for viz testing",
+        "steps": [
+            {
+                "id": "step-1",
+                "name": "First Step",
+                "action": "transform",
+                "transform": "inputs",
+            },
+            {
+                "id": "step-2",
+                "name": "Second Step",
+                "action": "transform",
+                "transform": "step-1",
+                "depends_on": ["step-1"],
+            },
+        ],
+        "execution": {"mode": "dependency-aware"},
+    }
     resp = writer_client.post(
         "/v1/workflows/",
-        json={
-            "name": workflow_name,
-            "version": "1.0.0",
-            "description": "Simple workflow for viz testing",
-            "steps": [
-                {
-                    "id": "step-1",
-                    "name": "First Step",
-                    "action": "transform",
-                    "transform": "inputs",
-                },
-                {
-                    "id": "step-2",
-                    "name": "Second Step",
-                    "action": "transform",
-                    "transform": "step-1",
-                    "depends_on": ["step-1"],
-                },
-            ],
-            "execution": {"mode": "dependency-aware"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            writer_client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest visualization workflow setup",
+        ),
     )
     assert resp.status_code == 201
     return workflow_name
 
 
 @pytest.fixture
-def dag_workflow(writer_client: TestClient) -> str:
+def dag_workflow(writer_client: TestClient, route_approval_headers) -> str:
     """Create a DAG workflow with parallel branches and return its name."""
     workflow_name = f"dag-viz-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "name": workflow_name,
+        "version": "1.0.0",
+        "description": "DAG workflow with parallel branches",
+        "steps": [
+            {
+                "id": "start",
+                "name": "Start",
+                "action": "transform",
+                "transform": "inputs",
+            },
+            {
+                "id": "branch-a",
+                "name": "Branch A",
+                "action": "transform",
+                "transform": "start",
+                "depends_on": ["start"],
+            },
+            {
+                "id": "branch-b",
+                "name": "Branch B",
+                "action": "transform",
+                "transform": "start",
+                "depends_on": ["start"],
+            },
+            {
+                "id": "merge",
+                "name": "Merge",
+                "action": "transform",
+                "transform": "branch-a",
+                "depends_on": ["branch-a", "branch-b"],
+            },
+        ],
+        "execution": {"mode": "dependency-aware"},
+    }
     resp = writer_client.post(
         "/v1/workflows/",
-        json={
-            "name": workflow_name,
-            "version": "1.0.0",
-            "description": "DAG workflow with parallel branches",
-            "steps": [
-                {
-                    "id": "start",
-                    "name": "Start",
-                    "action": "transform",
-                    "transform": "inputs",
-                },
-                {
-                    "id": "branch-a",
-                    "name": "Branch A",
-                    "action": "transform",
-                    "transform": "start",
-                    "depends_on": ["start"],
-                },
-                {
-                    "id": "branch-b",
-                    "name": "Branch B",
-                    "action": "transform",
-                    "transform": "start",
-                    "depends_on": ["start"],
-                },
-                {
-                    "id": "merge",
-                    "name": "Merge",
-                    "action": "transform",
-                    "transform": "branch-a",
-                    "depends_on": ["branch-a", "branch-b"],
-                },
-            ],
-            "execution": {"mode": "dependency-aware"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            writer_client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest visualization workflow setup",
+        ),
     )
     assert resp.status_code == 201
     return workflow_name
 
 
 @pytest.fixture
-def cyclic_workflow(writer_client: TestClient) -> str:
+def cyclic_workflow(writer_client: TestClient, route_approval_headers) -> str:
     """Create a workflow with a cycle (for testing cycle detection)."""
     workflow_name = f"cyclic-viz-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "name": workflow_name,
+        "version": "1.0.0",
+        "description": "Workflow with cycle",
+        "steps": [
+            {
+                "id": "step-a",
+                "action": "transform",
+                "transform": "inputs",
+                "depends_on": ["step-c"],
+            },
+            {
+                "id": "step-b",
+                "action": "transform",
+                "transform": "step-a",
+                "depends_on": ["step-a"],
+            },
+            {
+                "id": "step-c",
+                "action": "transform",
+                "transform": "step-b",
+                "depends_on": ["step-b"],
+            },
+        ],
+        "execution": {"mode": "dependency-aware"},
+    }
     resp = writer_client.post(
         "/v1/workflows/",
-        json={
-            "name": workflow_name,
-            "version": "1.0.0",
-            "description": "Workflow with cycle",
-            "steps": [
-                {
-                    "id": "step-a",
-                    "action": "transform",
-                    "transform": "inputs",
-                    "depends_on": ["step-c"],  # Creates cycle
-                },
-                {
-                    "id": "step-b",
-                    "action": "transform",
-                    "transform": "step-a",
-                    "depends_on": ["step-a"],
-                },
-                {
-                    "id": "step-c",
-                    "action": "transform",
-                    "transform": "step-b",
-                    "depends_on": ["step-b"],
-                },
-            ],
-            "execution": {"mode": "dependency-aware"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            writer_client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest visualization workflow setup",
+        ),
     )
     assert resp.status_code == 201
     return workflow_name
@@ -342,16 +365,28 @@ class TestWorkflowGraphAuthorization:
         resp = reader_client.get(f"/v1/visualizations/workflows/{simple_workflow}/graph")
         assert resp.status_code == 200
 
-    def test_run_overlay_hides_other_tenant_live_runs(self, writer_client: TestClient) -> None:
+    def test_run_overlay_hides_other_tenant_live_runs(
+        self,
+        writer_client: TestClient,
+        route_approval_headers,
+    ) -> None:
         workflow_name = f"tenant-viz-{uuid.uuid4().hex[:8]}"
+        payload = {
+            "name": workflow_name,
+            "version": "1.0.0",
+            "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
+            "execution": {"mode": "sequential"},
+        }
         resp = writer_client.post(
             "/v1/workflows/",
-            json={
-                "name": workflow_name,
-                "version": "1.0.0",
-                "steps": [{"id": "step-1", "action": "transform", "transform": "inputs"}],
-                "execution": {"mode": "sequential"},
-            },
+            json=payload,
+            headers=route_approval_headers(
+                writer_client,
+                route_name="workflows.create",
+                operation="create",
+                arguments=payload,
+                details="Pytest tenant visualization setup",
+            ),
         )
         assert resp.status_code == 201
 

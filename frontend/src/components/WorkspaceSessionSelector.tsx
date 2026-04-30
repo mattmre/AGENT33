@@ -4,12 +4,17 @@ import {
   isWorkspaceSessionId,
   type WorkspaceSessionId
 } from "../data/workspaces";
+import {
+  buildWorkspaceTemplateStarterDraft,
+  getPrimaryWorkspaceTemplateStarter
+} from "../data/workspaceTemplateStarters";
+import type { WorkflowStarterDraft } from "../features/workflow-starter/types";
 
 interface WorkspaceSessionSelectorProps {
   selectedWorkspaceId: WorkspaceSessionId;
   onSelectWorkspace: (workspaceId: WorkspaceSessionId) => void;
   onOpenRuns: () => void;
-  onOpenWorkflows: () => void;
+  onOpenWorkflows: (draft?: WorkflowStarterDraft) => void;
 }
 
 export function WorkspaceSessionSelector({
@@ -19,6 +24,7 @@ export function WorkspaceSessionSelector({
   onOpenWorkflows
 }: WorkspaceSessionSelectorProps): JSX.Element {
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
+  const primaryStarter = getPrimaryWorkspaceTemplateStarter(selectedWorkspaceId);
 
   return (
     <section className="cockpit-sidebar-context workspace-session-card" aria-label="Workspace session">
@@ -51,6 +57,13 @@ export function WorkspaceSessionSelector({
       </select>
 
       <p>{selectedWorkspace.goal}</p>
+      {primaryStarter ? (
+        <section className="workspace-session-starter" aria-label="Recommended workspace starter">
+          <span>Best first workflow</span>
+          <strong>{primaryStarter.label}</strong>
+          <p>{primaryStarter.description}</p>
+        </section>
+      ) : null}
 
       <dl className="workspace-session-stats" aria-label="Workspace snapshot">
         <div>
@@ -68,8 +81,13 @@ export function WorkspaceSessionSelector({
       </dl>
 
       <div className="workspace-session-actions" aria-label="Workspace quick actions">
-        <button type="button" onClick={onOpenWorkflows}>
-          Open workflows
+        <button
+          type="button"
+          onClick={() =>
+            onOpenWorkflows(primaryStarter ? buildWorkspaceTemplateStarterDraft(primaryStarter) : undefined)
+          }
+        >
+          {primaryStarter ? `Start ${primaryStarter.label}` : "Open workflows"}
         </button>
         <button type="button" onClick={onOpenRuns}>
           View runs

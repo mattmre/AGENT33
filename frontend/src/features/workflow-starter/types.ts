@@ -1,4 +1,11 @@
 export type StarterKind = "research" | "improvement-loop" | "automation-loop";
+export type WorkflowStarterReadinessStatus = "ready" | "attention" | "unknown";
+export type WorkflowStarterProviderHealthState =
+  | "available"
+  | "empty"
+  | "unavailable"
+  | "error";
+export type WorkflowStarterModelHealthState = "ready" | "needs_attention" | "unavailable";
 
 export interface WorkflowStarterDraft {
   id: string;
@@ -9,6 +16,9 @@ export interface WorkflowStarterDraft {
   schedule?: string;
   author?: string;
   sourceLabel?: string;
+  sourcePack?: string;
+  sourcePackVersion?: string;
+  sourceOutcomeId?: string;
 }
 
 export interface WorkflowStarterRequest {
@@ -76,4 +86,38 @@ export interface SkillDiscoveryMatch {
 export interface SkillDiscoveryResponse {
   query: string;
   matches: SkillDiscoveryMatch[];
+}
+
+export interface WorkflowStarterModelHealthProvider {
+  provider: string;
+  label: string;
+  state: WorkflowStarterProviderHealthState;
+  ok: boolean;
+  baseUrl: string;
+  modelCount: number;
+  message: string;
+  action: string;
+}
+
+export interface WorkflowStarterModelHealth {
+  overallState: WorkflowStarterModelHealthState;
+  summary: string;
+  readyProviderCount: number;
+  attentionProviderCount: number;
+  totalModelCount: number;
+  providers: WorkflowStarterModelHealthProvider[];
+}
+
+export interface WorkflowStarterSessionSummary {
+  session_id: string;
+  purpose: string;
+  status: string;
+  started_at: string;
+  updated_at: string;
+  ended_at: string | null;
+  task_count: number;
+  tasks_completed: number;
+  event_count: number;
+  parent_session_id: string | null;
+  tenant_id: string;
 }

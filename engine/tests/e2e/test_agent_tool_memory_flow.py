@@ -244,7 +244,12 @@ class TestAgentInvokeE2E:
 class TestAgentRegistrationE2E:
     """Agent CRUD through the HTTP API."""
 
-    def test_register_list_get_agent(self, e2e_client, sample_agent_def):
+    def test_register_list_get_agent(
+        self,
+        e2e_client,
+        sample_agent_def,
+        route_approval_headers,
+    ):
         """Full CRUD lifecycle: register -> list -> get -> verify fields.
 
         This catches regressions in agent serialization, registry state,
@@ -253,9 +258,17 @@ class TestAgentRegistrationE2E:
         _, client, _ = e2e_client
         token = _admin_token()
         headers = {"Authorization": f"Bearer {token}"}
+        create_headers = route_approval_headers(
+            client,
+            route_name="agents.create",
+            operation="create",
+            arguments=sample_agent_def,
+            details="Pytest E2E agent registration setup",
+            authorization=headers["Authorization"],
+        )
 
         # Register
-        resp = client.post("/v1/agents/", json=sample_agent_def, headers=headers)
+        resp = client.post("/v1/agents/", json=sample_agent_def, headers=create_headers)
         assert resp.status_code == 201
         assert resp.json()["name"] == "e2e-test-agent"
 

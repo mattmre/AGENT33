@@ -21,6 +21,9 @@ from agent33.packs.api_models import (
     InstallRequest,
     InstallResponse,
     PackDetail,
+    PackRecoveryArchive,
+    PackRecoveryDependent,
+    PackRecoveryPreviewResponse,
     PackRollbackResponse,
     PackSkillInfo,
     PackSummary,
@@ -30,9 +33,11 @@ from agent33.packs.api_models import (
     TrustPolicyUpdateRequest,
 )
 from agent33.packs.models import PackSource
+from agent33.packs.outcome_pack import parse_outcome_pack_yaml
 from agent33.packs.provenance import evaluate_trust
 from agent33.packs.registry import PackRegistry
 from agent33.security.permissions import require_scope
+from agent33.workflows.definition import WorkflowDefinition
 
 logger = structlog.get_logger()
 
@@ -139,6 +144,61 @@ def _pack_to_detail(pack: Any, skill_registry: Any = None) -> PackDetail:
         checksum=pack.checksum,
         status=pack.status.value if hasattr(pack.status, "value") else str(pack.status),
         provenance=pack.provenance,
+    )
+
+
+def _dependent_constraint(dependent: Any, dependency_name: str) -> str:
+    """Return the declared version constraint a dependent has on a pack."""
+    for dependency in getattr(dependent, "pack_dependencies", []) or []:
+        if dependency.name == dependency_name:
+            return str(getattr(dependency, "version_constraint", "") or "")
+    return ""
+
+
+def _recovery_recommendation(
+    *,
+    pack_name: str,
+    target_version: str,
+    dependents: list[PackRecoveryDependent],
+    compatibility_errors: list[str],
+    archived_versions: list[PackRecoveryArchive],
+) -> tuple[str, list[str]]:
+    """Build beginner-safe recovery guidance for destructive pack operations."""
+    warnings: list[str] = []
+    if dependents:
+        warnings.append(
+            f"Uninstall is blocked until {len(dependents)} dependent pack"
+            f"{'' if len(dependents) == 1 else 's'} are removed or updated."
+        )
+    if compatibility_errors:
+        warnings.append(
+            "Selected upgrade target is not compatible with dependent pack requirements.",
+        )
+    if not archived_versions:
+        warnings.append("No archived rollback revisions are available yet.")
+
+    if compatibility_errors:
+        return (
+            f"Do not upgrade {pack_name} to {target_version} until compatibility "
+            "errors are resolved.",
+            warnings,
+        )
+    if dependents:
+        return (
+            f"Review dependent packs before uninstalling {pack_name}; compatible "
+            "upgrades can proceed.",
+            warnings,
+        )
+    if archived_versions:
+        return (
+            "No dependent packs are blocking this change, and rollback revisions "
+            "are available if needed.",
+            warnings,
+        )
+    return (
+        "No dependent packs are blocking this change. Upgrade archives the "
+        "current version before applying.",
+        warnings,
     )
 
 
@@ -431,6 +491,74 @@ async def dry_run_pack(
     return result
 
 
+@router.get(
+    "/{name}/recovery-preview",
+    response_model=PackRecoveryPreviewResponse,
+    dependencies=[require_scope("agents:read")],
+)
+async def get_pack_recovery_preview(
+    name: str,
+    request: Request,
+    target_version: str = Query(default="", description="Optional upgrade target version"),
+) -> PackRecoveryPreviewResponse:
+    """Preview dependency impact and rollback options before destructive pack changes."""
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    pack = registry.get(name)
+    if pack is None:
+        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
+
+    dependents = [
+        PackRecoveryDependent(
+            name=dependent.name,
+            version=dependent.version,
+            version_constraint=_dependent_constraint(dependent, name),
+            status=dependent.status.value
+            if hasattr(dependent.status, "value")
+            else str(dependent.status),
+        )
+        for dependent in registry.find_dependents(name)
+    ]
+
+    compatibility_errors: list[str] = []
+    if target_version and target_version != pack.version:
+        compatibility_errors = registry.check_dependents_compatible(name, target_version)
+
+    rollback_manager = _get_pack_rollback_manager(request)
+    archived_versions: list[PackRecoveryArchive] = []
+    if rollback_manager is not None:
+        archived_versions = [
+            PackRecoveryArchive(version=revision.version, archived_at=revision.archived_at)
+            for revision in rollback_manager.list_archived_versions(name)
+        ]
+
+    recommended_action, warnings = _recovery_recommendation(
+        pack_name=name,
+        target_version=target_version or pack.version,
+        dependents=dependents,
+        compatibility_errors=compatibility_errors,
+        archived_versions=archived_versions,
+    )
+
+    return PackRecoveryPreviewResponse(
+        pack_name=name,
+        installed_version=pack.version,
+        target_version=target_version,
+        affected_skills=pack.loaded_skill_names,
+        enabled_tenants=registry.enabled_tenants(name),
+        dependents=dependents,
+        compatibility_errors=compatibility_errors,
+        archived_versions=archived_versions,
+        can_uninstall_safely=len(dependents) == 0,
+        can_upgrade_safely=len(compatibility_errors) == 0,
+        can_rollback=len(archived_versions) > 0,
+        recommended_action=recommended_action,
+        warnings=warnings,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Session-scoped enable/disable (P-PACK v1)
 # ---------------------------------------------------------------------------
@@ -482,6 +610,77 @@ async def disable_pack_for_session(
         "session_id": session_id,
         "action": "disabled_for_session",
     }
+
+
+# ---------------------------------------------------------------------------
+# Outcome pack manifests
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{name}/outcome-manifests", dependencies=[require_scope("agents:read")])
+async def get_pack_outcome_manifests(name: str, request: Request) -> dict[str, Any]:
+    """Return validated outcome manifests and workflows bundled with an installed pack."""
+    registry = _get_pack_registry(request)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Pack registry not initialized")
+
+    pack = registry.get(name)
+    if pack is None:
+        raise HTTPException(status_code=404, detail=f"Pack '{name}' not found")
+
+    pack_dir = pack.pack_dir.resolve()
+    results: list[dict[str, Any]] = []
+    for entry in pack.outcome_packs:
+        manifest_path = (pack_dir / entry.path).resolve()
+        try:
+            manifest_path.relative_to(pack_dir)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Outcome pack path '{entry.path}' escapes pack directory",
+            ) from exc
+
+        try:
+            manifest = parse_outcome_pack_yaml(manifest_path)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to load outcome pack '{entry.path}': {exc}",
+            ) from exc
+
+        workflows: list[dict[str, Any]] = []
+        for workflow_ref in manifest.workflows:
+            if workflow_ref.definition is not None:
+                workflows.append(workflow_ref.definition.model_dump(mode="json"))
+                continue
+            if workflow_ref.path is None:
+                continue
+            workflow_path = (pack_dir / workflow_ref.path).resolve()
+            try:
+                workflow_path.relative_to(pack_dir)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Workflow path '{workflow_ref.path}' escapes pack directory",
+                ) from exc
+            try:
+                workflow = WorkflowDefinition.load_from_file(workflow_path)
+            except (FileNotFoundError, ValueError, ImportError) as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to load workflow '{workflow_ref.path}': {exc}",
+                ) from exc
+            workflows.append(workflow.model_dump(mode="json"))
+
+        results.append(
+            {
+                "entry": entry.model_dump(mode="json"),
+                "manifest": manifest.model_dump(mode="json"),
+                "workflows": workflows,
+            }
+        )
+
+    return {"packs": results, "count": len(results)}
 
 
 # ---------------------------------------------------------------------------

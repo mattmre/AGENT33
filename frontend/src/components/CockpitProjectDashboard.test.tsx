@@ -19,9 +19,20 @@ describe("CockpitProjectDashboard", () => {
 
     expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Multi-Agent Shipyard")).toBeInTheDocument();
-    expect(screen.getByText("PR-first implementation")).toBeInTheDocument();
+    expect(screen.getAllByText("PR-first implementation")).toHaveLength(3);
     expect(screen.getByText("3 tasks need attention")).toBeInTheDocument();
-    expect(screen.getByText("No PR or package linked")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Artifact timeline" })).toBeInTheDocument();
+    expect(screen.getByText("Review timeline")).toBeInTheDocument();
+    expect(screen.getByText("Artifact package ready")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review outcome artifact: Artifact package ready" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Workspace template adapter").length).toBeGreaterThan(1);
+    expect(screen.getByRole("region", { name: "Safety and coordination signals" })).toBeInTheDocument();
+    expect(screen.getAllByText("1 cockpit item needs review.")).toHaveLength(2);
+    expect(screen.getByRole("region", { name: "Safety gate summary" })).toHaveClass("safety-gate-indicator-review");
+    expect(screen.getByLabelText("Needs review: 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Top safety gate records")).toBeInTheDocument();
   });
 
   it("routes dashboard actions through the existing cockpit surfaces", async () => {
@@ -47,5 +58,23 @@ describe("CockpitProjectDashboard", () => {
     expect(onReviewCurrentWork).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenSafety).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes restricted mode blockers explicit before opening safety review", () => {
+    render(
+      <CockpitProjectDashboard
+        workspace={getWorkspaceSession("solo-builder")}
+        permissionModeId="restricted"
+        onReviewCurrentWork={vi.fn()}
+        onOpenWorkflows={vi.fn()}
+        onOpenSafety={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText("1 cockpit safety item blocked.")).toHaveLength(2);
+    expect(screen.getByLabelText("Blocked: 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock a safer mode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Choose workflow locked: Restricted mode keeps workflow launch locked/i })).toBeDisabled();
+    expect(screen.getByText(/Restricted \/ high-risk locked: Unlock a safer mode before running high-risk actions/i)).toBeInTheDocument();
   });
 });

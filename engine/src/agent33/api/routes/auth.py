@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from agent33.api.route_approvals import require_route_mutation_approval
 from agent33.config import settings
 from agent33.security.auth import (
     create_access_token,
@@ -148,8 +149,15 @@ async def login(body: LoginRequest) -> TokenResponse:
     status_code=status.HTTP_201_CREATED,
     dependencies=[require_scope("admin")],
 )
-async def create_api_key(body: ApiKeyRequest) -> ApiKeyResponse:
+async def create_api_key(body: ApiKeyRequest, request: Request) -> ApiKeyResponse:
     """Generate a new API key."""
+    require_route_mutation_approval(
+        request,
+        route_name="auth.api_keys.create",
+        operation="create",
+        arguments=body.model_dump(mode="json"),
+        details="API key creation requires an explicit approval token.",
+    )
     result = generate_api_key(subject=body.subject, scopes=body.scopes)
     return ApiKeyResponse(**result)
 

@@ -29,9 +29,12 @@ describe("provider presets", () => {
     for (const preset of PROVIDER_PRESETS) {
       expect(preset.name).toBeTruthy();
       expect(preset.description.length).toBeGreaterThan(20);
-      expect(preset.baseUrlDefault).toContain("/v1");
       expect(preset.recommendedModels.length).toBeGreaterThan(0);
     }
+    expect(getProviderPreset("openrouter")?.baseUrlDefault).toContain("/v1");
+    expect(getProviderPreset("ollama")?.baseUrlDefault).toBe("http://localhost:11434");
+    expect(getProviderPreset("lm-studio")?.baseUrlDefault).toBe("http://localhost:1234/v1");
+    expect(getProviderPreset("lm-studio")?.needsApiKey).toBe(false);
   });
 
   it("looks up and infers presets from base URLs", () => {
@@ -52,7 +55,7 @@ describe("provider presets", () => {
       ollama!
     );
 
-    expect(next.baseUrl).toBe("http://localhost:11434/v1");
+    expect(next.baseUrl).toBe("http://localhost:11434");
     expect(next.defaultModel).toBe("ollama/qwen2.5-coder:7b");
     expect(next.apiKey).toBe("");
     expect(next.removeStoredKey).toBe(false);

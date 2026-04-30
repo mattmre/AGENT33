@@ -11,6 +11,7 @@ from agent33.api.routes.agents import _default_agent_model, _llamacpp_enabled
 from agent33.config import settings
 from agent33.llm.openai import OpenAIProvider
 from agent33.llm.router import ModelRouter
+from agent33.llm.runtime_config import build_model_router
 
 
 class TestLlamaCppEnabled:
@@ -76,6 +77,20 @@ class TestModelRouterRegistration:
             assert _llamacpp_enabled() is True
             router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
             assert router._default_provider == "llamacpp"
+
+    @pytest.mark.asyncio
+    async def test_runtime_router_registers_lm_studio_provider(self) -> None:
+        """LM Studio model refs must route to the local OpenAI-compatible provider."""
+        router = build_model_router()
+        try:
+            resolved = router.resolve("lmstudio/qwen2.5-coder-7b-instruct")
+            assert resolved.provider_name == "lmstudio"
+            assert resolved.model_name == "qwen2.5-coder-7b-instruct"
+        finally:
+            for provider in router.providers.values():
+                close = getattr(provider, "close", None)
+                if close is not None:
+                    await close()
 
 
 class TestResolveDefaultModel:

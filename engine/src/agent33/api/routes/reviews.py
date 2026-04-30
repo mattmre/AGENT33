@@ -37,6 +37,12 @@ router = APIRouter(prefix="/v1/reviews", tags=["reviews"])
 _service = ReviewService()
 
 
+def set_review_service(service: ReviewService) -> None:
+    """Inject a shared review service instance (called from lifespan)."""
+    global _service  # noqa: PLW0603
+    _service = service
+
+
 def get_review_service() -> ReviewService:
     """Return the review service singleton (for testing injection)."""
     return _service

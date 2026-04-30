@@ -68,6 +68,10 @@ export function OperationCard({
     () => JSON.stringify(operation.defaultQuery ?? {}, null, 2),
     [operation.defaultQuery]
   );
+  const initialHeadersText = useMemo(
+    () => JSON.stringify(operation.defaultHeaders ?? {}, null, 2),
+    [operation.defaultHeaders]
+  );
   const initialBodyText = useMemo(() => operation.defaultBody ?? "", [operation.defaultBody]);
 
   const isWorkflowExecute = operation.uxHint === "workflow-execute";
@@ -82,6 +86,7 @@ export function OperationCard({
     initialPathParamsText
   );
   const [queryText, setQueryText] = useState(initialQueryText);
+  const [headersText, setHeadersText] = useState(initialHeadersText);
   const [bodyText, setBodyText] = useState(initialBodyText);
   const [error, setError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -130,6 +135,12 @@ export function OperationCard({
   const hasBody = useMemo(
     () => operation.method !== "GET" && operation.method !== "DELETE",
     [operation.method]
+  );
+  const hasHeaderInputs = useMemo(
+    () =>
+      Object.keys(operation.defaultHeaders ?? {}).length > 0 ||
+      (operation.schemaInfo?.headers?.length ?? 0) > 0,
+    [operation.defaultHeaders, operation.schemaInfo?.headers]
   );
 
   const responseSummary = useMemo(() => {
@@ -479,6 +490,7 @@ export function OperationCard({
     try {
       const pathParams = parseObjectJson(pathParamsText);
       const query = parseObjectJson(queryText);
+      const requestHeaders = parseObjectJson(headersText);
       let requestBody = bodyText;
       const shouldUseWorkflowLive = isWorkflowExecute && executionMode === "single";
       const workflowName = shouldUseWorkflowLive ? pathParams.name : undefined;
@@ -519,6 +531,7 @@ export function OperationCard({
         apiKey,
         pathParams,
         query,
+        headers: requestHeaders,
         body: hasBody ? requestBody : undefined
       });
       setResult(res);
@@ -632,6 +645,31 @@ export function OperationCard({
               </table>
             </div>
           )}
+          {operation.schemaInfo.headers && (
+            <div className="schema-table-container">
+              <h5>Headers</h5>
+              <table className="schema-table">
+                <thead>
+                  <tr>
+                    <th>Header</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {operation.schemaInfo.headers.map((header) => (
+                    <tr key={header.name}>
+                      <td><code>{header.name}</code></td>
+                      <td><span className="schema-type">{header.type}</span></td>
+                      <td>{header.required ? <span className="req-badge req-true">Yes</span> : <span className="req-badge req-false">No</span>}</td>
+                      <td>{header.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {operation.schemaInfo.body && (
             <div className="schema-body-info">
               <h5>Body Payload</h5>
@@ -677,6 +715,27 @@ export function OperationCard({
               </button>
             </div>
           </label>
+          {hasHeaderInputs ? (
+            <label>
+              Headers (JSON)
+              <textarea
+                value={headersText}
+                onChange={(e) => setHeadersText(e.target.value)}
+                rows={4}
+              />
+              <div className="json-tools">
+                <button
+                  type="button"
+                  onClick={() => formatObjectEditor(headersText, setHeadersText, "Headers")}
+                >
+                  Format
+                </button>
+                <button type="button" onClick={() => setHeadersText(initialHeadersText)}>
+                  Reset
+                </button>
+              </div>
+            </label>
+          ) : null}
         </div>
       )}
 

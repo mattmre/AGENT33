@@ -1,10 +1,166 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apiRequest } from "../../lib/api";
 import { ModelConnectionWizardPanel } from "./ModelConnectionWizardPanel";
 
+vi.mock("../../lib/api", () => ({
+  apiRequest: vi.fn()
+}));
+
+const apiRequestMock = vi.mocked(apiRequest);
+
+function mockApiRequest(): void {
+  apiRequestMock.mockImplementation(({ path }) => {
+    if (path === "/v1/operator/config") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/operator/config",
+        data: {
+          groups: {
+            llm: {
+              default_model: "openrouter/auto",
+              openrouter_base_url: "https://openrouter.ai/api/v1"
+            },
+            ollama: {
+              ollama_base_url: "http://localhost:11434",
+              ollama_default_model: "qwen2.5-coder:7b"
+            },
+            lm_studio: {
+              lm_studio_base_url: "http://localhost:1234/v1",
+              lm_studio_default_model: "qwen2.5-coder-7b-instruct"
+            }
+          }
+        }
+      });
+    }
+    if (path === "/v1/openrouter/models") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/openrouter/models",
+        data: { data: [] }
+      });
+    }
+    if (path === "/v1/ollama/status") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/ollama/status",
+        data: {
+          provider: "ollama",
+          state: "available",
+          ok: true,
+          base_url: "http://localhost:11434",
+          message: "Detected 2 local Ollama models.",
+          models: [
+            {
+              name: "qwen2.5-coder:7b",
+              size: 4_700_000_000,
+              details: { parameter_size: "7B", quantization_level: "Q4_K_M" }
+            },
+            {
+              name: "llama3.2:3b",
+              size: 2_000_000_000,
+              details: { parameter_size: "3B", quantization_level: "Q4_0" }
+            }
+          ]
+        }
+      });
+    }
+    if (path === "/v1/lm-studio/status") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/lm-studio/status",
+        data: {
+          provider: "lm-studio",
+          state: "available",
+          ok: true,
+          base_url: "http://localhost:1234/v1",
+          message: "Detected 2 LM Studio models.",
+          models: [
+            {
+              id: "qwen2.5-coder-7b-instruct",
+              name: "qwen2.5-coder-7b-instruct",
+              owned_by: "lmstudio",
+              context_length: 32_768
+            },
+            {
+              id: "mistral-nemo-instruct",
+              name: "mistral-nemo-instruct",
+              owned_by: "lmstudio",
+              context_length: 128_000
+            }
+          ]
+        }
+      });
+    }
+    if (path === "/v1/model-health") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: "http://localhost/v1/model-health",
+        data: {
+          overall_state: "ready",
+          summary: "2 local runtimes ready with 4 detected models.",
+          ready_provider_count: 2,
+          attention_provider_count: 0,
+          total_model_count: 4,
+          providers: [
+            {
+              provider: "ollama",
+              label: "Ollama",
+              state: "available",
+              ok: true,
+              base_url: "http://localhost:11434",
+              model_count: 2,
+              message: "Detected 2 local Ollama models.",
+              action: "Choose a detected Ollama model for local workflows."
+            },
+            {
+              provider: "lm-studio",
+              label: "LM Studio",
+              state: "available",
+              ok: true,
+              base_url: "http://localhost:1234/v1",
+              model_count: 2,
+              message: "Detected 2 LM Studio models.",
+              action: "Choose a detected LM Studio model for local workflows."
+            }
+          ]
+        }
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      durationMs: 5,
+      url: `http://localhost${path}`,
+      data: {}
+    });
+  });
+}
+
+function getLocalRuntimePanel(label: string): HTMLElement {
+  const panel = screen.getByText(label).closest(".local-runtime-panel");
+  expect(panel).not.toBeNull();
+  return panel as HTMLElement;
+}
+
 describe("ModelConnectionWizardPanel provider setup v2", () => {
+  beforeEach(() => {
+    apiRequestMock.mockReset();
+    mockApiRequest();
+  });
+
   it("renders provider paths before model settings", () => {
     render(
       <ModelConnectionWizardPanel
@@ -38,10 +194,188 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
 
-    expect(screen.getByRole("button", { name: /Ollama/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    expect(providerPaths.getByRole("button", { name: /Ollama/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:11434");
     expect(screen.getByLabelText("Default model")).toHaveValue("ollama/qwen2.5-coder:7b");
     expect(screen.getByText("Local path can run without a key")).toBeInTheDocument();
+  });
+
+  it("shows detected Ollama models and lets users choose one", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Ollama/ }));
+
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
+    const detectedModels = within(screen.getByRole("group", { name: "Detected Ollama models" }));
+    await user.click(detectedModels.getByRole("button", { name: /llama3.2:3b/ }));
+
+    expect(screen.getByLabelText("Default model")).toHaveValue("ollama/llama3.2:3b");
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/v1/ollama/status",
+        query: undefined
+      })
+    );
+  });
+
+  it("shows unified local model health and refreshes with edited local URLs", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("One place to see what can run now")).toBeInTheDocument();
+    expect(screen.getByText("2 local runtimes ready with 4 detected models.")).toBeInTheDocument();
+    const healthKpis = screen.getByLabelText("Local runtime readiness");
+    expect(within(healthKpis).getByText("4")).toBeInTheDocument();
+    expect(within(healthKpis).getByText("models detected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const baseUrlInput = screen.getByLabelText("Base URL");
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://127.0.0.1:1234");
+    await user.click(screen.getByRole("button", { name: "Refresh local health" }));
+
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/model-health",
+          query: { lm_studio_base_url: "http://127.0.0.1:1234/v1" }
+        })
+      )
+    );
+  });
+
+  it("uses Ollama status for the local connection test", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Ollama/ }));
+    const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
+    expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(await screen.findByText(/Ollama is ready at http:\/\/localhost:11434/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiRequestMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/v1/openrouter/probe" })
+      )
+    );
+  });
+
+  it("shows detected LM Studio models and preserves the /v1 base URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+
+    expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:1234/v1");
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
+    const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
+    await user.click(detectedModels.getByRole("button", { name: /mistral-nemo-instruct/ }));
+
+    expect(screen.getByLabelText("Default model")).toHaveValue("lmstudio/mistral-nemo-instruct");
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/v1/lm-studio/status",
+        query: undefined
+      })
+    );
+  });
+
+  it("uses LM Studio status for the local connection test", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
+    const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
+    await user.click(detectedModels.getByRole("button", { name: /qwen2.5-coder-7b-instruct/ }));
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(await screen.findByText(/LM Studio is ready at http:\/\/localhost:1234\/v1/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiRequestMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/v1/openrouter/probe" })
+      )
+    );
+  });
+
+  it("passes an LM Studio override only when the operator edits the configured URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
+    expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
+    const baseUrlInput = screen.getByLabelText("Base URL");
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://127.0.0.1:1234");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/lm-studio/status",
+          query: { base_url: "http://127.0.0.1:1234/v1" }
+        })
+      )
+    );
   });
 
   it("shows capability labels on recommended models", () => {

@@ -267,7 +267,7 @@ export default function App(): JSX.Element {
             selectedWorkspaceId={selectedWorkspaceId}
             onSelectWorkspace={selectWorkspace}
             onOpenRuns={() => setActiveTab("operations")}
-            onOpenWorkflows={() => setActiveTab("starter")}
+            onOpenWorkflows={openWorkflowStarter}
           />
           <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
         </aside>
@@ -558,14 +558,16 @@ export default function App(): JSX.Element {
           <div className="consumer-operations-layout">
             <ShipyardLaneScaffold
               workspace={selectedWorkspace}
+              permissionModeId={permissionModeId}
               onOpenSafety={() => setActiveTab("safety")}
-              onOpenWorkflows={() => setActiveTab("starter")}
+              onOpenWorkflows={openWorkflowStarter}
             />
             <div id="operations-workspace-board" className="operations-workspace-board-anchor" tabIndex={-1}>
               <WorkspaceTaskBoard
                 workspace={selectedWorkspace}
+                permissionModeId={permissionModeId}
                 onOpenSafety={() => setActiveTab("safety")}
-                onOpenWorkflows={() => setActiveTab("starter")}
+                onOpenWorkflows={openWorkflowStarter}
               />
             </div>
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
@@ -602,7 +604,11 @@ export default function App(): JSX.Element {
 
         {activeTab === "marketplace" && (
           <div className="consumer-marketplace-layout">
-            <PackMarketplacePage token={token || null} apiKey={apiKey || null} />
+            <PackMarketplacePage
+              token={token || null}
+              apiKey={apiKey || null}
+              onOpenWorkflowStarter={openWorkflowStarter}
+            />
           </div>
         )}
 

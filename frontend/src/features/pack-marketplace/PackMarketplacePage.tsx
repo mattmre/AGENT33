@@ -7,12 +7,15 @@ import {
   fetchInstalledPacks,
   fetchMarketplaceCategories,
   fetchMarketplacePackDetail,
-  fetchMarketplacePacks,
-  fetchPackQualityAssessment,
-  fetchPackTrust,
+    fetchMarketplacePacks,
+    fetchPackOutcomeManifests,
+    fetchPackQualityAssessment,
+    fetchPackRecoveryPreview,
+    fetchPackTrust,
   installMarketplacePack,
   submitPackForCuration
 } from "./api";
+import type { StarterKind, WorkflowStarterDraft } from "../workflow-starter/types";
 import type {
   CurationRecord,
   InstalledPackDetail,
@@ -21,6 +24,8 @@ import type {
   MarketplacePackDetail,
   MarketplacePackSummary,
   MarketplacePackVersionInfo,
+  OutcomePackManifest,
+  PackRecoveryPreviewResponse,
   QualityAssessment,
   PackTrustResponse
 } from "./types";
@@ -28,6 +33,7 @@ import type {
 interface PackMarketplacePageProps {
   token: string | null;
   apiKey: string | null;
+  onOpenWorkflowStarter?: (draft?: WorkflowStarterDraft) => void;
 }
 
 interface CategoryOption {
@@ -56,7 +62,14 @@ function formatStatus(value: string): string {
 }
 
 function formatTrust(value: string | null): string {
-  return value ? value.replace(/_/g, " ") : "Unknown";
+  if (!value) {
+    return "Unknown";
+  }
+  return value
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function filterMatches(pack: MarketplacePackSummary, query: string): boolean {
@@ -115,6 +128,231 @@ function assessmentLabel(assessment: QualityAssessment | null): string | null {
   return `${assessment.label} quality · ${Math.round(assessment.overall_score * 100)}%`;
 }
 
+function normalizeBadgeValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+}
+
+function trustTone(value: string | null | undefined): string {
+  const normalized = normalizeBadgeValue(value ?? "unknown");
+  if (["official", "verified", "community", "untrusted", "imported"].includes(normalized)) {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function qualityTone(value: string | null | undefined): string {
+  const normalized = normalizeBadgeValue(value ?? "unknown");
+  if (["excellent", "high", "medium", "low"].includes(normalized)) {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function versionTrustLevel(pack: MarketplacePackDetail, selectedVersion: string): string | null {
+  const selected =
+    pack.versions.find((version) => version.version === selectedVersion) ?? pack.versions[0] ?? null;
+  return selected?.trust_level ?? null;
+}
+
+function versionSkillCount(pack: MarketplacePackDetail, selectedVersion: string): number {
+  const selected =
+    pack.versions.find((version) => version.version === selectedVersion) ?? pack.versions[0] ?? null;
+  return selected?.skills_count ?? 0;
+}
+
+function starterKindForOutcomePack(manifest: OutcomePackManifest): StarterKind {
+  if (manifest.kind === "improvement-loop") {
+    return "improvement-loop";
+  }
+  if (manifest.kind === "automation-loop") {
+    return "automation-loop";
+  }
+
+  const searchable = `${manifest.category ?? ""} ${(manifest.tags ?? []).join(" ")}`.toLowerCase();
+  if (searchable.includes("research") || searchable.includes("security") || searchable.includes("review")) {
+    return "research";
+  }
+  return "automation-loop";
+}
+
+function buildOutcomeWorkflowDraft(
+  manifest: OutcomePackManifest,
+  pack: MarketplacePackDetail
+): WorkflowStarterDraft {
+  const primaryWorkflow = manifest.workflows[0];
+  const deliverables =
+    manifest.presentation.expected_deliverables && manifest.presentation.expected_deliverables.length > 0
+      ? manifest.presentation.expected_deliverables.join("; ")
+      : (manifest.artifacts ?? []).map((artifact) => artifact.name).join("; ");
+
+  return {
+    id: `outcome-${manifest.name}`,
+    name: primaryWorkflow?.name ?? manifest.name,
+    goal: manifest.presentation.summary || manifest.description,
+    kind: starterKindForOutcomePack(manifest),
+    output: deliverables || `Artifacts from ${manifest.presentation.title || manifest.name}`,
+    schedule: "",
+    author: pack.author || manifest.author || "operator",
+    sourceLabel: `Outcome pack: ${manifest.presentation.title || manifest.name}`,
+    sourcePack: pack.name,
+    sourcePackVersion: pack.latest_version,
+    sourceOutcomeId: manifest.name
+  };
+}
+
+function TrustBadge({
+  level,
+  showUnknown = false
+}: {
+  level: string | null | undefined;
+  showUnknown?: boolean;
+}): JSX.Element | null {
+  if (!level && !showUnknown) {
+    return null;
+  }
+
+  return (
+    <span className={`marketplace-pill trust-${trustTone(level)}`}>
+      {formatTrust(level ?? null)} trust
+    </span>
+  );
+}
+
+function QualityBadge({ assessment }: { assessment: QualityAssessment | null | undefined }): JSX.Element | null {
+  if (!assessment) {
+    return null;
+  }
+
+  return (
+    <span className={`marketplace-pill quality-${qualityTone(assessment.label)}`}>
+      {assessment.label} quality
+    </span>
+  );
+}
+
+function formatArchiveDate(value: string): string {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+  return new Date(timestamp).toLocaleString();
+}
+
+function RecoveryPreviewPanel({
+  preview,
+  loading,
+  error
+}: {
+  preview: PackRecoveryPreviewResponse | null;
+  loading: boolean;
+  error: string | null;
+}): JSX.Element | null {
+  if (loading) {
+    return (
+      <section className="pack-marketplace-recovery-preview">
+        <div className="pack-marketplace-preview-header">
+          <h3>Change safety preview</h3>
+          <span className="marketplace-pill preview">Checking...</span>
+        </div>
+        <p>Checking dependents and rollback options before pack changes...</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="pack-marketplace-recovery-preview warning">
+        <div className="pack-marketplace-preview-header">
+          <h3>Change safety preview</h3>
+          <span className="marketplace-pill trust-untrusted">Unavailable</span>
+        </div>
+        <p>{error}</p>
+      </section>
+    );
+  }
+
+  if (!preview) {
+    return null;
+  }
+
+  const hasUpgradeTarget =
+    preview.target_version !== "" && preview.target_version !== preview.installed_version;
+  const latestArchive = preview.archived_versions[0] ?? null;
+
+  return (
+    <section className="pack-marketplace-recovery-preview">
+      <div className="pack-marketplace-preview-header">
+        <h3>Change safety preview</h3>
+        <span className="marketplace-pill preview">Before uninstall / upgrade / rollback</span>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Selected change</dt>
+          <dd>
+            {hasUpgradeTarget
+              ? `Upgrade ${preview.installed_version} -> ${preview.target_version}`
+              : `Installed version ${preview.installed_version}`}
+          </dd>
+        </div>
+        <div>
+          <dt>Dependents</dt>
+          <dd>
+            {preview.dependents.length === 0
+              ? "No installed packs depend on this pack."
+              : `${preview.dependents.length} installed pack(s) depend on this pack.`}
+          </dd>
+        </div>
+        <div>
+          <dt>Rollback</dt>
+          <dd>
+            {preview.can_rollback && latestArchive
+              ? `${preview.archived_versions.length} archived version(s); latest ${latestArchive.version} from ${formatArchiveDate(latestArchive.archived_at)}.`
+              : "No rollback archive is available yet. Upgrades archive the current version first."}
+          </dd>
+        </div>
+        <div>
+          <dt>Safe action</dt>
+          <dd>{preview.recommended_action}</dd>
+        </div>
+      </dl>
+
+      {preview.dependents.length > 0 && (
+        <div className="pack-marketplace-dependency-list">
+          <strong>Uninstall blockers</strong>
+          <ul>
+            {preview.dependents.map((dependent) => (
+              <li key={dependent.name}>
+                {dependent.name} {dependent.version}
+                {dependent.version_constraint ? ` requires ${dependent.version_constraint}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.compatibility_errors.length > 0 && (
+        <div className="pack-marketplace-dependency-list warning">
+          <strong>Upgrade compatibility issues</strong>
+          <ul>
+            {preview.compatibility_errors.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.warnings.length > 0 && (
+        <ul className="pack-marketplace-recovery-warnings">
+          {preview.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function canSubmitForCuration(curation: CurationRecord | null): boolean {
   if (!curation) {
     return true;
@@ -143,6 +381,7 @@ function PackDetailPanel({
   trust,
   curation,
   quality,
+  recoveryPreview,
   selectedVersion,
   detailLoading,
   detailError,
@@ -154,8 +393,14 @@ function PackDetailPanel({
   submissionFeedbackTone,
   qualityLoading,
   qualityError,
+  recoveryLoading,
+  recoveryError,
+  outcomeLaunchPending,
+  outcomeLaunchFeedback,
+  canLaunchOutcome,
   onVersionChange,
   onInstall,
+  onLaunchOutcome,
   onSubmitForCuration,
   onClose
 }: {
@@ -165,6 +410,7 @@ function PackDetailPanel({
   trust: PackTrustResponse | null;
   curation: CurationRecord | null;
   quality: QualityAssessment | null;
+  recoveryPreview: PackRecoveryPreviewResponse | null;
   selectedVersion: string;
   detailLoading: boolean;
   detailError: string | null;
@@ -176,8 +422,14 @@ function PackDetailPanel({
   submissionFeedbackTone: "success" | "error" | null;
   qualityLoading: boolean;
   qualityError: string | null;
+  recoveryLoading: boolean;
+  recoveryError: string | null;
+  outcomeLaunchPending: boolean;
+  outcomeLaunchFeedback: string | null;
+  canLaunchOutcome: boolean;
   onVersionChange: (value: string) => void;
   onInstall: () => void;
+  onLaunchOutcome: () => void;
   onSubmitForCuration: () => void;
   onClose: () => void;
 }): JSX.Element | null {
@@ -191,6 +443,15 @@ function PackDetailPanel({
   const curationQuality = qualityLabel(curation);
   const canSubmit = isInstalled && canSubmitForCuration(curation);
   const previewQuality = assessmentLabel(quality);
+  const selectedTrustLevel = versionTrustLevel(pack, selectedVersion);
+  const selectedSkillCount = versionSkillCount(pack, selectedVersion);
+  const trustSummary = trust
+    ? trust.allowed
+      ? "Allowed by installed-pack policy"
+      : `Blocked by policy: ${trust.reason || "review required"}`
+    : selectedTrustLevel
+      ? `${formatTrust(selectedTrustLevel)} marketplace provenance`
+      : "No signed provenance published yet";
 
   return (
     <aside className="pack-marketplace-detail" aria-label={`Details for ${pack.name}`}>
@@ -212,9 +473,43 @@ function PackDetailPanel({
           <div className="pack-marketplace-badges">
             {curation?.featured && <span className="marketplace-pill featured">Featured</span>}
             {curation?.verified && <span className="marketplace-pill verified">Verified</span>}
+            <TrustBadge level={selectedTrustLevel} showUnknown />
+            <QualityBadge assessment={curation?.quality ?? quality} />
             {isInstalled && <span className="marketplace-pill installed">Installed</span>}
             <span className="marketplace-pill neutral">{pack.latest_version}</span>
           </div>
+
+          <section className="pack-marketplace-preview">
+            <div className="pack-marketplace-preview-header">
+              <h3>Beginner preview</h3>
+              <span className="marketplace-pill preview">Preview before install</span>
+            </div>
+            <dl>
+              <div>
+                <dt>Trust</dt>
+                <dd>{trustSummary}</dd>
+              </div>
+              <div>
+                <dt>Setup</dt>
+                <dd>
+                  Installs {selectedSkillCount} skill{selectedSkillCount !== 1 ? "s" : ""} from{" "}
+                  {pack.sources.length > 0 ? pack.sources.join(", ") : "marketplace"}.
+                </dd>
+              </div>
+              <div>
+                <dt>Outcome</dt>
+                <dd>Install only - no auto-run. Launch workflows after reviewing setup.</dd>
+              </div>
+              <div>
+                <dt>Review</dt>
+                <dd>
+                  {curationQuality ??
+                    previewQuality ??
+                    (curation?.verified ? "Verified by marketplace curation" : "Not curated yet")}
+                </dd>
+              </div>
+            </dl>
+          </section>
 
           <dl className="pack-marketplace-metadata">
             <dt>Author</dt>
@@ -324,6 +619,14 @@ function PackDetailPanel({
             </ul>
           </section>
 
+          {isInstalled && (
+            <RecoveryPreviewPanel
+              preview={recoveryPreview}
+              loading={recoveryLoading}
+              error={recoveryError}
+            />
+          )}
+
           <div className="pack-marketplace-actions">
             <button
               type="button"
@@ -337,7 +640,20 @@ function PackDetailPanel({
                   ? "Installing..."
                   : "Install selected version"}
             </button>
+            {canLaunchOutcome && isInstalled && (
+              <button
+                type="button"
+                className="pack-marketplace-secondary"
+                disabled={outcomeLaunchPending}
+                onClick={onLaunchOutcome}
+              >
+                {outcomeLaunchPending ? "Preparing starter..." : "Launch outcome starter"}
+              </button>
+            )}
             {installFeedback && <p className="pack-marketplace-feedback">{installFeedback}</p>}
+            {outcomeLaunchFeedback && (
+              <p className="pack-marketplace-feedback">{outcomeLaunchFeedback}</p>
+            )}
           </div>
 
           {installedDetailError && <p className="pack-marketplace-error">{installedDetailError}</p>}
@@ -426,7 +742,11 @@ function PackDetailPanel({
   );
 }
 
-export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps): JSX.Element {
+export function PackMarketplacePage({
+  token,
+  apiKey,
+  onOpenWorkflowStarter
+}: PackMarketplacePageProps): JSX.Element {
   const [packs, setPacks] = useState<MarketplacePackSummary[]>([]);
   const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
   const [curationByPack, setCurationByPack] = useState<Record<string, CurationRecord>>({});
@@ -438,6 +758,8 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
   const [selectedInstalledDetail, setSelectedInstalledDetail] = useState<InstalledPackDetail | null>(null);
   const [selectedTrust, setSelectedTrust] = useState<PackTrustResponse | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<QualityAssessment | null>(null);
+  const [selectedRecoveryPreview, setSelectedRecoveryPreview] =
+    useState<PackRecoveryPreviewResponse | null>(null);
   const [selectedVersion, setSelectedVersion] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -451,6 +773,10 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
   const [submissionFeedbackTone, setSubmissionFeedbackTone] = useState<"success" | "error" | null>(null);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityError, setQualityError] = useState<string | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [outcomeLaunchPending, setOutcomeLaunchPending] = useState(false);
+  const [outcomeLaunchFeedback, setOutcomeLaunchFeedback] = useState<string | null>(null);
 
   const loadMarketplace = useCallback(async () => {
     setLoading(true);
@@ -514,10 +840,13 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       setSelectedInstalledDetail(null);
       setSelectedTrust(null);
       setSelectedQuality(null);
+      setSelectedRecoveryPreview(null);
       setSelectedVersion("");
       setDetailError(null);
       setInstalledDetailError(null);
       setQualityError(null);
+      setRecoveryError(null);
+      setRecoveryLoading(false);
       return;
     }
 
@@ -541,6 +870,9 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
           setSelectedInstalledDetail(null);
           setSelectedTrust(null);
           setSelectedQuality(null);
+          setSelectedRecoveryPreview(null);
+          setRecoveryLoading(false);
+          setRecoveryError(null);
           setQualityLoading(false);
           return;
         }
@@ -593,6 +925,44 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
     };
   }, [apiKey, installedByPack, selectedPackName, token]);
 
+  useEffect(() => {
+    if (!selectedPackName || !installedByPack[selectedPackName] || !selectedVersion) {
+      setSelectedRecoveryPreview(null);
+      setRecoveryError(null);
+      setRecoveryLoading(false);
+      return;
+    }
+
+    const packName = selectedPackName;
+    let cancelled = false;
+    setRecoveryLoading(true);
+    setRecoveryError(null);
+
+    async function loadRecoveryPreview(): Promise<void> {
+      try {
+        const preview = await fetchPackRecoveryPreview(token, apiKey, packName, selectedVersion);
+        if (!cancelled) {
+          setSelectedRecoveryPreview(preview);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSelectedRecoveryPreview(null);
+          setRecoveryError(err instanceof Error ? err.message : "Pack recovery preview failed");
+        }
+      } finally {
+        if (!cancelled) {
+          setRecoveryLoading(false);
+        }
+      }
+    }
+
+    void loadRecoveryPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, installedByPack, selectedPackName, selectedVersion, token]);
+
   const featuredPacks = useMemo(
     () => packs.filter((pack) => Boolean(curationByPack[pack.name]?.featured)).slice(0, 3),
     [curationByPack, packs]
@@ -621,12 +991,16 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
     setSelectedInstalledDetail(null);
     setSelectedTrust(null);
     setSelectedQuality(null);
+    setSelectedRecoveryPreview(null);
     setSelectedVersion("");
     setInstallFeedback(null);
     setInstalledDetailError(null);
     setSubmissionFeedback(null);
     setSubmissionFeedbackTone(null);
     setQualityError(null);
+    setRecoveryError(null);
+    setRecoveryLoading(false);
+    setOutcomeLaunchFeedback(null);
   };
 
   const handleInstall = async (): Promise<void> => {
@@ -667,6 +1041,34 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
       setInstallFeedback(err instanceof Error ? err.message : "Install failed");
     } finally {
       setInstallPending(false);
+    }
+  };
+
+  const handleLaunchOutcome = async (): Promise<void> => {
+    if (!selectedPackDetail || !onOpenWorkflowStarter) {
+      return;
+    }
+
+    setOutcomeLaunchPending(true);
+    setOutcomeLaunchFeedback(null);
+
+    try {
+      const outcomeResponse = await fetchPackOutcomeManifests(
+        token,
+        apiKey,
+        selectedPackDetail.name
+      );
+      const firstOutcome = outcomeResponse.packs[0];
+      if (!firstOutcome) {
+        setOutcomeLaunchFeedback("This pack does not bundle outcome starters yet.");
+        return;
+      }
+
+      onOpenWorkflowStarter(buildOutcomeWorkflowDraft(firstOutcome.manifest, selectedPackDetail));
+    } catch (err) {
+      setOutcomeLaunchFeedback(err instanceof Error ? err.message : "Outcome starter failed");
+    } finally {
+      setOutcomeLaunchPending(false);
     }
   };
 
@@ -735,6 +1137,11 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
                 <span>{pack.description || "No description available."}</span>
                 <div className="pack-marketplace-badges">
                   <span className="marketplace-pill featured">Featured</span>
+                  {curationByPack[pack.name]?.verified && (
+                    <span className="marketplace-pill verified">Verified</span>
+                  )}
+                  <TrustBadge level={pack.trust_level} />
+                  <QualityBadge assessment={curationByPack[pack.name]?.quality} />
                   <span className="marketplace-pill neutral">{pack.latest_version}</span>
                 </div>
               </button>
@@ -836,8 +1243,11 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
                       <span className="marketplace-pill neutral">
                         {pack.versions_count} version{pack.versions_count !== 1 ? "s" : ""}
                       </span>
+                      <TrustBadge level={pack.trust_level} />
+                      <QualityBadge assessment={curation?.quality} />
                       {installed && <span className="marketplace-pill installed">Installed</span>}
                       {curation?.featured && <span className="marketplace-pill featured">Featured</span>}
+                      {curation?.verified && <span className="marketplace-pill verified">Verified</span>}
                       {curation && !curation.featured && (
                         <span className="marketplace-pill neutral">
                           {formatStatus(curation.status)}
@@ -868,6 +1278,7 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
           trust={selectedTrust}
           curation={selectedPackName ? curationByPack[selectedPackName] ?? null : null}
           quality={selectedQuality}
+          recoveryPreview={selectedRecoveryPreview}
           selectedVersion={selectedVersion}
           detailLoading={detailLoading}
           detailError={detailError}
@@ -879,8 +1290,14 @@ export function PackMarketplacePage({ token, apiKey }: PackMarketplacePageProps)
           submissionFeedbackTone={submissionFeedbackTone}
           qualityLoading={qualityLoading}
           qualityError={qualityError}
+          recoveryLoading={recoveryLoading}
+          recoveryError={recoveryError}
+          outcomeLaunchPending={outcomeLaunchPending}
+          outcomeLaunchFeedback={outcomeLaunchFeedback}
+          canLaunchOutcome={Boolean(onOpenWorkflowStarter)}
           onVersionChange={setSelectedVersion}
           onInstall={() => void handleInstall()}
+          onLaunchOutcome={() => void handleLaunchOutcome()}
           onSubmitForCuration={() => void handleSubmitForCuration()}
           onClose={() => setSelectedPackName(null)}
         />

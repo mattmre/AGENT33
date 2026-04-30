@@ -95,6 +95,30 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
 ];
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+const APPROVAL_SENSITIVE_KEYS: Array<
+  keyof Pick<
+    AgentBuilderState,
+    | "name"
+    | "description"
+    | "role"
+    | "version"
+    | "canReadFiles"
+    | "canWriteFiles"
+    | "canSearchWeb"
+    | "canRunCode"
+    | "canCallAPIs"
+  >
+> = [
+  "name",
+  "description",
+  "role",
+  "version",
+  "canReadFiles",
+  "canWriteFiles",
+  "canSearchWeb",
+  "canRunCode",
+  "canCallAPIs",
+];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -104,6 +128,12 @@ interface AgentBuilderPageProps {
   apiUrl?: string;
   token: string | null;
   apiKey?: string | null;
+}
+
+interface RouteApprovalRequirement {
+  approvalId: string;
+  approvalHeader: string;
+  actionLabel: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,14 +199,60 @@ function buildExport(state: AgentBuilderState): AgentDefinitionExport {
   };
 }
 
-function authHeaders(token: string | null, apiKey: string | null | undefined): Record<string, string> {
+function authHeaders(
+  token: string | null,
+  apiKey: string | null | undefined,
+  approvalToken?: string | null,
+): Record<string, string> {
   const h: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
   };
   if (token) h.Authorization = `Bearer ${token}`;
   if (apiKey) h["X-API-Key"] = apiKey;
+  if (approvalToken?.trim()) {
+    h["X-Agent33-Approval-Token"] = approvalToken.trim();
+  }
   return h;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asRouteApprovalRequirement(
+  value: unknown,
+  actionLabel: string,
+): RouteApprovalRequirement | null {
+  if (!isObject(value) || typeof value.approval_id !== "string") {
+    return null;
+  }
+  const approvalHeader =
+    typeof value.approval_header === "string" && value.approval_header.trim() !== ""
+      ? value.approval_header
+      : "X-Agent33-Approval-Token";
+  return {
+    approvalId: value.approval_id,
+    approvalHeader,
+    actionLabel,
+  };
+}
+
+function formatResponseDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim() !== "") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) =>
+        isObject(item) && typeof item.msg === "string" ? item.msg : JSON.stringify(item),
+      )
+      .join("; ");
+  }
+  if (detail !== null && detail !== undefined) {
+    return JSON.stringify(detail);
+  }
+  return fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +286,8 @@ export default function AgentBuilderPage({
   const [saveMessage, setSaveMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [approvalToken, setApprovalToken] = useState("");
+  const [pendingRouteApproval, setPendingRouteApproval] = useState<RouteApprovalRequirement | null>(null);
 
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { API_BASE_URL } = getRuntimeConfig();
@@ -289,6 +367,10 @@ export default function AgentBuilderPage({
   ) {
     setState((prev) => ({ ...prev, [key]: value }));
     if (key === "name") validateName(value as string);
+    if (APPROVAL_SENSITIVE_KEYS.includes(key as (typeof APPROVAL_SENSITIVE_KEYS)[number])) {
+      setApprovalToken("");
+      setPendingRouteApproval(null);
+    }
   }
 
   function applyTemplate(template: AgentTemplate) {
@@ -317,47 +399,54 @@ export default function AgentBuilderPage({
     setValidationErrors([]);
 
     const payload = buildDefinitionPayload(state);
-    const headers = authHeaders(token, apiKey);
+    const mutationHeaders = authHeaders(token, apiKey, approvalToken);
+    const lookupHeaders = authHeaders(token, apiKey);
+    const agentPath = `${API_BASE_URL}/v1/agents/${encodeURIComponent(state.name)}`;
 
-    // Try PUT first (update), fall back to POST (create) on 404
-    try {
-      const putResp = await fetch(`${API_BASE_URL}/v1/agents/${encodeURIComponent(state.name)}`, {
-        method: "PUT",
-        headers,
+    async function submitMutation(options: {
+      actionLabel: string;
+      method: "POST" | "PUT";
+      successMessage: string;
+      url: string;
+    }): Promise<void> {
+      const resp = await fetch(options.url, {
+        method: options.method,
+        headers: mutationHeaders,
         body: JSON.stringify(payload),
       });
+      const errData = await resp.json().catch(() => null);
+      const detail = isObject(errData) ? errData.detail : null;
 
-      if (putResp.ok) {
+      if (resp.ok) {
         setSaveStatus("saved");
-        setSaveMessage("Agent updated successfully.");
+        setSaveMessage(options.successMessage);
+        setValidationErrors([]);
+        setApprovalToken("");
+        setPendingRouteApproval(null);
         return;
       }
 
-      if (putResp.status === 404) {
-        // Agent doesn't exist yet -- create it
-        const postResp = await fetch(`${API_BASE_URL}/v1/agents/`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        if (postResp.ok) {
-          setSaveStatus("saved");
-          setSaveMessage("Agent created successfully.");
-        } else {
-          const errData = await postResp.json().catch(() => null);
+      if (resp.status === 428) {
+        const requirement = asRouteApprovalRequirement(detail, options.actionLabel);
+        if (requirement !== null) {
+          setPendingRouteApproval(requirement);
           setSaveStatus("error");
-          setSaveMessage(errData?.detail ?? `Error ${postResp.status}`);
+          setSaveMessage(
+            `Approval required before ${options.actionLabel}. Approve ${requirement.approvalId} in Safety Center, issue a short-lived token, paste it below, then save again.`,
+          );
+          return;
         }
-        return;
       }
 
-      if (putResp.status === 422) {
-        const errData = await putResp.json().catch(() => null);
-        const detail = errData?.detail;
+      if (resp.status === 422) {
         if (Array.isArray(detail)) {
-          setValidationErrors(detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)));
+          setValidationErrors(
+            detail.map((item) =>
+              isObject(item) && typeof item.msg === "string" ? item.msg : JSON.stringify(item),
+            ),
+          );
         } else {
-          setValidationErrors([typeof detail === "string" ? detail : JSON.stringify(detail)]);
+          setValidationErrors([formatResponseDetail(detail, "Validation failed.")]);
         }
         setSaveStatus("error");
         setSaveMessage("Validation failed.");
@@ -365,7 +454,39 @@ export default function AgentBuilderPage({
       }
 
       setSaveStatus("error");
-      setSaveMessage(`Error ${putResp.status}`);
+      setSaveMessage(formatResponseDetail(detail, `Error ${resp.status}`));
+    }
+
+    try {
+      const lookupResp = await fetch(agentPath, {
+        method: "GET",
+        headers: lookupHeaders,
+      });
+
+      if (lookupResp.ok) {
+        await submitMutation({
+          actionLabel: "updating this agent",
+          method: "PUT",
+          successMessage: "Agent updated successfully.",
+          url: agentPath,
+        });
+        return;
+      }
+
+      if (lookupResp.status === 404) {
+        await submitMutation({
+          actionLabel: "creating this agent",
+          method: "POST",
+          successMessage: "Agent created successfully.",
+          url: `${API_BASE_URL}/v1/agents/`,
+        });
+        return;
+      }
+
+      const lookupData = await lookupResp.json().catch(() => null);
+      const lookupDetail = isObject(lookupData) ? lookupData.detail : null;
+      setSaveStatus("error");
+      setSaveMessage(formatResponseDetail(lookupDetail, `Error ${lookupResp.status}`));
     } catch (err) {
       setSaveStatus("error");
       setSaveMessage(err instanceof Error ? err.message : "Network error");
@@ -623,6 +744,32 @@ export default function AgentBuilderPage({
               Export JSON
             </button>
           </div>
+
+          {(pendingRouteApproval !== null || approvalToken.trim() !== "") && (
+            <section className="approval-token-panel" aria-label="Route approval token">
+              <h3>Route approval token</h3>
+              <p>
+                Save requests are approval-gated. Approve the pending Safety Center item, issue a
+                short-lived token, then retry save with{" "}
+                <code>{pendingRouteApproval?.approvalHeader ?? "X-Agent33-Approval-Token"}</code>.
+              </p>
+              {pendingRouteApproval !== null && (
+                <p className="approval-token-meta">
+                  Pending approval: <strong>{pendingRouteApproval.approvalId}</strong> for{" "}
+                  {pendingRouteApproval.actionLabel}.
+                </p>
+              )}
+              <label>
+                Approval token
+                <input
+                  type="text"
+                  value={approvalToken}
+                  onChange={(event) => setApprovalToken(event.target.value)}
+                  placeholder="Paste short-lived approval token from Safety Center"
+                />
+              </label>
+            </section>
+          )}
 
           {saveMessage && (
             <p

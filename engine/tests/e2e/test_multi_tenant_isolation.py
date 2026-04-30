@@ -179,7 +179,13 @@ class TestSessionTenantIsolation:
 class TestWorkflowTenantIsolation:
     """Workflow execution history is tenant-partitioned."""
 
-    def test_workflow_history_is_tenant_scoped(self, tenant_a_client, tenant_b_client):
+    def test_workflow_history_is_tenant_scoped(
+        self,
+        tenant_a_client,
+        tenant_b_client,
+        tenant_a_token,
+        route_approval_headers,
+    ):
         """Tenant A executes a workflow; tenant B cannot see it in history.
 
         Workflow execution history records include tenant_id. The history
@@ -202,7 +208,18 @@ class TestWorkflowTenantIsolation:
         }
 
         # Tenant A creates and executes
-        resp = client_a.post("/v1/workflows/", json=wf_def)
+        resp = client_a.post(
+            "/v1/workflows/",
+            json=wf_def,
+            headers=route_approval_headers(
+                client_a,
+                route_name="workflows.create",
+                operation="create",
+                arguments=wf_def,
+                details="Pytest tenant workflow setup",
+                authorization=f"Bearer {tenant_a_token}",
+            ),
+        )
         if resp.status_code == 409:
             # Already exists from prior test run -- proceed to execute
             pass

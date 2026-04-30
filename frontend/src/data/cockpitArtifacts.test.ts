@@ -4,6 +4,7 @@ import { ARTIFACT_DRAWER_SECTION_IDS } from "./artifactDrawerSections";
 import {
   COCKPIT_ARTIFACT_KINDS,
   buildCockpitArtifacts,
+  detectOutcomeCompletion,
   getCockpitArtifactsByKind,
   getCockpitArtifactsForWorkspace
 } from "./cockpitArtifacts";
@@ -106,6 +107,46 @@ describe("cockpit artifact view models", () => {
     });
   });
 
+  it("keeps command artifact priority deterministic when several tasks can produce command evidence", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const [, commandArtifact] = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "first-running",
+            title: "First running task",
+            outcome: "This task should own the primary command artifact.",
+            status: "running",
+            ownerRole: "Scout"
+          },
+          {
+            id: "blocked-second",
+            title: "Blocked second task",
+            outcome: "Blocked command evidence should not outrank active running work.",
+            status: "blocked",
+            ownerRole: "Builder"
+          },
+          {
+            id: "running-third",
+            title: "Running third task",
+            outcome: "Later running work remains visible through command blocks and logs.",
+            status: "running",
+            ownerRole: "Builder"
+          }
+        ]
+      }
+    });
+
+    expect(commandArtifact).toMatchObject({
+      title: "First running task",
+      status: "running",
+      relatedTaskIds: ["first-running"]
+    });
+  });
+
   it("maps blocked work into risk, approval, and outcome artifacts", () => {
     const artifactsByKind = getCockpitArtifactsByKind("test-review");
 
@@ -123,6 +164,171 @@ describe("cockpit artifact view models", () => {
       title: "Blocked with required action",
       status: "blocked",
       relatedTaskIds: ["quality-merge"]
+    });
+  });
+
+  it("detects PR-ready completion from completed task context", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "feature-pr",
+          title: "Prepare PR handoff",
+          outcome: "PR-ready implementation with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      title: "PR ready",
+      status: "done",
+      reviewState: "approved",
+      nextActionLabel: "Open the PR-ready handoff"
+    });
+  });
+
+  it("prioritizes PR-ready completion across all completed tasks", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "package-first",
+          title: "Collect artifacts",
+          outcome: "Implementation notes and validation logs collected.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        },
+        {
+          id: "pr-second",
+          title: "Prepare pull request",
+          outcome: "Pull request is ready with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      title: "PR ready",
+      task: expect.objectContaining({ id: "pr-second" })
+    });
+  });
+
+  it("prefers explicit PR-ready completed tasks before generic pull request mentions", () => {
+    const workspace = getWorkspaceSession("shipyard");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "generic-pr-note",
+          title: "Collect pull request notes",
+          outcome: "Implementation notes mention the pull request but do not mark it ready.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        },
+        {
+          id: "ready-pr-note",
+          title: "Prepare release handoff",
+          outcome: "PR ready with tests and reviewer notes.",
+          status: "complete",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "pr-ready",
+      task: expect.objectContaining({ id: "ready-pr-note" })
+    });
+  });
+
+
+  it("detects package-ready completion when no PR signal exists", () => {
+    const workspace = getWorkspaceSession("research-build");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "research-package",
+          title: "Review research handoff",
+          outcome: "Approved direction for the next build slice.",
+          status: "complete",
+          ownerRole: "Reviewer"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "package-ready",
+      title: "Artifact package ready",
+      status: "done",
+      reviewState: "approved",
+      nextActionLabel: "Review the completed handoff"
+    });
+  });
+
+  it("prioritizes blocked outcomes over completed work", () => {
+    const workspace = getWorkspaceSession("test-review");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "complete-package",
+          title: "Package artifacts",
+          outcome: "Artifact package collected.",
+          status: "complete",
+          ownerRole: "Builder"
+        },
+        {
+          id: "blocked-merge",
+          title: "Prepare merge handoff",
+          outcome: "Merge-safe summary and final status.",
+          status: "blocked",
+          ownerRole: "Coordinator"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "blocked",
+      title: "Blocked with required action",
+      status: "blocked",
+      task: expect.objectContaining({ id: "blocked-merge" })
+    });
+  });
+
+  it("keeps not-run outcomes explicit when no task is complete", () => {
+    const workspace = getWorkspaceSession("solo-builder");
+    const outcome = detectOutcomeCompletion({
+      workspaceId: workspace.id,
+      agents: [],
+      tasks: [
+        {
+          id: "draft-plan",
+          title: "Draft the first workflow",
+          outcome: "Recommended starter plan with safe next action.",
+          status: "running",
+          ownerRole: "Builder"
+        }
+      ]
+    });
+
+    expect(outcome).toMatchObject({
+      state: "not-run",
+      title: "No PR or artifact package linked",
+      status: "not-available",
+      reviewState: "not-started"
     });
   });
 
@@ -149,7 +355,71 @@ describe("cockpit artifact view models", () => {
     expect(artifactsByKind.test).toMatchObject({
       status: "needs-review",
       reviewState: "needs-review",
-      relatedTaskIds: ["research-convert"]
+      relatedTaskIds: ["research-convert"],
+      validationItems: [
+        expect.objectContaining({ name: "Scope checks", status: "pass" }),
+        expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+        expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+      ]
+    });
+  });
+
+  it("prefers reviewer-owned review tasks when several tasks are in review", () => {
+    const workspace = getWorkspaceSession("test-review");
+    const artifacts = buildCockpitArtifacts({
+      workspace,
+      board: {
+        workspaceId: workspace.id,
+        agents: [],
+        tasks: [
+          {
+            id: "builder-review",
+            title: "Builder review",
+            outcome: "Builder-owned review should remain secondary validation evidence.",
+            status: "review",
+            ownerRole: "Builder"
+          },
+          {
+            id: "reviewer-review",
+            title: "Reviewer review",
+            outcome: "Reviewer-owned review should become the primary test artifact.",
+            status: "review",
+            ownerRole: "Reviewer"
+          },
+          {
+            id: "reviewer-complete",
+            title: "Completed reviewer handoff",
+            outcome: "Completed reviewer-owned task should not outrank active review work.",
+            status: "complete",
+            ownerRole: "Reviewer"
+          }
+        ]
+      }
+    });
+    const testArtifact = artifacts.find((artifact) => artifact.kind === "test");
+
+    expect(testArtifact).toMatchObject({
+      title: "Reviewer review",
+      relatedTaskIds: ["reviewer-review"],
+      validationItems: [
+        expect.objectContaining({ name: "Scope checks", status: "pass" }),
+        expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+        expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+      ]
+    });
+  });
+
+  it("adds validation details and outcome handoff state for completed work", () => {
+    const artifactsByKind = getCockpitArtifactsByKind("shipyard");
+
+    expect(artifactsByKind.test.validationItems).toEqual([
+      expect.objectContaining({ name: "Scope checks", status: "pass" }),
+      expect.objectContaining({ name: "Automated validation", status: "skipped" }),
+      expect.objectContaining({ name: "Reviewer decision", status: "skipped" })
+    ]);
+    expect(artifactsByKind.outcome).toMatchObject({
+      outcomeState: "package-ready",
+      handoffState: "confirmed"
     });
   });
 
