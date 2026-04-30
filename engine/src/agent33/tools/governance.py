@@ -249,10 +249,7 @@ class ToolGovernance:
                             risk_tier=ApprovalRiskTier.HIGH,
                         )
                         logger.info(
-                            (
-                                "Supervised approval required: tool=%s "
-                                "operation=%s approval_id=%s"
-                            ),
+                            ("Supervised approval required: tool=%s operation=%s approval_id=%s"),
                             tool_name,
                             operation,
                             approval.approval_id,

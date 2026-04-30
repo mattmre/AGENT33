@@ -9,7 +9,7 @@ import shutil
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from agent33.workflows.events import WorkflowEvent
 from agent33.workflows.executor import WorkflowResult
@@ -343,9 +343,7 @@ class WorkflowRunArchiveService:
                 if data is None:
                     continue
                 content = (
-                    data
-                    if isinstance(data, str)
-                    else json.dumps(data, indent=2, sort_keys=True)
+                    data if isinstance(data, str) else json.dumps(data, indent=2, sort_keys=True)
                 )
                 metadata = self._coerce_mapping(artifact_payload.get("metadata"))
                 mime_type = str(artifact_payload.get("mime_type", "text/plain")) or "text/plain"
@@ -382,8 +380,7 @@ class WorkflowRunArchiveService:
                         "source": f"{source}.output_files[{index - 1}]",
                         "step_id": step_id,
                         "mime_type": (
-                            mimetypes.guess_type(source_path)[0]
-                            or "application/octet-stream"
+                            mimetypes.guess_type(source_path)[0] or "application/octet-stream"
                         ),
                         "source_path": source_path,
                     }
@@ -423,8 +420,7 @@ class WorkflowRunArchiveService:
         event_run_id = str(payload.get("run_id", "")).strip()
         if event_run_id and event_run_id != run_id:
             raise ValueError(
-                f"Workflow event run_id mismatch: expected {run_id!r}, got "
-                f"{event_run_id!r}",
+                f"Workflow event run_id mismatch: expected {run_id!r}, got {event_run_id!r}",
             )
         payload["run_id"] = run_id
         payload["workflow_name"] = str(payload.get("workflow_name", workflow_name)).strip()
@@ -578,5 +574,5 @@ class WorkflowRunArchiveService:
             return [self._json_safe(item) for item in value]
         return str(value)
 
-    def _is_sequence(self, value: Any) -> bool:
+    def _is_sequence(self, value: object) -> TypeGuard[Sequence[Any]]:
         return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))

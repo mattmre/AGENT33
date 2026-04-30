@@ -151,7 +151,7 @@ def _dependent_constraint(dependent: Any, dependency_name: str) -> str:
     """Return the declared version constraint a dependent has on a pack."""
     for dependency in getattr(dependent, "pack_dependencies", []) or []:
         if dependency.name == dependency_name:
-            return dependency.version_constraint
+            return str(getattr(dependency, "version_constraint", "") or "")
     return ""
 
 

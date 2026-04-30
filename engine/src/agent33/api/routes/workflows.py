@@ -22,6 +22,7 @@ from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 from agent33.workflows.history import WorkflowExecutionRecord, normalize_execution_record
 
 if TYPE_CHECKING:
+    from agent33.workflows.run_archive import WorkflowRunArchiveService
     from agent33.workflows.state import WorkflowStateService
 
 logger = structlog.get_logger()
@@ -39,7 +40,7 @@ _execution_history: deque[dict[str, Any]] = deque(maxlen=_MAX_EXECUTION_HISTORY)
 _scheduler: WorkflowScheduler | None = None
 _ws_manager: Any | None = None
 _workflow_state_service: WorkflowStateService | None = None
-_workflow_run_archive_service: Any | None = None
+_workflow_run_archive_service: WorkflowRunArchiveService | None = None
 
 
 def get_workflow_registry() -> dict[str, WorkflowDefinition]:
@@ -62,12 +63,12 @@ def set_workflow_state_service(service: WorkflowStateService | None) -> None:
     _workflow_state_service = service
 
 
-def get_workflow_run_archive_service() -> Any | None:
+def get_workflow_run_archive_service() -> WorkflowRunArchiveService | None:
     """Expose the shared workflow run archive service for route composition."""
     return _workflow_run_archive_service
 
 
-def set_workflow_run_archive_service(service: Any | None) -> None:
+def set_workflow_run_archive_service(service: WorkflowRunArchiveService | None) -> None:
     """Register the shared workflow run archive service for route access."""
     global _workflow_run_archive_service
     _workflow_run_archive_service = service

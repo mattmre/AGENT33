@@ -183,19 +183,13 @@ def _archived_replay_events(
                 workflow_name=str(payload.get("workflow_name", "")),
                 timestamp=float(payload.get("timestamp", 0.0)),
                 step_id=(
-                    str(payload.get("step_id"))
-                    if payload.get("step_id") is not None
-                    else None
+                    str(payload.get("step_id")) if payload.get("step_id") is not None else None
                 ),
                 data=(
-                    payload.get("data", {})
-                    if isinstance(payload.get("data", {}), dict)
-                    else {}
+                    payload.get("data", {}) if isinstance(payload.get("data", {}), dict) else {}
                 ),
                 event_id=(
-                    str(payload.get("event_id"))
-                    if payload.get("event_id") is not None
-                    else None
+                    str(payload.get("event_id")) if payload.get("event_id") is not None else None
                 ),
                 schema_version=int(payload.get("schema_version", 1)),
             )

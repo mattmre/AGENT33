@@ -241,7 +241,7 @@ async def batch_decide_tool_approvals(
             raise HTTPException(
                 status_code=404,
                 detail=f"Approval request not found: {record.approval_id}",
-        )
+            )
         result = updated.model_dump(mode="json")
         if body.issue_tokens and body.decision == "approve":
             result.update(_issue_token_response(updated, body, request))

@@ -97,7 +97,7 @@ def test_workflow_execution_history_persistence_stays_bounded(tmp_path) -> None:
                 "duration_ms": float(run_number),
                 "timestamp": 1_720_000_000.0 + run_number,
             }
-    )
+        )
     service.persist_state()
 
     assert [entry["run_id"] for entry in history] == ["run-2", "run-3"]

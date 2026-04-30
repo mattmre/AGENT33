@@ -127,13 +127,9 @@ def test_run_archive_extracts_inline_and_file_artifacts(tmp_path) -> None:
 
     artifacts = service.list_artifacts("run-artifacts")
     assert [artifact["name"] for artifact in artifacts] == ["report.html", "transcript.txt"]
+    assert service.read_artifact("run-artifacts", artifacts[0]["relative_path"]) == "<div>ok</div>"
     assert (
-        service.read_artifact("run-artifacts", artifacts[0]["relative_path"])
-        == "<div>ok</div>"
-    )
-    assert (
-        service.read_artifact("run-artifacts", artifacts[1]["relative_path"])
-        == "captured stdout"
+        service.read_artifact("run-artifacts", artifacts[1]["relative_path"]) == "captured stdout"
     )
 
     restarted = WorkflowRunArchiveService(archive_root)
