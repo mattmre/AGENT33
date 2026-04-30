@@ -14,8 +14,6 @@ from agent33.workflows.events import WorkflowEvent, WorkflowEventType
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from agent33.workflows.events import WorkflowEvent
-
 router = APIRouter(prefix="/v1/workflows", tags=["workflows"])
 
 
@@ -91,7 +89,10 @@ def _archived_workflow_events_response(
 ) -> StreamingResponse:
     archived = _get_archived_run_detail(run_id, request, user)
     sync_event = _build_archived_sync_event(run_id, archived)
-    replay_events = _archived_replay_events(archived, after_event_id=request.headers.get("last-event-id"))
+    replay_events = _archived_replay_events(
+        archived,
+        after_event_id=request.headers.get("last-event-id"),
+    )
 
     async def event_generator() -> AsyncGenerator[str, None]:
         yield _format_sse(sync_event)
@@ -175,13 +176,27 @@ def _archived_replay_events(
             continue
         replay_events.append(
             WorkflowEvent(
-                event_type=WorkflowEventType(str(payload.get("type", WorkflowEventType.SYNC.value))),
+                event_type=WorkflowEventType(
+                    str(payload.get("type", WorkflowEventType.SYNC.value)),
+                ),
                 run_id=str(payload.get("run_id", "")),
                 workflow_name=str(payload.get("workflow_name", "")),
                 timestamp=float(payload.get("timestamp", 0.0)),
-                step_id=str(payload.get("step_id")) if payload.get("step_id") is not None else None,
-                data=payload.get("data", {}) if isinstance(payload.get("data", {}), dict) else {},
-                event_id=str(payload.get("event_id")) if payload.get("event_id") is not None else None,
+                step_id=(
+                    str(payload.get("step_id"))
+                    if payload.get("step_id") is not None
+                    else None
+                ),
+                data=(
+                    payload.get("data", {})
+                    if isinstance(payload.get("data", {}), dict)
+                    else {}
+                ),
+                event_id=(
+                    str(payload.get("event_id"))
+                    if payload.get("event_id") is not None
+                    else None
+                ),
                 schema_version=int(payload.get("schema_version", 1)),
             )
         )

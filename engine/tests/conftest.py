@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent33.api.route_approvals import APPROVAL_TOKEN_HEADER
 from agent33.api.routes.tool_approvals import (
-    _resolve_approval_token_manager,
     _reset_tool_approval_service,
+    _resolve_approval_token_manager,
     get_tool_approval_service,
     set_approval_token_manager,
 )
 from agent33.main import app
 from agent33.security.auth import create_access_token, verify_token
 from agent33.tools.approvals import ApprovalReason, ApprovalRiskTier
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @pytest.fixture(autouse=True)

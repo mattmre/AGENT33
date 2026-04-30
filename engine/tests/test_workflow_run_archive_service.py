@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -8,6 +8,9 @@ from agent33.workflows.events import WorkflowEvent, WorkflowEventType
 from agent33.workflows.executor import StepResult, WorkflowResult, WorkflowStatus
 from agent33.workflows.history import WorkflowExecutionRecord
 from agent33.workflows.run_archive import WorkflowRunArchiveService
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _sample_result(*, output_file: Path | None = None) -> WorkflowResult:
@@ -107,7 +110,10 @@ def test_run_archive_persists_run_result_history_and_events_across_restart(tmp_p
         "workflow_completed",
     ]
     assert detail["artifacts"][0]["name"] == "report.html"
-    assert restarted.read_artifact("run-123", detail["artifacts"][0]["relative_path"]) == "<div>ok</div>"
+    assert (
+        restarted.read_artifact("run-123", detail["artifacts"][0]["relative_path"])
+        == "<div>ok</div>"
+    )
 
 
 def test_run_archive_extracts_inline_and_file_artifacts(tmp_path) -> None:
@@ -121,13 +127,28 @@ def test_run_archive_extracts_inline_and_file_artifacts(tmp_path) -> None:
 
     artifacts = service.list_artifacts("run-artifacts")
     assert [artifact["name"] for artifact in artifacts] == ["report.html", "transcript.txt"]
-    assert service.read_artifact("run-artifacts", artifacts[0]["relative_path"]) == "<div>ok</div>"
-    assert service.read_artifact("run-artifacts", artifacts[1]["relative_path"]) == "captured stdout"
+    assert (
+        service.read_artifact("run-artifacts", artifacts[0]["relative_path"])
+        == "<div>ok</div>"
+    )
+    assert (
+        service.read_artifact("run-artifacts", artifacts[1]["relative_path"])
+        == "captured stdout"
+    )
 
     restarted = WorkflowRunArchiveService(archive_root)
     restored_artifacts = restarted.list_artifacts("run-artifacts")
-    assert [artifact["name"] for artifact in restored_artifacts] == ["report.html", "transcript.txt"]
-    assert restarted.read_artifact("run-artifacts", restored_artifacts[1]["relative_path"]) == "captured stdout"
+    assert [artifact["name"] for artifact in restored_artifacts] == [
+        "report.html",
+        "transcript.txt",
+    ]
+    assert (
+        restarted.read_artifact(
+            "run-artifacts",
+            restored_artifacts[1]["relative_path"],
+        )
+        == "captured stdout"
+    )
 
 
 @pytest.mark.parametrize("run_id", ["", " ", "../escape", "bad/run", "name with spaces"])

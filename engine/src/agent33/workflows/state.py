@@ -183,7 +183,10 @@ class WorkflowStateService:
                 try:
                     record = normalize_execution_record(entry)
                 except (TypeError, ValidationError, ValueError):
-                    logger.warning("workflow_history_restore_failed run=%s", entry.get("run_id", ""))
+                    logger.warning(
+                        "workflow_history_restore_failed run=%s",
+                        entry.get("run_id", ""),
+                    )
                     continue
                 self._execution_history.append(record.model_dump(mode="json"))
             self._trim_execution_history()

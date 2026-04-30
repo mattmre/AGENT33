@@ -7,8 +7,8 @@ from typing import Any
 from fastapi import HTTPException, Request, status
 
 from agent33.api.routes.tool_approvals import (
-    get_tool_approval_service,
     _resolve_approval_token_manager,
+    get_tool_approval_service,
 )
 from agent33.security.approval_tokens import ApprovalTokenError
 from agent33.security.permissions import _get_token_payload

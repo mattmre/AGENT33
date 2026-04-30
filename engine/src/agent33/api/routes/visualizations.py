@@ -85,7 +85,10 @@ async def get_workflow_graph(
                     None,
                 )
             elif recent_executions:
-                target_entry = max(recent_executions, key=lambda entry: entry.get("timestamp") or 0)
+                target_entry = max(
+                    recent_executions,
+                    key=lambda entry: entry.get("timestamp") or 0,
+                )
 
         if target_entry is None and run_id:
             archive_service = workflows.get_workflow_run_archive_service()

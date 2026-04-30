@@ -201,9 +201,7 @@ class ToolApprovalService:
             return False
         if req.tool_name != tool_name:
             return False
-        if req.operation and req.operation != operation:
-            return False
-        return True
+        return not (req.operation and req.operation != operation)
 
     def _expire_pending(self) -> None:
         now = datetime.now(UTC)

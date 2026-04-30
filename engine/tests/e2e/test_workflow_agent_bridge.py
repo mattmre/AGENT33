@@ -10,6 +10,8 @@ verifying that:
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from agent33.security.auth import create_access_token
@@ -186,7 +188,7 @@ class TestWorkflowLifecycleE2E:
         )
         assert resp.status_code == 201
 
-        custom_run_id = "e2e-custom-run-12345"
+        custom_run_id = f"e2e-custom-run-{uuid4().hex}"
         resp = client.post(
             "/v1/workflows/e2e-runid-workflow/execute",
             json={"inputs": {"name": "RunID"}, "run_id": custom_run_id},

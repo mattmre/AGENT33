@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
@@ -20,7 +20,9 @@ from agent33.workflows.dag_layout import compute_dag_layout
 from agent33.workflows.definition import WorkflowDefinition
 from agent33.workflows.executor import WorkflowExecutor, WorkflowResult
 from agent33.workflows.history import WorkflowExecutionRecord, normalize_execution_record
-from agent33.workflows.state import WorkflowStateService
+
+if TYPE_CHECKING:
+    from agent33.workflows.state import WorkflowStateService
 
 logger = structlog.get_logger()
 
@@ -418,7 +420,10 @@ async def list_archived_run_artifacts(
     return [WorkflowArchivedArtifact.model_validate(artifact) for artifact in artifacts]
 
 
-@router.get("/runs/{run_id}/artifacts/{artifact_path:path}", dependencies=[require_scope("workflows:read")])
+@router.get(
+    "/runs/{run_id}/artifacts/{artifact_path:path}",
+    dependencies=[require_scope("workflows:read")],
+)
 async def get_archived_run_artifact(
     run_id: str,
     artifact_path: str,

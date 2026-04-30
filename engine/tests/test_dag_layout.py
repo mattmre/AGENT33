@@ -398,7 +398,11 @@ def writer_client() -> TestClient:
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 
-def _register_workflow(client: TestClient, steps: list[dict[str, Any]], route_approval_headers) -> None:
+def _register_workflow(
+    client: TestClient,
+    steps: list[dict[str, Any]],
+    route_approval_headers,
+) -> None:
     """Register a test workflow via the API."""
     payload = {
         "name": "test-dag",

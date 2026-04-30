@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock
 
 from agent33.api.routes import workflows
 from agent33.api.routes.workflow_sse import stream_workflow_events

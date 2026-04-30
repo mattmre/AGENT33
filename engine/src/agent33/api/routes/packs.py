@@ -171,27 +171,33 @@ def _recovery_recommendation(
             f"{'' if len(dependents) == 1 else 's'} are removed or updated."
         )
     if compatibility_errors:
-        warnings.append("Selected upgrade target is not compatible with dependent pack requirements.")
+        warnings.append(
+            "Selected upgrade target is not compatible with dependent pack requirements.",
+        )
     if not archived_versions:
         warnings.append("No archived rollback revisions are available yet.")
 
     if compatibility_errors:
         return (
-            f"Do not upgrade {pack_name} to {target_version} until compatibility errors are resolved.",
+            f"Do not upgrade {pack_name} to {target_version} until compatibility "
+            "errors are resolved.",
             warnings,
         )
     if dependents:
         return (
-            f"Review dependent packs before uninstalling {pack_name}; compatible upgrades can proceed.",
+            f"Review dependent packs before uninstalling {pack_name}; compatible "
+            "upgrades can proceed.",
             warnings,
         )
     if archived_versions:
         return (
-            "No dependent packs are blocking this change, and rollback revisions are available if needed.",
+            "No dependent packs are blocking this change, and rollback revisions "
+            "are available if needed.",
             warnings,
         )
     return (
-        "No dependent packs are blocking this change. Upgrade archives the current version before applying.",
+        "No dependent packs are blocking this change. Upgrade archives the "
+        "current version before applying.",
         warnings,
     )
 

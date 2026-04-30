@@ -342,7 +342,11 @@ class WorkflowRunArchiveService:
                 data = artifact_payload.get("data")
                 if data is None:
                     continue
-                content = data if isinstance(data, str) else json.dumps(data, indent=2, sort_keys=True)
+                content = (
+                    data
+                    if isinstance(data, str)
+                    else json.dumps(data, indent=2, sort_keys=True)
+                )
                 metadata = self._coerce_mapping(artifact_payload.get("metadata"))
                 mime_type = str(artifact_payload.get("mime_type", "text/plain")) or "text/plain"
                 step_label = step_id or "result"
@@ -377,7 +381,10 @@ class WorkflowRunArchiveService:
                     {
                         "source": f"{source}.output_files[{index - 1}]",
                         "step_id": step_id,
-                        "mime_type": mimetypes.guess_type(source_path)[0] or "application/octet-stream",
+                        "mime_type": (
+                            mimetypes.guess_type(source_path)[0]
+                            or "application/octet-stream"
+                        ),
                         "source_path": source_path,
                     }
                 )
@@ -415,7 +422,10 @@ class WorkflowRunArchiveService:
             payload["event_id"] = event.event_id
         event_run_id = str(payload.get("run_id", "")).strip()
         if event_run_id and event_run_id != run_id:
-            raise ValueError(f"Workflow event run_id mismatch: expected {run_id!r}, got {event_run_id!r}")
+            raise ValueError(
+                f"Workflow event run_id mismatch: expected {run_id!r}, got "
+                f"{event_run_id!r}",
+            )
         payload["run_id"] = run_id
         payload["workflow_name"] = str(payload.get("workflow_name", workflow_name)).strip()
         payload["timestamp"] = float(payload.get("timestamp", time.time()))
@@ -427,7 +437,11 @@ class WorkflowRunArchiveService:
         self,
         result: WorkflowResult | Mapping[str, Any],
     ) -> dict[str, Any]:
-        payload = result.model_dump(mode="json") if isinstance(result, WorkflowResult) else self._json_safe(result)
+        payload = (
+            result.model_dump(mode="json")
+            if isinstance(result, WorkflowResult)
+            else self._json_safe(result)
+        )
         if not isinstance(payload, Mapping):
             raise TypeError("workflow result must serialize to a mapping")
         return dict(payload)
@@ -480,7 +494,9 @@ class WorkflowRunArchiveService:
         if not suffix:
             suffix = self._guess_suffix(mime_type or "text/plain")
         safe_stem = _SAFE_FILENAME_CHARS.sub("-", stem).strip("-.") or "artifact"
-        safe_suffix = _SAFE_FILENAME_CHARS.sub("", suffix) or self._guess_suffix(mime_type or "text/plain")
+        safe_suffix = _SAFE_FILENAME_CHARS.sub("", suffix) or self._guess_suffix(
+            mime_type or "text/plain",
+        )
         candidate = f"{safe_stem}{safe_suffix}"
         counter = 2
         while candidate in used_names:

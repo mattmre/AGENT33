@@ -225,42 +225,45 @@ class ToolGovernance:
                 autonomy_level == AutonomyLevel.SUPERVISED
                 and tool_name in _DESTRUCTIVE_PARAMS
                 and operation in _DESTRUCTIVE_PARAMS[tool_name]
+                and not approval_validated
             ):
-                if not approval_validated:
-                    if self._try_consume_approval(
-                        params=params,
-                        tool_name=tool_name,
-                        operation=operation,
-                        tenant_id=context.tenant_id,
-                        consume=False,
-                    ):
-                        approval_validated = True
+                if self._try_consume_approval(
+                    params=params,
+                    tool_name=tool_name,
+                    operation=operation,
+                    tenant_id=context.tenant_id,
+                    consume=False,
+                ):
+                    approval_validated = True
+                else:
+                    if self._approval_service is not None:
+                        approval = self._approval_service.request(
+                            reason=ApprovalReason.SUPERVISED_DESTRUCTIVE,
+                            tool_name=tool_name,
+                            operation=operation,
+                            command=str(params.get("command", "")),
+                            requested_by=context.requested_by,
+                            tenant_id=context.tenant_id,
+                            details="Supervised autonomy requires operator approval.",
+                            arguments=self._sanitize_approval_arguments(params),
+                            risk_tier=ApprovalRiskTier.HIGH,
+                        )
+                        logger.info(
+                            (
+                                "Supervised approval required: tool=%s "
+                                "operation=%s approval_id=%s"
+                            ),
+                            tool_name,
+                            operation,
+                            approval.approval_id,
+                        )
                     else:
-                        if self._approval_service is not None:
-                            approval = self._approval_service.request(
-                                reason=ApprovalReason.SUPERVISED_DESTRUCTIVE,
-                                tool_name=tool_name,
-                                operation=operation,
-                                command=str(params.get("command", "")),
-                                requested_by=context.requested_by,
-                                tenant_id=context.tenant_id,
-                                details="Supervised autonomy requires operator approval.",
-                                arguments=self._sanitize_approval_arguments(params),
-                                risk_tier=ApprovalRiskTier.HIGH,
-                            )
-                            logger.info(
-                                "Supervised approval required: tool=%s operation=%s approval_id=%s",
-                                tool_name,
-                                operation,
-                                approval.approval_id,
-                            )
-                        else:
-                            logger.info(
-                                "Supervised approval required: tool=%s operation=%s",
-                                tool_name,
-                                operation,
-                            )
-                        return False
+                        logger.info(
+                            "Supervised approval required: tool=%s operation=%s",
+                            tool_name,
+                            operation,
+                        )
+                    return False
 
         # --- Scope check ---
         required_scope = self.TOOL_SCOPE_MAP.get(tool_name, "tools:execute")
@@ -348,8 +351,10 @@ class ToolGovernance:
                 logger.info("Approval token rejected: tool=%s error=%s", tool_name, exc)
                 return False
             if self._approval_service is None:
-                return not consume or (not payload.one_time) or self._approval_token_manager.consume(
-                    payload.jti
+                return (
+                    not consume
+                    or (not payload.one_time)
+                    or self._approval_token_manager.consume(payload.jti)
                 )
             if not consume:
                 return self._approval_service.is_approved(

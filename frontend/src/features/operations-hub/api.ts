@@ -67,7 +67,7 @@ interface RecoverySessionSummaryCandidate {
 
 interface RecoveryReplaySummaryCandidate {
   total_events: number;
-  by_type: unknown;
+  by_type: Record<string, unknown>;
   duration_seconds: number;
   first_event_at: string;
   last_event_at: string;

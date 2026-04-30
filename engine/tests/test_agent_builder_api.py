@@ -84,7 +84,7 @@ class TestUpdateAgent:
         elif hasattr(app.state, "agent_registry"):
             del app.state.agent_registry
 
-    async def test_update_existing_agent(self) -> None:
+    async def test_update_existing_agent(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
@@ -93,10 +93,18 @@ class TestUpdateAgent:
 
         payload = _definition_payload(description="Updated description")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.put(
                 "/v1/agents/test-agent",
                 json=payload,
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.update",
+                    operation="update",
+                    arguments={"name": "test-agent", "definition": payload},
+                    details="Pytest agent update",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 200
@@ -109,7 +117,7 @@ class TestUpdateAgent:
         assert updated is not None
         assert updated.description == "Updated description"
 
-    async def test_update_nonexistent_agent_returns_404(self) -> None:
+    async def test_update_nonexistent_agent_returns_404(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
@@ -117,16 +125,24 @@ class TestUpdateAgent:
 
         payload = _definition_payload(name="ghost-agent")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.put(
                 "/v1/agents/ghost-agent",
                 json=payload,
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.update",
+                    operation="update",
+                    arguments={"name": "ghost-agent", "definition": payload},
+                    details="Pytest missing agent update",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
 
-    async def test_update_returns_full_definition(self) -> None:
+    async def test_update_returns_full_definition(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
@@ -135,10 +151,18 @@ class TestUpdateAgent:
 
         payload = _definition_payload(version="2.0.0", description="Upgraded")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.put(
                 "/v1/agents/test-agent",
                 json=payload,
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.update",
+                    operation="update",
+                    arguments={"name": "test-agent", "definition": payload},
+                    details="Pytest full update response",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 200
@@ -181,7 +205,7 @@ class TestDeleteAgent:
         elif hasattr(app.state, "agent_registry"):
             del app.state.agent_registry
 
-    async def test_delete_existing_agent(self) -> None:
+    async def test_delete_existing_agent(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
@@ -191,24 +215,40 @@ class TestDeleteAgent:
         assert registry.get("doomed-agent") is not None
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.delete(
                 "/v1/agents/doomed-agent",
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.delete",
+                    operation="delete",
+                    arguments={"name": "doomed-agent"},
+                    details="Pytest agent delete",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 204
         assert registry.get("doomed-agent") is None
 
-    async def test_delete_nonexistent_agent_returns_404(self) -> None:
+    async def test_delete_nonexistent_agent_returns_404(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
         app.state.agent_registry = registry
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.delete(
                 "/v1/agents/no-such-agent",
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.delete",
+                    operation="delete",
+                    arguments={"name": "no-such-agent"},
+                    details="Pytest missing agent delete",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 404
@@ -231,7 +271,7 @@ class TestDeleteAgent:
         # Agent should still exist
         assert registry.get("protected-agent") is not None
 
-    async def test_delete_removes_only_target_agent(self) -> None:
+    async def test_delete_removes_only_target_agent(self, route_approval_headers) -> None:
         from agent33.main import app
 
         registry = AgentRegistry()
@@ -240,9 +280,17 @@ class TestDeleteAgent:
         app.state.agent_registry = registry
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = _auth_headers()
             resp = await client.delete(
                 "/v1/agents/delete-me",
-                headers=_auth_headers(),
+                headers=route_approval_headers(
+                    client,
+                    route_name="agents.delete",
+                    operation="delete",
+                    arguments={"name": "delete-me"},
+                    details="Pytest selective delete",
+                    authorization=headers["Authorization"],
+                ),
             )
 
         assert resp.status_code == 204
