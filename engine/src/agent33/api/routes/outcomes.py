@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from agent33.evaluation.ppack_ab_models import (
     GitHubIssuePublishResult,
@@ -263,7 +264,8 @@ async def assign_ppack_variant(
     request: Request,
 ) -> dict[str, Any]:
     try:
-        assignment = get_ppack_ab_service(request).assign_variant(
+        assignment = await run_in_threadpool(
+            get_ppack_ab_service(request).assign_variant,
             tenant_id=_tenant_id(request),
             session_id=body.session_id,
         )
@@ -282,7 +284,8 @@ async def assign_ppack_variant(
 )
 async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, Any]:
     try:
-        assignment = get_ppack_ab_service(request).get_assignment(
+        assignment = await run_in_threadpool(
+            get_ppack_ab_service(request).get_assignment,
             tenant_id=_tenant_id(request),
             session_id=session_id,
         )
@@ -304,13 +307,15 @@ async def generate_ppack_report(
     service = get_ppack_ab_service(request)
     try:
         if body.since is None and body.until is None:
-            report = service.generate_weekly_report(
+            report = await run_in_threadpool(
+                service.generate_weekly_report,
                 tenant_id=_tenant_id(request),
                 domain=body.domain,
                 metric_types=body.metric_types,
             )
         else:
-            report = service.generate_report(
+            report = await run_in_threadpool(
+                service.generate_report,
                 tenant_id=_tenant_id(request),
                 domain=body.domain,
                 since=body.since,
@@ -337,7 +342,7 @@ async def generate_ppack_report(
 )
 async def get_ppack_report(report_id: str, request: Request) -> dict[str, Any]:
     try:
-        report = get_ppack_ab_service(request).get_report(report_id)
+        report = await run_in_threadpool(get_ppack_ab_service(request).get_report, report_id)
     except sqlite3.Error as exc:
         _raise_ppack_persistence_error("get_ppack_report", exc)
     if report is None or report.tenant_id != _tenant_id(request):

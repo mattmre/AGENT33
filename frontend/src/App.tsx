@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
+import { ActivityPanel } from "./components/ActivityPanel";
 import { AppNavigation } from "./components/AppNavigation";
 import { ArtifactReviewDrawer } from "./components/ArtifactReviewDrawer";
-import { CockpitProjectDashboard } from "./components/CockpitProjectDashboard";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { PermissionModeControl } from "./components/PermissionModeControl";
 import { ShipyardLaneScaffold } from "./components/ShipyardLaneScaffold";
@@ -18,6 +18,7 @@ import { OperationsHubPanel } from "./features/operations-hub/OperationsHubPanel
 import { IngestionReviewPanel } from "./features/operations-hub/IngestionReviewPanel";
 import { OutcomesDashboardPanel } from "./features/outcomes-dashboard/OutcomesDashboardPanel";
 import { SessionAnalyticsDashboard } from "./features/session-analytics/SessionAnalyticsDashboard";
+import { SessionsDashboard } from "./features/sessions/Dashboard";
 import AgentBuilderPage from "./features/agent-builder/AgentBuilderPage";
 import "./features/agent-builder/AgentBuilderPage.css";
 import { PackMarketplacePage } from "./features/pack-marketplace";
@@ -42,6 +43,11 @@ import {
   AdvancedControlPlanePanel,
   type OperatorMode
 } from "./features/advanced/AdvancedControlPlanePanel";
+import {
+  ControlPlaneCockpitPanel,
+  getCockpitPrimaryDomains
+} from "./features/cockpit/ControlPlaneCockpitPanel";
+import { DesignKitSurfacesPanel } from "./features/design-kit/DesignKitSurfacesPanel";
 import { domains } from "./data/domains";
 import {
   DEFAULT_APP_TAB,
@@ -57,17 +63,21 @@ import {
 } from "./data/workspaces";
 import {
   DEFAULT_PERMISSION_MODE_ID,
+  getPermissionMode,
   isPermissionModeId,
   type PermissionModeId
 } from "./data/permissionModes";
 import {
+  DEFAULT_COCKPIT_OPERATOR_MODE,
   DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
   createCockpitUrl,
+  isCockpitOperatorMode,
   readCockpitUrlState,
   type ArtifactDrawerSectionId,
   type CockpitUrlState
 } from "./lib/cockpitUrlState";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
+import { getRuntimeConfig } from "./lib/api";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
@@ -76,6 +86,7 @@ import type { UserRoleId } from "./features/role-intake/types";
 const ROLE_STORAGE_KEY = "agent33:selected-role";
 const WORKSPACE_SESSION_STORAGE_KEY = "agent33:selected-workspace-session";
 const PERMISSION_MODE_STORAGE_KEY = "agent33:permission-mode";
+const OPERATOR_MODE_STORAGE_KEY = "agent33:operator-mode";
 
 function getSavedUserRole(): UserRoleId | null {
   if (typeof window === "undefined") {
@@ -104,6 +115,15 @@ function getSavedPermissionModeId(): PermissionModeId {
   return isPermissionModeId(savedPermissionMode) ? savedPermissionMode : DEFAULT_PERMISSION_MODE_ID;
 }
 
+function getSavedOperatorMode(): OperatorMode {
+  if (typeof window === "undefined") {
+    return DEFAULT_COCKPIT_OPERATOR_MODE;
+  }
+
+  const savedOperatorMode = window.sessionStorage.getItem(OPERATOR_MODE_STORAGE_KEY);
+  return isCockpitOperatorMode(savedOperatorMode) ? savedOperatorMode : DEFAULT_COCKPIT_OPERATOR_MODE;
+}
+
 function getCurrentCockpitUrlState(fallbackState: Partial<CockpitUrlState>): CockpitUrlState {
   if (typeof window === "undefined") {
     return readCockpitUrlState("", fallbackState);
@@ -112,20 +132,30 @@ function getCurrentCockpitUrlState(fallbackState: Partial<CockpitUrlState>): Coc
   return readCockpitUrlState(window.location.search, fallbackState);
 }
 
+function getRuntimeHost(): string {
+  const { API_BASE_URL } = getRuntimeConfig();
+  try {
+    return new URL(API_BASE_URL).host;
+  } catch {
+    return API_BASE_URL;
+  }
+}
+
 export default function App(): JSX.Element {
   const [initialCockpitUrlState] = useState(() =>
     getCurrentCockpitUrlState({
       activeTab: getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB,
       workspaceId: getSavedWorkspaceSessionId(),
       permissionModeId: getSavedPermissionModeId(),
-      drawerSectionId: DEFAULT_ARTIFACT_DRAWER_SECTION_ID
+      drawerSectionId: DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
+      operatorMode: getSavedOperatorMode()
     })
   );
   const [activeTab, setActiveTab] = useState<AppTab>(initialCockpitUrlState.activeTab);
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
-  const [operatorMode, setOperatorMode] = useState<OperatorMode>("beginner");
+  const [operatorMode, setOperatorModeState] = useState<OperatorMode>(initialCockpitUrlState.operatorMode);
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -137,15 +167,42 @@ export default function App(): JSX.Element {
     initialCockpitUrlState.drawerSectionId
   );
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
-  const showCockpitDashboard = activeTab === "operations";
+  const selectedPermissionMode = getPermissionMode(permissionModeId);
+  const cockpitPrimaryDomains = useMemo(() => getCockpitPrimaryDomains(domains), []);
+  const activeCockpitDomain = useMemo(
+    () =>
+      cockpitPrimaryDomains.find((domain) => domain.id === selectedDomainId) ??
+      cockpitPrimaryDomains[0] ??
+      domains[0] ??
+      null,
+    [cockpitPrimaryDomains, selectedDomainId]
+  );
+  const runtimeHost = getRuntimeHost();
+  const showArtifactDrawer = activeTab === "operations";
+  const showLiveRail = activeTab === "cockpit" || activeTab === "advanced";
+  const liveRailSurfaceLabel =
+    activeTab === "cockpit"
+      ? activeCockpitDomain?.title ?? "Operations cockpit"
+      : activeTab === "advanced"
+        ? domains.find((domain) => domain.id === selectedDomainId)?.title ?? "Control plane"
+        : getAppTabLabel(activeTab);
+  const liveRailContextLabel =
+    activeTab === "cockpit"
+      ? activeCockpitDomain?.description ??
+        "Choose a live surface to inspect guarded routes, workflow entrypoints, and runtime endpoints."
+      : activeTab === "advanced"
+        ? domains.find((domain) => domain.id === selectedDomainId)?.description ??
+          "Search and inspect raw runtime domains, direct routes, and guarded execution surfaces."
+        : `${selectedWorkspace.name} · ${getAppTabLabel(activeTab)}`;
   const currentCockpitUrlState = useMemo(
     (): CockpitUrlState => ({
       activeTab,
       workspaceId: selectedWorkspaceId,
       permissionModeId,
-      drawerSectionId
+      drawerSectionId,
+      operatorMode
     }),
-    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId]
+    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId, operatorMode]
   );
   const currentCockpitUrlStateRef = useRef(currentCockpitUrlState);
   const isApplyingBrowserNavigationRef = useRef(false);
@@ -159,6 +216,7 @@ export default function App(): JSX.Element {
       setSelectedWorkspaceId(nextState.workspaceId);
       setPermissionModeId(nextState.permissionModeId);
       setDrawerSectionId(nextState.drawerSectionId);
+      setOperatorModeState(nextState.operatorMode);
     }
 
     window.addEventListener("popstate", onPopState);
@@ -238,14 +296,11 @@ export default function App(): JSX.Element {
     }
   }, []);
 
-  const focusOperationsBoard = useCallback((): void => {
-    const operationsBoard = document.getElementById("operations-workspace-board");
-    if (!operationsBoard) {
-      throw new Error("Operations workspace board anchor is unavailable.");
+  const selectOperatorMode = useCallback((mode: OperatorMode): void => {
+    setOperatorModeState(mode);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(OPERATOR_MODE_STORAGE_KEY, mode);
     }
-
-    operationsBoard.scrollIntoView({ block: "start" });
-    operationsBoard.focus();
   }, []);
 
   return (
@@ -254,10 +309,28 @@ export default function App(): JSX.Element {
       <header className="consumer-topbar">
         <div className="brand">
           <div className="logo-orb" aria-hidden="true"></div>
-          <h1>AGENT-33</h1>
+          <div className="brand-copy">
+            <h1>AGENT-33</h1>
+            <span className="brand-subtitle">Control Plane</span>
+          </div>
         </div>
         <div className="cockpit-topbar-actions">
           <GlobalSearch token={token || null} />
+          <div className="cockpit-topbar-meta" aria-label="Runtime shell state">
+            <span className="cockpit-topbar-pill">{selectedPermissionMode.label}</span>
+            <div className="cockpit-topbar-field">
+              <span>WS</span>
+              <b>{selectedWorkspace.name}</b>
+            </div>
+            <div className="cockpit-topbar-field">
+              <span>HOST</span>
+              <b>{runtimeHost}</b>
+            </div>
+            <div className="cockpit-topbar-field">
+              <span>VIEW</span>
+              <b>{getAppTabLabel(activeTab)}</b>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -269,38 +342,44 @@ export default function App(): JSX.Element {
             onOpenRuns={() => setActiveTab("operations")}
             onOpenWorkflows={openWorkflowStarter}
           />
-          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
-        </aside>
-
-        <main className="cockpit-main" id="main-content" role="main">
-          <div className="cockpit-context-bar" aria-label="Current workspace context">
-            <div className="cockpit-context-copy">
-              <span className="eyebrow">Now viewing</span>
-              <strong>{getAppTabLabel(activeTab)}</strong>
-              <span className="cockpit-context-note">
-                {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
-              </span>
+          <div className="cockpit-sidebar-context cockpit-sidebar-mode-card">
+            <div className="cockpit-sidebar-mode-head">
+              <span className="eyebrow">Operator</span>
+              <strong>{selectedPermissionMode.label}</strong>
             </div>
             <PermissionModeControl
               selectedModeId={permissionModeId}
               operatorMode={operatorMode}
               onSelectMode={selectPermissionMode}
-              onOperatorModeChange={setOperatorMode}
+              onOperatorModeChange={selectOperatorMode}
             />
           </div>
+          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
+        </aside>
 
-          <div className={showCockpitDashboard ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
-            <div className="cockpit-stage-content">
-              <div className="consumer-content">
-                {showCockpitDashboard ? (
-                  <CockpitProjectDashboard
-                    workspace={selectedWorkspace}
-                    permissionModeId={permissionModeId}
-                    onReviewCurrentWork={focusOperationsBoard}
-                    onOpenWorkflows={() => setActiveTab("starter")}
-                    onOpenSafety={() => setActiveTab("safety")}
-                  />
-                ) : null}
+        <main className="cockpit-main" id="main-content" role="main">
+          <div className={showLiveRail ? "cockpit-main-shell cockpit-main-shell-with-rail" : "cockpit-main-shell"}>
+            <div className={showArtifactDrawer ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
+              <div className="cockpit-stage-content">
+                <div className="consumer-content">
+        {activeTab === "cockpit" && (
+          <div className="consumer-cockpit-layout">
+            <ControlPlaneCockpitPanel
+              workspace={selectedWorkspace}
+              permissionModeId={permissionModeId}
+              domains={domains}
+              selectedDomainId={selectedDomainId}
+              token={token}
+              apiKey={apiKey}
+              onSelectedDomainChange={setSelectedDomainId}
+              onOpenOperations={() => setActiveTab("operations")}
+              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenSafety={() => setActiveTab("safety")}
+              onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
+          </div>
+        )}
         {activeTab === "guide" && (
           <div className="consumer-role-intake-layout">
             <RoleIntakePanel
@@ -571,6 +650,7 @@ export default function App(): JSX.Element {
               />
             </div>
             <OperationsHubPanel token={token} apiKey={apiKey} onResult={onResult} />
+            <SessionsDashboard token={token || null} />
           </div>
         )}
 
@@ -635,7 +715,8 @@ export default function App(): JSX.Element {
             apiKey={apiKey}
             activity={activity}
             operatorMode={operatorMode}
-            onOperatorModeChange={setOperatorMode}
+            showActivityRail={false}
+            onOperatorModeChange={selectOperatorMode}
             onSelectedDomainChange={setSelectedDomainId}
             onOpenModels={() => setActiveTab("models")}
             onOpenWorkflowCatalog={() => setActiveTab("catalog")}
@@ -645,9 +726,15 @@ export default function App(): JSX.Element {
             onResult={onResult}
           />
         )}
+
+        {activeTab === "design-kit" && (
+          <div className="consumer-design-kit-layout">
+            <DesignKitSurfacesPanel onNavigate={setActiveTab} />
+          </div>
+        )}
               </div>
             </div>
-            {showCockpitDashboard ? (
+            {showArtifactDrawer ? (
               <ArtifactReviewDrawer
                 workspace={selectedWorkspace}
                 permissionModeId={permissionModeId}
@@ -655,6 +742,19 @@ export default function App(): JSX.Element {
                 onSectionChange={setDrawerSectionId}
               />
             ) : null}
+            {showLiveRail ? (
+              <ActivityPanel
+                token={token || null}
+                activity={activity}
+                activeSurfaceLabel={liveRailSurfaceLabel}
+                contextLabel={liveRailContextLabel}
+                operatorMode={operatorMode}
+                onOpenOperations={() => setActiveTab("operations")}
+                onOpenSafety={() => setActiveTab("safety")}
+                onOpenWorkflowCatalog={() => setActiveTab("starter")}
+              />
+            ) : null}
+            </div>
           </div>
         </main>
       </div>

@@ -1,73 +1,86 @@
 import { useState } from "react";
+
 import { getRuntimeConfig } from "../lib/api";
 
-export function GlobalSearch({ token }: { token: string | null }) {
-    const [query, setQuery] = useState("");
-    const [results, setResults] = useState<any[]>([]);
-    const [isOpen, setIsOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const canSearch = Boolean(token);
-    const { API_BASE_URL } = getRuntimeConfig();
+interface MemorySearchResult {
+  content: string;
+  token_estimate: number;
+  level: string;
+}
 
-    const searchMemory = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!query.trim()) return;
-        if (!token) {
-            setResults([]);
-            setIsOpen(true);
-            return;
-        }
+export function GlobalSearch({ token }: { token: string | null }): JSX.Element {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<MemorySearchResult[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const canSearch = Boolean(token);
+  const { API_BASE_URL } = getRuntimeConfig();
 
-        setLoading(true);
-        setIsOpen(true);
-        try {
-            const res = await fetch(`${API_BASE_URL}/v1/memory/search`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ query, level: "full", top_k: 3 })
-            });
-            const data = await res.json();
-            setResults(data.results || []);
-        } catch (e) {
-            console.error("Failed to search globally:", e);
-        } finally {
-            setLoading(false);
-        }
-    };
+  async function searchMemory(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!query.trim()) {
+      return;
+    }
+    if (!token) {
+      setResults([]);
+      setIsOpen(true);
+      return;
+    }
 
-    return (
-        <div className="global-search" role="search" style={{ position: "relative", marginLeft: "20px", flex: 1 }}>
-            <form onSubmit={searchMemory} style={{ display: "flex", alignItems: "center" }}>
-                <input
-                    type="search"
-                    aria-label="Search semantic memory"
-                    placeholder={canSearch ? "Search Semantic Memory (PGVector)..." : "Sign in to use memory search"}
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    disabled={!canSearch}
-                    style={{ padding: "8px 12px", width: "100%", maxWidth: "400px", borderRadius: "4px", border: "1px solid #ccc" }}
-                />
-            </form>
+    setLoading(true);
+    setIsOpen(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/memory/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ query, level: "full", top_k: 3 })
+      });
+      const data = await response.json();
+      setResults(data.results || []);
+    } catch (error) {
+      console.error("Failed to search globally:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-            {isOpen && (
-                <div role="region" aria-label="Search results" aria-live="polite" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", color: "black", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", zIndex: 100, borderRadius: "4px", marginTop: "5px", padding: "10px", maxHeight: "400px", overflowY: "auto" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #ddd", paddingBottom: "5px", marginBottom: "10px" }}>
-                        <strong style={{ color: "#333" }}>{loading ? "Searching..." : "Memory Results"}</strong>
-                        <button onClick={() => setIsOpen(false)} aria-label="Close search results" style={{ background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
-                    </div>
-                    {!canSearch ? <div style={{ color: "#666" }}>Add a token in Integrations to enable search.</div> : null}
-                    {results.length === 0 && !loading && <div style={{ color: "#666" }}>No results found.</div>}
-                    {results.map((r, i) => (
-                        <div key={i} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px solid #eee" }}>
-                            <div style={{ fontSize: "0.9em", color: "#333" }}>{r.content.substring(0, 150)}...</div>
-                            <div style={{ fontSize: "0.75em", color: "#888", marginTop: "3px" }}>Tokens: {r.token_estimate} | Match: {r.level}</div>
-                        </div>
-                    ))}
-                </div>
-            )}
+  return (
+    <div className="global-search" role="search">
+      <form className="global-search-form" onSubmit={searchMemory}>
+        <input
+          className="global-search-input"
+          type="search"
+          aria-label="Search semantic memory"
+          placeholder={canSearch ? "Search semantic memory" : "Sign in to use memory search"}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          disabled={!canSearch}
+        />
+      </form>
+
+      {isOpen ? (
+        <div role="region" aria-label="Search results" aria-live="polite" className="global-search-results">
+          <div className="global-search-results-header">
+            <strong>{loading ? "Searching..." : "Memory results"}</strong>
+            <button type="button" onClick={() => setIsOpen(false)} aria-label="Close search results">
+              Close
+            </button>
+          </div>
+          {!canSearch ? <div className="global-search-empty">Add a token in Integrations to enable search.</div> : null}
+          {results.length === 0 && !loading ? <div className="global-search-empty">No results found.</div> : null}
+          {results.map((result, index) => (
+            <article key={`${result.level}-${index}`} className="global-search-result">
+              <div className="global-search-result-content">{result.content.substring(0, 150)}...</div>
+              <div className="global-search-result-meta">
+                Tokens: {result.token_estimate} | Match: {result.level}
+              </div>
+            </article>
+          ))}
         </div>
-    );
+      ) : null}
+    </div>
+  );
 }

@@ -9,10 +9,6 @@ vi.mock("../../components/HealthPanel", () => ({
   HealthPanel: () => <div data-testid="health-panel">Health</div>
 }));
 
-vi.mock("../../components/ObservationStream", () => ({
-  ObservationStream: () => <div data-testid="observation-stream">Observations</div>
-}));
-
 vi.mock("../../components/DomainPanel", () => ({
   DomainPanel: ({
     domain,
@@ -23,6 +19,20 @@ vi.mock("../../components/DomainPanel", () => ({
   }) => (
     <div data-testid="domain-panel">
       {domain.title}:{externalFilter}
+    </div>
+  )
+}));
+
+vi.mock("../../components/ActivityPanel", () => ({
+  ActivityPanel: ({
+    activeSurfaceLabel,
+    contextLabel
+  }: {
+    activeSurfaceLabel: string;
+    contextLabel: string;
+  }) => (
+    <div data-testid="activity-panel">
+      {activeSurfaceLabel}:{contextLabel}
     </div>
   )
 }));
@@ -66,7 +76,7 @@ function renderPanel(overrides: Partial<{ operatorMode: OperatorMode; selectedDo
       token="jwt"
       apiKey=""
       activity={[]}
-      operatorMode={overrides.operatorMode ?? "beginner"}
+      operatorMode={overrides.operatorMode ?? "pro"}
       onOperatorModeChange={vi.fn()}
       onSelectedDomainChange={vi.fn()}
       onOpenModels={vi.fn()}
@@ -80,43 +90,26 @@ function renderPanel(overrides: Partial<{ operatorMode: OperatorMode; selectedDo
 }
 
 describe("AdvancedControlPlanePanel", () => {
-  it("quarantines raw controls in beginner mode and exposes safer routes", async () => {
-    const user = userEvent.setup();
-    const onOperatorModeChange = vi.fn();
-    const onOpenModels = vi.fn();
+  it("renders the live control plane directly in pro mode", () => {
+    renderPanel();
 
-    render(
-      <AdvancedControlPlanePanel
-        domains={domains}
-        selectedDomainId="auth"
-        token="jwt"
-        apiKey=""
-        activity={[]}
-        operatorMode="beginner"
-        onOperatorModeChange={onOperatorModeChange}
-        onSelectedDomainChange={vi.fn()}
-        onOpenModels={onOpenModels}
-        onOpenWorkflowCatalog={vi.fn()}
-        onOpenOperations={vi.fn()}
-        onOpenSafety={vi.fn()}
-        onOpenSetup={vi.fn()}
-        onResult={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("Advanced controls are quarantined by default.")).toBeInTheDocument();
-    expect(screen.queryByText("Raw control plane")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Open Models" }));
-    expect(onOpenModels).toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Unlock Pro control plane" }));
-    expect(onOperatorModeChange).toHaveBeenCalledWith("pro");
+    expect(screen.getByText("Live control plane")).toBeInTheDocument();
+    expect(screen.getByTestId("health-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Authentication:");
+    expect(screen.getByTestId("activity-panel")).toHaveTextContent("Authentication:Token and API key control");
   });
 
-  it("filters domain previews and unlocks pro mode for the selected domain", async () => {
+  it("keeps guided actions visible without hiding raw domains in beginner mode", () => {
+    renderPanel({ operatorMode: "beginner" });
+
+    expect(screen.getByText("Guided control plane")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open Models" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Open Safety Center" })).toHaveLength(2);
+    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Authentication:");
+  });
+
+  it("filters domains and routes selection through the shared callback", async () => {
     const user = userEvent.setup();
-    const onOperatorModeChange = vi.fn();
     const onSelectedDomainChange = vi.fn();
 
     render(
@@ -126,8 +119,8 @@ describe("AdvancedControlPlanePanel", () => {
         token="jwt"
         apiKey=""
         activity={[]}
-        operatorMode="beginner"
-        onOperatorModeChange={onOperatorModeChange}
+        operatorMode="pro"
+        onOperatorModeChange={vi.fn()}
         onSelectedDomainChange={onSelectedDomainChange}
         onOpenModels={vi.fn()}
         onOpenWorkflowCatalog={vi.fn()}
@@ -138,17 +131,17 @@ describe("AdvancedControlPlanePanel", () => {
       />
     );
 
-    await user.type(screen.getByPlaceholderText(/Search endpoints/), "memory");
+    await user.type(screen.getByPlaceholderText("agents, workflows, memory, reviews..."), "memory");
+    expect(screen.getByRole("button", { name: /Memory/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Authentication/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Memory:memory");
 
-    expect(screen.getByText("Memory")).toBeInTheDocument();
-    expect(screen.queryByText("Authentication")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Inspect in Pro mode" }));
+    await user.click(screen.getByRole("button", { name: /Memory/ }));
     expect(onSelectedDomainChange).toHaveBeenCalledWith("memory");
-    expect(onOperatorModeChange).toHaveBeenCalledWith("pro");
+    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Memory:memory");
   });
 
-  it("renders pro mode with global search, activity, and beginner return", async () => {
+  it("toggles between guided and direct copy using the shared operator callback", async () => {
     const user = userEvent.setup();
     const onOperatorModeChange = vi.fn();
 
@@ -158,16 +151,7 @@ describe("AdvancedControlPlanePanel", () => {
         selectedDomainId="auth"
         token="jwt"
         apiKey=""
-        activity={[
-          {
-            id: "call-1",
-            at: "10:00",
-            label: "Create Token",
-            status: 200,
-            durationMs: 12,
-            url: "/v1/auth/token"
-          }
-        ]}
+        activity={[]}
         operatorMode="pro"
         onOperatorModeChange={onOperatorModeChange}
         onSelectedDomainChange={vi.fn()}
@@ -180,20 +164,51 @@ describe("AdvancedControlPlanePanel", () => {
       />
     );
 
-    expect(screen.getByText("Raw control plane")).toBeInTheDocument();
-    expect(screen.getByTestId("health-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Authentication:");
-    expect(screen.getByText("Create Token")).toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText("Filter domains and operation cards"), "token");
-    expect(screen.getByTestId("domain-panel")).toHaveTextContent("Authentication:token");
-
-    await user.click(screen.getByRole("button", { name: "Return to Beginner mode" }));
+    await user.click(screen.getByRole("button", { name: "Prioritize guided routes" }));
     expect(onOperatorModeChange).toHaveBeenCalledWith("beginner");
   });
 
+  it("routes hero buttons through the shared navigation callbacks", async () => {
+    const user = userEvent.setup();
+    const onOpenModels = vi.fn();
+    const onOpenWorkflowCatalog = vi.fn();
+    const onOpenOperations = vi.fn();
+    const onOpenSafety = vi.fn();
+    const onOpenSetup = vi.fn();
+
+    render(
+      <AdvancedControlPlanePanel
+        domains={domains}
+        selectedDomainId="auth"
+        token="jwt"
+        apiKey=""
+        activity={[]}
+        operatorMode="pro"
+        onOperatorModeChange={vi.fn()}
+        onSelectedDomainChange={vi.fn()}
+        onOpenModels={onOpenModels}
+        onOpenWorkflowCatalog={onOpenWorkflowCatalog}
+        onOpenOperations={onOpenOperations}
+        onOpenSafety={onOpenSafety}
+        onOpenSetup={onOpenSetup}
+        onResult={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open Models" }));
+    await user.click(screen.getByRole("button", { name: "Browse workflows" }));
+    await user.click(screen.getByRole("button", { name: "Open Sessions & Runs" }));
+    await user.click(screen.getByRole("button", { name: "Open Safety Center" }));
+    await user.click(screen.getByRole("button", { name: "Open Integrations" }));
+
+    expect(onOpenModels).toHaveBeenCalledTimes(1);
+    expect(onOpenWorkflowCatalog).toHaveBeenCalledTimes(1);
+    expect(onOpenOperations).toHaveBeenCalledTimes(1);
+    expect(onOpenSafety).toHaveBeenCalledTimes(1);
+    expect(onOpenSetup).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an empty state when no technical domains are registered", () => {
-    renderPanel({ operatorMode: "beginner", selectedDomainId: "missing" }).unmount();
     render(
       <AdvancedControlPlanePanel
         domains={[]}
@@ -201,7 +216,7 @@ describe("AdvancedControlPlanePanel", () => {
         token="jwt"
         apiKey=""
         activity={[]}
-        operatorMode="beginner"
+        operatorMode="pro"
         onOperatorModeChange={vi.fn()}
         onSelectedDomainChange={vi.fn()}
         onOpenModels={vi.fn()}
@@ -214,5 +229,29 @@ describe("AdvancedControlPlanePanel", () => {
     );
 
     expect(screen.getByText("No technical domains are registered.")).toBeInTheDocument();
+  });
+
+  it("can suppress the embedded activity rail when the shell provides a global one", () => {
+    render(
+      <AdvancedControlPlanePanel
+        domains={domains}
+        selectedDomainId="auth"
+        token="jwt"
+        apiKey=""
+        activity={[]}
+        operatorMode="pro"
+        showActivityRail={false}
+        onOperatorModeChange={vi.fn()}
+        onSelectedDomainChange={vi.fn()}
+        onOpenModels={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onOpenOperations={vi.fn()}
+        onOpenSafety={vi.fn()}
+        onOpenSetup={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("activity-panel")).not.toBeInTheDocument();
   });
 });

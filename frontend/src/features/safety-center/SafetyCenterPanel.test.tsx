@@ -230,7 +230,11 @@ describe("SafetyCenterPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("Sensitive route mutation")).toBeInTheDocument();
-    expect(screen.getByText(/X-Agent33-Approval-Token/)).toBeInTheDocument();
+    expect(
+      screen.getByText("X-Agent33-Approval-Token", {
+        selector: "code"
+      })
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Issue approval token" }));
 

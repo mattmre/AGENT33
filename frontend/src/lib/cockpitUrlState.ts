@@ -19,6 +19,11 @@ export const COCKPIT_URL_VIEW_PARAM = "view";
 export const COCKPIT_URL_WORKSPACE_PARAM = "workspace";
 export const COCKPIT_URL_PERMISSION_PARAM = "permission";
 export const COCKPIT_URL_DRAWER_PARAM = "drawer";
+export const COCKPIT_URL_OPERATOR_MODE_PARAM = "operatorMode";
+
+export const COCKPIT_OPERATOR_MODES = ["beginner", "pro"] as const;
+export type CockpitOperatorMode = (typeof COCKPIT_OPERATOR_MODES)[number];
+export const DEFAULT_COCKPIT_OPERATOR_MODE: CockpitOperatorMode = "pro";
 
 export {
   ARTIFACT_DRAWER_SECTION_IDS,
@@ -32,6 +37,11 @@ export interface CockpitUrlState {
   readonly workspaceId: WorkspaceSessionId;
   readonly permissionModeId: PermissionModeId;
   readonly drawerSectionId: ArtifactDrawerSectionId;
+  readonly operatorMode: CockpitOperatorMode;
+}
+
+export function isCockpitOperatorMode(value: string | null): value is CockpitOperatorMode {
+  return value === "beginner" || value === "pro";
 }
 
 export function readCockpitUrlState(
@@ -43,6 +53,7 @@ export function readCockpitUrlState(
   const requestedWorkspaceId = params.get(COCKPIT_URL_WORKSPACE_PARAM);
   const requestedPermissionModeId = params.get(COCKPIT_URL_PERMISSION_PARAM);
   const requestedDrawerSectionId = params.get(COCKPIT_URL_DRAWER_PARAM);
+  const requestedOperatorMode = params.get(COCKPIT_URL_OPERATOR_MODE_PARAM);
 
   return {
     activeTab: requestedTab !== null && isAppTab(requestedTab)
@@ -56,7 +67,10 @@ export function readCockpitUrlState(
       : fallbackState.permissionModeId ?? DEFAULT_PERMISSION_MODE_ID,
     drawerSectionId: isArtifactDrawerSectionIdValue(requestedDrawerSectionId)
       ? requestedDrawerSectionId
-      : fallbackState.drawerSectionId ?? DEFAULT_ARTIFACT_DRAWER_SECTION_ID_VALUE
+      : fallbackState.drawerSectionId ?? DEFAULT_ARTIFACT_DRAWER_SECTION_ID_VALUE,
+    operatorMode: isCockpitOperatorMode(requestedOperatorMode)
+      ? requestedOperatorMode
+      : fallbackState.operatorMode ?? DEFAULT_COCKPIT_OPERATOR_MODE
   };
 }
 
@@ -66,6 +80,7 @@ export function createCockpitUrl(baseUrl: string, state: CockpitUrlState): strin
   url.searchParams.set(COCKPIT_URL_VIEW_PARAM, state.activeTab);
   url.searchParams.set(COCKPIT_URL_WORKSPACE_PARAM, state.workspaceId);
   url.searchParams.set(COCKPIT_URL_PERMISSION_PARAM, state.permissionModeId);
+  url.searchParams.set(COCKPIT_URL_OPERATOR_MODE_PARAM, state.operatorMode);
 
   if (state.activeTab === "operations") {
     url.searchParams.set(COCKPIT_URL_DRAWER_PARAM, state.drawerSectionId);

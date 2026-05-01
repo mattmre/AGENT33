@@ -36,7 +36,7 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
               onClick={() => onNavigate(item.id)}
               aria-current={activeTab === item.id ? "page" : undefined}
             >
-              <span className="main-nav-button-label">{getAppTabLabel(item.id)}</span>
+              <span className="main-nav-button-label">{item.label ?? getAppTabLabel(item.id)}</span>
               <small>{item.description}</small>
             </button>
           ))}
@@ -49,10 +49,10 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
         onToggle={(event) => setIsToolsOpen(event.currentTarget.open)}
       >
         <summary>
-          <span>Tools & advanced surfaces</span>
+          <span>System surfaces</span>
         </summary>
         <p className="main-nav-tools-description">
-          Specialized builders, MCP, analytics, marketplace, and setup panels.
+          Build, inspect, and governance panels that support the main cockpit flow.
         </p>
         <div className="main-nav-tool-groups">
           {APP_SECONDARY_NAV_GROUPS.map((group) => (

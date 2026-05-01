@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
 from agent33.agents.capabilities import get_catalog_by_category
@@ -267,13 +268,12 @@ def _get_ppack_ab_service(request: Request) -> PPackABService | None:
     return getattr(request.app.state, "ppack_ab_service", None)
 
 
-def _resolve_ppack_assignment(
+def _get_cached_ppack_assignment(
     request: Request,
     *,
     tenant_id: str,
     session_id: str,
 ) -> PPackABAssignment | None:
-    """Resolve and cache the active P-PACK assignment for the current request."""
     if not session_id:
         return None
     cached_assignment = getattr(request.state, "ppack_assignment", None)
@@ -285,12 +285,33 @@ def _resolve_ppack_assignment(
         and cached_session_id == session_id
     ):
         return cached_assignment
+    return None
+
+
+async def _resolve_ppack_assignment(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> PPackABAssignment | None:
+    """Resolve and cache the active P-PACK assignment for the current request."""
+    cached_assignment = _get_cached_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=session_id,
+    )
+    if cached_assignment is not None:
+        return cached_assignment
 
     ab_service = _get_ppack_ab_service(request)
     if ab_service is None:
         return None
     try:
-        assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
+        assignment = await run_in_threadpool(
+            ab_service.assign_variant,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
     except Exception:
         logger.warning("ppack_variant_assignment_failed", exc_info=True)
         return None
@@ -307,8 +328,8 @@ def _resolve_ppack_variant(
     tenant_id: str,
     session_id: str,
 ) -> str:
-    """Resolve the active P-PACK variant for runtime behavior selection."""
-    assignment = _resolve_ppack_assignment(
+    """Return the cached P-PACK variant for runtime behavior selection."""
+    assignment = _get_cached_ppack_assignment(
         request,
         tenant_id=tenant_id,
         session_id=session_id,
@@ -326,7 +347,7 @@ def _build_outcome_metadata(
     payload = dict(metadata or {})
     if session_id:
         payload.setdefault("session_id", session_id)
-        assignment = _resolve_ppack_assignment(
+        assignment = _get_cached_ppack_assignment(
             request,
             tenant_id=tenant_id,
             session_id=session_id,
@@ -745,6 +766,11 @@ async def invoke_agent(
     metrics_collector = getattr(request.app.state, "metrics_collector", None)
     pack_registry = getattr(request.app.state, "pack_registry", None)
     invoke_session_id = _resolve_runtime_session_id(request)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=invoke_session_id,
+    )
     invoke_ppack_variant = _resolve_ppack_variant(
         request,
         tenant_id=tenant_id,
@@ -981,6 +1007,11 @@ async def invoke_agent_iterative(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
     pack_registry_iter = getattr(request.app.state, "pack_registry", None)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
     iterative_ppack_variant = _resolve_ppack_variant(
         request,
         tenant_id=token_payload.tenant_id or "",
@@ -1212,6 +1243,11 @@ async def invoke_agent_iterative_stream(
     cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
     pack_registry_stream = getattr(request.app.state, "pack_registry", None)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
     stream_ppack_variant = _resolve_ppack_variant(
         request,
         tenant_id=token_payload.tenant_id or "",

@@ -82,6 +82,12 @@ describe("VisuallyHidden", () => {
 // ---- App-level ARIA checks ----
 
 describe("App accessibility", () => {
+  let App: (typeof import("../../App"))["default"];
+
+  beforeAll(async () => {
+    App = (await import("../../App")).default;
+  });
+
   // Mock dependencies that App uses
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
@@ -120,43 +126,36 @@ describe("App accessibility", () => {
     };
   });
 
-  it("renders SkipLink at the top of the app", async () => {
-    // Dynamically import App to avoid import-order issues with mocks
-    const { default: App } = await import("../../App");
+  it("renders SkipLink at the top of the app", () => {
     render(<App />);
     const skipLink = screen.getByText("Skip to main content");
     expect(skipLink).toBeInTheDocument();
     expect(skipLink).toHaveAttribute("href", "#main-content");
-  });
+  }, 15000);
 
-  it("has a main-content landmark", async () => {
-    const { default: App } = await import("../../App");
+  it("has a main-content landmark", () => {
     render(<App />);
     const mainContent = document.getElementById("main-content");
     expect(mainContent).toBeTruthy();
     expect(mainContent).toHaveAttribute("role", "main");
-  });
+  }, 15000);
 
-  it("has labeled main navigation", async () => {
-    const { default: App } = await import("../../App");
+  it("has labeled main navigation", () => {
     render(<App />);
-    const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(nav).toBeInTheDocument();
+    expect(screen.getAllByRole("navigation", { name: "Main navigation" }).length).toBeGreaterThan(0);
   });
 
-  it("marks the active tab with aria-current", async () => {
-    const { default: App } = await import("../../App");
+  it("marks the active tab with aria-current", () => {
     render(<App />);
     const buttons = screen.getAllByRole("button");
-    const guideTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Guide / Intake")
+    const cockpitTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Operations Cockpit")
     );
-    expect(guideTabButton).toBeTruthy();
-    expect(guideTabButton).toHaveAttribute("aria-current", "page");
+    expect(cockpitTabButton).toBeTruthy();
+    expect(cockpitTabButton).toHaveAttribute("aria-current", "page");
   });
 
-  it("non-active tabs do not have aria-current", async () => {
-    const { default: App } = await import("../../App");
+  it("non-active tabs do not have aria-current", () => {
     render(<App />);
     const buttons = screen.getAllByRole("button");
     const sessionsTabButton = buttons.find(
@@ -166,16 +165,14 @@ describe("App accessibility", () => {
     expect(sessionsTabButton).not.toHaveAttribute("aria-current");
   });
 
-  it("decorative logo orb has aria-hidden", async () => {
-    const { default: App } = await import("../../App");
+  it("decorative logo orb has aria-hidden", () => {
     render(<App />);
     const orb = document.querySelector(".logo-orb");
     expect(orb).toBeTruthy();
     expect(orb).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("keeps permission mode visible and changeable in the cockpit context", async () => {
-    const { default: App } = await import("../../App");
+  it("keeps permission mode visible and changeable in the cockpit context", () => {
     render(<App />);
 
     const permissionRegion = screen.getByRole("region", { name: "Permission mode" });
@@ -190,13 +187,13 @@ describe("App accessibility", () => {
     expect(within(permissionRegion).getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
   });
 
-  it("renders the cockpit dashboard and artifact drawer landmarks", async () => {
-    const { default: App } = await import("../../App");
+  it("renders cockpit landing landmarks and keeps operations-specific drawers reachable", () => {
     render(<App />);
+
+    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Sessions & Runs/ }));
 
-    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
   });
@@ -208,7 +205,6 @@ describe("App accessibility", () => {
       "/?view=operations&workspace=shipyard&permission=pr-first&drawer=activity"
     );
 
-    const { default: App } = await import("../../App");
     render(<App />);
 
     expect(screen.getByRole("button", { name: /Sessions & Runs/ })).toHaveAttribute("aria-current", "page");

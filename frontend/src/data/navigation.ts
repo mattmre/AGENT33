@@ -1,4 +1,5 @@
 export const APP_TAB_IDS = [
+  "cockpit",
   "guide",
   "start",
   "connect",
@@ -23,7 +24,8 @@ export const APP_TAB_IDS = [
   "marketplace",
   "builder",
   "spawner",
-  "advanced"
+  "advanced",
+  "design-kit"
 ] as const;
 
 export type AppTab = (typeof APP_TAB_IDS)[number];
@@ -40,18 +42,22 @@ export interface AppTabGroup {
 
 export interface AppPrimaryNavItem {
   readonly id: AppTab;
+  readonly label?: string;
   readonly description: string;
 }
 
-export const DEFAULT_APP_TAB: AppTab = "guide";
-export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
+export const DEFAULT_APP_TAB: AppTab = "cockpit";
+export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "cockpit";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
-    label: "Start",
+    label: "Cockpit",
     tabs: [
+      { id: "cockpit", label: "Operations Cockpit" },
       { id: "guide", label: "Guide / Intake" },
       { id: "start", label: "Home / Next Step" },
+      { id: "operations", label: "Sessions & Runs" },
+      { id: "advanced", label: "Control Plane" },
       { id: "connect", label: "Connect Models" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
@@ -60,69 +66,64 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     ]
   },
   {
-    label: "Operate",
-    tabs: [
-      { id: "setup", label: "Integrations" },
-      { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety & Approvals" },
-      { id: "operations", label: "Sessions & Runs" }
-    ]
-  },
-  {
     label: "Build",
     tabs: [
+      { id: "catalog", label: "Workflow Catalog" },
+      { id: "starter", label: "Workflow Starter" },
       { id: "skills", label: "Skill Wizard" },
       { id: "fabric", label: "Tool Fabric" },
-      { id: "mcp", label: "MCP Health" },
-      { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflows" },
-      { id: "tools", label: "Tools" }
+      { id: "tools", label: "Tool Catalog" },
+      { id: "builder", label: "Agent Builder" },
+      { id: "spawner", label: "Spawner" },
+      { id: "marketplace", label: "Marketplace" }
     ]
   },
   {
-    label: "Improve",
+    label: "Inspect",
     tabs: [
-      { id: "loops", label: "Improvement Loops" },
+      { id: "review", label: "Review Queue" },
       { id: "outcomes", label: "Outcomes" },
       { id: "analytics", label: "Analytics" },
-      { id: "impact", label: "Impact" }
+      { id: "impact", label: "Impact" },
+      { id: "mcp", label: "MCP Health" }
     ]
   },
   {
-    label: "Extend",
+    label: "Govern",
     tabs: [
-      { id: "marketplace", label: "Marketplace" },
-      { id: "builder", label: "Builder" },
-      { id: "spawner", label: "Spawner" },
-      { id: "advanced", label: "Advanced" }
+      { id: "safety", label: "Safety & Approvals" },
+      { id: "setup", label: "Integrations" },
+      { id: "loops", label: "Improvement Loops" }
+    ]
+  },
+  {
+    label: "Reference",
+    tabs: [
+      { id: "design-kit", label: "Design Kit Surfaces" }
     ]
   }
 ];
 
 export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
   {
-    id: "guide",
-    description: "Tell AGENT-33 what you want and get the safest next step."
-  },
-  {
-    id: "start",
-    description: "Beginner launchpad for setup, demo runs, and common outcomes."
+    id: "cockpit",
+    label: "Operations Cockpit",
+    description: "Active project · gates"
   },
   {
     id: "operations",
-    description: "Watch active work, recent results, and operator handoffs."
+    label: "Sessions & Runs",
+    description: "Traces · blockers · reviews"
   },
   {
     id: "starter",
-    description: "Pick a prebuilt strategy instead of assembling tools manually."
+    label: "Workflows",
+    description: "Starters · execution"
   },
   {
-    id: "connect",
-    description: "Set up providers, local models, and readiness checks."
-  },
-  {
-    id: "safety",
-    description: "Review risks, decisions, and protected actions before work runs."
+    id: "advanced",
+    label: "Agents & API",
+    description: "Invoke · configure · scope"
   }
 ];
 

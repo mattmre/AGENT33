@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -382,11 +382,11 @@ describe("OperationCard", () => {
       />
     );
 
-    await userEvent.clear(screen.getByLabelText("Headers (JSON)"));
-    await userEvent.type(
-      screen.getByLabelText("Headers (JSON)"),
-      '{\n  "X-Agent33-Approval-Token": "approval-token-123"\n}'
-    );
+    fireEvent.change(screen.getByLabelText("Headers (JSON)"), {
+      target: {
+        value: '{\n  "X-Agent33-Approval-Token": "approval-token-123"\n}'
+      }
+    });
     await userEvent.click(screen.getByRole("button", { name: /^Run / }));
 
     await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));

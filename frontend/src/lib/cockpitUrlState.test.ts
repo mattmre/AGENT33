@@ -9,28 +9,31 @@ import {
 describe("cockpit URL state", () => {
   it("reads valid cockpit deep-link params", () => {
     expect(
-      readCockpitUrlState("?view=operations&workspace=shipyard&permission=pr-first&drawer=tests")
+      readCockpitUrlState("?view=operations&workspace=shipyard&permission=pr-first&drawer=tests&operatorMode=beginner")
     ).toEqual({
       activeTab: "operations",
       workspaceId: "shipyard",
       permissionModeId: "pr-first",
-      drawerSectionId: "tests"
+      drawerSectionId: "tests",
+      operatorMode: "beginner"
     });
   });
 
   it("falls back safely for invalid deep-link params", () => {
     expect(
       readCockpitUrlState("?view=not-real&workspace=nope&permission=god-mode&drawer=terminal", {
-        activeTab: "start",
+        activeTab: "cockpit",
         workspaceId: "test-review",
         permissionModeId: "workspace",
-        drawerSectionId: "activity"
+        drawerSectionId: "activity",
+        operatorMode: "pro"
       })
     ).toEqual({
-      activeTab: "start",
+      activeTab: "cockpit",
       workspaceId: "test-review",
       permissionModeId: "workspace",
-      drawerSectionId: "activity"
+      drawerSectionId: "activity",
+      operatorMode: "pro"
     });
   });
 
@@ -40,18 +43,20 @@ describe("cockpit URL state", () => {
         activeTab: "operations",
         workspaceId: "research-build",
         permissionModeId: "ask",
-        drawerSectionId: "commands"
+        drawerSectionId: "commands",
+        operatorMode: "beginner"
       })
-    ).toBe("/?foo=bar&view=operations&workspace=research-build&permission=ask&drawer=commands#main");
+    ).toBe("/?foo=bar&view=operations&workspace=research-build&permission=ask&operatorMode=beginner&drawer=commands#main");
 
     expect(
       createCockpitUrl("http://localhost:5173/?drawer=logs", {
-        activeTab: "guide",
+        activeTab: "cockpit",
         workspaceId: "solo-builder",
         permissionModeId: "observe",
-        drawerSectionId: "logs"
+        drawerSectionId: "logs",
+        operatorMode: "pro"
       })
-    ).toBe("/?view=guide&workspace=solo-builder&permission=observe");
+    ).toBe("/?view=cockpit&workspace=solo-builder&permission=observe&operatorMode=pro");
   });
 
   it("validates artifact drawer section ids", () => {

@@ -345,17 +345,21 @@ class TestSkillSubsystem:
 
         pack_count = app.state.pack_registry.count
         loaded_names = {skill.name for skill in app.state.skill_registry.list_all()}
+        expected_pack_skills = {
+            "workflow-ops/pr-manager",
+            "workflow-ops/planning-with-files",
+            "platform-builder/mcp-builder",
+        }
 
         # Default skill_definitions_dir = "skills" still doesn't exist in this test env.
         # When pack_definitions_dir resolves to shipped capability packs, those pack skills
-        # should populate the registry; otherwise the registry should remain empty.
+        # should populate the registry; otherwise they should be absent. Runtime-ingested
+        # skills may still be hydrated by earlier lifecycle tests in the same suite.
         if pack_count == 0:
-            assert app.state.skill_registry.count == 0
+            assert loaded_names.isdisjoint(expected_pack_skills)
             return
 
-        assert "workflow-ops/pr-manager" in loaded_names
-        assert "workflow-ops/planning-with-files" in loaded_names
-        assert "platform-builder/mcp-builder" in loaded_names
+        assert expected_pack_skills.issubset(loaded_names)
         assert pack_count >= 3
 
     def test_promoted_skill_asset_is_discoverable_through_runtime_registries(self, patched_app):

@@ -24,6 +24,7 @@ from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
 from agent33.evaluation.ppack_ab_service import PPackABService
 from agent33.main import app
 from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
+from agent33.outcomes.persistence import OutcomePersistence
 from agent33.outcomes.service import OutcomesService
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,31 @@ def test_health_check_stale_null_when_no_events(svc: OutcomesService) -> None:
 
     assert result["status"] == "stale"
     assert result["hours_since_last_event"] is None
+
+
+def test_health_check_uses_persisted_events_after_restart(tmp_path) -> None:
+    """Persisted history should keep health green after an in-memory restart."""
+    db_path = tmp_path / "outcomes.db"
+    writer_persistence = OutcomePersistence(db_path)
+    writer_service = OutcomesService(persistence=writer_persistence)
+    writer_service.record_event(
+        tenant_id="tenant-a",
+        event=OutcomeEventCreate(
+            domain="agent-x",
+            event_type="invoke",
+            metric_type=OutcomeMetricType.SUCCESS_RATE,
+            value=1.0,
+            occurred_at=datetime.now(UTC) - timedelta(minutes=15),
+        ),
+    )
+    writer_persistence.close()
+
+    restarted_service = OutcomesService(persistence=OutcomePersistence(db_path))
+
+    result = restarted_service.health_check()
+
+    assert result["status"] == "ok"
+    assert "hours_since_last_event" not in result
 
 
 def test_health_check_uses_most_recent_event_across_tenants(svc: OutcomesService) -> None:

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -41,25 +41,29 @@ describe("RoleIntakePanel", () => {
   });
 
   it("turns guided intake answers into a workflow starter draft", async () => {
-    const user = userEvent.setup();
     const onOpenWorkflowStarter = vi.fn();
     const onSelectRole = vi.fn();
     renderPanel({ selectedRole: "founder", onSelectRole, onOpenWorkflowStarter });
 
-    await user.type(screen.getByPlaceholderText("Example: Client portal MVP"), "Client portal MVP");
-    await user.type(
+    fireEvent.change(screen.getByPlaceholderText("Example: Client portal MVP"), {
+      target: { value: "Client portal MVP" }
+    });
+    fireEvent.change(
       screen.getByPlaceholderText("Example: A portal where clients fill out intake forms and see project status."),
-      "A client portal for intake forms and project status."
+      {
+        target: { value: "A client portal for intake forms and project status." }
+      }
     );
-    await user.type(
-      screen.getByPlaceholderText("Example: business owner, client, project assistant"),
-      "Business owner and client"
-    );
-    await user.type(
+    fireEvent.change(screen.getByPlaceholderText("Example: business owner, client, project assistant"), {
+      target: { value: "Business owner and client" }
+    });
+    fireEvent.change(
       screen.getByPlaceholderText("Example: product brief, screen list, first implementation tasks"),
-      "Product brief and first build tasks"
+      {
+        target: { value: "Product brief and first build tasks" }
+      }
     );
-    await user.click(screen.getByRole("button", { name: "Create guided workflow draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create guided workflow draft" }));
 
     expect(onSelectRole).toHaveBeenCalledWith("founder");
     expect(onOpenWorkflowStarter).toHaveBeenCalledWith(

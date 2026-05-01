@@ -19,7 +19,7 @@ describe("PermissionModeControl", () => {
     expect(screen.getByRole("combobox", { name: "Permission mode" })).toHaveValue("ask");
     expect(screen.getByText("Confirm before tools or changes run.")).toBeInTheDocument();
     expect(screen.getByText("User approval before commands, writes, or external changes")).toBeInTheDocument();
-    expect(screen.getByText("Beginner guardrails")).toBeInTheDocument();
+    expect(screen.getByText("Guided routes prioritized")).toBeInTheDocument();
   });
 
   it("routes mode changes and control-plane compatibility changes through callbacks", async () => {
@@ -37,13 +37,13 @@ describe("PermissionModeControl", () => {
     );
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Permission mode" }), "pr-first");
-    await user.click(screen.getByRole("button", { name: "Unlock Pro controls" }));
+    await user.click(screen.getByRole("button", { name: "Prioritize live controls" }));
 
     expect(onSelectMode).toHaveBeenCalledWith("pr-first");
     expect(onOperatorModeChange).toHaveBeenCalledWith("pro");
   });
 
-  it("lets operators return to beginner guardrails from Pro controls", async () => {
+  it("lets operators switch back to guided emphasis from the live control plane", async () => {
     const user = userEvent.setup();
     const onOperatorModeChange = vi.fn();
 
@@ -56,9 +56,9 @@ describe("PermissionModeControl", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Return to Beginner guardrails" }));
+    await user.click(screen.getByRole("button", { name: "Prioritize guided routes" }));
 
-    expect(screen.getByText("Pro controls unlocked")).toBeInTheDocument();
+    expect(screen.getByText("Live control plane prioritized")).toBeInTheDocument();
     expect(onOperatorModeChange).toHaveBeenCalledWith("beginner");
   });
 });

@@ -57,7 +57,7 @@ export function ShipyardLaneScaffold({
     <section className="shipyard-lanes" aria-label="Shipyard lanes">
       <header className="shipyard-lanes-header">
         <div>
-          <span className="eyebrow">BridgeSpace-style lanes</span>
+          <span className="eyebrow">Drydock-style lanes</span>
           <h2>Shipyard command lanes</h2>
           <p>
             See how coordinator, scout, builder, and reviewer responsibilities split across this

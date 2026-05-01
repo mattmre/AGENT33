@@ -6,7 +6,7 @@ import { ShipyardLaneScaffold } from "./ShipyardLaneScaffold";
 import { getWorkspaceSession } from "../data/workspaces";
 
 describe("ShipyardLaneScaffold", () => {
-  it("renders BridgeSpace-style role lanes for the selected workspace", () => {
+  it("renders Drydock-style role lanes for the selected workspace", () => {
     render(
       <ShipyardLaneScaffold
         workspace={getWorkspaceSession("shipyard")}

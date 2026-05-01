@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 def _load_scipy_stats() -> Any | None:
     try:
         return importlib.import_module("scipy.stats")
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, ImportError):
         return None
 
 
@@ -154,6 +154,8 @@ class PPackABService:
         assignments = self._persistence.list_assignments(
             tenant_id=normalized_tenant,
             experiment_key=self._experiment_key,
+            since=since,
+            until=until,
         )
         assignments_by_session = {item.session_id: item for item in assignments}
         assignment_counts = {
@@ -164,11 +166,14 @@ class PPackABService:
                 1 for item in assignments if item.variant == PPackABVariant.TREATMENT
             ),
         }
-        historical = self._outcomes_service.load_historical(normalized_tenant, since=since)
-        if normalized_domain:
-            historical = [event for event in historical if event.domain == normalized_domain]
-        if until is not None:
-            historical = [event for event in historical if event.occurred_at <= until]
+        historical = self._outcomes_service.load_historical(
+            normalized_tenant,
+            since=since,
+            until=until,
+            domain=normalized_domain or None,
+            metric_types=selected_metrics,
+            limit=None,
+        )
         metric_buckets: dict[OutcomeMetricType, dict[PPackABVariant, list[float]]] = {
             metric: {PPackABVariant.CONTROL: [], PPackABVariant.TREATMENT: []}
             for metric in selected_metrics

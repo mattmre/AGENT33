@@ -4,6 +4,7 @@ import {
   isWorkspaceSessionId,
   type WorkspaceSessionId
 } from "../data/workspaces";
+import { getWorkspaceTaskCounts } from "../data/workspaceBoard";
 import {
   buildWorkspaceTemplateStarterDraft,
   getPrimaryWorkspaceTemplateStarter
@@ -25,6 +26,7 @@ export function WorkspaceSessionSelector({
 }: WorkspaceSessionSelectorProps): JSX.Element {
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
   const primaryStarter = getPrimaryWorkspaceTemplateStarter(selectedWorkspaceId);
+  const taskCounts = getWorkspaceTaskCounts(selectedWorkspaceId);
 
   return (
     <section className="cockpit-sidebar-context workspace-session-card" aria-label="Workspace session">
@@ -67,16 +69,16 @@ export function WorkspaceSessionSelector({
 
       <dl className="workspace-session-stats" aria-label="Workspace snapshot">
         <div>
-          <dt>Status</dt>
-          <dd>{selectedWorkspace.status}</dd>
+          <dt>RUN</dt>
+          <dd>{taskCounts.running}</dd>
         </div>
         <div>
-          <dt>Agents</dt>
-          <dd>{selectedWorkspace.agents}</dd>
+          <dt>REV</dt>
+          <dd>{taskCounts.review}</dd>
         </div>
         <div>
-          <dt>Tasks</dt>
-          <dd>{selectedWorkspace.tasks}</dd>
+          <dt>BLK</dt>
+          <dd>{taskCounts.blocked}</dd>
         </div>
       </dl>
 
