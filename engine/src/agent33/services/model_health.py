@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
+
 from agent33.services.lm_studio_readiness import normalize_lm_studio_base_url
 from agent33.services.ollama_readiness import normalize_ollama_base_url
 
@@ -359,7 +360,9 @@ class LocalOrchestrationReadinessService:
                 base_url=base_url,
                 default_model=default_model,
                 checked_at=checked_at,
-                message="Ollama startup runtime is running, but no local models are installed yet.",
+                message=(
+                    "Ollama startup runtime is running, but no local models are installed yet."
+                ),
             )
         if not self._configured_model_is_listed(default_model, model_ids):
             return LocalOrchestrationStatusResponse(
@@ -393,7 +396,9 @@ class LocalOrchestrationReadinessService:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                 response = await client.get(url)
                 payload = response.json()
-                return _LocalOrchestrationFetchResult(status_code=response.status_code, payload=payload)
+                return _LocalOrchestrationFetchResult(
+                    status_code=response.status_code, payload=payload
+                )
         except (httpx.HTTPError, ValueError) as exc:
             return _LocalOrchestrationFetchResult(status_code=None, error=str(exc))
 

@@ -202,9 +202,10 @@ class TestGetConfig:
 
         config = svc.get_config()
 
-        assert config.groups["local_orchestration"]["local_orchestration_base_url"] == "http://localhost:8033/v1"
-        assert config.groups["local_orchestration"]["local_orchestration_model"] == "qwen3-coder-next"
-        assert config.groups["local_orchestration"]["local_orchestration_engine"] == "vLLM"
+        lo = config.groups["local_orchestration"]
+        assert lo["local_orchestration_base_url"] == "http://localhost:8033/v1"
+        assert lo["local_orchestration_model"] == "qwen3-coder-next"
+        assert lo["local_orchestration_engine"] == "vLLM"
 
 
 # ---------------------------------------------------------------------------

@@ -11,8 +11,8 @@ from agent33.api.routes.ollama import get_ollama_readiness_service
 from agent33.config import settings
 from agent33.security.permissions import require_scope
 from agent33.services.model_health import (
-    ModelHealthService,
     LocalOrchestrationReadinessService,
+    ModelHealthService,
     UnifiedModelHealthResponse,
 )
 

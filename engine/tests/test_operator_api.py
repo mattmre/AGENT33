@@ -426,9 +426,10 @@ class TestOperatorConfig:
         resp = operator_read_client.get("/v1/operator/config")
 
         data = resp.json()
-        assert data["groups"]["local_orchestration"]["local_orchestration_base_url"] == "http://localhost:8033/v1"
-        assert data["groups"]["local_orchestration"]["local_orchestration_model"] == "qwen3-coder-next"
-        assert data["groups"]["local_orchestration"]["local_orchestration_engine"] == "vLLM"
+        lo = data["groups"]["local_orchestration"]
+        assert lo["local_orchestration_base_url"] == "http://localhost:8033/v1"
+        assert lo["local_orchestration_model"] == "qwen3-coder-next"
+        assert lo["local_orchestration_engine"] == "vLLM"
 
 
 # ============================================================================
