@@ -141,9 +141,7 @@ def _install_services(
 ) -> tuple[_OllamaSequenceFetcher, _LMStudioSequenceFetcher, _LocalOrchestrationSequenceFetcher]:
     ollama_fetcher = _OllamaSequenceFetcher(ollama_responses)
     lm_studio_fetcher = _LMStudioSequenceFetcher(lm_studio_responses)
-    local_orchestration_fetcher = _LocalOrchestrationSequenceFetcher(
-        local_orchestration_responses
-    )
+    local_orchestration_fetcher = _LocalOrchestrationSequenceFetcher(local_orchestration_responses)
     app.state.ollama_readiness_service = OllamaReadinessService(
         Settings(),
         fetcher=ollama_fetcher,
@@ -206,9 +204,7 @@ class TestModelHealthRoute:
         assert data["providers"][2]["model_count"] == 1
         assert ollama_fetcher.calls == ["http://ollama:11434/api/tags"]
         assert lm_studio_fetcher.calls == ["http://localhost:1234/v1/models"]
-        assert local_orchestration_fetcher.calls == [
-            "http://host.docker.internal:8033/v1/models"
-        ]
+        assert local_orchestration_fetcher.calls == ["http://host.docker.internal:8033/v1/models"]
 
     def test_reports_attention_when_runtime_has_no_models(
         self,

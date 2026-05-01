@@ -198,8 +198,7 @@ def _extract_runtime_model_names(payload: Any, runtime_flavor: str) -> set[str]:
         return {
             str(item.get("name") or item.get("model") or "").strip().lower()
             for item in raw_models
-            if isinstance(item, dict)
-            and str(item.get("name") or item.get("model") or "").strip()
+            if isinstance(item, dict) and str(item.get("name") or item.get("model") or "").strip()
         }
 
     raw_models = payload.get("data")
@@ -208,8 +207,7 @@ def _extract_runtime_model_names(payload: Any, runtime_flavor: str) -> set[str]:
     return {
         str(item.get("id") or item.get("name") or "").strip().lower()
         for item in raw_models
-        if isinstance(item, dict)
-        and str(item.get("id") or item.get("name") or "").strip()
+        if isinstance(item, dict) and str(item.get("id") or item.get("name") or "").strip()
     }
 
 
