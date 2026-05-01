@@ -1,5 +1,347 @@
 # Progress Log
 
+## 2026-04-28 (UX overhaul implementation wave through PRs #449-#454)
+
+- Completed the first UX overhaul queue from fresh `origin/main` worktrees, one PR
+  per slice, with review feedback fixed before merge and all required CI checks
+  green.
+- Research and implementation slices:
+  - **PR #449** (`9c7f6e`) — expert-panel UX overhaul research and 125-item backlog
+  - **PR #450** (`fe27f94`) — outcome-first home shell and workflow draft routing
+  - **PR #451** (`8fde809`) — dedicated Workflow Catalog
+  - **PR #452** (`4a3aead`) — Model Connection Wizard
+  - **PR #453** (`710a2ae`) — Run Timeline overview in Operations Hub
+  - **PR #454** (`5179e0e`) — Beginner/Pro mode and Advanced quarantine
+- Local validation highlights:
+  - Outcome Home / Workflow Catalog / Model Wizard / Run Timeline / Advanced
+    slices each passed their focused frontend tests plus `npm run lint` and
+    `npm run build` before PR merge.
+  - PR review feedback was resolved for `#450`, `#451`, `#452`, and `#454`; no
+    review fixes were required for `#453`.
+- `origin/main` is now at `5179e0e`.
+- Refreshed the handoff layer for the merged UX wave:
+  - `docs/next-session.md`
+  - `docs/research/ux-overhaul-backlog-2026-04-27.md`
+  - `docs/sessions/session-133-2026-04-27-ux-overhaul.md`
+
+## 2026-04-27 (Operator UX / Agent OS expansion through PRs #435-#447)
+
+- Executed the Operator UX rescue and platform-advantage queue from fresh
+  `origin/main` worktrees, one PR per slice, and merged every PR after green CI.
+- Operator-facing UX surfaces:
+  - **PR #435** (`7837389`) — Start Here onboarding control plane
+  - **PR #436** (`53e77d1`) — top-level ingestion Review Queue
+  - **PR #437** (`71a8075`) — Safety Center tool approvals
+  - **PR #438** (`3a02c46`) — operator skill authoring wizard
+  - **PR #439** (`5bb283c`) — guided Workflow Starter
+  - **PR #440** (`8e08f6d`) — adaptive Tool Fabric resolver
+- Platform advantage / automation surfaces:
+  - **PR #441** (`61c5d16`) — contained Agent OS runtime
+  - **PR #442** (`990fcc7`) — governed Improvement Loops
+  - **PR #443** (`705e3d9`) — MCP Health Center
+  - **PR #444** (`4865c1c`) — grouped operator navigation
+  - **PR #445** (`99019e3`) — MCP operator actions for CLI sync and proxy validate/reload
+  - **PR #446** (`751933e`) — named Agent OS sessions and lifecycle controls
+  - **PR #447** (`cf8d68a`) — one-click scheduled competitive, UX, and Agent OS research launchers
+- Local validation highlights:
+  - MCP actions: `npm test -- --run src/features/mcp-health/api.test.ts`, `npm run lint`, `npm run build`
+  - Agent OS sessions: `git diff --check`, PowerShell parser validation, `bash -n scripts/agent-os.sh`, `docker compose -f engine/docker-compose.yml --profile agent-os config --quiet`
+  - Scheduled research launchers: `npm test -- --run src/features/improvement-loops/presets.test.ts`, `npm run lint`, `npm run build`
+- `origin/main` is now at `cf8d68a`.
+
+## 2026-04-25 (final wrap-up verification after PRs #425-#433)
+
+- Fetched `origin/main` to `cc4845a` and created fresh verification worktree
+  `C:\GitHub\repos\AGENT33\worktrees\final-main-verify`.
+- Verified the merged baseline from that clean worktree with targeted backend and
+  frontend coverage across the closing roadmap wave:
+  - backend install: `python -m pip install -e '.[dev]'`
+  - backend tests: `python -m pytest tests/test_ingestion_mailbox.py tests/test_ingestion_journal.py tests/test_ingestion_notifications.py tests/test_ingestion_service.py tests/test_sse_versioning.py tests/test_workflow_sse.py tests/test_integration_wiring.py tests/test_skills.py tests/test_bench_cli.py tests/test_skillsbench_regression.py tests/test_skillsbench_storage_reporting.py tests/benchmarks/test_skills_smoke.py -q --override-ini=addopts=` (`263 passed`)
+  - backend lint: `python -m ruff check src/agent33/api/routes/ingestion.py src/agent33/ingestion/journal.py src/agent33/ingestion/mailbox.py src/agent33/ingestion/mailbox_persistence.py src/agent33/ingestion/metrics.py src/agent33/ingestion/notifications.py src/agent33/ingestion/service.py src/agent33/skills/ingestion.py src/agent33/skills/registry.py src/agent33/workflows/events.py src/agent33/workflows/executor.py src/agent33/workflows/ws_manager.py src/agent33/benchmarks/skillsbench/regression.py src/agent33/benchmarks/skillsbench/reporting.py src/agent33/cli/bench.py tests/test_ingestion_mailbox.py tests/test_ingestion_journal.py tests/test_ingestion_notifications.py tests/test_ingestion_service.py tests/test_sse_versioning.py tests/test_workflow_sse.py tests/test_integration_wiring.py tests/test_skills.py tests/test_bench_cli.py tests/test_skillsbench_regression.py tests/test_skillsbench_storage_reporting.py tests/benchmarks/test_skills_smoke.py`
+  - SkillsBench smoke/reporting smoke: `python -m agent33.cli.main bench smoke --output test-results\final-verify\ctrf-smoke.json` (`6 passed`); `python -m agent33.cli.main bench report test-results\final-verify\ctrf-smoke.json`
+  - frontend install/checks: `npm ci`, `npm run lint`, `npx vitest run src/features/operations-hub/IngestionReviewPanel.test.tsx src/data/domains/operationsHub.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000` (`15 passed`), `npm run build`
+- Verification note: the remote `benchmarks` branch was absent during this run,
+  so SkillsBench smoke reporting was validated without a fetched baseline
+  comparison artifact.
+- Refreshed the stale queue/handoff layer for the now-merged final wave:
+  - `docs/next-session.md`
+  - `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+  - `task_plan.md`
+
+## 2026-04-25 (fresh-main verification after PRs #425-#427)
+
+- Fetched `origin/main` to `860daf0` and created fresh verification worktree
+  `C:\GitHub\repos\AGENT33\worktrees\main-baseline-verify`.
+- Verified the merged baseline from that clean worktree with practical coverage
+  across the merge wave:
+  - backend: `uv run pytest --override-ini addopts='' tests/test_chat.py tests/test_openrouter_runtime_fallback.py tests/test_tool_loop.py tests/test_health.py tests/test_openrouter_api.py tests/test_openrouter_service.py tests/test_operator_api.py tests/test_operator_service.py tests/test_diagnose.py tests/test_wizard.py tests/test_provider_catalog.py tests/test_config_runtime_urls.py tests/test_status_line.py tests/test_ingestion_mailbox.py -q`
+  - backend lint: `uv run ruff check src/agent33/api/routes/chat.py src/agent33/api/routes/health.py src/agent33/api/routes/openrouter.py src/agent33/cli/diagnose.py src/agent33/cli/wizard.py src/agent33/config.py src/agent33/llm/default_models.py src/agent33/llm/openai.py src/agent33/llm/router.py src/agent33/llm/runtime_config.py src/agent33/main.py src/agent33/operator/service.py src/agent33/operator/status_line.py src/agent33/services/openrouter_catalog.py src/agent33/ingestion/mailbox.py src/agent33/ingestion/mailbox_persistence.py tests/test_chat.py tests/test_openrouter_runtime_fallback.py tests/test_health.py tests/test_openrouter_api.py tests/test_openrouter_service.py tests/test_operator_api.py tests/test_operator_service.py tests/test_diagnose.py tests/test_wizard.py tests/test_provider_catalog.py tests/test_config_runtime_urls.py tests/test_status_line.py tests/test_ingestion_mailbox.py`
+  - frontend install/checks: `npm ci`, `.\node_modules\.bin\tsc.cmd --noEmit`, `.\node_modules\.bin\vitest.cmd run src/features/integrations/MessagingSetup.test.tsx src/features/chat/ChatInterface.test.tsx src/components/__tests__/Accessibility.test.tsx`, `.\node_modules\.bin\vite.cmd build`
+- Refreshed the stale queue/handoff layer for the new merged reality:
+  - `docs/next-session.md`
+  - `docs/phases/PHASE-PLAN-POST-P72-2026.md`
+  - `task_plan.md`
+- The next roadmap queue is now explicitly reset to:
+  1. ingestion hardening follow-up
+  2. operator UX depth
+  3. SSE schema v2
+  4. skills-system integration
+  5. SkillsBench follow-up
+
+## 2026-04-20 (Session 130 community submissions scoping)
+
+- Squash-merged PR `#413` (`Session 130: add pack marketplace web UI`) as
+  commit `d38f1b1`.
+- Verified the merged marketplace slice from fresh `origin/main` in
+  `C:\GitHub\repos\AGENT33\worktrees\session130-s1-postmerge-verify` using:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions`
+  on branch `session130-s2-community-submissions` from verified merged `main`.
+- Audited the current backend/community surfaces and confirmed the narrow next
+  slice should be submission UX on top of the existing curation backend rather
+  than an admin review console or broader PackHub rebuild.
+- Added a scope-lock note in
+  `docs/research/session130-s2-community-submissions-scope.md`.
+- Extended the existing marketplace detail panel with community-submission UX:
+  - submission/resubmission action for installed packs
+  - live curation status display
+  - quality assessment preview and check breakdown
+  - reviewer note surfacing for existing records
+- Added focused frontend coverage for the new submission flow.
+- Validation passed:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session130-s2-community-submissions\engine\src pytest engine\tests\test_marketplace_curation.py --no-cov -q`
+- Opened PR `#414` (`Session 130: add community pack submission flow`).
+- Addressed the first automated PR review pass:
+  - allow `draft` curation records to remain submittable
+  - keep submission UX available when installed-pack detail fetch fails
+  - separate success/error submission messaging and neutralize status-pill styling
+
+## 2026-04-20 (Session 130 pack marketplace web UI)
+
+- Verified the docs/operator remediation slice landed on `main` as PR `#412`
+  / commit `d11eac5`, then created fresh worktree
+  `C:\GitHub\repos\AGENT33\worktrees\session130-s1-pack-marketplace`
+  on branch `session130-s1-pack-marketplace`.
+- Confirmed latest `main` already exposes the backend marketplace surfaces, so
+  this slice stayed frontend-first rather than reopening the API layer.
+- Implemented a new `Marketplace` tab in `frontend/src/App.tsx` with a dedicated
+  `frontend/src/features/pack-marketplace/` feature slice:
+  - client-side browse/search/category filtering over `/v1/marketplace/packs`
+  - featured / curation / installed-state aggregation
+  - pack detail panel with version selection
+  - install action via `POST /v1/marketplace/install`
+  - status display for installed, tenant enablement, and trust posture
+- Added focused frontend regression coverage in
+  `frontend/src/features/pack-marketplace/PackMarketplacePage.test.tsx`.
+- Fixed one accessibility regression discovered during testing: marketplace pack
+  cards must keep their native button role rather than overriding it with
+  `role="listitem"`.
+- Targeted frontend validation is green:
+  - `npx vitest run src/features/pack-marketplace/PackMarketplacePage.test.tsx --pool=forks --poolOptions.forks.singleFork --testTimeout=10000 --hookTimeout=10000`
+  - `npm run lint`
+  - `npm run build`
+- Opened PR `#413` (`Session 130: add pack marketplace web UI`) from branch
+  `session130-s1-pack-marketplace`.
+- Addressed the first PR `#413` review pass:
+  - preserve featured state when curation and featured records overlap
+  - make version rows clickable with accessible pressed-state semantics
+  - preserve the actual installed version when deriving local skills-count state
+  - surface backend error detail in marketplace API failures
+  - isolate the focused frontend tests by unstubbing globals after each run
+  - expose category-toggle state via `aria-pressed`
+- Re-ran the focused marketplace validation stack successfully after the review
+  fixes.
+- Validation caveat on this Windows host: the default Vitest worker pool hung
+  for this spec, so the stable single-fork invocation above is the reliable
+  command when re-running the marketplace tests locally.
+
+## 2026-04-20 (Session 129 PR #411 merge and operator/docs follow-up)
+
+- Squash-merged PR `#411` (`Session 129: harden P-PACK A/B review debt`) as
+  commit `8f1cbe3`.
+- Ran a fresh-main verification pass from
+  `C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify`.
+- Verified the merged result against the intended worktree source using:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src pytest engine/tests/test_outcomes_api.py engine/tests/test_ppack_ab_service.py engine/tests/test_p68_outcome_recording.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src ruff check engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py engine/tests/test_outcomes_api.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src ruff format --check engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py engine/tests/test_outcomes_api.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session129-s1-postmerge-verify\engine\src mypy engine/src/agent33/api/routes/outcomes.py engine/src/agent33/evaluation/ppack_ab_service.py --config-file engine/pyproject.toml`
+- Found and documented an environment caveat during verification: this machine's
+  editable install points Python at the stale root checkout by default, so
+  fresh-worktree validation must pin `PYTHONPATH` to the active worktree's
+  `engine\src`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session129-s2-operator-docs`
+  on branch `session129-s2-operator-docs` from merged `origin/main`.
+- Re-audited the remaining operator/docs review debt and confirmed the final
+  pre-marketplace remediation scope:
+  - stale queue/handoff docs still anchored to `#408`
+  - onboarding still contains raw `docs/...` references instead of proper links
+  - getting-started / frontend / operator runbooks still need small Ollama and
+    local credential wording fixes
+  - duplicate Session 129 note `docs/sessions/session-129-2026-04-19.md`
+    remains on `main`
+
+## 2026-04-18 (Session 128 review-remediation audit and queue reset)
+
+- Verified there are `0` open PRs on `mattmre/AGENT33` and that `origin/main`
+  is at `943b683` after merging PR `#408`
+  (`POST-CLUSTER: add P-ENV v2 Ollama bootstrap`).
+- Confirmed the root checkout is stale (`pr-405`) and created a fresh worktree
+  `C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation` on
+  branch `session128-s1-review-remediation` from updated `origin/main`.
+- Audited merged review threads plus code for PRs `#406`, `#407`, and `#408`.
+- Locked the immediate follow-up queue to two remediation PRs before the
+  remaining roadmap resumes:
+  - pack/session lifecycle cleanup for POST-4.5 session-scoped pack state
+  - P-ENV v2 and launch-doc reliability fixes from the merged review feedback
+- Identified the concrete blocking issues before the next roadmap slice:
+  - `PackRegistry.clear_session_state()` is not wired into terminal session
+    lifecycle paths, so session-scoped pack state can leak after session end or
+    archive
+  - the P-ENV v2 happy path writes `.env.local`, but the runtime still defaults
+    to `.env`, so wizard/bootstrap output can be ignored by `agent33 start`
+  - the canonical Ollama model name and bundled-start documentation drifted
+    across runtime, config, and docs after PRs `#407` and `#408`
+- Wrote the Session 128 remediation plan and queue-reset docs so recovery now
+  points at the real merged baseline through `#408`.
+- Implemented the first remediation slice in
+  `engine/src/agent33/sessions/service.py`,
+  `engine/src/agent33/sessions/archive.py`, and `engine/src/agent33/main.py`:
+  terminal session completion and archive cleanup now clear session-scoped pack
+  tracking via a narrow session cleanup callback, while suspended sessions
+  remain resumable.
+- Added focused regression coverage in:
+  - `engine/tests/test_phase44_session_service.py`
+  - `engine/tests/test_session_catalog.py`
+- Focused validation is green from the Session 128 remediation worktree using
+  the worktree-local source path:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_integration.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_integration_wiring.py -k "lifespan or expected_attributes" --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Opened PR `#409` (`Session 128: harden pack/session lifecycle cleanup`) from
+  branch `session128-s1-review-remediation`.
+- Reviewed PR `#409` feedback and found one substantive issue repeated by both
+  review bots: the new terminal session cleanup callback should be treated as a
+  best-effort lifecycle side effect rather than aborting session teardown if it
+  raises.
+- Ran a fresh review agent against `#409` to sanity-check the bot feedback
+  before patching; no additional substantive issues were found.
+- Hardened `OperatorSessionService.clear_terminal_session_state()` to log and
+  continue when the injected cleanup callback raises, matching the existing
+  best-effort lifecycle patterns already used for hooks, status refresh, and
+  shutdown flush.
+- Added regression coverage for:
+  - completed session teardown continuing after cleanup-callback failure
+  - archived-session cleanup continuing after cleanup-callback failure
+- Re-ran the targeted Session 128 validation stack after the review fix:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_phase44_integration.py --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src pytest engine/tests/test_integration_wiring.py -k "lifespan or expected_attributes" --no-cov -q`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src ruff format --check engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py engine/tests/test_phase44_session_service.py engine/tests/test_session_catalog.py`
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s1-review-remediation\engine\src mypy engine/src/agent33/sessions/service.py engine/src/agent33/sessions/archive.py engine/src/agent33/main.py --config-file engine/pyproject.toml`
+- Squash-merged PR `#409` (`Session 128: harden pack/session lifecycle cleanup`)
+  and verified the merged result from fresh `origin/main` at `0918881`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session128-s2-penv2-hardening`
+  on branch `session128-s2-penv2-hardening` from the verified merged baseline.
+- Ran a fresh explore-agent audit for the R2 slice and confirmed the scope still
+  required on merged `main`:
+  - runtime settings still ignore `.env.local`
+  - runtime default model still drifts from bootstrap/wizard/docs
+  - wizard env refresh still has the broad `TypeError` fallback
+  - bundled Ollama startup still hides `docker compose` diagnostics
+  - Ollama pull timeout is still fixed at 900 seconds
+  - setup docs still need a true first-time bootstrap/start path
+- Wrote the R2 scope lock to
+  `docs/research/session128-r2-penv2-hardening-scope.md`.
+- Implemented the R2 reliability fixes in:
+  - `engine/src/agent33/config.py`
+  - `engine/src/agent33/env/ollama_setup.py`
+  - `engine/src/agent33/cli/wizard.py`
+  - `engine/.env.example`
+  - `docs/setup-guide.md`
+  - `docs/getting-started.md`
+- Added focused regression coverage in:
+  - `engine/tests/test_bootstrap.py`
+  - `engine/tests/test_ollama_setup.py`
+  - `engine/tests/test_wizard.py`
+- Ran a fresh code-review agent before PR prep; it found one real docs/code
+  mismatch in the manual Compose startup wording, and that clarification is now
+  folded into `docs/setup-guide.md`.
+- Focused R2 validation is green:
+  - `PYTHONPATH=C:\GitHub\repos\AGENT33\worktrees\session128-s2-penv2-hardening\engine\src pytest engine/tests/test_env_detect.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py engine/tests/test_bootstrap.py engine/tests/test_diagnose.py --no-cov -q`
+  - `ruff check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+  - `ruff format --check engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py engine/tests/test_bootstrap.py engine/tests/test_ollama_setup.py engine/tests/test_wizard.py`
+  - `mypy engine/src/agent33/config.py engine/src/agent33/env/ollama_setup.py engine/src/agent33/cli/wizard.py --config-file engine/pyproject.toml`
+- Opened PR `#410` (`Session 128: harden P-ENV v2 startup reliability`) from
+  branch `session128-s2-penv2-hardening`.
+- Next step: review CI/comments on `#410`, land any follow-up fixes, merge it,
+  verify `main` from a fresh worktree, and then start the marketplace slice
+  from fresh `main`.
+
+## 2026-04-17 (Session 127 POST-4.5 behavior implementation)
+
+- Verified `main` advanced to `b591454` after merging PR `#405` (`POST-4.4: add P-PACK v3 A/B harness`).
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s6-post45` on branch `session127-s6-post45` from that merged `main`.
+- Locked the POST-4.5 behavior contract to a source-aware session pack resolution model:
+  - control sessions keep the existing name-sorted P-PACK v1 behavior
+  - treatment sessions under `ppack_v3_enabled` apply workflow-shared packs before explicit session packs
+  - activation order is preserved within the shared and explicit groups
+- Implemented the behavior in:
+  - `engine/src/agent33/packs/registry.py`
+  - `engine/src/agent33/packs/sharing.py`
+  - `engine/src/agent33/agents/runtime.py`
+  - `engine/src/agent33/api/routes/agents.py`
+  - `engine/src/agent33/main.py`
+- Added regression coverage in `engine/tests/test_ppack_v3_ab.py` and updated runtime expectations in `engine/tests/test_aep6_remediations.py`.
+- Focused validation is green:
+  - `pytest --no-cov tests/test_ppack_v1.py tests/test_ppack_v2.py tests/test_ppack_v3_ab.py tests/test_p68_outcome_recording.py tests/test_aep6_remediations.py -q`
+  - `ruff check ...`
+  - `ruff format --check ...`
+  - `mypy src/agent33/packs/registry.py src/agent33/packs/sharing.py src/agent33/agents/runtime.py src/agent33/api/routes/agents.py`
+- Next step: write the POST-4.5 research/spec memo, open the PR, and move into the normal CI/review loop.
+
+## 2026-04-17 (Session 127 POST-4.5 merged and POST-CLUSTER launch-prep started)
+
+- Merged PR `#406` (`POST-4.5: apply P-PACK v3 behavior rollout`) and verified the merge from a fresh-main worktree at `f7ad606`.
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s8-public-launch` on branch `session127-s8-public-launch` from merged `main`.
+- Scope-locked the next slice as a docs-first public launch preparation wave:
+  - root `README.md` becomes the product-facing landing page
+  - add `docs/getting-started.md`
+  - add `docs/ONBOARDING.md`
+  - add `docs/RELEASE_CHECKLIST.md`
+  - refresh `docs/README.md`, `engine/README.md`, and `frontend/README.md`
+- Synced roadmap and handoff docs so they now reflect `POST-4.5` complete and `POST-CLUSTER — Public launch preparation` active.
+- Next step: open the launch-prep PR from `session127-s8-public-launch`.
+
+## 2026-04-18 (Session 127 POST-CLUSTER P-ENV v2 implementation)
+
+- Verified `main` advanced to `cfa8cac` after merging PR `#407` (`POST-CLUSTER: prepare public launch docs`).
+- Created fresh worktree `C:\GitHub\repos\AGENT33\worktrees\session127-s10-penv2` on branch `session127-s10-penv2` from merged `main`.
+- Scope-locked `POST-CLUSTER — P-ENV v2` as a first-run bootstrap upgrade:
+  - refresh wizard env detection instead of trusting stale cache
+  - auto-start local `ollama serve` when available
+  - fall back to the bundled `docker compose --profile local-ollama` service when local Ollama is unavailable
+  - auto-download the recommended Ollama model when missing
+  - standardize generated config on `OLLAMA_DEFAULT_MODEL`
+- Implemented the new local Ollama provisioning helpers in `engine/src/agent33/env/ollama_setup.py`.
+- Updated the wizard/bootstrap/diagnose path to use the new bootstrap flow and config key.
+- Updated setup docs so the wizard is the recommended path and manual `ollama pull` remains the fallback.
+- Focused validation is green:
+  - `PYTHONPATH=src python -m pytest tests/test_env_detect.py tests/test_ollama_setup.py tests/test_wizard.py tests/test_bootstrap.py tests/test_diagnose.py -q --no-cov`
+  - `python -m ruff check ...`
+  - `python -m ruff format --check ...`
+  - `python -m mypy src/agent33/env/ollama_setup.py src/agent33/cli/bootstrap.py src/agent33/cli/diagnose.py src/agent33/cli/wizard.py --config-file pyproject.toml`
+- Next step: open the P-ENV v2 PR from `session127-s10-penv2`.
+
 ## 2026-04-17 (Session 127 POST-4 execution unblock)
 
 - User direction changed the roadmap policy: remove the remaining calendar/data gates and execute the rest of the development wave now, then test and monitor afterward.

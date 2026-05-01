@@ -8,6 +8,7 @@ import math
 import statistics
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from statistics import NormalDist
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,14 @@ from agent33.outcomes.models import OutcomeEvent, OutcomeMetricType
 if TYPE_CHECKING:
     from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
     from agent33.outcomes.service import OutcomesService
+
+
+@lru_cache(maxsize=1)
+def _load_scipy_stats() -> Any | None:
+    try:
+        return importlib.import_module("scipy.stats")
+    except (ModuleNotFoundError, ImportError):
+        return None
 
 
 @dataclass(slots=True)
@@ -145,6 +154,8 @@ class PPackABService:
         assignments = self._persistence.list_assignments(
             tenant_id=normalized_tenant,
             experiment_key=self._experiment_key,
+            since=since,
+            until=until,
         )
         assignments_by_session = {item.session_id: item for item in assignments}
         assignment_counts = {
@@ -155,11 +166,14 @@ class PPackABService:
                 1 for item in assignments if item.variant == PPackABVariant.TREATMENT
             ),
         }
-        historical = self._outcomes_service.load_historical(normalized_tenant, since=since)
-        if normalized_domain:
-            historical = [event for event in historical if event.domain == normalized_domain]
-        if until is not None:
-            historical = [event for event in historical if event.occurred_at <= until]
+        historical = self._outcomes_service.load_historical(
+            normalized_tenant,
+            since=since,
+            until=until,
+            domain=normalized_domain or None,
+            metric_types=selected_metrics,
+            limit=None,
+        )
         metric_buckets: dict[OutcomeMetricType, dict[PPackABVariant, list[float]]] = {
             metric: {PPackABVariant.CONTROL: [], PPackABVariant.TREATMENT: []}
             for metric in selected_metrics
@@ -222,22 +236,34 @@ class PPackABService:
             "Automated weekly regression alert for the P-PACK v3 A/B harness.\n\n"
             f"{report.markdown}\n"
         )
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"https://api.github.com/repos/{self._alert_config.owner}/{self._alert_config.repo}/issues",
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {self._alert_config.token}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-                json={"title": title, "body": body},
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"https://api.github.com/repos/{self._alert_config.owner}/{self._alert_config.repo}/issues",
+                    headers={
+                        "Accept": "application/vnd.github+json",
+                        "Authorization": f"Bearer {self._alert_config.token}",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json={"title": title, "body": body},
+                )
+        except httpx.HTTPError as exc:
+            return GitHubIssuePublishResult(
+                attempted=True,
+                reason=f"GitHub issue creation failed due to HTTP error: {exc}",
             )
         if response.status_code >= 300:
             return GitHubIssuePublishResult(
                 attempted=True,
                 reason=f"GitHub issue creation failed: {response.status_code}",
             )
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            return GitHubIssuePublishResult(
+                attempted=True,
+                reason=f"GitHub issue creation failed due to invalid JSON response: {exc}",
+            )
         return GitHubIssuePublishResult(
             attempted=True,
             created=True,
@@ -289,12 +315,6 @@ class PPackABService:
         event: OutcomeEvent,
         assignments_by_session: dict[str, PPackABAssignment],
     ) -> PPackABVariant | None:
-        raw_variant = event.metadata.get("ppack_variant")
-        if isinstance(raw_variant, str) and raw_variant in {
-            PPackABVariant.CONTROL.value,
-            PPackABVariant.TREATMENT.value,
-        }:
-            return PPackABVariant(raw_variant)
         session_id = event.metadata.get("session_id")
         if not isinstance(session_id, str) or not session_id.strip():
             return None
@@ -349,7 +369,7 @@ class PPackABService:
     def _welch_ttest(self, control_values: list[float], treatment_values: list[float]) -> float:
         if len(control_values) < 2 or len(treatment_values) < 2:
             return 1.0
-        scipy_stats = self._load_scipy_stats()
+        scipy_stats = _load_scipy_stats()
         if scipy_stats is not None:
             result = scipy_stats.ttest_ind(control_values, treatment_values, equal_var=False)
             p_value = float(result.pvalue)
@@ -360,17 +380,15 @@ class PPackABService:
         treatment_n = len(treatment_values)
         standard_error_sq = (control_variance / control_n) + (treatment_variance / treatment_n)
         if standard_error_sq <= 0:
-            return 0.0 if not math.isclose(
-                statistics.fmean(control_values),
-                statistics.fmean(treatment_values),
-            ) else 1.0
+            return (
+                0.0
+                if not math.isclose(
+                    statistics.fmean(control_values),
+                    statistics.fmean(treatment_values),
+                )
+                else 1.0
+            )
         t_stat = abs(
             statistics.fmean(control_values) - statistics.fmean(treatment_values)
         ) / math.sqrt(standard_error_sq)
         return 2 * (1 - NormalDist().cdf(t_stat))
-
-    def _load_scipy_stats(self) -> Any | None:
-        try:
-            return importlib.import_module("scipy.stats")
-        except ModuleNotFoundError:
-            return None

@@ -4,20 +4,48 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import string
 from typing import Literal
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 _logger = logging.getLogger(__name__)
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def resolve_runtime_service_url(url: str) -> str:
+    """Rewrite loopback service URLs when the engine runs inside Docker."""
+    normalized = url.strip()
+    if not normalized or not os.path.exists("/.dockerenv"):
+        return normalized
+
+    parsed = urlparse(normalized)
+    if parsed.hostname not in _LOOPBACK_HOSTS:
+        return normalized
+
+    credentials = ""
+    if parsed.username:
+        credentials = parsed.username
+        if parsed.password:
+            credentials += f":{parsed.password}"
+        credentials += "@"
+
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return urlunparse(parsed._replace(netloc=f"{credentials}host.docker.internal{port}"))
 
 
 class Settings(BaseSettings):
     """AGENT-33 engine settings loaded from environment."""
 
-    model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
+    model_config = {
+        "env_prefix": "",
+        "env_file": (".env", ".env.local"),
+        "extra": "ignore",
+    }
 
     # API
     api_port: int = 8000
@@ -27,8 +55,11 @@ class Settings(BaseSettings):
     max_request_size_bytes: int = 10 * 1024 * 1024  # 10 MB default
 
     # Ollama
+    default_model: str = ""
     ollama_base_url: str = "http://ollama:11434"
-    ollama_default_model: str = "llama3.2"
+    ollama_default_model: str = "llama3.2:3b"
+    lm_studio_base_url: str = "http://localhost:1234/v1"
+    lm_studio_default_model: str = "local-model"
 
     # Local "Heretic" & Ultra-Sparse Orchestration
     # (optimized for single RTX 3090 - 24GB VRAM).
@@ -90,6 +121,12 @@ class Settings(BaseSettings):
     # Optional cloud LLM
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = ""
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_site_url: str = "http://localhost"
+    openrouter_app_name: str = "AGENT-33"
+    openrouter_app_category: str = "cli-agent"
+    openrouter_default_fallback_models: str = ""
     elevenlabs_api_key: SecretStr = SecretStr("")
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     voice_daemon_enabled: bool = True
@@ -253,8 +290,26 @@ class Settings(BaseSettings):
     skillsbench_context_manager_enabled: bool = True
     skillsbench_storage_path: str = "var/skillsbench_runs"
 
+    # P69b tool-approval persistence
+    p69b_db_path: str = "var/p69b.db"
+
+    # Ingestion persistence (Sprint 1)
+    ingestion_db_path: str = "var/ingestion.db"
+
+    # Ingestion mailbox inbox persistence (Session 132)
+    ingestion_mailbox_db_path: str = "var/ingestion_mailbox.db"
+
+    # Ingestion journal persistence (Sprint 4)
+    ingestion_journal_db_path: str = "var/ingestion_journal.db"
+    ingestion_journal_retention_days: int = 90  # 0 disables journal expiry
+    ingestion_task_metrics_db_path: str = "var/ingestion_task_metrics.db"
+    ingestion_task_metrics_retention_days: int = 30  # 0 disables task-metrics expiry
+    ingestion_notification_hooks_db_path: str = "var/ingestion_notification_hooks.db"
+    ingestion_notification_timeout_seconds: float = 5.0
+
     # Outcomes persistence (P72)
     outcomes_db_path: str = "var/outcomes.db"
+    ppack_v3_ab_db_path: str = "var/ppack_ab.db"
     ppack_v3_ab_enabled: bool = True
     ppack_v3_enabled: bool = False
     ppack_v3_ab_experiment_key: str = "ppack_v3"
@@ -399,6 +454,7 @@ class Settings(BaseSettings):
     synthetic_env_bundle_retention: int = 100
     synthetic_env_bundle_persistence_path: str = "var/synthetic_environment_bundles.json"
     orchestration_state_store_path: str = ""
+    workflow_run_archive_dir: str = "var/workflow-runs"
     process_manager_log_dir: str = "var/process-manager"
     process_manager_max_processes: int = 10
     backup_dir: str = "var/backups"
@@ -531,6 +587,9 @@ class Settings(BaseSettings):
     workflow_transport_preferred: str = "auto"  # auto | websocket | sse
     workflow_ws_ping_interval: float = 30.0
     workflow_ws_ping_timeout: float = 10.0
+    # SSE schema v2 rollout (backend foundation only; v1 remains the default).
+    # Kill switch: /tmp/agent33_disable_sse_v2
+    sse_schema_v2_enabled: bool = False
 
     # Session trajectory capture (Phase 59)
     trajectory_capture_enabled: bool = False  # opt-in
@@ -554,6 +613,16 @@ class Settings(BaseSettings):
     ptc_max_calls: int = 50
     ptc_max_stdout_bytes: int = 51200  # 50 KB
     ptc_allowed_tools: str = ""  # comma-separated override; empty = default list
+
+    @property
+    def runtime_ollama_base_url(self) -> str:
+        """Return the Ollama URL that runtime code should use."""
+        return resolve_runtime_service_url(self.ollama_base_url)
+
+    @property
+    def runtime_lm_studio_base_url(self) -> str:
+        """Return the LM Studio URL that runtime code should use."""
+        return resolve_runtime_service_url(self.lm_studio_base_url)
 
     @field_validator("control_plane_backend")
     @classmethod
@@ -632,6 +701,8 @@ class Settings(BaseSettings):
 
     @field_validator(
         "component_security_scan_store_retention_days",
+        "ingestion_journal_retention_days",
+        "ingestion_task_metrics_retention_days",
         "improvement_learning_dedupe_window_minutes",
         "improvement_learning_retention_days",
         "improvement_learning_max_signals",

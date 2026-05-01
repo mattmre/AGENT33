@@ -13,7 +13,11 @@ Tests verify:
 
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
+
+import pytest
 
 from agent33.cli.wizard import (
     QUICK_TEMPLATES,
@@ -21,14 +25,13 @@ from agent33.cli.wizard import (
     FirstRunWizard,
     WizardResult,
     _build_env_lines,
+    _stream_test_response,
     _write_env,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
     from pathlib import Path
-
-    import pytest
 
 # ---------------------------------------------------------------------------
 # Mock I/O helper
@@ -74,11 +77,29 @@ class MockIO:
             return ""
 
 
+@pytest.fixture(autouse=True)
+def _restore_llm_api_keys() -> Generator[None, None, None]:
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+    try:
+        yield
+    finally:
+        _restore_env_var("OPENAI_API_KEY", openai_api_key)
+        _restore_env_var("OPENROUTER_API_KEY", openrouter_api_key)
+
+
 def _wizard(answers: list[str], tmp_path: Path) -> WizardResult:
     """Convenience: run the wizard with scripted answers into a tmp env file."""
     io = MockIO(answers)
     w = FirstRunWizard(io=io, env_path=tmp_path / ".env.local")
     return w.run()
+
+
+def _restore_env_var(name: str, value: str | None) -> None:
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +141,56 @@ def test_wizard_chooses_minimal_profile(tmp_path: Path, monkeypatch: pytest.Monk
     assert result.profile == "minimal"
 
 
+def test_wizard_forces_fresh_environment_detection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[bool] = []
+
+    def _record_detect(*, force_refresh: bool = False) -> object:
+        captured.append(force_refresh)
+        return SimpleNamespace(
+            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
+            tools=SimpleNamespace(ollama_available=True, docker_available=True),
+            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
+            mode="standard",
+        )
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _record_detect, raising=False)
+
+    result = _wizard(
+        answers=["developer", "skip", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+
+    assert captured == [True]
+    assert result.profile == "developer"
+
+
+def test_wizard_retries_environment_detection_without_force_refresh_kwarg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[str] = []
+
+    def _legacy_detect() -> object:
+        captured.append("retried-without-kwarg")
+        return SimpleNamespace(
+            hardware=SimpleNamespace(cpu_cores=8, ram_gb=16.0, gpu_vram_gb=None, gpu_brand=None),
+            tools=SimpleNamespace(ollama_available=True, docker_available=True),
+            selected_model=SimpleNamespace(ollama_model="llama3.2:3b"),
+            mode="standard",
+        )
+
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _legacy_detect, raising=False)
+
+    result = _wizard(
+        answers=["developer", "skip", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+
+    assert captured == ["retried-without-kwarg"]
+    assert result.profile == "developer"
+
+
 # ---------------------------------------------------------------------------
 # LLM provider paths (step 2)
 # ---------------------------------------------------------------------------
@@ -155,6 +226,26 @@ def test_wizard_openai_provider_sets_api_key(
     assert result.api_key_set is True
     assert result.llm_model == "gpt-4o-mini"
     assert result.entered_api_key == "sk-test-key-12345"
+
+
+def test_wizard_openrouter_provider_sets_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    result = _wizard(
+        answers=[
+            "developer",
+            "openrouter",
+            "sk-or-test-key-12345",
+            "no",
+            "None — I'll configure manually",
+        ],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_provider == "openrouter"
+    assert result.api_key_set is True
+    assert result.llm_model == "openrouter/auto"
+    assert result.entered_api_key == "sk-or-test-key-12345"
 
 
 def test_wizard_openai_empty_key_does_not_set_flag(
@@ -202,6 +293,20 @@ def test_wizard_ollama_provider_without_binary(
     assert result.llm_model is None
 
 
+def test_wizard_ollama_without_binary_skips_test_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    result = _wizard(
+        answers=["developer", "ollama", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.template is None
+    assert "test_invocation_skipped" in result.steps_completed
+    assert "test_invocation" not in result.steps_completed
+
+
 def test_wizard_ollama_provider_with_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -245,6 +350,25 @@ def test_wizard_skips_test_invocation_when_user_declines(
     )
     # "no" answers confirm=False for test invocation
     assert "test_invocation_skipped" in result.steps_completed
+
+
+def test_wizard_skips_test_invocation_when_ollama_model_detection_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
+    monkeypatch.setattr(
+        "agent33.cli.wizard._pick_ollama_model",
+        lambda: (_ for _ in ()).throw(RuntimeError("no local models")),
+    )
+    result = _wizard(
+        answers=["developer", "ollama", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    assert result.llm_model == "llama3.2:3b"
+    assert result.template is None
+    assert "test_invocation_skipped" in result.steps_completed
+    assert "test_invocation" not in result.steps_completed
 
 
 def test_wizard_test_invocation_failure_is_graceful(
@@ -348,6 +472,21 @@ def test_wizard_env_contains_ollama_url_when_ollama_chosen(
     assert "DEFAULT_MODEL=llama3.2:3b" in content
 
 
+def test_wizard_env_preserves_custom_ollama_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent33.cli.wizard.detect_env", _failing_detect, raising=False)
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None)
+    monkeypatch.setattr("agent33.cli.wizard._pick_ollama_model", lambda: "llama3.2:3b")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
+    _wizard(
+        answers=["developer", "ollama", "no", "None — I'll configure manually"],
+        tmp_path=tmp_path,
+    )
+    content = (tmp_path / ".env.local").read_text()
+    assert "OLLAMA_BASE_URL=http://ollama.remote:11434" in content
+
+
 def test_wizard_env_contains_template_when_chosen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -441,6 +580,20 @@ def test_build_env_lines_openai_with_entered_key() -> None:
     assert "DEFAULT_MODEL=gpt-4o-mini" in joined
 
 
+def test_build_env_lines_openrouter_with_entered_key() -> None:
+    result = WizardResult(
+        profile="production",
+        llm_provider="openrouter",
+        llm_model="openrouter/auto",
+        api_key_set=True,
+        entered_api_key="sk-or-test-abc",
+    )
+    lines = _build_env_lines(result)
+    joined = "\n".join(lines)
+    assert "OPENROUTER_API_KEY=sk-or-test-abc" in joined
+    assert "DEFAULT_MODEL=openrouter/auto" in joined
+
+
 def test_build_env_lines_openai_without_entered_key_omits_api_key() -> None:
     """If api_key_set from env but user didn't enter a key, don't write it to .env.local."""
     result = WizardResult(
@@ -466,6 +619,65 @@ def test_build_env_lines_ollama() -> None:
     joined = "\n".join(lines)
     assert "OLLAMA_BASE_URL=http://localhost:11434" in joined
     assert "DEFAULT_MODEL=llama3.1:8b" in joined
+
+
+def test_build_env_lines_ollama_reuses_existing_env_file_url(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env.local"
+    env_path.write_text("OLLAMA_BASE_URL=http://ollama.internal:11434\n", encoding="utf-8")
+    result = WizardResult(
+        profile="minimal",
+        llm_provider="ollama",
+        llm_model="llama3.2:3b",
+        env_path=env_path,
+    )
+    lines = _build_env_lines(result)
+    joined = "\n".join(lines)
+    assert "OLLAMA_BASE_URL=http://ollama.internal:11434" in joined
+
+
+def test_stream_test_response_ollama_uses_resolved_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"response": "hello"}
+
+    class FakeClient:
+        def __init__(self, *, timeout: int) -> None:
+            captured["timeout"] = timeout
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def post(self, url: str, json: dict[str, object]) -> FakeResponse:
+            captured["url"] = url
+            captured["json"] = json
+            return FakeResponse()
+
+    io = MockIO([])
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.remote:11434")
+    monkeypatch.setattr("httpx.Client", FakeClient)
+
+    _stream_test_response(
+        WizardResult(llm_provider="ollama", llm_model="llama3.2:3b"),
+        io,
+    )
+
+    assert captured["url"] == "http://ollama.remote:11434/api/generate"
+    assert captured["json"] == {
+        "model": "llama3.2:3b",
+        "prompt": "What can you do? (answer in 2 sentences)",
+        "stream": False,
+    }
+    assert io.messages[-1] == "hello"
 
 
 def test_build_env_lines_with_template() -> None:

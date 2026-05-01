@@ -210,6 +210,30 @@ jobs:
               --output test-results/ctrf-smoke-report.json
           fi
 
+      - name: Summarize benchmark regressions
+        if: always()
+        env:
+          AGENT33_SKIP_FRONTEND_BUILD: "1"
+        run: |
+          if [ -f "test-results/ctrf-smoke-report.json" ]; then
+            if [ -f "test-results/ctrf-baseline.json" ]; then
+              agent33 bench report \
+                test-results/ctrf-smoke-report.json \
+                --baseline test-results/ctrf-baseline.json \
+                --github-step-summary
+            else
+              agent33 bench report \
+                test-results/ctrf-smoke-report.json \
+                --github-step-summary
+            fi
+          else
+            {
+              echo "## SkillsBench benchmark report"
+              echo
+              echo "- Smoke CTRF report was not generated."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload benchmark artifacts
         if: always()
         uses: actions/upload-artifact@v7

@@ -31,6 +31,7 @@ from agent33.workflows.definition import (
     WorkflowDefinition,
     WorkflowStep,
 )
+from agent33.workflows.events import resolve_active_schema_version
 from agent33.workflows.expressions import ExpressionEvaluator
 
 if TYPE_CHECKING:
@@ -96,6 +97,7 @@ class WorkflowExecutor:
         self._model_router = model_router
         self._run_id = run_id or definition.name
         self._event_sink = event_sink
+        self._schema_version = resolve_active_schema_version()
 
     async def _emit_event(
         self,
@@ -116,6 +118,7 @@ class WorkflowExecutor:
             workflow_name=self._definition.name,
             step_id=step_id,
             data=data or {},
+            schema_version=self._schema_version,
         )
         result = self._event_sink(event)
         if inspect.isawaitable(result):

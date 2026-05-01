@@ -39,8 +39,10 @@ from agent33.api.routes import (
     health,
     hooks,
     improvements,
+    ingestion,
     insights,
     knowledge,
+    lm_studio,
     marketplace,
     mcp,
     mcp_proxy,
@@ -48,7 +50,10 @@ from agent33.api.routes import (
     memory_search,
     migrations,
     moa,
+    model_health,
     multimodal,
+    ollama,
+    openrouter,
     operations,
     operations_hub,
     operator,
@@ -103,6 +108,9 @@ from agent33.api.routes import (
 )
 from agent33.api.routes import (
     scheduled_gates as scheduled_gates_routes,
+)
+from agent33.api.routes import (
+    skill_authoring as skill_authoring_routes,
 )
 from agent33.api.routes import (
     skill_matching as skill_matching_routes,
@@ -193,16 +201,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.backup.service import BackupService
     from agent33.observability.trace_collector import TraceCollector
     from agent33.release.service import ReleaseService
+    from agent33.review.service import ReviewService
+    from agent33.workflows.run_archive import WorkflowRunArchiveService
+    from agent33.workflows.state import WorkflowStateService
 
     autonomy_service = AutonomyService(state_store=orchestration_state_store)
     release_service = ReleaseService(state_store=orchestration_state_store)
+    review_service = ReviewService(state_store=orchestration_state_store)
     trace_collector = TraceCollector(state_store=orchestration_state_store)
+    workflow_run_archive_dir = state_paths.resolve_approved(settings.workflow_run_archive_dir)
+    workflow_run_archive_service = WorkflowRunArchiveService(workflow_run_archive_dir)
+    workflow_state_service = WorkflowStateService(
+        state_store=orchestration_state_store,
+        max_execution_history=1000,
+        registry=workflows.get_workflow_registry(),
+        execution_history=workflows.get_execution_history(),
+    )
     app.state.autonomy_service = autonomy_service
     app.state.release_service = release_service
+    app.state.review_service = review_service
     app.state.trace_collector = trace_collector
+    app.state.workflow_run_archive_service = workflow_run_archive_service
+    app.state.workflow_state_service = workflow_state_service
     autonomy.set_autonomy_service(autonomy_service)
     releases.set_release_service(release_service)
+    reviews.set_review_service(review_service)
     traces.set_trace_collector(trace_collector)
+    workflows.set_workflow_run_archive_service(workflow_run_archive_service)
+    workflows.set_workflow_state_service(workflow_state_service)
+    logger.info("workflow_run_archive_initialized", path=str(workflow_run_archive_dir))
 
     # -- Redis -------------------------------------------------------------
     from agent33.lifespan.fallbacks import InProcessCache, InProcessMessageBus
@@ -392,7 +419,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("connector_metrics_and_registry_initialized")
 
     # -- Agent runtime / workflow integration ------------------------------
-    from agent33.llm.router import ModelRouter
     from agent33.workflows.actions.invoke_agent import (
         register_agent,
         set_definition_registry,
@@ -459,45 +485,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     _llamacpp_active = settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
-    model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_active else "ollama")
+    from agent33.llm.runtime_config import build_model_router
 
-    # Register LLM providers on the shared model router
-    from agent33.llm.ollama import OllamaProvider
-
-    model_router.register(
-        "ollama",
-        OllamaProvider(
-            base_url=settings.ollama_base_url,
-            default_model=settings.ollama_default_model,
-        ),
-    )
+    model_router = build_model_router()
 
     if _llamacpp_active:
-        from agent33.llm.openai import OpenAIProvider as _OpenAICompatProvider
-
-        model_router.register(
-            "llamacpp",
-            _OpenAICompatProvider(
-                api_key="local",
-                base_url=settings.local_orchestration_base_url,
-                default_model=settings.local_orchestration_model,
-            ),
-        )
         logger.info(
             "llamacpp_provider_registered",
             base_url=settings.local_orchestration_base_url,
             model=settings.local_orchestration_model,
         )
-
-    if settings.openai_api_key.get_secret_value():
-        from agent33.llm.openai import OpenAIProvider
-
-        _openai_kwargs: dict[str, Any] = {
-            "api_key": settings.openai_api_key.get_secret_value(),
-        }
-        if settings.openai_base_url:
-            _openai_kwargs["base_url"] = settings.openai_base_url
-        model_router.register("openai", OpenAIProvider(**_openai_kwargs))
 
     app.state.model_router = model_router
     logger.info("model_router_initialized")
@@ -535,12 +532,116 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tool_approval_service = tool_approval_service
     tool_approvals.set_tool_approval_service(tool_approval_service)
 
-    # -- P69b tool approval gate (POST-4.3) --------------------------------
+    # -- Skill registry bootstrap -----------------------------------------
+    from agent33.skills.registry import SkillRegistry
+
+    skill_registry = SkillRegistry()
+    skills_dir = Path(settings.skill_definitions_dir)
+    if skills_dir.is_dir():
+        skill_count = skill_registry.discover(skills_dir)
+        logger.info("skill_registry_loaded", count=skill_count, path=str(skills_dir))
+    app.state.skill_registry = skill_registry
+
+    # -- Ingestion candidate lifecycle (Sprint 1 + Sprint 2 + Sprint 4) -----------
+    from agent33.ingestion.intake import IntakePipeline
+    from agent33.ingestion.journal import TransitionJournal
+    from agent33.ingestion.persistence import IngestionPersistence
+    from agent33.ingestion.service import IngestionService
+
+    ingestion_db_path = state_paths.resolve_approved(settings.ingestion_db_path)
+    ingestion_journal_db_path = state_paths.resolve_approved(settings.ingestion_journal_db_path)
+    ingestion_mailbox_db_path = state_paths.resolve_approved(settings.ingestion_mailbox_db_path)
+    ingestion_task_metrics_db_path = state_paths.resolve_approved(
+        settings.ingestion_task_metrics_db_path
+    )
+    ingestion_notification_hooks_db_path = state_paths.resolve_approved(
+        settings.ingestion_notification_hooks_db_path
+    )
+    ingestion_persistence = IngestionPersistence(ingestion_db_path)
+    ingestion_journal = TransitionJournal(
+        ingestion_journal_db_path,
+        retention_days=settings.ingestion_journal_retention_days,
+    )
+    expired_journal_entries = ingestion_journal.cleanup_expired()
+    from agent33.ingestion.notifications import (
+        IngestionNotificationService,
+        NotificationHookStore,
+    )
+
+    ingestion_notification_store = NotificationHookStore(ingestion_notification_hooks_db_path)
+    ingestion_notification_service = IngestionNotificationService(
+        ingestion_notification_store,
+        timeout_seconds=settings.ingestion_notification_timeout_seconds,
+    )
+    ingestion_service = IngestionService(
+        persistence=ingestion_persistence,
+        journal=ingestion_journal,
+        notifications=ingestion_notification_service,
+        skill_registry=skill_registry,
+    )
+    intake_pipeline = IntakePipeline(ingestion_service)
+    app.state.ingestion_persistence = ingestion_persistence
+    app.state.ingestion_journal = ingestion_journal
+    app.state.ingestion_notification_service = ingestion_notification_service
+    app.state.ingestion_service = ingestion_service
+    app.state.intake_pipeline = intake_pipeline
+    ingestion.set_ingestion_service(ingestion_service)
+    ingestion.set_intake_pipeline(intake_pipeline)
+    ingestion.set_ingestion_notification_service(ingestion_notification_service)
+    logger.info(
+        "ingestion_service_initialized",
+        db_path=str(ingestion_db_path),
+        journal_db_path=str(ingestion_journal_db_path),
+        notification_hooks_db_path=str(ingestion_notification_hooks_db_path),
+        journal_retention_days=settings.ingestion_journal_retention_days,
+        expired_journal_entries=expired_journal_entries,
+    )
+
+    from agent33.ingestion.doctor import SkillsDoctor
+    from agent33.ingestion.mailbox import IngestionMailbox
+    from agent33.ingestion.mailbox_persistence import MailboxInboxPersistence
+    from agent33.ingestion.metrics import TaskMetricsCollector
+
+    ingestion_mailbox_persistence = MailboxInboxPersistence(ingestion_mailbox_db_path)
+    ingestion_mailbox = IngestionMailbox(
+        pipeline=intake_pipeline,
+        persistence=ingestion_mailbox_persistence,
+    )
+    task_metrics = TaskMetricsCollector(
+        ingestion_task_metrics_db_path,
+        retention_days=settings.ingestion_task_metrics_retention_days,
+    )
+    expired_task_metrics = task_metrics.cleanup_expired()
+    app.state.ingestion_mailbox_persistence = ingestion_mailbox_persistence
+    app.state.ingestion_mailbox = ingestion_mailbox
+    app.state.task_metrics = task_metrics
+    ingestion.set_ingestion_mailbox(ingestion_mailbox)
+    ingestion.set_task_metrics(task_metrics)
+    logger.info(
+        "ingestion_mailbox_initialized",
+        mailbox_db_path=str(ingestion_mailbox_db_path),
+    )
+    logger.info(
+        "ingestion_task_metrics_initialized",
+        metrics_db_path=str(ingestion_task_metrics_db_path),
+        retention_days=settings.ingestion_task_metrics_retention_days,
+        expired_task_metrics=expired_task_metrics,
+    )
+
+    skills_doctor = SkillsDoctor(service=ingestion_service)
+    app.state.skills_doctor = skills_doctor
+    ingestion.set_skills_doctor(skills_doctor)
+    logger.info("skills_doctor_initialized")
+
+    # -- P69b tool approval gate (POST-4.3 + Session-131 T2 persistence) ------
+    from agent33.autonomy.p69b_persistence import P69bPersistence
     from agent33.autonomy.p69b_service import P69bService
 
-    p69b_service = P69bService(timeout_seconds=300)
+    p69b_persistence = P69bPersistence(Path(settings.p69b_db_path))
+    p69b_service = P69bService(timeout_seconds=300, persistence=p69b_persistence)
+    app.state.p69b_persistence = p69b_persistence
     app.state.p69b_service = p69b_service
-    logger.info("p69b_service_initialized")
+    logger.info("p69b_service_initialized", db_path=settings.p69b_db_path)
 
     approval_token_manager = None
     if settings.approval_token_enabled:
@@ -552,6 +653,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             state_store=orchestration_state_store,
         )
     app.state.approval_token_manager = approval_token_manager
+    tool_approvals.set_approval_token_manager(approval_token_manager)
 
     tool_governance = ToolGovernance(
         approval_service=tool_approval_service,
@@ -655,7 +757,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.memory.embeddings import EmbeddingProvider
 
     embedding_provider = EmbeddingProvider(
-        base_url=settings.ollama_base_url,
+        base_url=settings.runtime_ollama_base_url,
+        model=settings.embedding_default_model,
         max_connections=settings.http_max_connections,
         max_keepalive_connections=settings.http_max_keepalive,
     )
@@ -798,16 +901,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_service = knowledge_service
     logger.info("knowledge_ingestion_service_initialized")
 
-    # -- Skill registry + injector -----------------------------------------
+    # -- Skill injector -----------------------------------------------------
     from agent33.skills.injection import SkillInjector
-    from agent33.skills.registry import SkillRegistry
-
-    skill_registry = SkillRegistry()
-    skills_dir = Path(settings.skill_definitions_dir)
-    if skills_dir.is_dir():
-        skill_count = skill_registry.discover(skills_dir)
-        logger.info("skill_registry_loaded", count=skill_count, path=str(skills_dir))
-    app.state.skill_registry = skill_registry
 
     skill_injector = SkillInjector(skill_registry)
     app.state.skill_injector = skill_injector
@@ -817,6 +912,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from agent33.skills.slash_commands import CommandRegistry
 
     command_registry = CommandRegistry(skill_registry)
+    skill_registry.add_change_listener(command_registry.refresh)
     app.state.command_registry = command_registry
     logger.info("command_registry_initialized", count=command_registry.count)
 
@@ -881,6 +977,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         skill_registry=skill_registry,
         marketplace=pack_marketplace,
         trust_policy_manager=pack_trust_manager,
+        ppack_v3_enabled=settings.ppack_v3_enabled,
     )
     pack_rollback_manager = PackRollbackManager(
         pack_registry,
@@ -1012,6 +1109,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             hook_registry=hook_registry,
             checkpoint_interval_seconds=settings.operator_session_checkpoint_interval_seconds,
             max_sessions_retained=settings.operator_session_max_retained,
+            session_cleanup_callback=pack_registry.clear_session_state,
         )
         app.state.operator_session_service = operator_session_service
         sessions.set_session_service(operator_session_service)
@@ -1146,7 +1244,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # -- WebSocket manager for workflow events ------------------------------
     from agent33.workflows.ws_manager import WorkflowWSManager
 
-    ws_manager = WorkflowWSManager()
+    ws_manager = WorkflowWSManager(archive_service=workflow_run_archive_service)
     app.state.ws_manager = ws_manager
     workflows.set_ws_manager(ws_manager)
     logger.info("workflow_ws_manager_initialized")
@@ -1931,7 +2029,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     outcomes_persistence = OutcomePersistence(Path(settings.outcomes_db_path))
     outcomes_service = OutcomesService(persistence=outcomes_persistence)
-    ppack_ab_persistence = PPackABPersistence(settings.outcomes_db_path)
+    ppack_ab_persistence = PPackABPersistence(settings.ppack_v3_ab_db_path)
     ppack_ab_service = PPackABService(
         outcomes_service=outcomes_service,
         persistence=ppack_ab_persistence,
@@ -1955,6 +2053,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     outcomes.set_outcomes_service(outcomes_service)
     outcomes.set_ppack_ab_service(ppack_ab_service)
     logger.info("outcomes_service_initialized", db_path=settings.outcomes_db_path)
+    logger.info("ppack_ab_service_initialized", db_path=settings.ppack_v3_ab_db_path)
 
     # -- Context compression engine (Phase 50) ---------------------------------
     context_compressor = None
@@ -2000,6 +2099,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.warning("process_manager_service_shutdown_failed", exc_info=True)
 
     workflows.set_ws_manager(None)
+    workflows.set_workflow_run_archive_service(None)
 
     _spawner_svc: Any = getattr(app.state, "spawner_service", None)
     if _spawner_svc is not None:
@@ -2008,6 +2108,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("spawner_service_shutdown")
         except Exception:
             logger.warning("spawner_service_shutdown_failed", exc_info=True)
+
+    _ollama_readiness_svc: Any = getattr(app.state, "ollama_readiness_service", None)
+    if _ollama_readiness_svc is not None:
+        await _ollama_readiness_svc.aclose()
+        logger.info("ollama_readiness_service_shutdown")
+
+    _lm_studio_readiness_svc: Any = getattr(app.state, "lm_studio_readiness_service", None)
+    if _lm_studio_readiness_svc is not None:
+        await _lm_studio_readiness_svc.aclose()
+        logger.info("lm_studio_readiness_service_shutdown")
 
     shutdown_multimodal_service: Any = getattr(app.state, "multimodal_service", None)
     if shutdown_multimodal_service is not None:
@@ -2074,6 +2184,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("instance_deregistered")
         except Exception:
             logger.warning("instance_deregister_failed", exc_info=True)
+
+    _ingestion_persistence: Any = getattr(app.state, "ingestion_persistence", None)
+    if _ingestion_persistence is not None:
+        _ingestion_persistence.close()
+        logger.info("ingestion_persistence_closed")
+
+    _ingestion_journal: Any = getattr(app.state, "ingestion_journal", None)
+    if _ingestion_journal is not None:
+        _ingestion_journal.close()
+        logger.info("ingestion_journal_closed")
+
+    _ingestion_notification_service: Any = getattr(
+        app.state,
+        "ingestion_notification_service",
+        None,
+    )
+    if _ingestion_notification_service is not None:
+        _ingestion_notification_service.close()
+        logger.info("ingestion_notification_service_closed")
+
+    _ingestion_mailbox_persistence: Any = getattr(app.state, "ingestion_mailbox_persistence", None)
+    if _ingestion_mailbox_persistence is not None:
+        _ingestion_mailbox_persistence.close()
+        logger.info("ingestion_mailbox_persistence_closed")
+
+    _task_metrics: Any = getattr(app.state, "task_metrics", None)
+    if _task_metrics is not None:
+        _task_metrics.close()
+        logger.info("ingestion_task_metrics_closed")
+
+    _p69b_persistence: Any = getattr(app.state, "p69b_persistence", None)
+    if _p69b_persistence is not None:
+        _p69b_persistence.close()
+        logger.info("p69b_persistence_closed")
 
     _outcomes_persistence: Any = getattr(app.state, "outcomes_persistence", None)
     if _outcomes_persistence is not None:
@@ -2305,6 +2449,7 @@ app.include_router(hooks.router)
 app.include_router(comparative.router)
 app.include_router(synthetic_envs.router)
 app.include_router(p69b.router)
+app.include_router(ingestion.router)
 app.include_router(tool_approvals.router)
 app.include_router(tool_mutations.router)
 app.include_router(processes.router)
@@ -2312,6 +2457,10 @@ app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(context.router)
 app.include_router(operator.router)
+app.include_router(openrouter.router)
+app.include_router(ollama.router)
+app.include_router(lm_studio.router)
+app.include_router(model_health.router)
 app.include_router(cron.router)
 app.include_router(config_routes.router)
 app.include_router(operations.router)
@@ -2326,6 +2475,7 @@ app.include_router(provenance.router)
 app.include_router(connectors.router)
 app.include_router(delegation.router)
 app.include_router(spawner.router)
+app.include_router(skill_authoring_routes.router)
 app.include_router(skill_matching_routes.router)
 app.include_router(commands.router)
 app.include_router(execution_routes.router)

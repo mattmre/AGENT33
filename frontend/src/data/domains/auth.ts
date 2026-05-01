@@ -32,13 +32,24 @@ export const authDomain: DomainConfig = {
       title: "Create API Key",
       method: "POST",
       path: "/v1/auth/api-keys",
-      description: "Generate a scoped API key.",
-      instructionalText: "Create a long-lived API key that lets external applications (like scripts or integrations) connect to AGENT-33 without needing a username and password.",
+      description: "Generate a scoped API key after route approval.",
+      instructionalText: "Create a long-lived API key for scripts or integrations. This route is now approval-token gated: the first call may create a pending approval, then you approve it in Safety Center and retry with a short-lived X-Agent33-Approval-Token header.",
       schemaInfo: {
+        headers: [
+          {
+            name: "X-Agent33-Approval-Token",
+            type: "string",
+            description: "Short-lived approval token issued after approving the matching route mutation in Safety Center.",
+            required: true
+          }
+        ],
         body: {
-          description: "A JSON specifying who the key belongs to and what security scopes it possesses.",
+          description: "Requires auth scope plus a matching X-Agent33-Approval-Token header from an approved route-mutation request.",
           example: '{\n  "subject": "my-custom-service",\n  "scopes": ["agents:read", "workflows:execute"]\n}'
         }
+      },
+      defaultHeaders: {
+        "X-Agent33-Approval-Token": ""
       },
       defaultBody: JSON.stringify(
         {

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -204,6 +204,24 @@ describe("OperationCard", () => {
     expect(connectWorkflowLiveTransportMock).not.toHaveBeenCalled();
   });
 
+  it("shows the raw endpoint warning only after advanced controls are visible", async () => {
+    render(
+      <OperationCard
+        operation={presetExecuteOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Raw endpoint mode")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(screen.getByText("Raw endpoint mode")).toBeInTheDocument();
+    expect(screen.getByText(/Review path params, query params, and JSON body/)).toBeInTheDocument();
+  });
+
   it("requires an explicit apply action before a workflow preset overwrites execute inputs", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "22222222-2222-4222-8222-222222222222"
@@ -326,6 +344,54 @@ describe("OperationCard", () => {
         baseline_period: "2026-02-23 to 2026-02-29"
       },
       run_id: "33333333-3333-4333-8333-333333333333"
+    });
+  });
+
+  it("passes custom headers through the shared request helper", async () => {
+    apiRequestMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      durationMs: 9,
+      url: "/v1/auth/api-keys",
+      data: { key_id: "key-1" }
+    });
+
+    const headerOperation: OperationConfig = {
+      id: "auth-create-api-key",
+      title: "Create API Key",
+      method: "POST",
+      path: "/v1/auth/api-keys",
+      description: "Generate a scoped API key after route approval.",
+      defaultHeaders: { "X-Agent33-Approval-Token": "" },
+      defaultBody: JSON.stringify(
+        {
+          subject: "agent-service",
+          scopes: ["agents:read"]
+        },
+        null,
+        2
+      )
+    };
+
+    render(
+      <OperationCard
+        operation={headerOperation}
+        token="jwt-token"
+        apiKey=""
+        onResult={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Headers (JSON)"), {
+      target: {
+        value: '{\n  "X-Agent33-Approval-Token": "approval-token-123"\n}'
+      }
+    });
+    await userEvent.click(screen.getByRole("button", { name: /^Run / }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledTimes(1));
+    expect(apiRequestMock.mock.calls[0][0]).toMatchObject({
+      headers: { "X-Agent33-Approval-Token": "approval-token-123" }
     });
   });
 });

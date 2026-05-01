@@ -71,6 +71,43 @@ def test_supervised_destructive_flow_consumes_approved_token() -> None:
     assert approvals.get_request(request.approval_id).status == ApprovalStatus.CONSUMED
 
 
+def test_approved_request_still_respects_command_allowlist() -> None:
+    approvals = ToolApprovalService()
+    governance = ToolGovernance(approval_service=approvals)
+    context = ToolContext(
+        user_scopes=["tools:execute"],
+        tool_policies={"shell": "ask"},
+        command_allowlist=["python"],
+        requested_by="requester-allowlist",
+    )
+
+    allowed = governance.pre_execute_check(
+        "shell",
+        {"command": "git status"},
+        context,
+    )
+    assert allowed is False
+
+    request = approvals.list_requests()[0]
+    approvals.decide(
+        request.approval_id,
+        approved=True,
+        reviewed_by="operator",
+        review_note="approved pending policy checks",
+    )
+
+    second_allowed = governance.pre_execute_check(
+        "shell",
+        {
+            "command": "git status",
+            "__approval_id": request.approval_id,
+        },
+        context,
+    )
+    assert second_allowed is False
+    assert approvals.get_request(request.approval_id).status == ApprovalStatus.APPROVED
+
+
 def test_apply_patch_requires_supervised_approval() -> None:
     approvals = ToolApprovalService()
     governance = ToolGovernance(approval_service=approvals)

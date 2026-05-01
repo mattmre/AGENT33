@@ -26,8 +26,7 @@ def clear_workflow_state() -> None:
     from agent33.api.routes import workflows
 
     def _reset() -> None:
-        workflows._registry.clear()
-        workflows._execution_history.clear()
+        workflows.reset_workflow_state()
         if workflows._scheduler is not None:
             with contextlib.suppress(RuntimeError):
                 workflows._scheduler.stop()
@@ -50,23 +49,31 @@ def executor_client() -> TestClient:
 
 
 @pytest.fixture
-def workflow_name(executor_client: TestClient) -> str:
+def workflow_name(executor_client: TestClient, route_approval_headers) -> str:
     name = f"workflow-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "name": name,
+        "version": "1.0.0",
+        "description": "Workflow WS test",
+        "steps": [
+            {
+                "id": "step-a",
+                "action": "transform",
+                "transform": "inputs",
+            }
+        ],
+        "execution": {"mode": "sequential"},
+    }
     response = executor_client.post(
         "/v1/workflows/",
-        json={
-            "name": name,
-            "version": "1.0.0",
-            "description": "Workflow WS test",
-            "steps": [
-                {
-                    "id": "step-a",
-                    "action": "transform",
-                    "transform": "inputs",
-                }
-            ],
-            "execution": {"mode": "sequential"},
-        },
+        json=payload,
+        headers=route_approval_headers(
+            executor_client,
+            route_name="workflows.create",
+            operation="create",
+            arguments=payload,
+            details="Pytest workflow WS setup",
+        ),
     )
     assert response.status_code == 201
     return name

@@ -20,6 +20,10 @@ docker compose up -d
 curl http://localhost:8000/health
 ```
 
+`/health` reports the dependencies required by the current runtime configuration.
+Inactive providers stay visible as `configured`/`unconfigured`, while `/readyz`
+only gates on the services the running stack actually needs.
+
 By default, AGENT-33 expects Ollama to be available at `http://host.docker.internal:11434`
 so one shared Ollama instance can be reused across repos.
 
@@ -27,7 +31,7 @@ If you want a bundled Ollama service for this stack instead:
 
 ```bash
 docker compose --profile local-ollama up -d ollama
-docker compose exec ollama ollama pull llama3.2
+docker compose exec ollama ollama pull llama3.2:3b
 ```
 
 If your Ollama is running in another compose project/network (for example OpenClaw),
@@ -38,6 +42,10 @@ docker compose -f docker-compose.yml -f docker-compose.shared-ollama.yml up -d
 ```
 
 This points API calls at `openclaw-ollama:11434` on `openclaw_local_default` by default.
+
+If `EMBEDDING_PROVIDER=ollama`, make sure the configured embedding model is
+available in Ollama (for example `ollama pull nomic-embed-text`) or `/health`
+and `/readyz` will stay degraded.
 
 ## Frontend (Control Plane UI)
 

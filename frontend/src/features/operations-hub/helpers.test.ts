@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildOperationsTimeline,
   canCancel,
   canPause,
   canResume,
   filterAndSortProcesses,
+  getTimelineTone,
   getStatusClass,
-  getStatusLabel
+  getStatusLabel,
+  summarizeOperations
 } from "./helpers";
 import type { OperationsHubProcessDetail, OperationsHubProcessSummary } from "./types";
 
@@ -15,6 +18,7 @@ describe("operations hub helpers", () => {
     expect(getStatusClass("running")).toBe("status-running");
     expect(getStatusClass("suspended")).toBe("status-paused");
     expect(getStatusClass("expired")).toBe("status-cancelled");
+    expect(getStatusClass("crashed")).toBe("status-error");
     expect(getStatusClass("success")).toBe("status-ok");
     expect(getStatusClass("failed")).toBe("status-error");
   });
@@ -78,5 +82,80 @@ describe("operations hub helpers", () => {
     expect(canResume(activeBudget)).toBe(false);
     expect(canCancel(runningTrace)).toBe(true);
     expect(canCancel({ ...runningTrace, status: "completed" })).toBe(false);
+  });
+
+  it("summarizes process status in operator-friendly groups", () => {
+    const input: OperationsHubProcessSummary[] = [
+      {
+        id: "running-1",
+        type: "trace",
+        status: "running",
+        started_at: "2026-02-18T10:00:00Z",
+        name: "Trace"
+      },
+      {
+        id: "paused-1",
+        type: "autonomy_budget",
+        status: "suspended",
+        started_at: "2026-02-18T11:00:00Z",
+        name: "Budget"
+      },
+      {
+        id: "done-1",
+        type: "workflow",
+        status: "completed",
+        started_at: "2026-02-18T12:00:00Z",
+        name: "Workflow"
+      }
+    ];
+
+    expect(getTimelineTone("running")).toBe("active");
+    expect(getTimelineTone("suspended")).toBe("attention");
+    expect(getTimelineTone("completed")).toBe("done");
+
+    const summary = summarizeOperations(input);
+    expect(summary.total).toBe(3);
+    expect(summary.active).toBe(1);
+    expect(summary.attention).toBe(1);
+    expect(summary.done).toBe(1);
+    expect(summary.primaryMessage).toContain("need attention");
+  });
+
+  it("builds a latest-first timeline with selected process actions", () => {
+    const processes: OperationsHubProcessSummary[] = [
+      {
+        id: "workflow-1",
+        type: "workflow_run",
+        status: "running",
+        started_at: "2026-02-18T10:00:00Z",
+        name: "Build a release brief"
+      },
+      {
+        id: "trace-1",
+        type: "trace",
+        status: "completed",
+        started_at: "2026-02-18T09:00:00Z",
+        name: "Previous trace"
+      }
+    ];
+    const selectedProcess: OperationsHubProcessDetail = {
+      ...processes[0],
+      actions: [
+        {
+          step_id: "research",
+          action_count: 2,
+          completed_at: "2026-02-18T10:15:00Z"
+        }
+      ]
+    };
+
+    const timeline = buildOperationsTimeline(processes, selectedProcess);
+
+    expect(timeline[0]).toMatchObject({
+      id: "workflow-1:research",
+      title: "research completed",
+      tone: "done"
+    });
+    expect(timeline.some((item) => item.title === "Build a release brief is running")).toBe(true);
   });
 });

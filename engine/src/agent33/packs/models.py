@@ -11,9 +11,10 @@ from enum import StrEnum
 from pathlib import Path  # noqa: TC003 -- Pydantic needs Path at runtime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agent33.packs.provenance_models import PackProvenance  # noqa: TC001
+from agent33.packs.validation import validate_relative_pack_path
 
 
 class PackStatus(StrEnum):
@@ -32,6 +33,19 @@ class PackSkillEntry(BaseModel):
     path: str = Field(..., min_length=1, description="Relative path to skill dir/file")
     description: str = ""
     required: bool = True
+
+
+class OutcomePackEntry(BaseModel):
+    """An outcome/starter pack manifest bundled with a pack."""
+
+    path: str = Field(..., min_length=1, description="Relative path to outcome pack YAML")
+    required: bool = True
+    description: str = ""
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        return validate_relative_pack_path(value, field_name="Outcome pack path")
 
 
 class PackDependency(BaseModel):
@@ -114,6 +128,7 @@ class InstalledPack(BaseModel):
     # Improvement pack sections (P-PACK v1)
     prompt_addenda: list[str] = Field(default_factory=list)
     tool_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    outcome_packs: list[OutcomePackEntry] = Field(default_factory=list)
 
     # Installation metadata
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

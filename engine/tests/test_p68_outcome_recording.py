@@ -23,6 +23,7 @@ from agent33.agents.definition import AgentDefinition, AgentRole
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentResult, IterativeAgentResult
 from agent33.api.routes.agents import _record_outcome_safe
+from agent33.evaluation.ppack_ab_models import PPackABAssignment, PPackABVariant
 from agent33.evaluation.ppack_ab_persistence import PPackABPersistence
 from agent33.evaluation.ppack_ab_service import PPackABService
 from agent33.main import app
@@ -193,6 +194,41 @@ def test_invoke_records_success_and_latency(
     assert isinstance(latency_events[0].value, float)
     assert latency_events[0].metadata["agent"] == "test-agent"
     assert latency_events[0].metadata["ppack_variant"] in {"control", "treatment"}
+
+
+@patch("agent33.api.routes.agents.AgentRuntime")
+def test_invoke_reuses_single_ppack_assignment_per_request(
+    mock_runtime_cls: MagicMock,
+    invoke_client: TestClient,
+    outcomes_service: OutcomesService,
+) -> None:
+    mock_instance = MagicMock()
+    mock_instance.invoke = AsyncMock(return_value=_make_agent_result())
+    mock_runtime_cls.return_value = mock_instance
+
+    assignment = PPackABAssignment(
+        tenant_id="t-abc",
+        session_id="test-session-123",
+        variant=PPackABVariant.TREATMENT,
+        assignment_hash="abc123",
+    )
+    mock_ab_service = MagicMock()
+    mock_ab_service.assign_variant.return_value = assignment
+    app.state.ppack_ab_service = mock_ab_service
+
+    response = invoke_client.post(
+        "/v1/agents/test-agent/invoke",
+        json={"inputs": {"message": "hi"}},
+    )
+    assert response.status_code == 200
+    assert mock_ab_service.assign_variant.call_count == 1
+    assert mock_runtime_cls.call_args.kwargs["ppack_variant"] == assignment.variant.value
+
+    events = outcomes_service.list_events(tenant_id="t-abc", domain="test-agent")
+    assert len(events) == 2
+    assert {
+        event.metadata["ppack_variant"] for event in events if "ppack_variant" in event.metadata
+    } == {assignment.variant.value}
 
 
 # ---------------------------------------------------------------------------

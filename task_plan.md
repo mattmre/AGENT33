@@ -2,16 +2,47 @@
 
 ## Goal
 
-Execute the remaining POST-P72 roadmap clusters (POST-3 through POST-CLUSTER) sequentially with disposable worktree agents, one PR per slice from fresh `origin/main` worktrees.
+Record and preserve the verified merged baseline after the Sessions 130-132
+follow-up wave, closing roadmap slices, Operator UX / Agent OS expansion, and
+UX overhaul first implementation wave. The explicit ranges are `#414`-`#447`
+for the prior follow-up / Operator UX / Agent OS work and `#449`-`#454` for
+the UX overhaul wave, so any future work starts from a fresh `origin/main`
+worktree instead of reopening stale queue state.
 
 ## Current Baseline
 
-- There are no open GitHub PRs as of `2026-04-17`.
-- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (404 PRs merged).
-- POST-P72 phase plan is available at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
-- ARCH-AEP Loops 1-8 are COMPLETE.
-- POST-1 and POST-2 are COMPLETE on `main`; POST-3.1 and POST-3.2 are now COMPLETE.
-- Treat the root checkout as disposable and always implement from fresh `origin/main` worktrees.
+- There are 0 open GitHub PRs as of `2026-04-28` after PR `#454`.
+- All Phases P01-P72 and UX clusters UX-A/B/C/D are COMPLETE (454 PRs merged).
+- POST-1 through POST-4 are COMPLETE on `main`.
+- POST-CLUSTER public launch preparation is COMPLETE in PR `#407`.
+- POST-CLUSTER P-ENV v2 is COMPLETE in PR `#408`, with follow-up reliability
+  fixes merged in PR `#410`.
+- Session 129 P-PACK remediation is COMPLETE in PR `#411`.
+- Session 129 operator/docs remediation is COMPLETE in PR `#412`.
+- Session 130 marketplace web UI and community submissions are COMPLETE in PRs
+  `#413` and `#414`.
+- Sessions 131-132 follow-up work and its closeout slices are merged through PR
+  `#433`, including monitoring, persistence, SSE migration prep/foundation,
+  security hardening, ingestion sprints, research preservation, OpenRouter
+  integration, mailbox persistence, ingestion hardening, operator UX depth,
+  skills integration, and SkillsBench smoke-regression reporting.
+- Operator UX / Agent OS expansion is merged through PR `#447`, including
+  Start Here onboarding, Review Queue, Safety Center, Skill Wizard, Workflow
+  Starter, Tool Fabric, Agent OS runtime and sessions, Improvement Loops, MCP
+  Health/actions, grouped navigation, and scheduled research launchers.
+- UX overhaul first wave is merged through PR `#454`, including expert-panel
+  UX research, Outcome Home, Workflow Catalog, Model Connection Wizard, Run
+  Timeline, and Advanced quarantine / Beginner-Pro mode.
+- The prior queue (ingestion hardening -> operator UX depth -> SSE schema v2 ->
+  skills-system integration -> SkillsBench follow-up) is complete on `main`.
+- The Operator UX rescue / MCP / Agent OS / scheduled research launcher queue is
+  complete on `main`.
+- The UX overhaul first implementation queue is complete on `main`; remaining
+  usability work should be newly scoped from
+  `docs/research/ux-overhaul-backlog-2026-04-27.md`.
+- POST-P72 phase plan lives at `docs/phases/PHASE-PLAN-POST-P72-2026.md`.
+- Treat the root checkout as disposable and always implement from fresh
+  `origin/main` worktrees.
 
 ## Resume Protocol
 
@@ -25,9 +56,43 @@ If execution stops mid-slice, resume in this order:
 
 ## Current Slice Pointer
 
-- Active queue owner: Session 127
-- Current slice: POST-4.4 (P-PACK v3 A/B harness)
-- Resume artifact: `docs/research/session127-post44-roadmap-unblock.md`
+- Active queue owner: post-merge queue (closed)
+- Current slice: none - queue complete through `#454`
+- Worktree: create a fresh worktree from updated `origin/main` when new scoped work starts
+- Branch: TBD (new branch from verified `main` for the next slice)
+- Active PR: none
+- Resume artifacts: `docs/next-session.md`, `docs/phases/PHASE-PLAN-POST-P72-2026.md`, `docs/research/ux-overhaul-backlog-2026-04-27.md`, and `progress.md`
+
+---
+
+# Task Plan - Session 128 (Historical queue state)
+
+## 2026-04-18 Session 128: Post-Merge Hardening And Remaining POST-CLUSTER Work
+
+### Goal
+
+Clear the actionable merged-review follow-up work from PRs `#406`-`#408`,
+repair the stale tracking layer, and then continue the remaining POST-CLUSTER
+roadmap slices in sequence.
+
+### Session 128 Queue
+
+| Task | Item | Status |
+|---|---|---|
+| T1 | Reset planning and session tracking to the real merged baseline through `#408` | complete |
+| T2 | Follow-up PR: pack/session lifecycle hardening for POST-4.5 review feedback | complete (merged as PR `#409`, fresh-main verified) |
+| T3 | Follow-up PR: P-ENV v2 and launch-doc reliability fixes from `#407`/`#408` review feedback | complete (merged as PR `#410`, fresh-main verified) |
+| T4 | Follow-up PR: remaining operator/docs remediation from `#407`/`#408`/`#411` drift | in_progress |
+| T5 | POST-CLUSTER - Pack marketplace web UI | queued after T4 |
+| T6 | POST-CLUSTER - Community submissions | queued after T5 |
+
+### Session 128 Rules
+
+1. One fresh worktree per slice from `origin/main`
+2. One fresh agent per slice; dispose after merge
+3. One PR per slice
+4. No later slice starts before merge plus fresh-main verification
+5. Review-thread follow-up fixes land before the remaining roadmap slices
 
 ---
 
@@ -43,12 +108,12 @@ Remove the calendar/data blockers from the remaining POST roadmap and execute th
 
 | Task | Item | Status |
 |---|---|---|
-| T1 | POST-4.4 — P-PACK v3 A/B harness | in_progress |
-| T2 | POST-4.5 — P-PACK v3 behavior modifications | pending (depends on T1 validation) |
-| T3 | POST-CLUSTER — Public launch preparation | pending (depends on T2) |
-| T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | pending (depends on T2) |
-| T5 | POST-CLUSTER — Pack marketplace web UI | pending (depends on T2) |
-| T6 | POST-CLUSTER — Community submissions | pending (depends on T2) |
+| T1 | POST-4.4 — P-PACK v3 A/B harness | complete (merged as PR `#405`) |
+| T2 | POST-4.5 — P-PACK v3 behavior modifications | complete (merged as PR `#406`) |
+| T3 | POST-CLUSTER — Public launch preparation | complete (merged as PR `#407`) |
+| T4 | POST-CLUSTER — P-ENV v2 auto-install + automated model download | in_progress |
+| T5 | POST-CLUSTER — Pack marketplace web UI | pending (depends on T4) |
+| T6 | POST-CLUSTER — Community submissions | pending (depends on T5) |
 
 ### Session 127 Rules
 1. One fresh worktree per slice from `origin/main`

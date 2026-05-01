@@ -73,11 +73,39 @@ def write_benchmark_ctrf(
                 "start": start_time,
                 "stop": stop_time,
             },
+            "extra": {
+                "skillsbench": {
+                    "suite": "smoke",
+                    "task_summaries": [
+                        {
+                            "task_id": t["name"],
+                            "category": "smoke",
+                            "total_trials": 1,
+                            "passed_trials": 1 if t["status"] == "passed" else 0,
+                            "failed_trials": 1 if t["status"] == "failed" else 0,
+                            "error_trials": 0,
+                            "skipped_trials": 1 if t["status"] == "skipped" else 0,
+                            "pass_rate": 1.0 if t["status"] == "passed" else 0.0,
+                            "avg_duration_ms": t["duration_ms"],
+                            "total_tokens_used": 0,
+                        }
+                        for t in test_results
+                    ],
+                }
+            },
             "tests": [
                 {
                     "name": t["name"],
                     "status": t["status"],
                     "duration": t["duration_ms"],
+                    "suite": "skillsbench-smoke",
+                    "type": "smoke-benchmark",
+                    "extra": {
+                        "skillsbench": {
+                            "task_id": t["name"],
+                            "category": "smoke",
+                        }
+                    },
                 }
                 for t in test_results
             ],
@@ -342,6 +370,7 @@ def test_write_ctrf_helper() -> None:
     assert "tool" in report["results"]
     assert "summary" in report["results"]
     assert "tests" in report["results"]
+    assert report["results"]["extra"]["skillsbench"]["suite"] == "smoke"
 
     # Verify summary counts
     summary = report["results"]["summary"]
@@ -354,3 +383,4 @@ def test_write_ctrf_helper() -> None:
     assert len(tests) == 2
     assert tests[0]["name"] == "test_example_pass"
     assert tests[0]["status"] == "passed"
+    assert tests[0]["extra"]["skillsbench"]["task_id"] == "test_example_pass"

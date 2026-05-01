@@ -43,11 +43,9 @@ def _resolve_default_model() -> str:
     back to ``ollama_default_model``.  This avoids hard-coding ``"llama3.2"``
     in the runtime constructor.
     """
-    from agent33.config import settings as _settings
+    from agent33.llm.runtime_config import resolve_default_model
 
-    if _settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp"):
-        return _settings.local_orchestration_model
-    return _settings.ollama_default_model
+    return resolve_default_model()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -270,6 +268,7 @@ class AgentRuntime:
         cost_tracker: CostTracker | None = None,
         metrics_collector: Any | None = None,
         pack_registry: PackRegistry | None = None,
+        ppack_variant: str | None = None,
         evaluation_mode: bool = False,
     ) -> None:
         self._definition = definition
@@ -309,6 +308,7 @@ class AgentRuntime:
         self._cost_tracker = cost_tracker
         self._metrics_collector = metrics_collector
         self._pack_registry = pack_registry
+        self._ppack_variant = ppack_variant or ""
         self._evaluation_mode = evaluation_mode
 
     @property
@@ -485,7 +485,10 @@ class AgentRuntime:
         if not session_id:
             return system_prompt
         try:
-            addenda = self._pack_registry.get_session_prompt_addenda(session_id)
+            addenda = self._pack_registry.get_session_prompt_addenda(
+                session_id,
+                ppack_variant=self._ppack_variant,
+            )
         except Exception:
             logger.debug("failed to retrieve pack addenda", exc_info=True)
             return system_prompt
@@ -503,7 +506,10 @@ class AgentRuntime:
         if self._pack_registry is None or not self._session_id:
             return {}
         try:
-            return self._pack_registry.get_session_tool_config(self._session_id)
+            return self._pack_registry.get_session_tool_config(
+                self._session_id,
+                ppack_variant=self._ppack_variant,
+            )
         except Exception:
             logger.debug("failed to retrieve pack tool config", exc_info=True)
             return {}
@@ -675,6 +681,7 @@ class AgentRuntime:
                         model=routed_model,
                         temperature=self._temperature,
                         max_tokens=max_tokens,
+                        allow_fallback=self._requested_model is None,
                     )
                     break
                 except Exception as exc:
@@ -897,6 +904,7 @@ class AgentRuntime:
                 context_compressor=self._context_compressor,
                 metrics_collector=self._metrics_collector,
                 redact_secrets=_settings.redact_secrets_enabled,
+                allow_model_fallback=self._requested_model is None,
             )
 
             task_input = json.dumps(inputs, indent=2)
@@ -969,6 +977,7 @@ class AgentRuntime:
             context_compressor=self._context_compressor,
             metrics_collector=self._metrics_collector,
             redact_secrets=_settings.redact_secrets_enabled,
+            allow_model_fallback=self._requested_model is None,
         )
 
         try:
@@ -1171,6 +1180,7 @@ class AgentRuntime:
             context_compressor=self._context_compressor,
             metrics_collector=self._metrics_collector,
             redact_secrets=_settings.redact_secrets_enabled,
+            allow_model_fallback=self._requested_model is None,
         )
 
         routed_model, routed_max_tokens = self._resolve_execution_parameters(

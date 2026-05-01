@@ -13,6 +13,7 @@ interface ApiRequestArgs {
   apiKey?: string;
   pathParams?: Record<string, string>;
   query?: Record<string, string>;
+  headers?: Record<string, string>;
   body?: string;
 }
 
@@ -81,6 +82,14 @@ export async function apiRequest(args: ApiRequestArgs): Promise<ApiResult> {
   const parsedBody = parseBody(args.body);
   if (parsedBody !== undefined) {
     headers["Content-Type"] = "application/json";
+  }
+  if (args.headers) {
+    Object.entries(args.headers).forEach(([key, value]) => {
+      const normalizedValue = value.trim();
+      if (normalizedValue !== "") {
+        headers[key] = normalizedValue;
+      }
+    });
   }
 
   const response = await fetch(url, {

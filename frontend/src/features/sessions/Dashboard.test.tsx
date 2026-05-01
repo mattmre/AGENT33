@@ -16,9 +16,9 @@ describe("SessionsDashboard", () => {
   it("renders the dashboard heading and description", () => {
     render(<SessionsDashboard token={null} />)
 
-    expect(screen.getByText("Session Logs & Alignment Status")).toBeInTheDocument()
+    expect(screen.getByText("Agent runs, outcomes, and artifacts")).toBeInTheDocument()
     expect(
-      screen.getByText("Historic execution contexts and system checkpoints.")
+      screen.getByText("Review what ran, what happened, what artifacts exist, and what to do next.")
     ).toBeInTheDocument()
   })
 
@@ -26,7 +26,7 @@ describe("SessionsDashboard", () => {
     render(<SessionsDashboard token={null} />)
 
     expect(
-      screen.getByText("No historic sessions found or API not wired.")
+      screen.getByText("No run history found yet")
     ).toBeInTheDocument()
   })
 
@@ -42,12 +42,12 @@ describe("SessionsDashboard", () => {
   it("fetches and displays sessions when token is provided", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve([
-          { id: "session-001" },
-          { id: "session-002" },
-          { id: "session-003" }
-        ])
+        json: () =>
+          Promise.resolve([
+            { id: "session-001", status: "completed", agent: "researcher" },
+            { id: "session-002", status: "running", agent: "implementer" },
+            { id: "session-003", status: "failed", agent: "qa" }
+          ])
     })
     vi.stubGlobal("fetch", fetchMock)
 
@@ -58,6 +58,7 @@ describe("SessionsDashboard", () => {
     })
     expect(screen.getByText("session-002")).toBeInTheDocument()
     expect(screen.getByText("session-003")).toBeInTheDocument()
+    expect(screen.getByText("Review artifacts")).toBeInTheDocument()
 
     expect(fetchMock.mock.calls[0][0]).toContain("/v1/sessions")
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
@@ -85,7 +86,7 @@ describe("SessionsDashboard", () => {
       expect(screen.getByText("session-old")).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole("button", { name: "Refresh Sessions" }))
+    await user.click(screen.getByRole("button", { name: "Refresh runs" }))
 
     await waitFor(() => {
       expect(screen.getByText("session-new")).toBeInTheDocument()
@@ -115,7 +116,7 @@ describe("SessionsDashboard", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Refresh Sessions" })
+        screen.getByRole("button", { name: "Refresh runs" })
       ).toBeEnabled()
     })
   })
@@ -128,16 +129,16 @@ describe("SessionsDashboard", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Refresh Sessions" })
+        screen.getByRole("button", { name: "Refresh runs" })
       ).toBeEnabled()
     })
 
     expect(
-      screen.getByText("No historic sessions found or API not wired.")
+      screen.getByText("Network error")
     ).toBeInTheDocument()
   })
 
-  it("renders session IDs as strong elements inside list items", async () => {
+  it("renders session IDs inside run cards", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([{ id: "ses-42" }])
@@ -150,8 +151,7 @@ describe("SessionsDashboard", () => {
       expect(screen.getByText("ses-42")).toBeInTheDocument()
     })
 
-    const strongEl = screen.getByText("ses-42")
-    expect(strongEl.tagName).toBe("STRONG")
+    expect(screen.getByText("Run ID")).toBeInTheDocument()
   })
 
   it("handles session objects without an id property", async () => {
@@ -164,7 +164,8 @@ describe("SessionsDashboard", () => {
     render(<SessionsDashboard token="jwt" />)
 
     await waitFor(() => {
-      expect(screen.getByText("Unknown")).toBeInTheDocument()
+      expect(screen.getByText("Run session-1")).toBeInTheDocument()
+      expect(screen.getByText("Unassigned agent")).toBeInTheDocument()
     })
   })
 })

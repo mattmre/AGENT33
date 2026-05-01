@@ -13,6 +13,6 @@ data:
   REDIS_URL: "redis://redis:6379/0"
   NATS_URL: "nats://nats:4222"
   OLLAMA_BASE_URL: "http://ollama:11434"
-  OLLAMA_DEFAULT_MODEL: "llama3.2"
+  OLLAMA_DEFAULT_MODEL: "llama3.2:3b"
   SEARXNG_URL: "http://searxng:8080"
   OPENAI_BASE_URL: ""

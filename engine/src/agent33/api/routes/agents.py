@@ -12,10 +12,12 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from agent33.evaluation.ppack_ab_service import PPackABService
+    from agent33.llm.router import ModelRouter
     from agent33.outcomes.service import OutcomesService
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
 from agent33.agents.capabilities import get_catalog_by_category
@@ -29,9 +31,16 @@ from agent33.agents.definition import (
 from agent33.agents.effort import AgentEffort, AgentEffortRouter
 from agent33.agents.registry import AgentRegistry
 from agent33.agents.runtime import AgentRuntime
+from agent33.api.route_approvals import require_route_mutation_approval
 from agent33.config import settings
-from agent33.llm.ollama import OllamaProvider
-from agent33.llm.router import ModelRouter
+from agent33.evaluation.ppack_ab_models import PPackABAssignment
+from agent33.llm.runtime_config import (
+    build_model_router,
+    resolve_default_model,
+)
+from agent33.llm.runtime_config import (
+    llamacpp_enabled as _runtime_llamacpp_enabled,
+)
 from agent33.observability.effort_telemetry import (
     EffortTelemetryExporter,
     EffortTelemetryExportError,
@@ -41,6 +50,7 @@ from agent33.observability.metrics import MetricsCollector
 from agent33.outcomes.models import OutcomeEventCreate, OutcomeMetricType
 from agent33.security.injection import scan_inputs_recursive
 from agent33.security.permissions import _get_token_payload, require_scope
+from agent33.tools.approvals import ApprovalRiskTier
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 logger = logging.getLogger(__name__)
@@ -48,46 +58,17 @@ logger = logging.getLogger(__name__)
 # -- singletons ----------------------------------------------------------
 
 
-def _llamacpp_enabled() -> bool:
-    """Return True when the local orchestration engine is llama.cpp."""
-    return settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
-
-
 def _default_agent_model() -> str:
     """Return the default model name for agent invocations."""
-    if _llamacpp_enabled():
-        return settings.local_orchestration_model
-    return settings.ollama_default_model
+    return resolve_default_model()
 
 
-_model_router = ModelRouter(default_provider="llamacpp" if _llamacpp_enabled() else "ollama")
-_model_router.register(
-    "ollama",
-    OllamaProvider(
-        base_url=settings.ollama_base_url,
-        default_model=settings.ollama_default_model,
-    ),
-)
+def _llamacpp_enabled() -> bool:
+    """Backwards-compatible llama.cpp helper used by provider tests."""
+    return _runtime_llamacpp_enabled()
 
-if _llamacpp_enabled():
-    from agent33.llm.openai import OpenAIProvider as _LlamaCppProvider
 
-    _model_router.register(
-        "llamacpp",
-        _LlamaCppProvider(
-            api_key="local",
-            base_url=settings.local_orchestration_base_url,
-            default_model=settings.local_orchestration_model,
-        ),
-    )
-
-if settings.openai_api_key.get_secret_value():
-    from agent33.llm.openai import OpenAIProvider
-
-    _openai_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key.get_secret_value()}
-    if settings.openai_base_url:
-        _openai_kwargs["base_url"] = settings.openai_base_url
-    _model_router.register("openai", OpenAIProvider(**_openai_kwargs))
+_model_router = build_model_router()
 
 
 def _parse_effort_policy(raw: str) -> dict[str, str]:
@@ -158,7 +139,7 @@ async def _resolve_active_skills(
         skill_matcher = SkillMatcher(
             registry=skill_registry,
             router=model_router,
-            model=settings.skillsbench_skill_matcher_model or settings.ollama_default_model,
+            model=settings.skillsbench_skill_matcher_model or resolve_default_model(),
             top_k=settings.skillsbench_skill_matcher_top_k,
             skip_llm_below=settings.skillsbench_skill_matcher_skip_llm_below,
         )
@@ -287,6 +268,75 @@ def _get_ppack_ab_service(request: Request) -> PPackABService | None:
     return getattr(request.app.state, "ppack_ab_service", None)
 
 
+def _get_cached_ppack_assignment(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> PPackABAssignment | None:
+    if not session_id:
+        return None
+    cached_assignment = getattr(request.state, "ppack_assignment", None)
+    cached_tenant_id = getattr(request.state, "ppack_assignment_tenant_id", "")
+    cached_session_id = getattr(request.state, "ppack_assignment_session_id", "")
+    if (
+        isinstance(cached_assignment, PPackABAssignment)
+        and cached_tenant_id == tenant_id
+        and cached_session_id == session_id
+    ):
+        return cached_assignment
+    return None
+
+
+async def _resolve_ppack_assignment(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> PPackABAssignment | None:
+    """Resolve and cache the active P-PACK assignment for the current request."""
+    cached_assignment = _get_cached_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=session_id,
+    )
+    if cached_assignment is not None:
+        return cached_assignment
+
+    ab_service = _get_ppack_ab_service(request)
+    if ab_service is None:
+        return None
+    try:
+        assignment = await run_in_threadpool(
+            ab_service.assign_variant,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
+    except Exception:
+        logger.warning("ppack_variant_assignment_failed", exc_info=True)
+        return None
+
+    request.state.ppack_assignment = assignment
+    request.state.ppack_assignment_tenant_id = tenant_id
+    request.state.ppack_assignment_session_id = session_id
+    return assignment
+
+
+def _resolve_ppack_variant(
+    request: Request,
+    *,
+    tenant_id: str,
+    session_id: str,
+) -> str:
+    """Return the cached P-PACK variant for runtime behavior selection."""
+    assignment = _get_cached_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=session_id,
+    )
+    return assignment.variant.value if assignment is not None else ""
+
+
 def _build_outcome_metadata(
     request: Request,
     *,
@@ -297,15 +347,14 @@ def _build_outcome_metadata(
     payload = dict(metadata or {})
     if session_id:
         payload.setdefault("session_id", session_id)
-        ab_service = _get_ppack_ab_service(request)
-        if ab_service is not None:
-            try:
-                assignment = ab_service.assign_variant(tenant_id=tenant_id, session_id=session_id)
-            except Exception:
-                logger.warning("ppack_variant_assignment_failed", exc_info=True)
-            else:
-                payload.setdefault("experiment_key", assignment.experiment_key)
-                payload.setdefault("ppack_variant", assignment.variant.value)
+        assignment = _get_cached_ppack_assignment(
+            request,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
+        if assignment is not None:
+            payload.setdefault("experiment_key", assignment.experiment_key)
+            payload.setdefault("ppack_variant", assignment.variant.value)
     return payload
 
 
@@ -611,9 +660,21 @@ async def get_agent(
 async def update_agent(
     name: str,
     definition: AgentDefinition,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> dict[str, Any]:
     """Update an existing agent definition."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.update",
+        operation="update",
+        arguments={
+            "name": name,
+            "definition": definition.model_dump(mode="json"),
+        },
+        details="Agent definition updates require explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     existing = registry.get(name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
@@ -627,9 +688,18 @@ async def update_agent(
 @router.delete("/{name}", status_code=204, dependencies=[require_scope("agents:write")])
 async def delete_agent(
     name: str,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> None:
     """Remove an agent definition from the registry."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.delete",
+        operation="delete",
+        arguments={"name": name},
+        details="Agent definition deletion requires explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     existing = registry.get(name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
@@ -639,9 +709,18 @@ async def delete_agent(
 @router.post("/", status_code=201, dependencies=[require_scope("agents:write")])
 async def register_agent(
     definition: AgentDefinition,
+    request: Request,
     registry: AgentRegistry = Depends(get_registry),  # noqa: B008
 ) -> dict[str, str]:
     """Register a new agent definition."""
+    require_route_mutation_approval(
+        request,
+        route_name="agents.create",
+        operation="create",
+        arguments=definition.model_dump(mode="json"),
+        details="Agent definition creation requires explicit operator approval.",
+        risk_tier=ApprovalRiskTier.MEDIUM,
+    )
     registry.register(definition)
     return {"status": "registered", "name": definition.name}
 
@@ -686,13 +765,24 @@ async def invoke_agent(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector = getattr(request.app.state, "metrics_collector", None)
     pack_registry = getattr(request.app.state, "pack_registry", None)
+    invoke_session_id = _resolve_runtime_session_id(request)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=tenant_id,
+        session_id=invoke_session_id,
+    )
+    invoke_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=tenant_id,
+        session_id=invoke_session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
         router=model_router,
         model=body.model or _default_agent_model(),
         temperature=body.temperature,
-        session_id=_resolve_runtime_session_id(request),
+        session_id=invoke_session_id,
         invocation_mode="invoke",
         effort=body.effort,
         effort_router=effort_router,
@@ -706,11 +796,11 @@ async def invoke_agent(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector,
         pack_registry=pack_registry,
+        ppack_variant=invoke_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
     invoke_start = time.monotonic()
-    invoke_session_id = _resolve_runtime_session_id(request)
 
     try:
         result = await runtime.invoke(body.inputs)
@@ -904,7 +994,7 @@ async def invoke_agent_iterative(
     if context_manager is None and settings.skillsbench_context_manager_enabled:
         from agent33.agents.context_manager import ContextManager, budget_for_model
 
-        selected_model = body.model or settings.ollama_default_model
+        selected_model = body.model or resolve_default_model()
         context_manager = ContextManager(
             budget=budget_for_model(selected_model),
             router=model_router,
@@ -917,6 +1007,16 @@ async def invoke_agent_iterative(
     cost_tracker = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_iter = getattr(request.app.state, "metrics_collector", None)
     pack_registry_iter = getattr(request.app.state, "pack_registry", None)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
+    iterative_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -944,6 +1044,7 @@ async def invoke_agent_iterative(
         cost_tracker=cost_tracker,
         metrics_collector=metrics_collector_iter,
         pack_registry=pack_registry_iter,
+        ppack_variant=iterative_ppack_variant,
     )
 
     outcomes_svc = _get_outcomes_service(request)
@@ -1142,6 +1243,16 @@ async def invoke_agent_iterative_stream(
     cost_tracker_stream = getattr(request.app.state, "cost_tracker", None)
     metrics_collector_stream = getattr(request.app.state, "metrics_collector", None)
     pack_registry_stream = getattr(request.app.state, "pack_registry", None)
+    await _resolve_ppack_assignment(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
+    stream_ppack_variant = _resolve_ppack_variant(
+        request,
+        tenant_id=token_payload.tenant_id or "",
+        session_id=session_id,
+    )
 
     runtime = AgentRuntime(
         definition=definition,
@@ -1170,6 +1281,7 @@ async def invoke_agent_iterative_stream(
         cost_tracker=cost_tracker_stream,
         metrics_collector=metrics_collector_stream,
         pack_registry=pack_registry_stream,
+        ppack_variant=stream_ppack_variant,
     )
 
     outcomes_svc_stream = _get_outcomes_service(request)
@@ -1220,19 +1332,19 @@ async def invoke_agent_iterative_stream(
                         event_type="invoke_iterative_stream",
                         metric_type=OutcomeMetricType.SUCCESS_RATE,
                         value=1.0,
-                            metadata=_build_outcome_metadata(
-                                request,
-                                tenant_id=stream_tenant_id,
-                                session_id=_resolve_runtime_session_id(request),
-                                metadata={
-                                    "iterations": event.iteration,
-                                    "termination": completion_data.get(
-                                        "termination_reason",
-                                        "complete",
-                                    ),
-                                },
-                            ),
-                        )
+                        metadata=_build_outcome_metadata(
+                            request,
+                            tenant_id=stream_tenant_id,
+                            session_id=_resolve_runtime_session_id(request),
+                            metadata={
+                                "iterations": event.iteration,
+                                "termination": completion_data.get(
+                                    "termination_reason",
+                                    "complete",
+                                ),
+                            },
+                        ),
+                    )
                     _record_outcome_safe(
                         outcomes_svc_stream,
                         tenant_id=stream_tenant_id,

@@ -70,7 +70,7 @@ class PackSharingService:
                 continue
 
             try:
-                self._registry.enable_for_session(req.pack_ref, session_id)
+                self._registry.enable_for_session(req.pack_ref, session_id, source="shared")
                 applied.append(req.pack_ref)
                 logger.info(
                     "pack_share_applied",

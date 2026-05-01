@@ -144,6 +144,46 @@ services:
     profiles:
       - dev
 
+  agent-os:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-os
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    env_file: .env
+    environment:
+      AGENT33_API_URL: http://api:8000
+      AGENT33_HOME: /home/agentos/.agent33
+      AGENT33_SESSION: ${AGENT_OS_SESSION_NAME:-default}
+      AGENT33_WORKSPACE: /agent-workspace
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      DATABASE_URL: postgresql://agent33:agent33@postgres:5432/agent33
+      REDIS_URL: redis://redis:6379/0
+      NATS_URL: nats://nats:4222
+      DOCKER_HOST: unix:///var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      searxng:
+        condition: service_healthy
+    volumes:
+      - ..:/workspace
+      - shared_data:/data/shared
+      - agent_os_home:/home/agentos
+      - ${AGENT_OS_SESSION_WORKSPACE:-agent_os_workspace}:/agent-workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    profiles:
+      - agent-os
+
   n8n:
     image: n8nio/n8n:latest
     ports:
@@ -194,3 +234,5 @@ volumes:
   n8n_data:
   shared_data:
   devbox_home:
+  agent_os_home:
+  agent_os_workspace:

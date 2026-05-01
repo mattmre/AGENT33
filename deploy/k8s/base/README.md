@@ -106,11 +106,11 @@ kubectl apply -k deploy/k8s/overlays/production
   `AUTH_BOOTSTRAP_ENABLED=true`, apply a strong
   `AUTH_BOOTSTRAP_ADMIN_PASSWORD`, mint the initial admin token, then disable
   bootstrap auth again.
-- Ollama readiness now requires the `llama3.2` model to be present. After the
+- Ollama readiness now requires the `llama3.2:3b` model to be present. After the
   daemon starts, pull it with:
 
 ```bash
-kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2
+kubectl exec -n agent33 deploy/ollama -- ollama pull llama3.2:3b
 ```
 
 - `/health` remains the dependency-aware operator diagnostic route.

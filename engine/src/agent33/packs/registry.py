@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING
 
 import structlog
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+_SESSION_PACK_SOURCE_PRECEDENCE = {"shared": 0, "explicit": 1}
+
 
 class PackRegistry:
     """Manages installed skill packs and their lifecycle.
@@ -59,15 +62,21 @@ class PackRegistry:
         marketplace: PackMarketplace | None = None,
         trust_policy: PackTrustPolicy | None = None,
         trust_policy_manager: TrustPolicyManager | None = None,
+        ppack_v3_enabled: bool = False,
     ) -> None:
         self._packs_dir = packs_dir
         self._skill_registry = skill_registry
         self._installed: dict[str, InstalledPack] = {}
         self._enabled: dict[str, set[str]] = {}  # tenant_id -> set of enabled pack names
         self._session_enabled: dict[str, set[str]] = {}  # session_id -> set of pack names
+        self._session_pack_sources: dict[str, dict[str, str]] = {}
+        self._session_pack_sequence: dict[str, dict[str, int]] = {}
+        self._session_activation_counter: dict[str, int] = {}
+        self._session_tracking_lock = RLock()
         self._marketplace = marketplace
         self._trust_policy = trust_policy or PackTrustPolicy()
         self._trust_policy_manager = trust_policy_manager
+        self._ppack_v3_enabled = ppack_v3_enabled
 
     # ------------------------------------------------------------------
     # Discovery & Loading
@@ -157,6 +166,7 @@ class PackRegistry:
             compatibility=manifest.compatibility,
             prompt_addenda=manifest.prompt_addenda,
             tool_config=manifest.tool_config,
+            outcome_packs=manifest.outcome_packs,
             installed_at=datetime.now(UTC),
             source="local",
             checksum=compute_pack_checksum(pack_dir),
@@ -369,6 +379,10 @@ class PackRegistry:
                     break
         return dependents
 
+    def find_dependents(self, name: str) -> list[InstalledPack]:
+        """Return installed packs that declare a dependency on the named pack."""
+        return [self._installed[pack_name] for pack_name in self._find_dependents(name)]
+
     def _check_dependencies_met(self, pack: InstalledPack) -> list[str]:
         """Check that all declared pack dependencies are installed and version-compatible.
 
@@ -433,6 +447,10 @@ class PackRegistry:
                         f"for '{name}': {exc}"
                     )
         return errors
+
+    def check_dependents_compatible(self, name: str, new_version: str) -> list[str]:
+        """Return compatibility errors for dependents if the pack changed version."""
+        return self._check_dependents_compatible(name, new_version)
 
     # ------------------------------------------------------------------
     # Enable/Disable (tenant-scoped)
@@ -509,7 +527,67 @@ class PackRegistry:
     # Session-Scoped Enable/Disable (P-PACK v1)
     # ------------------------------------------------------------------
 
-    def enable_for_session(self, pack_name: str, session_id: str) -> None:
+    def _record_session_pack_activation(
+        self,
+        pack_name: str,
+        session_id: str,
+        source: str,
+    ) -> None:
+        sources = self._session_pack_sources.setdefault(session_id, {})
+        sequence = self._session_pack_sequence.setdefault(session_id, {})
+        existing_source = sources.get(pack_name)
+
+        if existing_source == "explicit" and source == "shared":
+            return
+        if existing_source == source:
+            return
+
+        next_sequence = self._session_activation_counter.get(session_id, 0) + 1
+        self._session_activation_counter[session_id] = next_sequence
+        sources[pack_name] = source
+        sequence[pack_name] = next_sequence
+
+    def clear_session_state(self, session_id: str) -> None:
+        """Remove all session-scoped pack tracking for a session."""
+        with self._session_tracking_lock:
+            self._session_enabled.pop(session_id, None)
+            self._session_pack_sources.pop(session_id, None)
+            self._session_pack_sequence.pop(session_id, None)
+            self._session_activation_counter.pop(session_id, None)
+
+    def _session_pack_order(
+        self,
+        session_id: str,
+        *,
+        ppack_variant: str | None = None,
+    ) -> list[str]:
+        with self._session_tracking_lock:
+            names = set(self._session_enabled.get(session_id, set()))
+            sources = dict(self._session_pack_sources.get(session_id, {}))
+            sequence = dict(self._session_pack_sequence.get(session_id, {}))
+        if not names:
+            return []
+
+        installed_names = [name for name in names if name in self._installed]
+        if not self._ppack_v3_enabled or str(ppack_variant).lower() != "treatment":
+            return sorted(installed_names)
+
+        return sorted(
+            installed_names,
+            key=lambda name: (
+                _SESSION_PACK_SOURCE_PRECEDENCE.get(sources.get(name, "explicit"), 1),
+                sequence.get(name, 0),
+                name,
+            ),
+        )
+
+    def enable_for_session(
+        self,
+        pack_name: str,
+        session_id: str,
+        *,
+        source: str = "explicit",
+    ) -> None:
         """Enable a pack for a specific session only (not global/tenant).
 
         Raises:
@@ -517,11 +595,20 @@ class PackRegistry:
         """
         if pack_name not in self._installed:
             raise ValueError(f"Pack '{pack_name}' is not installed")
+        if source not in _SESSION_PACK_SOURCE_PRECEDENCE:
+            raise ValueError(f"Unsupported session pack source '{source}'")
 
-        if session_id not in self._session_enabled:
-            self._session_enabled[session_id] = set()
-        self._session_enabled[session_id].add(pack_name)
-        logger.info("pack_enabled_for_session", name=pack_name, session_id=session_id)
+        with self._session_tracking_lock:
+            if session_id not in self._session_enabled:
+                self._session_enabled[session_id] = set()
+            self._session_enabled[session_id].add(pack_name)
+            self._record_session_pack_activation(pack_name, session_id, source)
+        logger.info(
+            "pack_enabled_for_session",
+            name=pack_name,
+            session_id=session_id,
+            source=source,
+        )
 
     def disable_for_session(self, pack_name: str, session_id: str) -> None:
         """Disable a session-scoped pack.
@@ -532,34 +619,61 @@ class PackRegistry:
         if pack_name not in self._installed:
             raise ValueError(f"Pack '{pack_name}' is not installed")
 
-        if session_id in self._session_enabled:
-            self._session_enabled[session_id].discard(pack_name)
+        with self._session_tracking_lock:
+            if session_id in self._session_enabled:
+                self._session_enabled[session_id].discard(pack_name)
+                if not self._session_enabled[session_id]:
+                    self.clear_session_state(session_id)
+                else:
+                    self._session_pack_sources.get(session_id, {}).pop(pack_name, None)
+                    self._session_pack_sequence.get(session_id, {}).pop(pack_name, None)
         logger.info("pack_disabled_for_session", name=pack_name, session_id=session_id)
 
-    def get_session_packs(self, session_id: str) -> list[InstalledPack]:
-        """Get packs enabled for a specific session."""
-        names = self._session_enabled.get(session_id, set())
-        return [self._installed[n] for n in sorted(names) if n in self._installed]
+    def get_session_packs(
+        self,
+        session_id: str,
+        *,
+        ppack_variant: str | None = None,
+    ) -> list[InstalledPack]:
+        """Get packs enabled for a specific session.
 
-    def get_session_prompt_addenda(self, session_id: str) -> list[str]:
+        Control sessions retain the original name-sorted P-PACK v1 behavior.
+        Treatment sessions under ``ppack_v3_enabled`` resolve packs by
+        application precedence: workflow-shared packs first, then explicit
+        session enables, preserving activation order within each group.
+        """
+        names = self._session_pack_order(session_id, ppack_variant=ppack_variant)
+        return [self._installed[name] for name in names]
+
+    def get_session_prompt_addenda(
+        self,
+        session_id: str,
+        *,
+        ppack_variant: str | None = None,
+    ) -> list[str]:
         """Collect all prompt addenda from packs enabled for a session.
 
         Returns a flat list of prompt addenda strings from all active
-        session-scoped packs, in deterministic (sorted by pack name) order.
+        session-scoped packs, using the current session-pack resolution order.
         """
         addenda: list[str] = []
-        for pack in self.get_session_packs(session_id):
+        for pack in self.get_session_packs(session_id, ppack_variant=ppack_variant):
             addenda.extend(pack.prompt_addenda)
         return addenda
 
-    def get_session_tool_config(self, session_id: str) -> dict[str, dict[str, object]]:
+    def get_session_tool_config(
+        self,
+        session_id: str,
+        *,
+        ppack_variant: str | None = None,
+    ) -> dict[str, dict[str, object]]:
         """Merge tool_config from all session-scoped packs.
 
-        Later packs (alphabetically) override earlier ones for the same tool
-        key.  Returns a merged dict of tool_name -> config.
+        Later packs in the resolved session-pack order override earlier ones
+        for the same tool key. Returns a merged dict of tool_name -> config.
         """
         merged: dict[str, dict[str, object]] = {}
-        for pack in self.get_session_packs(session_id):
+        for pack in self.get_session_packs(session_id, ppack_variant=ppack_variant):
             for tool_name, config in pack.tool_config.items():
                 if tool_name not in merged:
                     merged[tool_name] = {}

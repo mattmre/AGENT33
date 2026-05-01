@@ -258,6 +258,21 @@ class OperatorService:
                 "ollama_base_url": s.ollama_base_url,
                 "ollama_default_model": s.ollama_default_model,
             },
+            "lm_studio": {
+                "lm_studio_base_url": s.lm_studio_base_url,
+                "lm_studio_default_model": s.lm_studio_default_model,
+            },
+            "llm": {
+                "default_model": s.default_model,
+                "openai_api_key": _redact(s.openai_api_key),
+                "openai_base_url": s.openai_base_url,
+                "openrouter_api_key": _redact(s.openrouter_api_key),
+                "openrouter_base_url": s.openrouter_base_url,
+                "openrouter_site_url": s.openrouter_site_url,
+                "openrouter_app_name": s.openrouter_app_name,
+                "openrouter_app_category": s.openrouter_app_category,
+                "openrouter_default_fallback_models": s.openrouter_default_fallback_models,
+            },
             "agents": {
                 "agent_definitions_dir": s.agent_definitions_dir,
             },

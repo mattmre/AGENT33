@@ -24,8 +24,7 @@ from agent33.workflows.template_catalog import TemplateCatalog
 @pytest.fixture(autouse=True)
 def _reset_state() -> None:
     """Reset global state between tests."""
-    workflows._registry.clear()
-    workflows._execution_history.clear()
+    workflows.reset_workflow_state()
     if workflows._scheduler is not None:
         with contextlib.suppress(RuntimeError):
             workflows._scheduler.stop()
@@ -33,8 +32,7 @@ def _reset_state() -> None:
     auth._api_keys.clear()
     workflow_templates.set_template_catalog(None)  # type: ignore[arg-type]
     yield
-    workflows._registry.clear()
-    workflows._execution_history.clear()
+    workflows.reset_workflow_state()
     auth._api_keys.clear()
     workflow_templates.set_template_catalog(None)  # type: ignore[arg-type]
 

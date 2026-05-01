@@ -6,7 +6,7 @@ without editing any files manually.
 5-step flow
 -----------
 1. Environment Summary  — show hardware + tool detection, suggest profile
-2. LLM Provider         — OpenAI API key path, Ollama local path, or skip
+2. LLM Provider         — OpenRouter, OpenAI, Ollama, or skip
 3. Test Invocation      — ask "What can you do?" and stream a response (skipped
                           if provider was skipped or not reachable)
 4. Template Picker      — choose a quick-start agent template
@@ -28,12 +28,16 @@ try:
     from agent33.env.detect import detect_env
 except ImportError:  # pragma: no cover
 
-    def detect_env() -> object:  # type: ignore[misc]
+    def detect_env(force_refresh: bool = False) -> object:  # type: ignore[misc]
+        del force_refresh
         raise ImportError("agent33.env.detect not available")
 
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from agent33.env.detect import EnvProfile
 
 # ---------------------------------------------------------------------------
 # I/O protocol — the only thing tests need to replace
@@ -158,6 +162,46 @@ QUICK_TEMPLATES: list[dict[str, str]] = [
 ]
 
 TEMPLATE_NAMES = [t["name"] for t in QUICK_TEMPLATES]
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+
+
+def _detect_environment(*, force_refresh: bool = False) -> EnvProfile:
+    """Run environment detection, forcing a fresh probe when supported."""
+    try:
+        return detect_env(force_refresh=force_refresh)
+    except TypeError:
+        return detect_env()
+
+
+def _existing_env_value(path: Path, key: str) -> str | None:
+    """Return the last assignment for ``key`` from an existing env file."""
+    if not path.exists():
+        return None
+
+    for raw_line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() == key:
+            return value.strip()
+
+    return None
+
+
+def _resolve_ollama_base_url(path: Path | None = None) -> str:
+    """Prefer explicit env/file Ollama URLs before falling back to localhost."""
+    env_value = os.environ.get("OLLAMA_BASE_URL", "").strip()
+    if env_value:
+        return env_value
+
+    if path is not None:
+        existing_value = _existing_env_value(path, "OLLAMA_BASE_URL")
+        if existing_value:
+            return existing_value
+
+    return _OLLAMA_DEFAULT_BASE_URL
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -169,10 +213,12 @@ class WizardResult:
     """Captures the choices made during the wizard run."""
 
     profile: str = "developer"
-    llm_provider: str = "skip"  # "openai" | "ollama" | "skip"
+    llm_provider: str = "skip"  # "openrouter" | "openai" | "ollama" | "skip"
     llm_model: str | None = None
+    ollama_base_url: str | None = None
     api_key_set: bool = False
     entered_api_key: str | None = None  # key user explicitly typed (not from env)
+    llm_test_ready: bool = False
     template: str | None = None
     env_path: Path = field(default_factory=lambda: Path(".env.local"))
     env_written: bool = False
@@ -241,7 +287,7 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         try:
-            env = detect_env()
+            env = _detect_environment(force_refresh=True)
             hw = env.hardware
             tools = env.tools
             rec = env.selected_model
@@ -285,18 +331,38 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
         self._io.info(
             "AGENT-33 needs an LLM to work.  Choose a provider:\n"
-            "  • OpenAI API  — requires API key, no local GPU needed\n"
+            "  • OpenRouter  — one API key, many hosted models\n"
+            "  • OpenAI API  — direct OpenAI access\n"
             "  • Ollama      — runs locally, free, requires ~4GB+ RAM\n"
             "  • Skip        — configure manually later\n"
         )
 
         choice = self._io.prompt(
             "Which provider?",
-            choices=["openai", "ollama", "skip"],
+            choices=["openrouter", "openai", "ollama", "skip"],
             default="skip",
         )
 
-        if choice == "openai":
+        if choice == "openrouter":
+            self._io.info(
+                "\n  Get your API key at: https://openrouter.ai/keys\n"
+                "  Model refs use forms like `openrouter/auto` or\n"
+                "  `openrouter/openai/gpt-5.2`.\n"
+                "  (The key will be written to your .env.local — never committed to git.)\n"
+            )
+            existing_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+            key = self._io.secret("  Paste your OpenRouter API key").strip()
+            effective_key = key or existing_key
+            result.api_key_set = bool(effective_key)
+            result.llm_test_ready = result.api_key_set
+            if result.api_key_set:
+                result.llm_model = "openrouter/auto"
+            if key:
+                os.environ["OPENROUTER_API_KEY"] = key
+                result.entered_api_key = key
+            result.llm_provider = "openrouter"
+
+        elif choice == "openai":
             self._io.info(
                 "\n  Get your API key at: https://platform.openai.com/api-keys\n"
                 "  (The key will be written to your .env.local — never committed to git.)\n"
@@ -305,6 +371,7 @@ class FirstRunWizard:
             key = self._io.secret("  Paste your OpenAI API key").strip()
             effective_key = key or existing_key
             result.api_key_set = bool(effective_key)
+            result.llm_test_ready = result.api_key_set
             if result.api_key_set:
                 result.llm_model = "gpt-4o-mini"
             if key:
@@ -315,6 +382,7 @@ class FirstRunWizard:
             result.llm_provider = "openai"
 
         elif choice == "ollama":
+            result.ollama_base_url = _resolve_ollama_base_url(self._env_path)
             ollama_ok = shutil.which("ollama") is not None
             if not ollama_ok:
                 self._io.info(
@@ -327,11 +395,13 @@ class FirstRunWizard:
                     model = _pick_ollama_model()
                     self._io.info(f"  Using model: {model}")
                     result.llm_model = model
+                    result.llm_test_ready = True
                 except Exception:
                     self._io.info(
                         "  (Could not detect Ollama models — will use llama3.2:3b as default)"
                     )
                     result.llm_model = "llama3.2:3b"
+                    result.llm_test_ready = False
             result.llm_provider = "ollama"
 
         else:
@@ -353,9 +423,17 @@ class FirstRunWizard:
         self._io.info(STEP_SEPARATOR)
 
         no_provider = result.llm_provider == "skip"
-        openai_no_key = result.llm_provider == "openai" and not result.api_key_set
-        if no_provider or openai_no_key:
+        provider_needs_key = (
+            result.llm_provider in {"openai", "openrouter"} and not result.api_key_set
+        )
+        if no_provider or provider_needs_key:
             self._io.info("  Skipping test invocation (no LLM configured).")
+            result.steps_completed.append("test_invocation_skipped")
+            return
+        if result.llm_provider == "ollama" and not result.llm_test_ready:
+            self._io.info(
+                "  Skipping test invocation (no usable local Ollama runtime/model detected)."
+            )
             result.steps_completed.append("test_invocation_skipped")
             return
 
@@ -457,7 +535,7 @@ def _pick_ollama_model() -> str:
         timeout=10,
     )
     if proc.returncode != 0 or not proc.stdout.strip():
-        return "llama3.2:3b"
+        raise RuntimeError("Could not detect local Ollama models")
 
     lines = proc.stdout.strip().splitlines()[1:]  # skip header
     pulled = [ln.split()[0] for ln in lines if ln.strip()]
@@ -468,7 +546,10 @@ def _pick_ollama_model() -> str:
         if pref in pulled:
             return pref
 
-    return pulled[0] if pulled else "llama3.2:3b"
+    if pulled:
+        return pulled[0]
+
+    raise RuntimeError("No local Ollama models detected")
 
 
 def _stream_test_response(result: WizardResult, io: WizardIO) -> None:
@@ -497,13 +578,44 @@ def _stream_test_response(result: WizardResult, io: WizardIO) -> None:
         text = resp.json()["choices"][0]["message"]["content"]
         io.info(text)
 
+    elif result.llm_provider == "openrouter":
+        import httpx
+
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not set")
+
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "http://localhost",
+                    "X-OpenRouter-Title": "AGENT-33 Wizard",
+                },
+                json={
+                    "model": result.llm_model or "openrouter/auto",
+                    "messages": [
+                        {"role": "user", "content": "What can you do? (answer in 2 sentences)"}
+                    ],
+                    "stream": False,
+                    "max_tokens": 80,
+                },
+            )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"]
+        io.info(text)
+
     elif result.llm_provider == "ollama":
         import httpx
 
+        base_url = (result.ollama_base_url or _resolve_ollama_base_url(result.env_path)).rstrip(
+            "/"
+        )
         model = result.llm_model or "llama3.2:3b"
         with httpx.Client(timeout=60) as client:
             resp = client.post(
-                "http://localhost:11434/api/generate",
+                f"{base_url}/api/generate",
                 json={
                     "model": model,
                     "prompt": "What can you do? (answer in 2 sentences)",
@@ -529,8 +641,15 @@ def _build_env_lines(result: WizardResult) -> list[str]:
         if result.llm_model:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")
+    elif result.llm_provider == "openrouter":
+        if result.entered_api_key:
+            lines.append(f"OPENROUTER_API_KEY={result.entered_api_key}")
+        if result.llm_model:
+            lines.append(f"DEFAULT_MODEL={result.llm_model}")
+        lines.append("")
     elif result.llm_provider == "ollama":
-        lines.append("OLLAMA_BASE_URL=http://localhost:11434")
+        ollama_base_url = result.ollama_base_url or _resolve_ollama_base_url(result.env_path)
+        lines.append(f"OLLAMA_BASE_URL={ollama_base_url}")
         if result.llm_model:
             lines.append(f"DEFAULT_MODEL={result.llm_model}")
         lines.append("")

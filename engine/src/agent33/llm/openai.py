@@ -38,6 +38,54 @@ _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 1.0
 _DEFAULT_TIMEOUT = 120.0
+_OPENROUTER_PROVIDER_UNAVAILABLE_MARKERS = (
+    "no allowed providers are available",
+    "no providers are available",
+    "no providers available",
+    "provider routing",
+    "provider unavailable",
+)
+
+
+def _coerce_openrouter_error_detail(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("message", "detail", "error"):
+            nested = value.get(key)
+            if nested:
+                detail = _coerce_openrouter_error_detail(nested)
+                if detail:
+                    return detail
+    return ""
+
+
+def extract_openrouter_error_detail(response: httpx.Response) -> str:
+    """Return the most useful OpenRouter error detail from a response body."""
+    try:
+        payload = response.json()
+    except (json.JSONDecodeError, ValueError):
+        payload = None
+    if payload is not None:
+        detail = _coerce_openrouter_error_detail(payload)
+        if detail:
+            return detail
+    return response.text
+
+
+def is_openrouter_provider_unavailable_response(response: httpx.Response) -> bool:
+    """Return True when the response matches OpenRouter provider-routing failures."""
+    if response.status_code < 400:
+        return False
+    detail = extract_openrouter_error_detail(response).lower()
+    return any(marker in detail for marker in _OPENROUTER_PROVIDER_UNAVAILABLE_MARKERS)
+
+
+def is_openrouter_provider_unavailable_error(exc: Exception) -> bool:
+    """Return True when *exc* represents an OpenRouter model-availability failure."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return is_openrouter_provider_unavailable_response(exc.response)
+    return any(marker in str(exc).lower() for marker in _OPENROUTER_PROVIDER_UNAVAILABLE_MARKERS)
 
 
 class OpenAIProvider:
@@ -51,11 +99,13 @@ class OpenAIProvider:
         timeout: float = _DEFAULT_TIMEOUT,
         max_connections: int = 20,
         max_keepalive_connections: int = 10,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._default_model = default_model
         self._timeout = timeout
+        self._extra_headers = dict(extra_headers or {})
         self._client = httpx.AsyncClient(
             timeout=timeout,
             limits=httpx.Limits(
@@ -72,11 +122,23 @@ class OpenAIProvider:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    @property
+    def base_url(self) -> str:
+        """Return the configured API base URL."""
+        return self._base_url
+
+    @property
+    def request_headers(self) -> dict[str, str]:
+        """Return headers used for upstream requests."""
+        headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+        headers.update(self._extra_headers)
+        return headers
+
+    def _headers(self) -> dict[str, str]:
+        return self.request_headers
 
     # -- helpers ----------------------------------------------------------
 
@@ -112,6 +174,10 @@ class OpenAIProvider:
                 return cast("dict[str, Any]", result)
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
+                if isinstance(
+                    exc, httpx.HTTPStatusError
+                ) and is_openrouter_provider_unavailable_response(exc.response):
+                    break
                 if attempt < _MAX_ATTEMPTS - 1:
                     delay = _BACKOFF_BASE * (2**attempt)
                     logger.warning(
@@ -127,6 +193,8 @@ class OpenAIProvider:
                     mapped = map_connector_exception(exc, connector, operation)
                     raise mapped from exc
                 raise
+        if last_exc is not None and is_openrouter_provider_unavailable_error(last_exc):
+            raise last_exc
         failure = RuntimeError(f"OpenAI request to {path} failed after {_MAX_ATTEMPTS} attempts")
         if self._boundary_executor is not None and last_exc is not None:
             raise map_connector_exception(last_exc, connector, operation) from last_exc

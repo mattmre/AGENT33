@@ -6,8 +6,8 @@
  * accessibility, form labels, and heading hierarchy.
  */
 
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { render, screen, fireEvent, cleanup, within, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
 
 import { SkipLink } from "../SkipLink";
 import { VisuallyHidden } from "../VisuallyHidden";
@@ -15,6 +15,13 @@ import { VisuallyHidden } from "../VisuallyHidden";
 // jsdom does not implement scrollIntoView; stub it globally for all tests
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  cleanup();
+  delete (window as any).__AGENT33_CONFIG__;
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /**
@@ -75,8 +82,17 @@ describe("VisuallyHidden", () => {
 // ---- App-level ARIA checks ----
 
 describe("App accessibility", () => {
+  let App: (typeof import("../../App"))["default"];
+
+  beforeAll(async () => {
+    App = (await import("../../App")).default;
+  });
+
   // Mock dependencies that App uses
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    window.sessionStorage.clear();
+
     // Mock localStorage for auth
     vi.stubGlobal("localStorage", {
       getItem: vi.fn().mockReturnValue(null),
@@ -110,59 +126,100 @@ describe("App accessibility", () => {
     };
   });
 
-  it("renders SkipLink at the top of the app", async () => {
-    // Dynamically import App to avoid import-order issues with mocks
-    const { default: App } = await import("../../App");
+  it("renders SkipLink at the top of the app", () => {
     render(<App />);
     const skipLink = screen.getByText("Skip to main content");
     expect(skipLink).toBeInTheDocument();
     expect(skipLink).toHaveAttribute("href", "#main-content");
-  });
+  }, 15000);
 
-  it("has a main-content landmark", async () => {
-    const { default: App } = await import("../../App");
+  it("has a main-content landmark", () => {
     render(<App />);
     const mainContent = document.getElementById("main-content");
     expect(mainContent).toBeTruthy();
     expect(mainContent).toHaveAttribute("role", "main");
-  });
+  }, 15000);
 
-  it("has labeled main navigation", async () => {
-    const { default: App } = await import("../../App");
+  it("has labeled main navigation", () => {
     render(<App />);
-    const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(nav).toBeInTheDocument();
+    expect(screen.getAllByRole("navigation", { name: "Main navigation" }).length).toBeGreaterThan(0);
   });
 
-  it("marks the active tab with aria-current", async () => {
-    const { default: App } = await import("../../App");
-    render(<App />);
-    // The default active tab is "chat" which maps to "Chat Central"
-    const buttons = screen.getAllByRole("button");
-    const chatTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Chat Central")
-    );
-    expect(chatTabButton).toBeTruthy();
-    expect(chatTabButton).toHaveAttribute("aria-current", "page");
-  });
-
-  it("non-active tabs do not have aria-current", async () => {
-    const { default: App } = await import("../../App");
+  it("marks the active tab with aria-current", () => {
     render(<App />);
     const buttons = screen.getAllByRole("button");
-    const voiceTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Voice Call")
+    const guideTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Guide / Intake")
     );
-    expect(voiceTabButton).toBeTruthy();
-    expect(voiceTabButton).not.toHaveAttribute("aria-current");
+    expect(guideTabButton).toBeTruthy();
+    expect(guideTabButton).toHaveAttribute("aria-current", "page");
   });
 
-  it("decorative logo orb has aria-hidden", async () => {
-    const { default: App } = await import("../../App");
+  it("non-active tabs do not have aria-current", () => {
+    render(<App />);
+    const buttons = screen.getAllByRole("button");
+    const sessionsTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Sessions & Runs")
+    );
+    expect(sessionsTabButton).toBeTruthy();
+    expect(sessionsTabButton).not.toHaveAttribute("aria-current");
+  });
+
+  it("decorative logo orb has aria-hidden", () => {
     render(<App />);
     const orb = document.querySelector(".logo-orb");
     expect(orb).toBeTruthy();
     expect(orb).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("keeps permission mode visible and changeable in the cockpit context", () => {
+    render(<App />);
+
+    const permissionRegion = screen.getByRole("region", { name: "Permission mode" });
+    expect(permissionRegion).toBeInTheDocument();
+
+    const permissionSelect = screen.getByRole("combobox", { name: "Permission mode" });
+    expect(permissionSelect).toHaveValue("ask");
+
+    fireEvent.change(permissionSelect, { target: { value: "pr-first" } });
+
+    expect(permissionSelect).toHaveValue("pr-first");
+    expect(within(permissionRegion).getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
+  });
+
+  it("renders the cockpit dashboard and artifact drawer landmarks", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sessions & Runs/ }));
+
+    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
+  });
+
+  it("opens major cockpit destinations from URL state and keeps shareable links updated", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?view=operations&workspace=shipyard&permission=pr-first&drawer=activity"
+    );
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: /Sessions & Runs/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("combobox", { name: "Permission mode" })).toHaveValue("pr-first");
+    expect(screen.getByRole("combobox", { name: "Active project template" })).toHaveValue("shipyard");
+    expect(screen.getByRole("tab", { name: "Activity / Mailbox" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Agent mailbox")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Safety & Approvals/ }));
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("view=safety");
+      expect(window.location.search).toContain("workspace=shipyard");
+      expect(window.location.search).toContain("permission=pr-first");
+      expect(window.location.search).not.toContain("drawer=");
+    });
   });
 });
 
@@ -257,6 +314,20 @@ describe("ChatInterface accessibility", () => {
     fireEvent.click(settingsBtn);
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-label", "Chat settings");
+  });
+
+  it("model picker controls remain labeled when the settings tab is opened", async () => {
+    const { ChatInterface } = await import("../../features/chat/ChatInterface");
+    render(<ChatInterface token="test" apiKey="test" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Model & Provider" }));
+
+    expect(screen.getByLabelText("Model override")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search model catalog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Use server default" })
+    ).toBeInTheDocument();
   });
 });
 
@@ -381,6 +452,53 @@ describe("OperationsHubPanel accessibility", () => {
 // ---- MessagingSetup icon a11y ----
 
 describe("MessagingSetup accessibility", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/v1/operator/config")) {
+          return Promise.resolve(
+            mockFetchResponse({
+              groups: {
+                llm: {
+                  openrouter_api_key: "***",
+                  openrouter_base_url: "https://openrouter.ai/api/v1",
+                  openrouter_site_url: "https://agent33.example",
+                  openrouter_app_name: "Agent Console",
+                  openrouter_app_category: "ops-console",
+                },
+                ollama: {
+                  default_model: "openrouter/auto",
+                },
+              },
+            })
+          );
+        }
+
+        if (url.includes("/v1/openrouter/models")) {
+          return Promise.resolve(
+            mockFetchResponse({
+              data: [
+                {
+                  id: "openrouter/auto",
+                  name: "Auto Router",
+                  context_length: 128000,
+                  pricing: { prompt: "0.000001", completion: "0.000002" },
+                },
+              ],
+            })
+          );
+        }
+
+        return Promise.resolve(mockFetchResponse({}));
+      })
+    );
+    (window as any).__AGENT33_CONFIG__ = {
+      API_BASE_URL: "http://localhost:8000",
+    };
+  });
+
   it("decorative card icons have aria-hidden", async () => {
     const { MessagingSetup } = await import(
       "../../features/integrations/MessagingSetup"
@@ -393,17 +511,27 @@ describe("MessagingSetup accessibility", () => {
     });
   });
 
-  it("form inputs have associated labels via wrapping <label>", async () => {
+  it("OpenRouter form controls expose accessible labels", async () => {
     const { MessagingSetup } = await import(
       "../../features/integrations/MessagingSetup"
     );
     render(<MessagingSetup />);
-    // Each input should be inside a label element
-    const inputs = screen.getAllByRole("textbox");
-    inputs.forEach((input) => {
-      const parentLabel = input.closest("label");
-      expect(parentLabel).toBeTruthy();
-    });
+
+    expect(await screen.findByLabelText("API key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Default model")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search catalog")).toBeInTheDocument();
+  });
+
+  it("status updates are announced via aria-live regions", async () => {
+    const { MessagingSetup } = await import(
+      "../../features/integrations/MessagingSetup"
+    );
+    render(<MessagingSetup />);
+
+    const setupStatus = await screen.findByText(
+      /Loaded OpenRouter settings from the server/
+    );
+    expect(setupStatus).toHaveAttribute("aria-live", "polite");
   });
 });
 

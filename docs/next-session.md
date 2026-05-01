@@ -1,104 +1,127 @@
 # Next Session Briefing
 
-Last updated: 2026-04-17 (POST-4 execution unblock sync)
+Last updated: 2026-04-28 (UX overhaul implementation wave merged through PR `#454`)
 
 ## Current State
 
 - **Branch posture**: root checkout intentionally lags `origin/main`. Always use fresh worktrees.
 - **Open PRs**: 0
-- **Latest merged PR**: `#404` (`docs(session127): sync post-403 maintenance state`)
-- **Latest merged implementation PR**: `#401` (`feat(p69b): POST-4.3 P69b tool approval pause/resume`)
-- **Latest commit on main**: `a77e731`
-- **Cumulative PRs merged**: 404
+- **Latest merged implementation PR**: `#454` (`feat(frontend): quarantine advanced controls`)
+- **Latest handoff refresh**: this document update after the `#449`-`#454` UX overhaul wave
+- **Latest commit on main**: `5179e0e`
+- **Cumulative implementation PRs merged through this wave**: 454
 - **All Phases P01-P72**: COMPLETE
 - **POST-1 (Foundation & Baseline)**: COMPLETE
 - **POST-2 (SkillsBench Competitiveness)**: COMPLETE
 - **POST-3 (Pack Ecosystem)**: COMPLETE
-- **POST-4.1 (P69b UX spec + API contract)**: COMPLETE — PR `#399`
-- **POST-4.2 (SSE event schema versioning)**: COMPLETE — PR `#400`
-- **POST-4.3 (P69b implementation)**: COMPLETE — PR `#401`
-- **POST-4.4 (P-PACK v3 A/B harness)**: ACTIVE — calendar/data gate removed; implementation should proceed immediately
-- **POST-4.5 (P-PACK v3 behavior mods)**: QUEUED — starts immediately after the POST-4.4 slice is validated
-- **POST-CLUSTER (Distribution & Ecosystem Growth)**: NOT STARTED
-- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
-- **Security scan posture**: `Dependency CVE Scan` + `Container Image Scan` still fail on the current baseline. Functional CI for `#403` was green, but those repo-level scans still required an admin override for merge.
-- **Roadmap policy update**: operator decision is to remove calendar/data gates from the remaining roadmap and complete the implementation wave first, then test and monitor.
+- **POST-4 (Interruption & Self-Improvement)**: COMPLETE through PR `#406`
+- **POST-CLUSTER (Distribution & Ecosystem Growth)**: COMPLETE through the tracked follow-up and Operator UX expansion waves (`#433`, `#435`-`#447`)
+- **Active roadmap**: `docs/phases/PHASE-PLAN-POST-P72-2026.md` plus the UX backlog in `docs/research/ux-overhaul-backlog-2026-04-27.md`
+- **Security scan posture**: the Trivy/admin-override burden was removed in PR `#418`; treat any new repo-level scan failures as regressions, not accepted baseline drift
 
-## What Session 127 Delivered
+## What Sessions 130-132 And The Final Follow-up Wave Delivered
 
 | PR | Commit | Slice | Description |
 |----|--------|-------|-------------|
-| #403 | `87c6637` | maintenance | `actions/github-script` v9 bump, plus a formatting-only unblock for inherited lint drift on the PR branch |
+| #414 | `f016b35` | POST-CLUSTER | community pack submission and resubmission flow |
+| #415 | `e8cd352` | monitoring | P68-Lite outcomes monitoring verification plus health endpoint |
+| #416 | `1cd556a` | POST-4 follow-up | `PausedInvocation` persistence across restarts |
+| #417 | `9da0f9d` | planning | SSE schema-v2 migration-path document |
+| #418 | `cb11b73` | security | Trivy CVE fixes to remove routine admin-override merges |
+| #419 | `9e0dadb` | ingestion | Evolver Sprint 0 clean-room guardrails and ingestion stub |
+| #420 | `35ab23e` | ingestion | candidate state model (`CANDIDATE -> VALIDATED -> PUBLISHED -> REVOKED`) |
+| #421 | `e9c2f24` | ingestion | candidate publication pipeline |
+| #422 | `0c0c615` | ingestion | mailbox/heartbeat pilot |
+| #423 | `a2a4582` | ingestion | lifecycle verbs and operator UX |
+| #424 | `9352715` | ingestion | detect-only skills doctor |
+| #425 | `a1670d3` | research preservation | durable research corpus index and panel-output ledger |
+| #426 | `729d9ca` | OpenRouter | runtime/config/operator/frontend integration and hardening |
+| #427 | `860daf0` | ingestion | persisted mailbox inbox events |
+| #428 | `6e327ae` | planning | refresh post-merge handoff queue |
+| #429 | `5e2e241` | ingestion | harden journal retention and task-metrics durability |
+| #430 | `48626e2` | operator UX | deepen ingestion review/history UX and notification hooks |
+| #431 | `f11b9ae` | SSE v2 | add backend schema-v2 foundation with version gating |
+| #432 | `ee7461a` | skills integration | register published ingestion skills into runtime discovery |
+| #433 | `cc4845a` | SkillsBench | report smoke regressions in CTRF/CI summaries |
 
-Additional maintenance completed during the PR review:
+## What The Operator UX / Agent OS Expansion Delivered
 
-- Verified both inline `github-script` usages are v9-compatible (no `require('@actions/github')`, no `getOctokit` redeclaration hazards)
-- Created the missing repository labels `dependencies` and `github-actions` so Dependabot can label future workflow dependency PRs cleanly
-- Saved the audit summary to `docs/research/session127-pr403-github-script-v9-audit.md`
+| PR | Commit | Slice | Description |
+|----|--------|-------|-------------|
+| #434 | `6015674` | planning | refresh final wrap-up queue state |
+| #435 | `7837389` | Start Here | first-run onboarding control plane with readiness/remediation guidance |
+| #436 | `53e77d1` | Review Queue | top-level ingestion review queue with search and safety filters |
+| #437 | `71a8075` | Safety Center | plain-language tool approvals surface |
+| #438 | `3a02c46` | Skill Wizard | operator-authored skill draft/install flow |
+| #439 | `5bb283c` | Workflow Starter | guided workflow creation from plain-language goals |
+| #440 | `8e08f6d` | Tool Fabric | objective-based tool/skill/workflow resolution |
+| #441 | `61c5d16` | Agent OS | contained Linux operator runtime foundation |
+| #442 | `990fcc7` | Improvement Loops | governed recurring research/improvement loop builder |
+| #443 | `705e3d9` | MCP Health | MCP bridge/proxy/sync health center |
+| #444 | `4865c1c` | Navigation | grouped operator navigation by job-to-be-done |
+| #445 | `99019e3` | MCP actions | live MCP sync/validate/reload operator actions |
+| #446 | `751933e` | Agent OS sessions | named Agent OS session workspaces and lifecycle controls |
+| #447 | `cf8d68a` | Research launchers | one-click competitive, UX, and Agent OS research schedules |
+
+## What The UX Overhaul Research And First Implementation Wave Delivered
+
+| PR | Commit | Slice | Description |
+|----|--------|-------|-------------|
+| #449 | `9c7f6e` | UX research | 10-persona expert-panel research plus 125-item UX improvement backlog |
+| #450 | `fe27f94` | Outcome Home | outcome-first Start Here shell, readiness guidance, and workflow draft routing |
+| #451 | `8fde809` | Workflow Catalog | searchable/filterable catalog of baked-in workflow systems with detail routing |
+| #452 | `4a3aead` | Model setup | plain-language Model Connection Wizard with OpenRouter defaults, save, probe, and catalog handoff |
+| #453 | `710a2ae` | Run Timeline | human-readable Operations Hub timeline, work/attention/done counts, and selected-process action feed |
+| #454 | `5179e0e` | Advanced quarantine | Beginner/Pro operator mode, quarantined raw control plane, safer route cards, global Pro search, and raw endpoint warnings |
 
 ## Current Roadmap Posture
 
 - **Roadmap authority**: `docs/phases/PHASE-PLAN-POST-P72-2026.md`
-- **Current execution queue**: `docs/sessions/session126-task-plan.md`
-- **Recovery note**: stale root checkouts may still have out-of-date planning docs; prefer fresh `origin/main` worktrees plus this file when recovering context
-- **Maintenance follow-up**: if maintenance PRs should merge normally again, add a dedicated slice to either fix the underlying security-scan failures or adjust the merge policy/ruleset around those known repo-wide findings
+- **Current execution queue**: none from the tracked roadmap, Operator UX expansion, or first UX overhaul implementation wave
+- **Current merged session log**: `docs/sessions/session-133-2026-04-27-ux-overhaul.md`
+- **Recovery note**: stale root checkouts may still have out-of-date planning docs; recover from a fresh `origin/main` worktree, then read this file, `task_plan.md`, and `progress.md`
+- **Immediate implementation focus**: no open PRs after this closed cycle — PRs `#425`-`#433`, `#435`-`#447`, and `#449`-`#454` are merged and CI-verified; start any new work from a new scope lock on updated `origin/main`
+- **Recommended next UX wave**: continue from the remaining backlog items: demo/sample project mode, role-based start paths, guided idea/product brief intake, unified Connect area, recent outcomes feed, workflow result pages, persona-specific templates, install/setup hardening, Agent OS container UX polish, and support/education surfaces.
 
-## Next Session Priority Queue
+## Queue Status
 
-### Immediate: POST-4.4 A/B Harness
-
-The prior 30-day calendar/data gate has been explicitly removed. `POST-4.4` is the active implementation slice.
-
-| Priority | Task | Status |
-|----------|------|--------|
-| T1 | POST-4.4 — P-PACK v3 A/B harness | ACTIVE |
-| T2 | POST-4.5 — P-PACK v3 behavior mods | QUEUED after T1 |
-
-**POST-4.4 scope**:
-- A/B assignment logic (deterministic by user/session hash)
-- Assignment persistence + outcome collection records in DB
-- Statistical test runner (`scipy.stats`): 95% confidence, `n>=30`, `-5%` regression threshold, Bonferroni correction
-- Report generation (JSON + markdown)
-- Alert hook: auto-open GitHub issue if weekly run shows `>5%` drop
-- Worktree: `worktrees/session127-s5-ab-harness`, branch `session127-s5-ab-harness`
-
-**POST-4.5 scope** (next slice after POST-4.4 validation):
-- Behavior changes to pack application/selection logic (per P-PACK v3 spec)
-- Gated behind `ppack_v3_enabled` feature flag
-- CI validation includes `pytest tests/test_ppack_v3_ab.py`
-
-### Secondary Follow-up Work
-
-- P68-Lite monitoring: verify the `outcomes` table continues to populate during rollout
-- P69b persistence follow-up: reconcile the current in-memory `P69bService` with the original DB-backed `PausedInvocation` design intent
-- SSE upgrade note: document the future client migration path before any v2 schema is introduced
-- Security scan/ruleset follow-up: either fix the underlying `Dependency CVE Scan` / `Container Image Scan` failures or remove the need for admin override on unrelated maintenance PRs
+- The prior queue (`ingestion hardening -> operator UX depth -> SSE schema v2 -> skills-system integration -> SkillsBench follow-up`) is **COMPLETE** on `main`.
+- The Operator UX rescue / Agent OS / MCP / recurring research queue is **COMPLETE** on `main` through `#447`.
+- The first UX overhaul queue (`expert-panel research -> Outcome Home -> Workflow Catalog -> Model Connection Wizard -> Run Timeline -> Advanced quarantine`) is **COMPLETE** on `main` through `#454`.
+- Queue/handoff docs should now be read as closed-cycle references rather than an open implementation prompt.
+- If implementation resumes, start from a fresh `origin/main` worktree and create a new scoped plan from the remaining items in `docs/research/ux-overhaul-backlog-2026-04-27.md`.
 
 ## Key References
 
-- `docs/phases/PHASE-PLAN-POST-P72-2026.md` — current POST-P72 roadmap
-- `docs/sessions/session126-task-plan.md` — authoritative Session 126 queue for `POST-4.4` / `POST-4.5`
-- `docs/research/session127-post44-roadmap-unblock.md` — rationale and implementation posture for removing the calendar/data gate
-- `docs/research/session127-pr403-github-script-v9-audit.md` — maintenance audit for PR `#403`
-- `docs/research/session126-p69b-ux-spec.md` — P69b UX spec
-- `docs/research/session126-p69b-api-contract.md` — P69b API contract
-- `engine/src/agent33/autonomy/p69b_models.py` — `PausedInvocation` model + P69b exception types
-- `engine/src/agent33/autonomy/p69b_service.py` — current `P69bService` implementation
-- `engine/src/agent33/workflows/events.py` — `WorkflowEvent` schema versioning
-
-## Worktree Hygiene
-
-Remove completed maintenance worktrees after this docs sync PR merges:
-
-```bash
-git worktree remove --force worktrees/pr403-review
-git worktree remove --force worktrees/post403-verify
-git worktree prune
-```
-
-If Windows reserved-name files block removal:
-
-```cmd
-cmd /c rd /s /q "\\?\C:\GitHub\repos\AGENT33\worktrees\<name>"
-git worktree prune
-```
+- `docs/phases/PHASE-PLAN-POST-P72-2026.md` - canonical POST-P72 roadmap and active queue
+- `task_plan.md` - current queue pointer plus historical execution trail
+- `progress.md` - merged milestones and fresh-main verification log
+- `docs/research/sse-schema-v2-migration-path.md` - required migration contract before any v2 stream work starts
+- `docs/research/research-corpus-index-2026-04-21.md` - preserved research corpus index added in PR `#425`
+- `docs/research/panel-output-ledger-2026-04-21.md` - preserved panel-output ledger added in PR `#425`
+- `engine/src/agent33/ingestion/journal.py` - durable journal retention/expiry implementation surface
+- `engine/src/agent33/ingestion/mailbox.py` - merged mailbox/runtime behavior
+- `engine/src/agent33/ingestion/mailbox_persistence.py` - persisted mailbox store added in PR `#427`
+- `engine/src/agent33/ingestion/metrics.py` - persisted task-metrics storage and history queries
+- `engine/src/agent33/ingestion/notifications.py` - webhook-style operator notification hooks for ingestion events
+- `engine/tests/test_ingestion_journal.py` - focused retention and tenant-journal coverage
+- `engine/tests/test_ingestion_mailbox.py` - focused regression coverage for the ingestion mailbox stack
+- `engine/tests/test_sse_versioning.py` - SSE version-gating and pinned-schema coverage
+- `engine/tests/test_workflow_sse.py` - workflow stream payload compatibility coverage
+- `engine/tests/test_skills.py` - runtime skill-registry ingestion coverage
+- `engine/tests/test_bench_cli.py` - SkillsBench CLI reporting coverage
+- `engine/tests/test_skillsbench_regression.py` - regression-threshold and comparison coverage
+- `frontend/src/App.tsx` - grouped operator navigation
+- `frontend/src/features/onboarding/` - Start Here onboarding control plane
+- `frontend/src/features/safety-center/` - tool approvals Safety Center
+- `frontend/src/features/skill-wizard/` - operator skill authoring wizard
+- `frontend/src/features/workflow-starter/` - guided workflow starter
+- `frontend/src/features/tool-fabric/` - adaptive tool fabric resolver
+- `frontend/src/features/outcome-home/` - outcome-first Start Here shell and launchable workflow systems
+- `frontend/src/features/workflow-catalog/` - searchable workflow catalog and workflow-starter draft routing
+- `frontend/src/features/model-connection/` - plain-language model/provider connection wizard
+- `frontend/src/features/advanced/` - Beginner/Pro mode and raw control-plane quarantine wrapper
+- `frontend/src/features/operations-hub/OperationsHubPanel.tsx` - Run Timeline over operations state
+- `frontend/src/features/improvement-loops/` - improvement loops and research launchers
+- `frontend/src/features/mcp-health/` - MCP Health Center and operator actions
+- `engine/Dockerfile.agent-os`, `scripts/agent-os.ps1`, `scripts/agent-os.sh`, and `docs/operators/agent-os-runtime.md` - Agent OS runtime and session lifecycle

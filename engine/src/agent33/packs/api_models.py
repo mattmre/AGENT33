@@ -167,6 +167,7 @@ class MarketplacePackSummary(BaseModel):
     latest_version: str
     versions_count: int = 0
     sources: list[str] = Field(default_factory=list)
+    trust_level: TrustLevel | None = None
 
 
 class MarketplacePackDetail(BaseModel):
@@ -214,6 +215,40 @@ class PackTrustResponse(BaseModel):
     policy: PackTrustPolicy
     allowed: bool
     reason: str = ""
+
+
+class PackRecoveryDependent(BaseModel):
+    """Installed pack that depends on the selected pack."""
+
+    name: str
+    version: str = ""
+    version_constraint: str = ""
+    status: str = "installed"
+
+
+class PackRecoveryArchive(BaseModel):
+    """Archived pack revision available for rollback."""
+
+    version: str
+    archived_at: datetime
+
+
+class PackRecoveryPreviewResponse(BaseModel):
+    """Beginner-safe preview for upgrade, uninstall, and rollback decisions."""
+
+    pack_name: str
+    installed_version: str
+    target_version: str = ""
+    affected_skills: list[str] = Field(default_factory=list)
+    enabled_tenants: list[str] = Field(default_factory=list)
+    dependents: list[PackRecoveryDependent] = Field(default_factory=list)
+    compatibility_errors: list[str] = Field(default_factory=list)
+    archived_versions: list[PackRecoveryArchive] = Field(default_factory=list)
+    can_uninstall_safely: bool
+    can_upgrade_safely: bool
+    can_rollback: bool
+    recommended_action: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 class EnablementMatrixResponse(BaseModel):

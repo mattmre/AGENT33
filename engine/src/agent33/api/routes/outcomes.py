@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from agent33.evaluation.ppack_ab_models import (
     GitHubIssuePublishResult,
@@ -28,6 +31,7 @@ if TYPE_CHECKING:
     from agent33.packs.registry import PackRegistry
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
+logger = structlog.get_logger()
 
 # Module-level fallback; replaced by lifespan via set_outcomes_service().
 _service = OutcomesService()
@@ -68,6 +72,11 @@ def _tenant_id(request: Request) -> str:
     return getattr(user, "tenant_id", "")
 
 
+def _raise_ppack_persistence_error(operation: str, exc: sqlite3.Error) -> None:
+    logger.warning("ppack_persistence_error", operation=operation, exc_info=True)
+    raise HTTPException(status_code=503, detail="P-PACK v3 persistence error") from exc
+
+
 class PPackABAssignmentRequest(BaseModel):
     session_id: str = Field(min_length=1)
 
@@ -85,6 +94,21 @@ class PPackABReportRequest(BaseModel):
         ]
     )
     open_github_issue: bool = False
+
+
+@router.get("/health")
+async def outcomes_health(request: Request) -> dict[str, object]:
+    """P68-Lite monitoring health check.
+
+    Returns ``{"status": "ok"}`` when events have been recorded in the last 24 h.
+    Returns ``{"status": "stale", "hours_since_last_event": N | null}`` when the
+    outcomes table has been empty (or silent) for more than 24 hours.
+
+    This endpoint is intentionally unauthenticated so that monitoring agents
+    can poll it without needing API credentials.
+    """
+    service = get_outcomes_service(request)
+    return service.health_check()
 
 
 @router.post("/events", status_code=201, dependencies=[require_scope("outcomes:write")])
@@ -240,12 +264,15 @@ async def assign_ppack_variant(
     request: Request,
 ) -> dict[str, Any]:
     try:
-        assignment = get_ppack_ab_service(request).assign_variant(
+        assignment = await run_in_threadpool(
+            get_ppack_ab_service(request).assign_variant,
             tenant_id=_tenant_id(request),
             session_id=body.session_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        _raise_ppack_persistence_error("assign_ppack_variant", exc)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return assignment.model_dump(mode="json")
@@ -256,10 +283,14 @@ async def assign_ppack_variant(
     dependencies=[require_scope("outcomes:read")],
 )
 async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, Any]:
-    assignment = get_ppack_ab_service(request).get_assignment(
-        tenant_id=_tenant_id(request),
-        session_id=session_id,
-    )
+    try:
+        assignment = await run_in_threadpool(
+            get_ppack_ab_service(request).get_assignment,
+            tenant_id=_tenant_id(request),
+            session_id=session_id,
+        )
+    except sqlite3.Error as exc:
+        _raise_ppack_persistence_error("get_ppack_assignment", exc)
     if assignment is None:
         raise HTTPException(status_code=404, detail="P-PACK v3 assignment not found")
     return assignment.model_dump(mode="json")
@@ -267,7 +298,7 @@ async def get_ppack_assignment(session_id: str, request: Request) -> dict[str, A
 
 @router.post(
     "/ppack-v3/report",
-    dependencies=[require_scope("outcomes:read")],
+    dependencies=[require_scope("outcomes:write")],
 )
 async def generate_ppack_report(
     body: PPackABReportRequest,
@@ -275,13 +306,26 @@ async def generate_ppack_report(
 ) -> dict[str, Any]:
     service = get_ppack_ab_service(request)
     try:
-        report = service.generate_report(
-            tenant_id=_tenant_id(request),
-            domain=body.domain,
-            since=body.since,
-            until=body.until,
-            metric_types=body.metric_types,
-        )
+        if body.since is None and body.until is None:
+            report = await run_in_threadpool(
+                service.generate_weekly_report,
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                metric_types=body.metric_types,
+            )
+        else:
+            report = await run_in_threadpool(
+                service.generate_report,
+                tenant_id=_tenant_id(request),
+                domain=body.domain,
+                since=body.since,
+                until=body.until,
+                metric_types=body.metric_types,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        _raise_ppack_persistence_error("generate_ppack_report", exc)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     issue_result = GitHubIssuePublishResult(reason="GitHub alert not requested")
@@ -297,7 +341,10 @@ async def generate_ppack_report(
     dependencies=[require_scope("outcomes:read")],
 )
 async def get_ppack_report(report_id: str, request: Request) -> dict[str, Any]:
-    report = get_ppack_ab_service(request).get_report(report_id)
-    if report is None:
+    try:
+        report = await run_in_threadpool(get_ppack_ab_service(request).get_report, report_id)
+    except sqlite3.Error as exc:
+        _raise_ppack_persistence_error("get_ppack_report", exc)
+    if report is None or report.tenant_id != _tenant_id(request):
         raise HTTPException(status_code=404, detail="P-PACK v3 report not found")
     return report.model_dump(mode="json")

@@ -8,9 +8,9 @@
 - Auth middleware on all routes except `/health`, `/docs`, `/redoc`, `/openapi.json`
 - Scope system: admin, agents:read/write/invoke, workflows:read/write/execute, tools:execute
 
-### Prompt Injection Defense ✅ (built, NOT integrated)
+### Prompt Injection Defense ✅ (mostly integrated)
 - `engine/src/agent33/security/injection.py` — detects system overrides, delimiter injection, instruction overrides, base64 payloads
-- **CRITICAL**: `scan_input()` is never called in any API route
+- Wave 12 reality check: chat, agent invoke, workflow schedule/execute, and webhooks now scan user-controlled inputs. Route-level approval gates remain a follow-up.
 
 ### Network Controls ✅
 - `DomainAllowlist` and `PathAllowlist` in `engine/src/agent33/security/allowlists.py`
@@ -22,35 +22,38 @@
 
 ## Critical Gaps
 
-### 1. IDOR Vulnerabilities (8 endpoints) — 🔴 CRITICAL
-| Endpoint | File | Issue |
+### 1. IDOR Vulnerabilities (8 endpoints) — ✅ CLOSED / SUPERSEDED
+Wave 12 route audit found these historical findings are closed or superseded by scope checks, global-definition semantics, subject ownership checks, or tenant execution-history filtering.
+
+| Endpoint | File | Current status |
 |----------|------|-------|
-| GET /v1/memory/sessions/{id}/observations | memory_search.py:53-76 | No ownership check |
-| POST /v1/memory/sessions/{id}/summarize | memory_search.py:79-98 | No ownership check |
-| GET /v1/agents/by-id/{id} | agents.py:115-127 | No access control |
-| GET /v1/agents/{name} | agents.py:138-147 | No access control |
-| POST /v1/agents/{name}/invoke | agents.py:160-190 | No ownership check |
-| GET /v1/workflows/{name} | workflows.py:68-74 | No access control |
-| POST /v1/workflows/{name}/execute | workflows.py:102-132 | No ownership check |
-| DELETE /v1/auth/api-keys/{key_id} | auth.py:79-84 | No ownership check |
+| GET /v1/memory/sessions/{id}/observations | memory_search.py | Subject ownership enforced |
+| POST /v1/memory/sessions/{id}/summarize | memory_search.py | Subject ownership enforced |
+| GET /v1/agents/by-id/{id} | agents.py | Scope-protected global definition |
+| GET /v1/agents/{name} | agents.py | Scope-protected global definition |
+| POST /v1/agents/{name}/invoke | agents.py | Scope-protected, tenant context captured, inputs scanned |
+| GET /v1/workflows/{name} | workflows.py | Scope-protected global definition |
+| POST /v1/workflows/{name}/execute | workflows.py | Scope-protected, tenant execution history captured, inputs scanned |
+| DELETE /v1/auth/api-keys/{key_id} | auth.py | Non-admin ownership enforced |
 
-### 2. Prompt Injection — 🔴 CRITICAL (0% integration)
-- chat.py:30-72 — no `scan_input()` on messages
-- agents.py:160-190 — no `scan_input()` on body.inputs
-- workflows.py:102-132 — no `scan_input()` on request.inputs
-- webhooks.py:28-141 — no scanning of external payloads
+### 2. Prompt Injection — ✅ INTEGRATED, with route-level follow-up
+- chat.py — scans message content
+- agents.py — scans invoke inputs recursively
+- workflows.py — scans schedule and execute inputs recursively
+- webhooks.py — scans external messaging payloads recursively
+- remaining follow-up: add explicit approval-token gates for sensitive route operations
 
-### 3. SSRF — 🟡 MEDIUM
-- web_fetch.py:46 — domain allowlist check skipped if allowlist is empty (`if context.domain_allowlist and ...`)
-- reader.py:50-141 — no domain allowlist enforcement at all
+### 3. SSRF — ✅ CLOSED
+- web_fetch/web_research paths pass configured domain allowlists into governed fetch enforcement
+- reader.py denies requests when the domain allowlist is empty and enforces allowed domains
 
-### 4. Configuration Security — 🔴 CRITICAL
-- config.py:16,32 — hardcoded `"change-me-in-production"` secrets
-- main.py:241 — CORS `allow_origins=["*"]`
+### 4. Configuration Security — ✅ CLOSED / DEVELOPMENT-SAFE DEFAULTS
+- config still has development defaults, but production startup rejects default secrets and `check_production_secrets()` reports unsafe settings
+- CORS defaults to an empty origin list rather than wildcard allow-all
 
-### 5. Approval Gates — 🔴 NOT IMPLEMENTED
-- Documentation exists in SECURITY_HARDENING.md but zero code implementation
-- Missing: AG-01 through AG-05 approval gates
+### 5. Approval Gates — 🟡 FOLLOW-UP
+- approval token infrastructure exists and is persisted, but sensitive route operations still need explicit approval-token gates
+- Wave 12 follow-up should prioritize destructive or privilege-expanding operations such as agent deletion/update, workflow creation, and admin API-key creation
 
 ### 6. XSS — 🟢 LOW
 - Most endpoints return JSON (auto-escaped)
@@ -58,8 +61,7 @@
 - Minor: error messages may reflect unescaped user input
 
 ## Fix Priorities
-1. Integrate prompt injection scanning into all API routes
-2. Add IDOR protections (ownership validation)
-3. Harden SSRF (mandatory domain allowlists)
-4. Fix hardcoded secrets / CORS wildcard
-5. Sanitize error message output
+1. Add route-level approval-token gates for sensitive operations.
+2. Keep regression tests for prompt-injection scanning on chat, agent invoke, workflow execute/schedule, and webhooks.
+3. Keep regression tests for memory/auth/workflow tenant or subject isolation.
+4. Continue sanitizing reflected error output and logs.

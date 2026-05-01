@@ -46,11 +46,17 @@ from agent33.packs.marketplace import (
 from agent33.packs.models import (
     InstalledPack,
     InstallResult,
+    OutcomePackEntry,
     PackDependency,
     PackGovernance,
     PackSkillEntry,
     PackSource,
     PackStatus,
+)
+from agent33.packs.outcome_pack import (
+    OutcomePackManifest,
+    outcome_pack_to_dict,
+    parse_outcome_pack_yaml,
 )
 from agent33.packs.provenance import (
     evaluate_trust,
@@ -62,6 +68,14 @@ from agent33.packs.provenance_models import (
     PackTrustPolicy,
     TrustDecision,
     TrustLevel,
+)
+from agent33.packs.readiness import (
+    OutcomePackReadinessContext,
+    OutcomePackReadinessEvaluator,
+    OutcomePackReadinessResult,
+    OutcomePackReadinessState,
+    OutcomePackRequirementReadiness,
+    OutcomePackRequirementState,
 )
 from agent33.packs.sharing import PackShareRequest, PackSharingService
 
@@ -90,6 +104,14 @@ __all__ = [
     "MarketplaceCategory",
     "MarketplacePackRecord",
     "MarketplacePackVersion",
+    "OutcomePackEntry",
+    "OutcomePackManifest",
+    "OutcomePackReadinessContext",
+    "OutcomePackReadinessEvaluator",
+    "OutcomePackReadinessResult",
+    "OutcomePackReadinessState",
+    "OutcomePackRequirementReadiness",
+    "OutcomePackRequirementState",
     "PackDependency",
     "PackGovernance",
     "PackManifest",
@@ -108,6 +130,8 @@ __all__ = [
     "assess_pack_quality",
     "detect_conflicts",
     "evaluate_trust",
+    "outcome_pack_to_dict",
+    "parse_outcome_pack_yaml",
     "resolve_conflicts",
     "sign_pack",
     "verify_pack",

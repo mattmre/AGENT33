@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -159,21 +160,49 @@ class OutcomesService:
             top_failure_modes=failure_modes,
         )
 
-    def load_historical(self, tenant_id: str, since: datetime | None = None) -> list[OutcomeEvent]:
+    def load_historical(
+        self,
+        tenant_id: str,
+        since: datetime | None = None,
+        *,
+        until: datetime | None = None,
+        domain: str | None = None,
+        metric_types: Sequence[OutcomeMetricType] | None = None,
+        limit: int | None = None,
+    ) -> list[OutcomeEvent]:
         """Merge in-memory events with loaded historical events (dedup by ID).
 
         Returns all events for the tenant, newest first.
         """
         merged: dict[str, OutcomeEvent] = {}
+        metric_type_set = set(metric_types) if metric_types is not None else None
         if self._persistence is not None:
-            for ev in self._persistence.load_events(tenant_id=tenant_id, since=since):
+            for ev in self._persistence.load_events(
+                tenant_id=tenant_id,
+                since=since,
+                until=until,
+                domain=domain,
+                metric_types=metric_types,
+                limit=limit,
+            ):
                 merged[ev.id] = ev
         # In-memory events override DB rows if IDs collide
         for ev in self._events.values():
-            if ev.tenant_id == tenant_id and (since is None or ev.occurred_at >= since):
-                merged[ev.id] = ev
+            if ev.tenant_id != tenant_id:
+                continue
+            if since is not None and ev.occurred_at < since:
+                continue
+            if until is not None and ev.occurred_at > until:
+                continue
+            if domain is not None and ev.domain != domain:
+                continue
+            if metric_type_set is not None and ev.metric_type not in metric_type_set:
+                continue
+            merged[ev.id] = ev
         result = list(merged.values())
         result.sort(key=lambda item: item.occurred_at, reverse=True)
+        if limit is not None:
+            return result[: max(limit, 0)]
         return result
 
     def compute_roi(
@@ -187,8 +216,7 @@ class OutcomesService:
     ) -> dict[str, float | int]:
         """Compute ROI estimate for a given domain over a time window."""
         since = datetime.now(UTC) - timedelta(days=window_days)
-        all_events = self.load_historical(tenant_id, since=since)
-        domain_events = [ev for ev in all_events if ev.domain == domain]
+        domain_events = self.load_historical(tenant_id, since=since, domain=domain)
 
         success_events = [
             ev for ev in domain_events if ev.metric_type == OutcomeMetricType.SUCCESS_RATE
@@ -230,9 +258,11 @@ class OutcomesService:
         fourteen_days_ago = now - timedelta(days=14)
         seven_days_ago = now - timedelta(days=7)
 
-        all_events = self.load_historical(tenant_id, since=fourteen_days_ago)
-        if domain is not None:
-            all_events = [ev for ev in all_events if ev.domain == domain]
+        all_events = self.load_historical(
+            tenant_id,
+            since=fourteen_days_ago,
+            domain=domain,
+        )
 
         numeric_metrics = [
             OutcomeMetricType.SUCCESS_RATE,
@@ -308,6 +338,32 @@ class OutcomesService:
         if metric_type is not None:
             events = [item for item in events if item.metric_type == metric_type]
         return events
+
+    def health_check(self, *, alert_threshold_hours: float = 24.0) -> dict[str, object]:
+        """Return P68-Lite monitoring health status.
+
+        Returns ``{"status": "ok"}`` when at least one event exists whose
+        ``occurred_at`` is within *alert_threshold_hours* of now.  Returns
+        ``{"status": "stale", "hours_since_last_event": N}`` when the most
+        recent event across **all** tenants is older than the threshold, and
+        ``{"status": "stale", "hours_since_last_event": null}`` when the
+        table has never received any events.
+        """
+        now = datetime.now(UTC)
+        most_recent = max(self._events.values(), key=lambda ev: ev.occurred_at, default=None)
+        if self._persistence is not None:
+            persisted_recent = self._persistence.load_most_recent_event()
+            if persisted_recent is not None and (
+                most_recent is None or persisted_recent.occurred_at > most_recent.occurred_at
+            ):
+                most_recent = persisted_recent
+        if most_recent is None:
+            return {"status": "stale", "hours_since_last_event": None}
+        delta_hours = (now - most_recent.occurred_at).total_seconds() / 3600.0
+
+        if delta_hours <= alert_threshold_hours:
+            return {"status": "ok"}
+        return {"status": "stale", "hours_since_last_event": round(delta_hours, 2)}
 
     @staticmethod
     def _compute_direction(

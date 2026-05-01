@@ -1,5 +1,82 @@
 # Findings
 
+## 2026-04-27 (Operator UX / Agent OS expansion)
+
+- The primary platform gap was not raw endpoint coverage; it was that layman
+  operators had to discover JSON/API-shaped actions instead of being guided by
+  plain-language, job-oriented surfaces.
+- The complete remediation wave replaced the flat, API-centric entry path with:
+  Start Here onboarding, Review Queue, Safety Center, Skill Wizard, Workflow
+  Starter, Tool Fabric, Improvement Loops, MCP Health/actions, and grouped
+  navigation by operator job.
+- Agent OS is now a productized operator runtime instead of an internal devbox:
+  it has a non-root contained Linux environment, helper commands, docs, and named
+  session workspaces mounted into `/agent-workspace`.
+- MCP/EVOKORE work is now visible and actionable from the operator UI: health,
+  proxy fleet status, tool inventory, CLI sync drift, sync push, config
+  validation, and proxy reload all live in MCP Health.
+- Recurring competitive/product research no longer requires hand-authored JSON or
+  cron tuning: Improvement Loops now include one-click scheduled launchers for
+  competitive scans, layman UX watch, and Agent OS horizon scanning.
+- Remaining future work should be treated as a new scoped planning cycle, not as
+  unfinished debt from the roadmap queues closed through `#447`.
+
+## 2026-04-20 (Session 130 community submissions)
+
+- The backend already exposes the essential community-submission contract on
+  `main`:
+  - `POST /v1/marketplace/curation/submit`
+  - `GET /v1/marketplace/curation/{name}`
+  - `GET /v1/marketplace/quality/{name}`
+- The admin review/feature/verify/deprecate routes also already exist, but they
+  are out of scope for the next slice because the roadmap item is community
+  submissions, not operator review tooling.
+- The smallest complete next slice is frontend submission/status UX layered into
+  the marketplace experience for already-installed packs.
+- The implemented shape keeps this as an extension of the marketplace detail
+  panel, which avoids introducing a second workflow surface while still exposing
+  submission, status, quality, and review feedback.
+- The older PackHub/community registry routes under `/v1/packs/hub/*` are
+  adjacent platform capability, not the core missing surface for this slice.
+- On this Windows host, the stable frontend test command remains the
+  single-fork Vitest invocation already recorded in `progress.md`.
+
+## 2026-04-20 (Session 130 pack marketplace web UI)
+
+- The backend marketplace contract already exists on `main`; the missing user
+  value was a frontend entry point that aggregates:
+  - marketplace summaries and versions from `/v1/marketplace/*`
+  - installed-pack state from `/v1/packs`
+  - trust posture from `/v1/packs/{name}/trust`
+  - curation / featured metadata from `/v1/marketplace/curation` and
+    `/v1/marketplace/featured`
+- The safest UI shape is client-side filtering over the marketplace list instead
+  of pushing search/category composition into new backend endpoints.
+- Featured and curation endpoints are useful enrichments, but the page must
+  degrade safely if those services are unavailable; the core hard dependency is
+  only the marketplace pack list.
+- Marketplace cards need native button semantics for accessibility and testing;
+  overriding the role breaks keyboard/query behavior.
+- On this Windows host, Vitest's default worker pool can hang on the marketplace
+  spec; use the single-fork invocation recorded in `progress.md` for reliable
+  reruns.
+
+## 2026-04-20 (Session 129 operator/docs follow-up)
+
+- PR `#411` is merged on `main` as commit `8f1cbe3`; the remaining gate before
+  marketplace work is docs/operator drift rather than runtime code.
+- The freshest queue authority must now be `docs/next-session.md`,
+  `docs/phases/PHASE-PLAN-POST-P72-2026.md`, and the Session 129 scope note, not
+  the older Session 128 pre-merge handoff state.
+- This environment's editable Python install resolves `agent33` from the stale
+  root checkout unless `PYTHONPATH` is pinned to the active worktree's
+  `engine\src`, so fresh-main verification can produce false regressions if the
+  source path is not forced.
+- The remaining operator/docs debt is narrow and safe to isolate:
+  queue-state drift through `#411`, raw onboarding path references, clearer local
+  credential guidance for the frontend, and consistent Ollama default model
+  wording (`llama3.2:3b`) in operator docs.
+
 ## 2026-04-10 (POST-3.2)
 
 - The merged baseline already had the lightweight GitHub-backed registry client; the meaningful POST-3.2 gap was revocation semantics plus Sigstore-aware provenance verification.

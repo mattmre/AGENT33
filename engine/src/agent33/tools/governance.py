@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING, Any
 from agent33.config import settings
 from agent33.security.approval_tokens import ApprovalTokenError, ApprovalTokenManager
 from agent33.security.permissions import check_permission
-from agent33.tools.approvals import ApprovalReason, ToolApprovalService
+from agent33.tools.approvals import (
+    ApprovalReason,
+    ApprovalRiskTier,
+    ToolApprovalService,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -153,6 +157,7 @@ class ToolGovernance:
         """
         # --- Tool-specific governance policies ---
         operation = self._resolve_operation(tool_name, params)
+        approval_validated = False
         if context.tool_policies:
             policy_result = self._check_tool_policy(tool_name, params, context)
             if policy_result is not None:
@@ -171,30 +176,34 @@ class ToolGovernance:
                             tool_name=tool_name,
                             operation=operation,
                             tenant_id=context.tenant_id,
+                            consume=False,
                         ):
-                            return True
-                        if self._approval_service is not None:
-                            approval = self._approval_service.request(
-                                reason=ApprovalReason.TOOL_POLICY_ASK,
-                                tool_name=tool_name,
-                                operation=operation,
-                                command=str(params.get("command", "")),
-                                requested_by=context.requested_by,
-                                tenant_id=context.tenant_id,
-                                details="Tool policy requires operator approval.",
-                            )
-                            logger.info(
-                                "Tool policy requires approval: tool=%s approval_id=%s",
-                                tool_name,
-                                approval.approval_id,
-                            )
+                            approval_validated = True
                         else:
-                            logger.info("Tool policy requires approval: tool=%s", tool_name)
-                        logger.info(
-                            "Tool policy approval pending: tool=%s (blocking)",
-                            tool_name,
-                        )
-                        return False
+                            if self._approval_service is not None:
+                                approval = self._approval_service.request(
+                                    reason=ApprovalReason.TOOL_POLICY_ASK,
+                                    tool_name=tool_name,
+                                    operation=operation,
+                                    command=str(params.get("command", "")),
+                                    requested_by=context.requested_by,
+                                    tenant_id=context.tenant_id,
+                                    details="Tool policy requires operator approval.",
+                                    arguments=self._sanitize_approval_arguments(params),
+                                    risk_tier=ApprovalRiskTier.MEDIUM,
+                                )
+                                logger.info(
+                                    "Tool policy requires approval: tool=%s approval_id=%s",
+                                    tool_name,
+                                    approval.approval_id,
+                                )
+                            else:
+                                logger.info("Tool policy requires approval: tool=%s", tool_name)
+                            logger.info(
+                                "Tool policy approval pending: tool=%s (blocking)",
+                                tool_name,
+                            )
+                            return False
                 # "allow" continues to normal checks
 
         # --- Rate limiting ---
@@ -216,37 +225,42 @@ class ToolGovernance:
                 autonomy_level == AutonomyLevel.SUPERVISED
                 and tool_name in _DESTRUCTIVE_PARAMS
                 and operation in _DESTRUCTIVE_PARAMS[tool_name]
+                and not approval_validated
             ):
                 if self._try_consume_approval(
                     params=params,
                     tool_name=tool_name,
                     operation=operation,
                     tenant_id=context.tenant_id,
+                    consume=False,
                 ):
-                    return True
-                if self._approval_service is not None:
-                    approval = self._approval_service.request(
-                        reason=ApprovalReason.SUPERVISED_DESTRUCTIVE,
-                        tool_name=tool_name,
-                        operation=operation,
-                        command=str(params.get("command", "")),
-                        requested_by=context.requested_by,
-                        tenant_id=context.tenant_id,
-                        details="Supervised autonomy requires operator approval.",
-                    )
-                    logger.info(
-                        "Supervised approval required: tool=%s operation=%s approval_id=%s",
-                        tool_name,
-                        operation,
-                        approval.approval_id,
-                    )
+                    approval_validated = True
                 else:
-                    logger.info(
-                        "Supervised approval required: tool=%s operation=%s",
-                        tool_name,
-                        operation,
-                    )
-                return False
+                    if self._approval_service is not None:
+                        approval = self._approval_service.request(
+                            reason=ApprovalReason.SUPERVISED_DESTRUCTIVE,
+                            tool_name=tool_name,
+                            operation=operation,
+                            command=str(params.get("command", "")),
+                            requested_by=context.requested_by,
+                            tenant_id=context.tenant_id,
+                            details="Supervised autonomy requires operator approval.",
+                            arguments=self._sanitize_approval_arguments(params),
+                            risk_tier=ApprovalRiskTier.HIGH,
+                        )
+                        logger.info(
+                            ("Supervised approval required: tool=%s operation=%s approval_id=%s"),
+                            tool_name,
+                            operation,
+                            approval.approval_id,
+                        )
+                    else:
+                        logger.info(
+                            "Supervised approval required: tool=%s operation=%s",
+                            tool_name,
+                            operation,
+                        )
+                    return False
 
         # --- Scope check ---
         required_scope = self.TOOL_SCOPE_MAP.get(tool_name, "tools:execute")
@@ -293,17 +307,29 @@ class ToolGovernance:
                 )
                 return False
 
+        if approval_validated and not self._try_consume_approval(
+            params=params,
+            tool_name=tool_name,
+            operation=operation,
+            tenant_id=context.tenant_id,
+            consume=True,
+        ):
+            logger.warning("Approval consumption failed after validation: tool=%s", tool_name)
+            return False
+
         return True
 
     def _try_consume_approval(
-        self, params: dict[str, Any], tool_name: str, operation: str, tenant_id: str
+        self,
+        params: dict[str, Any],
+        tool_name: str,
+        operation: str,
+        tenant_id: str,
+        *,
+        consume: bool,
     ) -> bool:
         """Consume a matching approved request via approval token or approval ID."""
-        sanitized_params = {
-            key: value
-            for key, value in params.items()
-            if key not in {"__approval_id", "__approval_token"}
-        }
+        sanitized_params = self._sanitize_approval_arguments(params)
         approval_token = params.get("__approval_token")
         if (
             isinstance(approval_token, str)
@@ -322,7 +348,18 @@ class ToolGovernance:
                 logger.info("Approval token rejected: tool=%s error=%s", tool_name, exc)
                 return False
             if self._approval_service is None:
-                return (not payload.one_time) or self._approval_token_manager.consume(payload.jti)
+                return (
+                    not consume
+                    or (not payload.one_time)
+                    or self._approval_token_manager.consume(payload.jti)
+                )
+            if not consume:
+                return self._approval_service.is_approved(
+                    payload.jti,
+                    tool_name=tool_name,
+                    operation=operation,
+                    tenant_id=tenant_id,
+                )
             consumed = self._approval_service.consume_if_approved(
                 payload.jti,
                 tool_name=tool_name,
@@ -338,12 +375,28 @@ class ToolGovernance:
         approval_id = params.get("__approval_id")
         if not isinstance(approval_id, str) or not approval_id:
             return False
+        if not consume:
+            return self._approval_service.is_approved(
+                approval_id,
+                tool_name=tool_name,
+                operation=operation,
+                tenant_id=tenant_id,
+            )
         return self._approval_service.consume_if_approved(
             approval_id,
             tool_name=tool_name,
             operation=operation,
             tenant_id=tenant_id,
         )
+
+    @staticmethod
+    def _sanitize_approval_arguments(params: dict[str, Any]) -> dict[str, object]:
+        """Remove transport-only approval keys before hashing or persisting arguments."""
+        return {
+            key: value
+            for key, value in params.items()
+            if key not in {"__approval_id", "__approval_token"}
+        }
 
     def _check_tool_policy(
         self,

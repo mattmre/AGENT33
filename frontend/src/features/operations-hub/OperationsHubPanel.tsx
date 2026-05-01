@@ -1,26 +1,41 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ApiResult } from "../../types";
 import {
   asOperationsHubDetail,
   asOperationsHubResponse,
+  asRecoveryReplaySummary,
+  asRecoverySessionSummaries,
+  checkpointSession,
   controlProcess,
+  fetchIncompleteSessions,
   fetchOperationsHub,
-  fetchProcessDetail
+  fetchProcessDetail,
+  fetchReplaySummary,
+  resumeIncompleteSession
 } from "./api";
 import {
+  buildOperationsTimeline,
   canCancel,
   canPause,
   canResume,
   filterAndSortProcesses,
   formatTimestamp,
   getStatusClass,
-  getStatusLabel
+  getStatusLabel,
+  summarizeOperations
 } from "./helpers";
+import { IngestionReviewPanel } from "./IngestionReviewPanel";
+import {
+  OPERATIONS_RECOVERY_PANEL_ID,
+  consumeOperationsRecoveryFocusRequest
+} from "./recoveryNavigation";
 import type {
   OperationsHubControlAction,
   OperationsHubProcessDetail,
-  OperationsHubProcessSummary
+  OperationsHubProcessSummary,
+  RecoveryReplaySummary,
+  RecoverySessionSummary
 } from "./types";
 
 interface OperationsHubPanelProps {
@@ -36,11 +51,43 @@ function stringifyMetadata(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function sortRecoverySessions(
+  sessions: RecoverySessionSummary[]
+): RecoverySessionSummary[] {
+  return [...sessions].sort((left, right) => {
+    return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+  });
+}
+
+function formatDurationSeconds(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0s";
+  }
+  if (value < 60) {
+    return `${Math.round(value)}s`;
+  }
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function summarizeReplayTypes(byType: Record<string, number>): string {
+  const entries = Object.entries(byType).sort((left, right) => right[1] - left[1]);
+  if (entries.length === 0) {
+    return "No replay events recorded yet.";
+  }
+  return entries
+    .slice(0, 3)
+    .map(([eventType, count]) => `${count} ${getStatusLabel(eventType).toLowerCase()}`)
+    .join(" • ");
+}
+
 export function OperationsHubPanel({
   token,
   apiKey,
   onResult
 }: OperationsHubPanelProps): JSX.Element {
+  const recoveryPanelRef = useRef<HTMLElement | null>(null);
   const [processes, setProcesses] = useState<OperationsHubProcessSummary[]>([]);
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const [selectedProcess, setSelectedProcess] = useState<OperationsHubProcessDetail | null>(null);
@@ -52,6 +99,13 @@ export function OperationsHubPanel({
   const [controlInFlight, setControlInFlight] = useState<OperationsHubControlAction | null>(null);
   const [hubError, setHubError] = useState("");
   const [detailError, setDetailError] = useState("");
+  const [incompleteSessions, setIncompleteSessions] = useState<RecoverySessionSummary[]>([]);
+  const [replaySummaries, setReplaySummaries] = useState<Record<string, RecoveryReplaySummary>>({});
+  const [loadingRecovery, setLoadingRecovery] = useState(false);
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryActionId, setRecoveryActionId] = useState("");
+  const [recoveryStatus, setRecoveryStatus] = useState("");
+  const [shouldFocusRecoveryPanel] = useState(() => consumeOperationsRecoveryFocusRequest());
 
   const loadHub = useCallback(async (): Promise<void> => {
     if (!token && !apiKey) {
@@ -103,6 +157,58 @@ export function OperationsHubPanel({
     [apiKey, onResult, token]
   );
 
+  const loadRecovery = useCallback(async (): Promise<void> => {
+    if (!token && !apiKey) {
+      return;
+    }
+    setLoadingRecovery(true);
+    try {
+      const result = await fetchIncompleteSessions(token, apiKey);
+      onResult("Operations Hub - Incomplete Sessions", result);
+      const sessions = asRecoverySessionSummaries(result.data);
+      if (!result.ok || sessions === null) {
+        setRecoveryError(`Failed to load recovery sessions (${result.status})`);
+        return;
+      }
+
+      const orderedSessions = sortRecoverySessions(sessions);
+      setIncompleteSessions(orderedSessions);
+      setRecoveryError("");
+
+      if (orderedSessions.length === 0) {
+        setReplaySummaries({});
+        return;
+      }
+
+      const summaryResults = await Promise.allSettled(
+        orderedSessions.map(async (session) => {
+          const replayResult = await fetchReplaySummary(session.session_id, token, apiKey);
+          if (!replayResult.ok) {
+            return [session.session_id, null] as const;
+          }
+          return [session.session_id, asRecoveryReplaySummary(replayResult.data)] as const;
+        })
+      );
+
+      const nextSummaries: Record<string, RecoveryReplaySummary> = {};
+      summaryResults.forEach((resultItem) => {
+        if (resultItem.status !== "fulfilled") {
+          return;
+        }
+        const [sessionId, summary] = resultItem.value;
+        if (summary !== null) {
+          nextSummaries[sessionId] = summary;
+        }
+      });
+      setReplaySummaries(nextSummaries);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown session recovery error";
+      setRecoveryError(message);
+    } finally {
+      setLoadingRecovery(false);
+    }
+  }, [apiKey, onResult, token]);
+
   useEffect(() => {
     loadHub();
     const interval = setInterval(() => {
@@ -110,6 +216,18 @@ export function OperationsHubPanel({
     }, 1500);
     return () => clearInterval(interval);
   }, [loadHub]);
+
+  useEffect(() => {
+    void loadRecovery();
+  }, [loadRecovery]);
+
+  useEffect(() => {
+    if (!shouldFocusRecoveryPanel || recoveryPanelRef.current === null) {
+      return;
+    }
+    recoveryPanelRef.current.scrollIntoView({ block: "start" });
+    recoveryPanelRef.current.focus();
+  }, [shouldFocusRecoveryPanel]);
 
   useEffect(() => {
     if (selectedProcessId === null) {
@@ -123,6 +241,12 @@ export function OperationsHubPanel({
   const filteredProcesses = useMemo(() => {
     return filterAndSortProcesses(processes, statusFilter, textFilter);
   }, [processes, statusFilter, textFilter]);
+
+  const timelineSummary = useMemo(() => summarizeOperations(processes), [processes]);
+  const timelineItems = useMemo(
+    () => buildOperationsTimeline(filteredProcesses, selectedProcess),
+    [filteredProcesses, selectedProcess]
+  );
 
   const availableStatuses = useMemo(() => {
     const values = new Set<string>(["all"]);
@@ -160,12 +284,44 @@ export function OperationsHubPanel({
     }
   }
 
+  async function handleRecoveryAction(
+    action: "resume" | "checkpoint",
+    sessionId: string
+  ): Promise<void> {
+    setRecoveryError("");
+    setRecoveryStatus("");
+    setRecoveryActionId(`${action}:${sessionId}`);
+    try {
+      const result =
+        action === "resume"
+          ? await resumeIncompleteSession(sessionId, token, apiKey)
+          : await checkpointSession(sessionId, token, apiKey);
+      onResult(`Operations Hub - Session ${getStatusLabel(action)}`, result);
+      if (!result.ok) {
+        setRecoveryError(`Session ${action} failed (${result.status})`);
+        return;
+      }
+      setRecoveryStatus(
+        action === "resume"
+          ? `Session ${sessionId} resumed. Watch the live run below.`
+          : `Checkpoint saved for session ${sessionId}.`
+      );
+      await Promise.all([loadRecovery(), loadHub()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown recovery action error";
+      setRecoveryError(message);
+    } finally {
+      setRecoveryActionId("");
+    }
+  }
+
   return (
     <section className="operations-hub-panel">
       <header className="ops-hub-head">
         <div>
-          <h2>Operations Hub</h2>
-          <p>Unified lifecycle view with pause/resume/cancel controls.</p>
+          <p className="ops-hub-eyebrow">Run Timeline</p>
+          <h2>See what the agents are doing right now</h2>
+          <p>Plain-language progress, attention signals, and safe controls for active work.</p>
         </div>
         <div className="ops-hub-filters">
           <label>
@@ -188,6 +344,157 @@ export function OperationsHubPanel({
           </label>
         </div>
       </header>
+      <section className="ops-timeline-overview" aria-label="Run timeline overview">
+        <div className="ops-timeline-summary-card">
+          <span>Current state</span>
+          <strong>{timelineSummary.primaryMessage}</strong>
+          <p>{timelineSummary.nextAction}</p>
+        </div>
+        <div className="ops-timeline-stats" aria-label="Run counts">
+          <div>
+            <strong>{timelineSummary.total}</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.active}</strong>
+            <span>Working</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.attention}</strong>
+            <span>Needs attention</span>
+          </div>
+          <div>
+            <strong>{timelineSummary.done}</strong>
+            <span>Done</span>
+          </div>
+        </div>
+      </section>
+      <section
+        id={OPERATIONS_RECOVERY_PANEL_ID}
+        ref={recoveryPanelRef}
+        className="ops-recovery-panel"
+        aria-label="Session recovery"
+        tabIndex={-1}
+      >
+        <div className="ops-recovery-head">
+          <div>
+            <h3>Session recovery</h3>
+            <p>Recover suspended or crashed sessions before starting another host-backed run.</p>
+          </div>
+          <button type="button" onClick={() => void loadRecovery()} disabled={loadingRecovery}>
+            {loadingRecovery ? "Refreshing..." : "Refresh recovery"}
+          </button>
+        </div>
+        {recoveryError ? <p className="ops-hub-error" role="alert">{recoveryError}</p> : null}
+        {recoveryStatus ? <p className="review-action-success">{recoveryStatus}</p> : null}
+        {loadingRecovery && incompleteSessions.length === 0 ? (
+          <p className="ops-hub-loading">Loading recovery candidates...</p>
+        ) : null}
+        {incompleteSessions.length === 0 && !loadingRecovery ? (
+          <p className="ops-hub-empty">No suspended or crashed sessions are waiting for recovery.</p>
+        ) : null}
+        {incompleteSessions.length > 0 ? (
+          <div className="ops-recovery-grid">
+            {incompleteSessions.map((session) => {
+              const replaySummary = replaySummaries[session.session_id];
+              const resumeActionId = `resume:${session.session_id}`;
+              const checkpointActionId = `checkpoint:${session.session_id}`;
+              const sessionLabel = session.purpose.trim() || session.session_id;
+              return (
+                <article key={session.session_id} className="ops-recovery-card">
+                  <div className="ops-recovery-card-head">
+                    <div>
+                      <span>Recovery candidate</span>
+                      <h4>{sessionLabel}</h4>
+                    </div>
+                    <span className={`process-status ${getStatusClass(session.status)}`}>
+                      {getStatusLabel(session.status)}
+                    </span>
+                  </div>
+                  <p>
+                    Last updated {formatTimestamp(session.updated_at)}. {session.tasks_completed} of{" "}
+                    {session.task_count} tracked tasks are complete.
+                  </p>
+                  <dl className="ops-recovery-meta">
+                    <div>
+                      <dt>Session ID</dt>
+                      <dd>{session.session_id}</dd>
+                    </div>
+                    <div>
+                      <dt>Event count</dt>
+                      <dd>{session.event_count}</dd>
+                    </div>
+                    <div>
+                      <dt>Started</dt>
+                      <dd>{formatTimestamp(session.started_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>Tenant</dt>
+                      <dd>{session.tenant_id || "global"}</dd>
+                    </div>
+                  </dl>
+                  <div className="ops-recovery-replay">
+                    <strong>Replay summary</strong>
+                    {replaySummary ? (
+                      <>
+                        <p>
+                          {replaySummary.total_events} events across {formatDurationSeconds(replaySummary.duration_seconds)}.
+                        </p>
+                        <p>{summarizeReplayTypes(replaySummary.by_type)}</p>
+                        <small>Latest event {formatTimestamp(replaySummary.last_event_at)}</small>
+                      </>
+                    ) : (
+                      <p>No replay summary is available yet for this recovery candidate.</p>
+                    )}
+                  </div>
+                  <div className="ops-recovery-actions">
+                    <button
+                      type="button"
+                      disabled={recoveryActionId !== "" || session.status.toLowerCase() === "active"}
+                      onClick={() => void handleRecoveryAction("resume", session.session_id)}
+                    >
+                      {recoveryActionId === resumeActionId ? "Resuming..." : "Resume session"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={recoveryActionId !== ""}
+                      onClick={() => void handleRecoveryAction("checkpoint", session.session_id)}
+                    >
+                      {recoveryActionId === checkpointActionId ? "Checkpointing..." : "Save checkpoint"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+      <section className="ops-timeline-panel" aria-label="Latest agent activity">
+        <div className="ops-timeline-head">
+          <div>
+            <h3>Latest activity</h3>
+            <p>Select a process below to add its step-by-step actions to this timeline.</p>
+          </div>
+          {hubTimestamp ? <span>Updated {formatTimestamp(hubTimestamp)}</span> : null}
+        </div>
+        {timelineItems.length === 0 && !loadingHub ? (
+          <p className="ops-hub-empty">No agent activity yet.</p>
+        ) : null}
+        {timelineItems.length > 0 ? (
+          <ol className="ops-timeline-list">
+            {timelineItems.map((item) => (
+              <li key={item.id} className={`ops-timeline-item ops-timeline-item--${item.tone}`}>
+                <div className="ops-timeline-marker" aria-hidden="true" />
+                <div>
+                  <span className="ops-timeline-time">{formatTimestamp(item.timestamp)}</span>
+                  <h4>{item.title}</h4>
+                  <p>{item.description}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </section>
       <div className="ops-hub-content">
         <div className="ops-hub-list">
           {hubError ? <p className="ops-hub-error" role="alert">{hubError}</p> : null}
@@ -308,6 +615,7 @@ export function OperationsHubPanel({
           ) : null}
         </div>
       </div>
+      <IngestionReviewPanel token={token} apiKey={apiKey} onResult={onResult} />
     </section>
   );
 }
