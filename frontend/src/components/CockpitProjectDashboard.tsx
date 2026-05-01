@@ -14,6 +14,7 @@ interface CockpitProjectDashboardProps {
   onReviewCurrentWork: () => void;
   onOpenWorkflows: () => void;
   onOpenSafety: () => void;
+  showDetailSections?: boolean;
 }
 
 function getRecommendedAction(workspace: WorkspaceSessionSummary): string {
@@ -37,7 +38,8 @@ export function CockpitProjectDashboard({
   permissionModeId,
   onReviewCurrentWork,
   onOpenWorkflows,
-  onOpenSafety
+  onOpenSafety,
+  showDetailSections = true
 }: CockpitProjectDashboardProps): JSX.Element {
   const permissionMode = getPermissionMode(permissionModeId);
   const taskCounts = getWorkspaceTaskCounts(workspace.id);
@@ -57,6 +59,16 @@ export function CockpitProjectDashboard({
           <span className="eyebrow">Project cockpit</span>
           <h2>{workspace.name}</h2>
           <p>{workspace.goal}</p>
+          <p className="cockpit-dashboard-crumb">
+            <span>WS</span>
+            <b>{workspace.id}</b>
+            <span className="sep">·</span>
+            <span>TEMPLATE</span>
+            <b>{workspace.template}</b>
+            <span className="sep">·</span>
+            <span>TASKS</span>
+            <b>{workspace.tasks}</b>
+          </p>
         </div>
         <div className="cockpit-dashboard-status" aria-label="Current project status">
           <span>{workspace.status}</span>
@@ -113,72 +125,76 @@ export function CockpitProjectDashboard({
         </article>
       </div>
 
-      <section className="cockpit-dashboard-timeline" aria-label="Artifact timeline">
-        <div className="cockpit-dashboard-section-heading">
-          <div>
-            <span className="eyebrow">Artifacts</span>
-            <h3>Review timeline</h3>
-          </div>
-          <p>Typed evidence cards show owner, review state, timestamp, and the next safe action.</p>
-        </div>
-        <div className="cockpit-dashboard-artifacts">
-          {artifacts.map((artifact) => (
-            <article key={artifact.id} className={`artifact-card artifact-card-${artifact.status}`}>
-              <span>{artifact.kind}</span>
-              <strong>{artifact.title}</strong>
-              <p>{artifact.summary}</p>
-              <dl className="artifact-card-meta">
-                <div>
-                  <dt>Status</dt>
-                  <dd>{getArtifactStatusLabel(artifact)}</dd>
-                </div>
-                <div>
-                  <dt>Owner</dt>
-                  <dd>{artifact.ownerRole}</dd>
-                </div>
-                <div>
-                  <dt>Source</dt>
-                  <dd>{artifact.sourceLabel}</dd>
-                </div>
-                <div>
-                  <dt>Updated</dt>
-                  <dd>{artifact.timestampLabel}</dd>
-                </div>
-              </dl>
-              <p className="artifact-card-next-action">Next: {artifact.nextActionLabel}</p>
-              <button
-                type="button"
-                aria-label={`Review ${artifact.kind} artifact: ${artifact.title}`}
-                onClick={onReviewCurrentWork}
-              >
-                Review current work
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
+      {showDetailSections ? (
+        <>
+          <section className="cockpit-dashboard-timeline" aria-label="Artifact timeline">
+            <div className="cockpit-dashboard-section-heading">
+              <div>
+                <span className="eyebrow">Artifacts</span>
+                <h3>Review timeline</h3>
+              </div>
+              <p>Typed evidence cards show owner, review state, timestamp, and the next safe action.</p>
+            </div>
+            <div className="cockpit-dashboard-artifacts">
+              {artifacts.map((artifact) => (
+                <article key={artifact.id} className={`artifact-card artifact-card-${artifact.status}`}>
+                  <span>{artifact.kind}</span>
+                  <strong>{artifact.title}</strong>
+                  <p>{artifact.summary}</p>
+                  <dl className="artifact-card-meta">
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{getArtifactStatusLabel(artifact)}</dd>
+                    </div>
+                    <div>
+                      <dt>Owner</dt>
+                      <dd>{artifact.ownerRole}</dd>
+                    </div>
+                    <div>
+                      <dt>Source</dt>
+                      <dd>{artifact.sourceLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>Updated</dt>
+                      <dd>{artifact.timestampLabel}</dd>
+                    </div>
+                  </dl>
+                  <p className="artifact-card-next-action">Next: {artifact.nextActionLabel}</p>
+                  <button
+                    type="button"
+                    aria-label={`Review ${artifact.kind} artifact: ${artifact.title}`}
+                    onClick={onReviewCurrentWork}
+                  >
+                    Review current work
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
 
-      <section className="cockpit-dashboard-safety-signals" aria-label="Safety and coordination signals">
-        <div className="cockpit-dashboard-section-heading">
-          <div>
-            <span className="eyebrow">Coordination</span>
-            <h3>{opsSafety.summary.primaryMessage}</h3>
-          </div>
-          <p>{opsSafety.summary.nextAction}</p>
-        </div>
-        <div className="cockpit-dashboard-signal-grid">
-          {safetySignals.map((signal) => (
-            <article key={signal.id} className={`cockpit-safety-signal signal-${signal.status}`}>
-              <span>{signal.kind.replace(/-/g, " ")}</span>
-              <strong>{signal.title}</strong>
-              <p>{signal.summary}</p>
-              <small>
-                {signal.sourceLabel} {"->"} {signal.relatedArtifactKind} artifact
-              </small>
-            </article>
-          ))}
-        </div>
-      </section>
+          <section className="cockpit-dashboard-safety-signals" aria-label="Safety and coordination signals">
+            <div className="cockpit-dashboard-section-heading">
+              <div>
+                <span className="eyebrow">Coordination</span>
+                <h3>{opsSafety.summary.primaryMessage}</h3>
+              </div>
+              <p>{opsSafety.summary.nextAction}</p>
+            </div>
+            <div className="cockpit-dashboard-signal-grid">
+              {safetySignals.map((signal) => (
+                <article key={signal.id} className={`cockpit-safety-signal signal-${signal.status}`}>
+                  <span>{signal.kind.replace(/-/g, " ")}</span>
+                  <strong>{signal.title}</strong>
+                  <p>{signal.summary}</p>
+                  <small>
+                    {signal.sourceLabel} {"->"} {signal.relatedArtifactKind} artifact
+                  </small>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
     </section>
   );
 }

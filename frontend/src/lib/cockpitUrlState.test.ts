@@ -22,14 +22,14 @@ describe("cockpit URL state", () => {
   it("falls back safely for invalid deep-link params", () => {
     expect(
       readCockpitUrlState("?view=not-real&workspace=nope&permission=god-mode&drawer=terminal", {
-        activeTab: "start",
+        activeTab: "cockpit",
         workspaceId: "test-review",
         permissionModeId: "workspace",
         drawerSectionId: "activity",
         operatorMode: "pro"
       })
     ).toEqual({
-      activeTab: "start",
+      activeTab: "cockpit",
       workspaceId: "test-review",
       permissionModeId: "workspace",
       drawerSectionId: "activity",
@@ -50,13 +50,13 @@ describe("cockpit URL state", () => {
 
     expect(
       createCockpitUrl("http://localhost:5173/?drawer=logs", {
-        activeTab: "guide",
+        activeTab: "cockpit",
         workspaceId: "solo-builder",
         permissionModeId: "observe",
         drawerSectionId: "logs",
         operatorMode: "pro"
       })
-    ).toBe("/?view=guide&workspace=solo-builder&permission=observe&operatorMode=pro");
+    ).toBe("/?view=cockpit&workspace=solo-builder&permission=observe&operatorMode=pro");
   });
 
   it("validates artifact drawer section ids", () => {

@@ -32,6 +32,7 @@ describe("app navigation registry", () => {
   });
 
   it("returns beginner-readable labels for registered tabs", () => {
+    expect(getAppTabLabel("cockpit")).toBe("Operations Cockpit");
     expect(getAppTabLabel("guide")).toBe("Guide / Intake");
     expect(getAppTabLabel("operations")).toBe("Sessions & Runs");
     expect(getAppTabLabel("advanced")).toBe("Control Plane");
@@ -46,10 +47,12 @@ describe("app navigation registry", () => {
     expect(new Set(secondaryIds).size).toBe(secondaryIds.length);
     expect(primaryIds.some((id) => secondaryIds.includes(id))).toBe(false);
     expect(new Set(splitIds)).toEqual(new Set(APP_TAB_IDS));
-    expect(primaryIds).toEqual(["start", "operations", "advanced", "starter", "connect", "safety", "guide"]);
+    expect(primaryIds).toEqual(["cockpit", "operations", "starter", "advanced"]);
   });
 
   it("identifies whether a tab is a primary cockpit destination or a secondary tool", () => {
+    expect(isPrimaryAppTab("cockpit")).toBe(true);
+    expect(isSecondaryAppTab("cockpit")).toBe(false);
     expect(isPrimaryAppTab("operations")).toBe(true);
     expect(isSecondaryAppTab("operations")).toBe(false);
     expect(isPrimaryAppTab("fabric")).toBe(false);

@@ -14,6 +14,7 @@ interface AdvancedControlPlanePanelProps {
   apiKey: string;
   activity: ActivityItem[];
   operatorMode: OperatorMode;
+  showActivityRail?: boolean;
   onOperatorModeChange: (mode: OperatorMode) => void;
   onSelectedDomainChange: (domainId: string) => void;
   onOpenModels: () => void;
@@ -82,6 +83,7 @@ export function AdvancedControlPlanePanel({
   apiKey,
   activity,
   operatorMode,
+  showActivityRail = true,
   onOperatorModeChange,
   onSelectedDomainChange,
   onOpenModels,
@@ -236,18 +238,20 @@ export function AdvancedControlPlanePanel({
           )}
         </div>
 
-        <ActivityPanel
-          token={token || null}
-          activity={activity}
-          activeSurfaceLabel={visibleDomain?.title ?? "No matching domain"}
-          contextLabel={
-            visibleDomain?.description ?? "Adjust the filter to restore a visible technical surface."
-          }
-          operatorMode={operatorMode}
-          onOpenOperations={onOpenOperations}
-          onOpenSafety={onOpenSafety}
-          onOpenWorkflowCatalog={onOpenWorkflowCatalog}
-        />
+        {showActivityRail ? (
+          <ActivityPanel
+            token={token || null}
+            activity={activity}
+            activeSurfaceLabel={visibleDomain?.title ?? "No matching domain"}
+            contextLabel={
+              visibleDomain?.description ?? "Adjust the filter to restore a visible technical surface."
+            }
+            operatorMode={operatorMode}
+            onOpenOperations={onOpenOperations}
+            onOpenSafety={onOpenSafety}
+            onOpenWorkflowCatalog={onOpenWorkflowCatalog}
+          />
+        ) : null}
       </div>
     </section>
   );

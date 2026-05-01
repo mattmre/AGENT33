@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuthPanel } from "./components/AuthPanel";
+import { ActivityPanel } from "./components/ActivityPanel";
 import { AppNavigation } from "./components/AppNavigation";
 import { ArtifactReviewDrawer } from "./components/ArtifactReviewDrawer";
-import { CockpitProjectDashboard } from "./components/CockpitProjectDashboard";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { PermissionModeControl } from "./components/PermissionModeControl";
 import { ShipyardLaneScaffold } from "./components/ShipyardLaneScaffold";
@@ -43,6 +43,11 @@ import {
   AdvancedControlPlanePanel,
   type OperatorMode
 } from "./features/advanced/AdvancedControlPlanePanel";
+import {
+  ControlPlaneCockpitPanel,
+  getCockpitPrimaryDomains
+} from "./features/cockpit/ControlPlaneCockpitPanel";
+import { DesignKitSurfacesPanel } from "./features/design-kit/DesignKitSurfacesPanel";
 import { domains } from "./data/domains";
 import {
   DEFAULT_APP_TAB,
@@ -163,8 +168,32 @@ export default function App(): JSX.Element {
   );
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
   const selectedPermissionMode = getPermissionMode(permissionModeId);
+  const cockpitPrimaryDomains = useMemo(() => getCockpitPrimaryDomains(domains), []);
+  const activeCockpitDomain = useMemo(
+    () =>
+      cockpitPrimaryDomains.find((domain) => domain.id === selectedDomainId) ??
+      cockpitPrimaryDomains[0] ??
+      domains[0] ??
+      null,
+    [cockpitPrimaryDomains, selectedDomainId]
+  );
   const runtimeHost = getRuntimeHost();
-  const showCockpitDashboard = activeTab === "operations";
+  const showArtifactDrawer = activeTab === "operations";
+  const showLiveRail = activeTab === "cockpit" || activeTab === "advanced";
+  const liveRailSurfaceLabel =
+    activeTab === "cockpit"
+      ? activeCockpitDomain?.title ?? "Operations cockpit"
+      : activeTab === "advanced"
+        ? domains.find((domain) => domain.id === selectedDomainId)?.title ?? "Control plane"
+        : getAppTabLabel(activeTab);
+  const liveRailContextLabel =
+    activeTab === "cockpit"
+      ? activeCockpitDomain?.description ??
+        "Choose a live surface to inspect guarded routes, workflow entrypoints, and runtime endpoints."
+      : activeTab === "advanced"
+        ? domains.find((domain) => domain.id === selectedDomainId)?.description ??
+          "Search and inspect raw runtime domains, direct routes, and guarded execution surfaces."
+        : `${selectedWorkspace.name} · ${getAppTabLabel(activeTab)}`;
   const currentCockpitUrlState = useMemo(
     (): CockpitUrlState => ({
       activeTab,
@@ -274,16 +303,6 @@ export default function App(): JSX.Element {
     }
   }, []);
 
-  const focusOperationsBoard = useCallback((): void => {
-    const operationsBoard = document.getElementById("operations-workspace-board");
-    if (!operationsBoard) {
-      throw new Error("Operations workspace board anchor is unavailable.");
-    }
-
-    operationsBoard.scrollIntoView({ block: "start" });
-    operationsBoard.focus();
-  }, []);
-
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -323,17 +342,10 @@ export default function App(): JSX.Element {
             onOpenRuns={() => setActiveTab("operations")}
             onOpenWorkflows={openWorkflowStarter}
           />
-          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
-        </aside>
-
-        <main className="cockpit-main" id="main-content" role="main">
-          <div className="cockpit-context-bar" aria-label="Current workspace context">
-            <div className="cockpit-context-copy">
-              <span className="eyebrow">Now viewing</span>
-              <strong>{getAppTabLabel(activeTab)}</strong>
-              <span className="cockpit-context-note">
-                {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
-              </span>
+          <div className="cockpit-sidebar-context cockpit-sidebar-mode-card">
+            <div className="cockpit-sidebar-mode-head">
+              <span className="eyebrow">Operator</span>
+              <strong>{selectedPermissionMode.label}</strong>
             </div>
             <PermissionModeControl
               selectedModeId={permissionModeId}
@@ -342,19 +354,32 @@ export default function App(): JSX.Element {
               onOperatorModeChange={selectOperatorMode}
             />
           </div>
+          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
+        </aside>
 
-          <div className={showCockpitDashboard ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
-            <div className="cockpit-stage-content">
-              <div className="consumer-content">
-                {showCockpitDashboard ? (
-                  <CockpitProjectDashboard
-                    workspace={selectedWorkspace}
-                    permissionModeId={permissionModeId}
-                    onReviewCurrentWork={focusOperationsBoard}
-                    onOpenWorkflows={() => setActiveTab("starter")}
-                    onOpenSafety={() => setActiveTab("safety")}
-                  />
-                ) : null}
+        <main className="cockpit-main" id="main-content" role="main">
+          <div className={showLiveRail ? "cockpit-main-shell cockpit-main-shell-with-rail" : "cockpit-main-shell"}>
+            <div className={showArtifactDrawer ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
+              <div className="cockpit-stage-content">
+                <div className="consumer-content">
+        {activeTab === "cockpit" && (
+          <div className="consumer-cockpit-layout">
+            <ControlPlaneCockpitPanel
+              workspace={selectedWorkspace}
+              permissionModeId={permissionModeId}
+              domains={domains}
+              selectedDomainId={selectedDomainId}
+              token={token}
+              apiKey={apiKey}
+              onSelectedDomainChange={setSelectedDomainId}
+              onOpenOperations={() => setActiveTab("operations")}
+              onOpenWorkflowStarter={() => setActiveTab("starter")}
+              onOpenSafety={() => setActiveTab("safety")}
+              onOpenSetup={() => setActiveTab("setup")}
+              onResult={onResult}
+            />
+          </div>
+        )}
         {activeTab === "guide" && (
           <div className="consumer-role-intake-layout">
             <RoleIntakePanel
@@ -690,6 +715,7 @@ export default function App(): JSX.Element {
             apiKey={apiKey}
             activity={activity}
             operatorMode={operatorMode}
+            showActivityRail={false}
             onOperatorModeChange={selectOperatorMode}
             onSelectedDomainChange={setSelectedDomainId}
             onOpenModels={() => setActiveTab("models")}
@@ -700,9 +726,15 @@ export default function App(): JSX.Element {
             onResult={onResult}
           />
         )}
+
+        {activeTab === "design-kit" && (
+          <div className="consumer-design-kit-layout">
+            <DesignKitSurfacesPanel onNavigate={setActiveTab} />
+          </div>
+        )}
               </div>
             </div>
-            {showCockpitDashboard ? (
+            {showArtifactDrawer ? (
               <ArtifactReviewDrawer
                 workspace={selectedWorkspace}
                 permissionModeId={permissionModeId}
@@ -710,6 +742,19 @@ export default function App(): JSX.Element {
                 onSectionChange={setDrawerSectionId}
               />
             ) : null}
+            {showLiveRail ? (
+              <ActivityPanel
+                token={token || null}
+                activity={activity}
+                activeSurfaceLabel={liveRailSurfaceLabel}
+                contextLabel={liveRailContextLabel}
+                operatorMode={operatorMode}
+                onOpenOperations={() => setActiveTab("operations")}
+                onOpenSafety={() => setActiveTab("safety")}
+                onOpenWorkflowCatalog={() => setActiveTab("starter")}
+              />
+            ) : null}
+            </div>
           </div>
         </main>
       </div>

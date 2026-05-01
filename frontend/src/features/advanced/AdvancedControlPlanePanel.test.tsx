@@ -230,4 +230,28 @@ describe("AdvancedControlPlanePanel", () => {
 
     expect(screen.getByText("No technical domains are registered.")).toBeInTheDocument();
   });
+
+  it("can suppress the embedded activity rail when the shell provides a global one", () => {
+    render(
+      <AdvancedControlPlanePanel
+        domains={domains}
+        selectedDomainId="auth"
+        token="jwt"
+        apiKey=""
+        activity={[]}
+        operatorMode="pro"
+        showActivityRail={false}
+        onOperatorModeChange={vi.fn()}
+        onSelectedDomainChange={vi.fn()}
+        onOpenModels={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onOpenOperations={vi.fn()}
+        onOpenSafety={vi.fn()}
+        onOpenSetup={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("activity-panel")).not.toBeInTheDocument();
+  });
 });

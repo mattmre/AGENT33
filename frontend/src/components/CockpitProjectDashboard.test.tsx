@@ -18,7 +18,7 @@ describe("CockpitProjectDashboard", () => {
     );
 
     expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
-    expect(screen.getByText("Multi-Agent Shipyard")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Multi-Agent Shipyard" })).toBeInTheDocument();
     expect(screen.getAllByText("PR-first implementation")).toHaveLength(3);
     expect(screen.getByText("3 tasks need attention")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Artifact timeline" })).toBeInTheDocument();
@@ -33,6 +33,25 @@ describe("CockpitProjectDashboard", () => {
     expect(screen.getByRole("region", { name: "Safety gate summary" })).toHaveClass("safety-gate-indicator-review");
     expect(screen.getByLabelText("Needs review: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Top safety gate records")).toBeInTheDocument();
+    expect(screen.getByText("WS")).toBeInTheDocument();
+    expect(screen.getByText("shipyard")).toBeInTheDocument();
+  });
+
+  it("can render a summary-only cockpit view for the live shell", () => {
+    render(
+      <CockpitProjectDashboard
+        workspace={getWorkspaceSession("shipyard")}
+        permissionModeId="pr-first"
+        onReviewCurrentWork={vi.fn()}
+        onOpenWorkflows={vi.fn()}
+        onOpenSafety={vi.fn()}
+        showDetailSections={false}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Artifact timeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Safety and coordination signals" })).not.toBeInTheDocument();
   });
 
   it("routes dashboard actions through the existing cockpit surfaces", async () => {

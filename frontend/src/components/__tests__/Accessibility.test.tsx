@@ -148,11 +148,11 @@ describe("App accessibility", () => {
   it("marks the active tab with aria-current", () => {
     render(<App />);
     const buttons = screen.getAllByRole("button");
-    const guideTabButton = buttons.find(
-      (btn) => btn.textContent?.includes("Guide / Intake")
+    const cockpitTabButton = buttons.find(
+      (btn) => btn.textContent?.includes("Operations Cockpit")
     );
-    expect(guideTabButton).toBeTruthy();
-    expect(guideTabButton).toHaveAttribute("aria-current", "page");
+    expect(cockpitTabButton).toBeTruthy();
+    expect(cockpitTabButton).toHaveAttribute("aria-current", "page");
   });
 
   it("non-active tabs do not have aria-current", () => {
@@ -187,12 +187,13 @@ describe("App accessibility", () => {
     expect(within(permissionRegion).getByText("Prefer reviewable branches and pull requests.")).toBeInTheDocument();
   });
 
-  it("renders the cockpit dashboard and artifact drawer landmarks", () => {
+  it("renders cockpit landing landmarks and keeps operations-specific drawers reachable", () => {
     render(<App />);
+
+    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Sessions & Runs/ }));
 
-    expect(screen.getByRole("region", { name: "Project cockpit dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Shipyard lanes" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Artifact and review drawer" })).toBeInTheDocument();
   });

@@ -1,4 +1,5 @@
 export const APP_TAB_IDS = [
+  "cockpit",
   "guide",
   "start",
   "connect",
@@ -23,7 +24,8 @@ export const APP_TAB_IDS = [
   "marketplace",
   "builder",
   "spawner",
-  "advanced"
+  "advanced",
+  "design-kit"
 ] as const;
 
 export type AppTab = (typeof APP_TAB_IDS)[number];
@@ -40,16 +42,18 @@ export interface AppTabGroup {
 
 export interface AppPrimaryNavItem {
   readonly id: AppTab;
+  readonly label?: string;
   readonly description: string;
 }
 
-export const DEFAULT_APP_TAB: AppTab = "guide";
-export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
+export const DEFAULT_APP_TAB: AppTab = "cockpit";
+export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "cockpit";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
     label: "Cockpit",
     tabs: [
+      { id: "cockpit", label: "Operations Cockpit" },
       { id: "guide", label: "Guide / Intake" },
       { id: "start", label: "Home / Next Step" },
       { id: "operations", label: "Sessions & Runs" },
@@ -91,37 +95,35 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
       { id: "setup", label: "Integrations" },
       { id: "loops", label: "Improvement Loops" }
     ]
+  },
+  {
+    label: "Reference",
+    tabs: [
+      { id: "design-kit", label: "Design Kit Surfaces" }
+    ]
   }
 ];
 
 export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
   {
-    id: "start",
-    description: "Launch the current workspace, model setup, and next safe action."
+    id: "cockpit",
+    label: "Operations Cockpit",
+    description: "Active project · gates"
   },
   {
     id: "operations",
-    description: "Watch active work, recent results, and operator handoffs."
-  },
-  {
-    id: "advanced",
-    description: "Open the live control plane with domains, health, and direct runtime calls."
+    label: "Sessions & Runs",
+    description: "Traces · blockers · reviews"
   },
   {
     id: "starter",
-    description: "Pick a prebuilt strategy instead of assembling tools manually."
+    label: "Workflows",
+    description: "Starters · execution"
   },
   {
-    id: "connect",
-    description: "Set up providers, local models, and readiness checks."
-  },
-  {
-    id: "safety",
-    description: "Review risks, decisions, and protected actions before work runs."
-  },
-  {
-    id: "guide",
-    description: "Capture operator intent before branching into specialized surfaces."
+    id: "advanced",
+    label: "Agents & API",
+    description: "Invoke · configure · scope"
   }
 ];
 

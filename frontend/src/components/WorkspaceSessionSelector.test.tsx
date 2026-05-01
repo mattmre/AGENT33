@@ -20,6 +20,9 @@ describe("WorkspaceSessionSelector", () => {
     expect(screen.getByText("Turn a plain-language idea into a guided build plan.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Recommended workspace starter" })).toHaveTextContent("Guided build plan");
     expect(screen.getByRole("combobox", { name: "Active project template" })).toHaveValue("solo-builder");
+    expect(screen.getByText("RUN")).toBeInTheDocument();
+    expect(screen.getByText("REV")).toBeInTheDocument();
+    expect(screen.getByText("BLK")).toBeInTheDocument();
   });
 
   it("routes workspace changes and quick actions through callbacks", async () => {

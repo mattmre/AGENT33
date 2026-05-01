@@ -36,7 +36,7 @@ export function AppNavigation({ activeTab, onNavigate }: AppNavigationProps): JS
               onClick={() => onNavigate(item.id)}
               aria-current={activeTab === item.id ? "page" : undefined}
             >
-              <span className="main-nav-button-label">{getAppTabLabel(item.id)}</span>
+              <span className="main-nav-button-label">{item.label ?? getAppTabLabel(item.id)}</span>
               <small>{item.description}</small>
             </button>
           ))}
