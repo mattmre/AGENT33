@@ -23,7 +23,7 @@ describe("GlobalSearch", () => {
     render(<GlobalSearch token="jwt-token" />)
 
     expect(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)...")
+      screen.getByPlaceholderText("Search semantic memory")
     ).not.toBeDisabled()
   })
 
@@ -37,7 +37,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="my-jwt" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "test query{enter}"
     )
 
@@ -81,12 +81,12 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="tok" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "search{enter}"
     )
 
     await waitFor(() => {
-      expect(screen.getByText("Memory Results")).toBeInTheDocument()
+      expect(screen.getByText("Memory results")).toBeInTheDocument()
     })
     expect(screen.getByText(/Result one content/)).toBeInTheDocument()
     expect(screen.getByText(/Result two content/)).toBeInTheDocument()
@@ -102,7 +102,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="tok" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "test{enter}"
     )
 
@@ -122,7 +122,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="tok" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "{enter}"
     )
 
@@ -153,7 +153,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="tok" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "query{enter}"
     )
 
@@ -191,7 +191,7 @@ describe("GlobalSearch", () => {
 
     render(<GlobalSearch token="tok" />)
     await user.type(
-      screen.getByPlaceholderText("Search Semantic Memory (PGVector)..."),
+      screen.getByPlaceholderText("Search semantic memory"),
       "search{enter}"
     )
 

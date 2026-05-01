@@ -20,7 +20,10 @@ export function PermissionModeControl({
   onOperatorModeChange
 }: PermissionModeControlProps): JSX.Element {
   const selectedMode = getPermissionMode(selectedModeId);
-  const controlPlaneLabel = operatorMode === "pro" ? "Pro controls unlocked" : "Beginner guardrails";
+  const controlPlaneLabel =
+    operatorMode === "pro"
+      ? "Live control plane prioritized"
+      : "Guided routes prioritized";
 
   return (
     <section className={`permission-mode-control permission-mode-control-${selectedMode.tone}`} aria-label="Permission mode">
@@ -70,7 +73,7 @@ export function PermissionModeControl({
         className="permission-mode-plane-toggle"
         onClick={() => onOperatorModeChange(operatorMode === "pro" ? "beginner" : "pro")}
       >
-        {operatorMode === "pro" ? "Return to Beginner guardrails" : "Unlock Pro controls"}
+        {operatorMode === "pro" ? "Prioritize guided routes" : "Prioritize live controls"}
       </button>
     </section>
   );

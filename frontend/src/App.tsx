@@ -58,17 +58,21 @@ import {
 } from "./data/workspaces";
 import {
   DEFAULT_PERMISSION_MODE_ID,
+  getPermissionMode,
   isPermissionModeId,
   type PermissionModeId
 } from "./data/permissionModes";
 import {
+  DEFAULT_COCKPIT_OPERATOR_MODE,
   DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
   createCockpitUrl,
+  isCockpitOperatorMode,
   readCockpitUrlState,
   type ArtifactDrawerSectionId,
   type CockpitUrlState
 } from "./lib/cockpitUrlState";
 import { saveApiKey, saveToken, getSavedApiKey, getSavedToken } from "./lib/auth";
+import { getRuntimeConfig } from "./lib/api";
 import type { ActivityItem, ApiResult } from "./types";
 import type { HelpAssistantTarget } from "./features/help-assistant/types";
 import type { WorkflowStarterDraft } from "./features/workflow-starter/types";
@@ -77,6 +81,7 @@ import type { UserRoleId } from "./features/role-intake/types";
 const ROLE_STORAGE_KEY = "agent33:selected-role";
 const WORKSPACE_SESSION_STORAGE_KEY = "agent33:selected-workspace-session";
 const PERMISSION_MODE_STORAGE_KEY = "agent33:permission-mode";
+const OPERATOR_MODE_STORAGE_KEY = "agent33:operator-mode";
 
 function getSavedUserRole(): UserRoleId | null {
   if (typeof window === "undefined") {
@@ -105,6 +110,15 @@ function getSavedPermissionModeId(): PermissionModeId {
   return isPermissionModeId(savedPermissionMode) ? savedPermissionMode : DEFAULT_PERMISSION_MODE_ID;
 }
 
+function getSavedOperatorMode(): OperatorMode {
+  if (typeof window === "undefined") {
+    return DEFAULT_COCKPIT_OPERATOR_MODE;
+  }
+
+  const savedOperatorMode = window.sessionStorage.getItem(OPERATOR_MODE_STORAGE_KEY);
+  return isCockpitOperatorMode(savedOperatorMode) ? savedOperatorMode : DEFAULT_COCKPIT_OPERATOR_MODE;
+}
+
 function getCurrentCockpitUrlState(fallbackState: Partial<CockpitUrlState>): CockpitUrlState {
   if (typeof window === "undefined") {
     return readCockpitUrlState("", fallbackState);
@@ -113,20 +127,30 @@ function getCurrentCockpitUrlState(fallbackState: Partial<CockpitUrlState>): Coc
   return readCockpitUrlState(window.location.search, fallbackState);
 }
 
+function getRuntimeHost(): string {
+  const { API_BASE_URL } = getRuntimeConfig();
+  try {
+    return new URL(API_BASE_URL).host;
+  } catch {
+    return API_BASE_URL;
+  }
+}
+
 export default function App(): JSX.Element {
   const [initialCockpitUrlState] = useState(() =>
     getCurrentCockpitUrlState({
       activeTab: getSavedUserRole() ? ROLE_SELECTED_DEFAULT_APP_TAB : DEFAULT_APP_TAB,
       workspaceId: getSavedWorkspaceSessionId(),
       permissionModeId: getSavedPermissionModeId(),
-      drawerSectionId: DEFAULT_ARTIFACT_DRAWER_SECTION_ID
+      drawerSectionId: DEFAULT_ARTIFACT_DRAWER_SECTION_ID,
+      operatorMode: getSavedOperatorMode()
     })
   );
   const [activeTab, setActiveTab] = useState<AppTab>(initialCockpitUrlState.activeTab);
 
   // Legacy Domain Panel State (Maintained for Advanced Settings)
   const [selectedDomainId, setSelectedDomainId] = useState(domains[0]?.id ?? "overview");
-  const [operatorMode, setOperatorMode] = useState<OperatorMode>("beginner");
+  const [operatorMode, setOperatorModeState] = useState<OperatorMode>(initialCockpitUrlState.operatorMode);
   const [token, setTokenState] = useState(getSavedToken());
   const [apiKey, setApiKeyState] = useState(getSavedApiKey());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -138,15 +162,18 @@ export default function App(): JSX.Element {
     initialCockpitUrlState.drawerSectionId
   );
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
+  const selectedPermissionMode = getPermissionMode(permissionModeId);
+  const runtimeHost = getRuntimeHost();
   const showCockpitDashboard = activeTab === "operations";
   const currentCockpitUrlState = useMemo(
     (): CockpitUrlState => ({
       activeTab,
       workspaceId: selectedWorkspaceId,
       permissionModeId,
-      drawerSectionId
+      drawerSectionId,
+      operatorMode
     }),
-    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId]
+    [activeTab, selectedWorkspaceId, permissionModeId, drawerSectionId, operatorMode]
   );
   const currentCockpitUrlStateRef = useRef(currentCockpitUrlState);
   const isApplyingBrowserNavigationRef = useRef(false);
@@ -160,6 +187,7 @@ export default function App(): JSX.Element {
       setSelectedWorkspaceId(nextState.workspaceId);
       setPermissionModeId(nextState.permissionModeId);
       setDrawerSectionId(nextState.drawerSectionId);
+      setOperatorModeState(nextState.operatorMode);
     }
 
     window.addEventListener("popstate", onPopState);
@@ -239,6 +267,13 @@ export default function App(): JSX.Element {
     }
   }, []);
 
+  const selectOperatorMode = useCallback((mode: OperatorMode): void => {
+    setOperatorModeState(mode);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(OPERATOR_MODE_STORAGE_KEY, mode);
+    }
+  }, []);
+
   const focusOperationsBoard = useCallback((): void => {
     const operationsBoard = document.getElementById("operations-workspace-board");
     if (!operationsBoard) {
@@ -255,10 +290,28 @@ export default function App(): JSX.Element {
       <header className="consumer-topbar">
         <div className="brand">
           <div className="logo-orb" aria-hidden="true"></div>
-          <h1>AGENT-33</h1>
+          <div className="brand-copy">
+            <h1>AGENT-33</h1>
+            <span className="brand-subtitle">Control Plane</span>
+          </div>
         </div>
         <div className="cockpit-topbar-actions">
           <GlobalSearch token={token || null} />
+          <div className="cockpit-topbar-meta" aria-label="Runtime shell state">
+            <span className="cockpit-topbar-pill">{selectedPermissionMode.label}</span>
+            <div className="cockpit-topbar-field">
+              <span>WS</span>
+              <b>{selectedWorkspace.name}</b>
+            </div>
+            <div className="cockpit-topbar-field">
+              <span>HOST</span>
+              <b>{runtimeHost}</b>
+            </div>
+            <div className="cockpit-topbar-field">
+              <span>VIEW</span>
+              <b>{getAppTabLabel(activeTab)}</b>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -286,7 +339,7 @@ export default function App(): JSX.Element {
               selectedModeId={permissionModeId}
               operatorMode={operatorMode}
               onSelectMode={selectPermissionMode}
-              onOperatorModeChange={setOperatorMode}
+              onOperatorModeChange={selectOperatorMode}
             />
           </div>
 
@@ -637,7 +690,7 @@ export default function App(): JSX.Element {
             apiKey={apiKey}
             activity={activity}
             operatorMode={operatorMode}
-            onOperatorModeChange={setOperatorMode}
+            onOperatorModeChange={selectOperatorMode}
             onSelectedDomainChange={setSelectedDomainId}
             onOpenModels={() => setActiveTab("models")}
             onOpenWorkflowCatalog={() => setActiveTab("catalog")}

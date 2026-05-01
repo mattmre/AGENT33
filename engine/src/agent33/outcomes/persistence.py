@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -14,6 +13,7 @@ import structlog
 from agent33.outcomes.models import OutcomeEvent, OutcomeMetricType
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 logger = structlog.get_logger()
@@ -62,7 +62,16 @@ class OutcomePersistence:
             with self._lock:
                 self._conn.execute(
                     """INSERT OR REPLACE INTO outcome_events
-                       (id, tenant_id, domain, event_type, metric_type, value, occurred_at, metadata)
+                       (
+                           id,
+                           tenant_id,
+                           domain,
+                           event_type,
+                           metric_type,
+                           value,
+                           occurred_at,
+                           metadata
+                       )
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         event.id,

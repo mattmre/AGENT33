@@ -48,10 +48,12 @@ export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
-    label: "Start",
+    label: "Cockpit",
     tabs: [
       { id: "guide", label: "Guide / Intake" },
       { id: "start", label: "Home / Next Step" },
+      { id: "operations", label: "Sessions & Runs" },
+      { id: "advanced", label: "Control Plane" },
       { id: "connect", label: "Connect Models" },
       { id: "demo", label: "Demo Mode" },
       { id: "models", label: "Models" },
@@ -60,57 +62,50 @@ export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
     ]
   },
   {
-    label: "Operate",
-    tabs: [
-      { id: "setup", label: "Integrations" },
-      { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety & Approvals" },
-      { id: "operations", label: "Sessions & Runs" }
-    ]
-  },
-  {
     label: "Build",
     tabs: [
+      { id: "catalog", label: "Workflow Catalog" },
+      { id: "starter", label: "Workflow Starter" },
       { id: "skills", label: "Skill Wizard" },
       { id: "fabric", label: "Tool Fabric" },
-      { id: "mcp", label: "MCP Health" },
-      { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflows" },
-      { id: "tools", label: "Tools" }
+      { id: "tools", label: "Tool Catalog" },
+      { id: "builder", label: "Agent Builder" },
+      { id: "spawner", label: "Spawner" },
+      { id: "marketplace", label: "Marketplace" }
     ]
   },
   {
-    label: "Improve",
+    label: "Inspect",
     tabs: [
-      { id: "loops", label: "Improvement Loops" },
+      { id: "review", label: "Review Queue" },
       { id: "outcomes", label: "Outcomes" },
       { id: "analytics", label: "Analytics" },
-      { id: "impact", label: "Impact" }
+      { id: "impact", label: "Impact" },
+      { id: "mcp", label: "MCP Health" }
     ]
   },
   {
-    label: "Extend",
+    label: "Govern",
     tabs: [
-      { id: "marketplace", label: "Marketplace" },
-      { id: "builder", label: "Builder" },
-      { id: "spawner", label: "Spawner" },
-      { id: "advanced", label: "Advanced" }
+      { id: "safety", label: "Safety & Approvals" },
+      { id: "setup", label: "Integrations" },
+      { id: "loops", label: "Improvement Loops" }
     ]
   }
 ];
 
 export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
   {
-    id: "guide",
-    description: "Tell AGENT-33 what you want and get the safest next step."
-  },
-  {
     id: "start",
-    description: "Beginner launchpad for setup, demo runs, and common outcomes."
+    description: "Launch the current workspace, model setup, and next safe action."
   },
   {
     id: "operations",
     description: "Watch active work, recent results, and operator handoffs."
+  },
+  {
+    id: "advanced",
+    description: "Open the live control plane with domains, health, and direct runtime calls."
   },
   {
     id: "starter",
@@ -123,6 +118,10 @@ export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
   {
     id: "safety",
     description: "Review risks, decisions, and protected actions before work runs."
+  },
+  {
+    id: "guide",
+    description: "Capture operator intent before branching into specialized surfaces."
   }
 ];
 

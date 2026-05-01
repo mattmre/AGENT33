@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import sqlite3
 from pathlib import Path
 from threading import RLock
+from typing import TYPE_CHECKING
 
 from agent33.evaluation.ppack_ab_models import PPackABAssignment, PPackABReport
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class PPackABPersistence:

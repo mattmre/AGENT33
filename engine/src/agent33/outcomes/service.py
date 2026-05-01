@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -20,6 +19,8 @@ from agent33.outcomes.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from agent33.outcomes.persistence import OutcomePersistence
 
 _MAX_EVENTS_PER_TENANT = 10_000

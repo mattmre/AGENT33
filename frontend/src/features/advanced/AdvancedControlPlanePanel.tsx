@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 
+import { ActivityPanel } from "../../components/ActivityPanel";
 import { DomainPanel } from "../../components/DomainPanel";
 import { HealthPanel } from "../../components/HealthPanel";
-import { ObservationStream } from "../../components/ObservationStream";
 import type { ActivityItem, ApiResult, DomainConfig } from "../../types";
 
 export type OperatorMode = "beginner" | "pro";
@@ -24,30 +24,36 @@ interface AdvancedControlPlanePanelProps {
   onResult: (label: string, result: ApiResult) => void;
 }
 
-const SAFE_ROUTES = [
+const CONTROL_PLANE_ROUTES = [
   {
-    title: "Connect a model",
-    description: "Use the guided provider setup instead of editing auth/config endpoints.",
+    title: "Connect runtime",
+    description: "Set up providers, local models, and host execution before running direct calls.",
     actionLabel: "Open Models",
     action: "models"
   },
   {
-    title: "Launch a baked-in workflow",
-    description: "Start with curated systems instead of raw workflow JSON payloads.",
-    actionLabel: "Open Workflow Catalog",
+    title: "Launch workflows",
+    description: "Use packaged systems and workflow starters before editing payloads by hand.",
+    actionLabel: "Browse workflows",
     action: "catalog"
   },
   {
-    title: "Watch active work",
-    description: "Use the timeline and safe controls before touching process endpoints.",
-    actionLabel: "Open Run Timeline",
+    title: "Inspect live runs",
+    description: "Move from direct calls to live orchestration timelines, blockers, and recovery.",
+    actionLabel: "Open Sessions & Runs",
     action: "operations"
   },
   {
-    title: "Approve risky actions",
-    description: "Review governed tool calls in the Safety Center before using direct API calls.",
+    title: "Review gates",
+    description: "See active approvals and protected actions before you trigger a destructive route.",
     actionLabel: "Open Safety Center",
     action: "safety"
+  },
+  {
+    title: "Configure access",
+    description: "Update tokens and API keys if a domain route is unavailable or unauthorized.",
+    actionLabel: "Open Integrations",
+    action: "setup"
   }
 ] as const;
 
@@ -94,12 +100,18 @@ export function AdvancedControlPlanePanel({
     () => domains.filter((domain) => domainMatchesQuery(domain, advancedSearch)),
     [advancedSearch, domains]
   );
+  const visibleDomain = useMemo(() => {
+    if (matchedDomains.length === 0) {
+      return null;
+    }
+    return matchedDomains.find((domain) => domain.id === selectedDomainId) ?? matchedDomains[0];
+  }, [matchedDomains, selectedDomainId]);
 
   if (selectedDomain === undefined) {
     return <p className="advanced-quarantine-empty">No technical domains are registered.</p>;
   }
 
-  function openSafeRoute(action: (typeof SAFE_ROUTES)[number]["action"]): void {
+  function openRoute(action: (typeof CONTROL_PLANE_ROUTES)[number]["action"]): void {
     if (action === "models") {
       onOpenModels();
     } else if (action === "catalog") {
@@ -108,157 +120,135 @@ export function AdvancedControlPlanePanel({
       onOpenOperations();
     } else if (action === "safety") {
       onOpenSafety();
+    } else if (action === "setup") {
+      onOpenSetup();
     }
   }
 
-  if (operatorMode !== "pro") {
-    return (
-      <section className="advanced-quarantine-panel">
-        <div className="advanced-quarantine-hero">
-          <div>
-            <p className="advanced-quarantine-eyebrow">Beginner mode</p>
-            <h2>Advanced controls are quarantined by default.</h2>
-            <p>
-              This area exposes raw endpoints, JSON payloads, and destructive operations. Use the
-              guided screens below unless you intentionally need the low-level control plane.
-            </p>
-          </div>
-          <button type="button" className="control-danger" onClick={() => onOperatorModeChange("pro")}>
-            Unlock Pro control plane
-          </button>
-        </div>
-
-        <div className="advanced-safe-route-grid">
-          {SAFE_ROUTES.map((route) => (
-            <article key={route.action} className="advanced-safe-route-card">
-              <h3>{route.title}</h3>
-              <p>{route.description}</p>
-              <button type="button" onClick={() => openSafeRoute(route.action)}>
-                {route.actionLabel}
-              </button>
-            </article>
-          ))}
-        </div>
-
-        <div className="advanced-quarantine-search">
-          <label>
-            Find a technical domain before unlocking Pro mode
-            <input
-              value={advancedSearch}
-              onChange={(event) => setAdvancedSearch(event.target.value)}
-              placeholder="Search endpoints, workflows, memory, auth..."
-            />
-          </label>
-          <button type="button" onClick={onOpenSetup}>
-            Configure access instead
-          </button>
-        </div>
-
-        <div className="advanced-domain-preview-grid">
-          {matchedDomains.map((domain) => (
-            <article key={domain.id} className="advanced-domain-preview-card">
-              <div>
-                <h3>{domain.title}</h3>
-                <p>{domain.description}</p>
-                <span>{domain.operations.length} raw operations hidden</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectedDomainChange(domain.id);
-                  onOperatorModeChange("pro");
-                }}
-              >
-                Inspect in Pro mode
-              </button>
-            </article>
-          ))}
-          {matchedDomains.length === 0 ? (
-            <p className="advanced-quarantine-empty">No matching technical domains.</p>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
+  const modeTitle =
+    operatorMode === "pro" ? "Live control plane" : "Guided control plane";
+  const modeDescription =
+    operatorMode === "pro"
+      ? "Runtime domains, health, and direct route execution are visible together in the live shell."
+      : "Guided actions stay in the foreground while raw domains remain mounted, so the design stays consistent with the live product surface.";
 
   return (
-    <div className="legacy-control-plane app-shell advanced-pro-shell">
-      <div className="advanced-pro-banner">
-        <div>
-          <p className="advanced-quarantine-eyebrow">Pro mode unlocked</p>
-          <h2>Raw control plane</h2>
-          <p>
-            You are viewing low-level endpoints. Prefer guided screens for routine work and review
-            payloads before running POST, PATCH, PUT, or DELETE calls.
-          </p>
+    <section className={`control-plane-shell control-plane-shell-${operatorMode}`} aria-label="Control plane">
+      <header className="control-plane-hero">
+        <div className="control-plane-hero-copy">
+          <p className="advanced-quarantine-eyebrow">AGENT-33 control plane</p>
+          <h2>{modeTitle}</h2>
+          <p>{modeDescription}</p>
+          <div className="control-plane-hero-actions">
+            {CONTROL_PLANE_ROUTES.map((route) => (
+              <button key={route.action} type="button" onClick={() => openRoute(route.action)}>
+                {route.actionLabel}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="advanced-pro-actions">
-          <label>
-            Search all technical domains
-            <input
-              value={advancedSearch}
-              onChange={(event) => setAdvancedSearch(event.target.value)}
-              placeholder="Filter domains and operation cards"
-            />
-          </label>
-          <button type="button" onClick={() => onOperatorModeChange("beginner")}>
-            Return to Beginner mode
+
+        <div className="control-plane-mode-card">
+          <span className="eyebrow">Mode</span>
+          <strong>{operatorMode === "pro" ? "Live runtime emphasis" : "Guided route emphasis"}</strong>
+          <p>
+            {operatorMode === "pro"
+              ? "Direct surfaces stay front and center so the runtime shell matches the design kit."
+              : "Guided paths stay prominent for quick launches, approvals, and safer operator actions without hiding the live domains."}
+          </p>
+          <button
+            type="button"
+            onClick={() => onOperatorModeChange(operatorMode === "pro" ? "beginner" : "pro")}
+          >
+            {operatorMode === "pro" ? "Prioritize guided routes" : "Prioritize live controls"}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="content">
-        <aside className="sidebar" aria-label="Sidebar">
+      <div className="control-plane-grid">
+        <aside className="control-plane-sidebar" aria-label="Control plane sidebar">
           <HealthPanel />
-          <nav className="domain-nav" aria-label="Technical domains">
-            <h2>Technical Domains</h2>
+
+          <section className="control-plane-sidebar-card">
+            <div className="control-plane-sidebar-header">
+              <span className="eyebrow">Domain search</span>
+              <strong>Technical surfaces</strong>
+            </div>
+            <label className="control-plane-search-field">
+              Search domains and operations
+              <input
+                value={advancedSearch}
+                onChange={(event) => setAdvancedSearch(event.target.value)}
+                placeholder="agents, workflows, memory, reviews..."
+              />
+            </label>
+            <p className="control-plane-sidebar-note">
+              {matchedDomains.length} domains match the current filter.
+            </p>
+          </section>
+
+          <nav className="control-plane-domain-nav" aria-label="Technical domains">
+            <span className="main-nav-group-label">Domains</span>
             {matchedDomains.map((domain) => (
               <button
                 key={domain.id}
-                className={domain.id === selectedDomainId ? "active" : ""}
+                type="button"
+                className={domain.id === visibleDomain?.id ? "active" : ""}
                 onClick={() => onSelectedDomainChange(domain.id)}
-                aria-current={domain.id === selectedDomainId ? "true" : undefined}
+                aria-current={domain.id === visibleDomain?.id ? "page" : undefined}
               >
-                {domain.title}
+                <span className="main-nav-button-label">{domain.title}</span>
+                <small>{domain.description}</small>
               </button>
             ))}
-            {matchedDomains.length === 0 ? <p>No domains match this search.</p> : null}
+            {matchedDomains.length === 0 ? (
+              <p className="advanced-quarantine-empty">No domains match this search.</p>
+            ) : null}
           </nav>
         </aside>
 
-        <main className="workspace">
-          <DomainPanel
-            domain={selectedDomain}
-            token={token}
-            apiKey={apiKey}
-            externalFilter={advancedSearch}
-            onResult={onResult}
-          />
-        </main>
+        <div className="control-plane-main">
+          {operatorMode === "beginner" ? (
+            <section className="control-plane-route-grid" aria-label="Guided control plane actions">
+              {CONTROL_PLANE_ROUTES.map((route) => (
+                <article key={route.action} className="control-plane-route-card">
+                  <span className="eyebrow">Guided route</span>
+                  <strong>{route.title}</strong>
+                  <p>{route.description}</p>
+                  <button type="button" onClick={() => openRoute(route.action)}>
+                    {route.actionLabel}
+                  </button>
+                </article>
+              ))}
+            </section>
+          ) : null}
 
-        <aside className="activity-panel" aria-label="Activity log">
-          <ObservationStream token={token} />
-          <h2>System Calls</h2>
-          {activity.length === 0 ? <p>No calls yet.</p> : null}
-          <div className="activity-list">
-            {activity.map((item) => (
-              <article key={item.id} className="activity-item">
-                <p className="activity-time">{item.at}</p>
-                <h3>{item.label}</h3>
-                <p>
-                  <span className={item.status < 400 ? "status-ok" : "status-error"}>
-                    <span className="sr-only">{item.status < 400 ? "Success" : "Error"}:</span>
-                    {item.status}
-                  </span>
-                  {" in "}
-                  {item.durationMs}ms
-                </p>
-                <p className="activity-url">{item.url}</p>
-              </article>
-            ))}
-          </div>
-        </aside>
+          {visibleDomain ? (
+            <DomainPanel
+              domain={visibleDomain}
+              token={token}
+              apiKey={apiKey}
+              externalFilter={advancedSearch}
+              onResult={onResult}
+            />
+          ) : (
+            <p className="advanced-quarantine-empty">No domains match this search.</p>
+          )}
+        </div>
+
+        <ActivityPanel
+          token={token || null}
+          activity={activity}
+          activeSurfaceLabel={visibleDomain?.title ?? "No matching domain"}
+          contextLabel={
+            visibleDomain?.description ?? "Adjust the filter to restore a visible technical surface."
+          }
+          operatorMode={operatorMode}
+          onOpenOperations={onOpenOperations}
+          onOpenSafety={onOpenSafety}
+          onOpenWorkflowCatalog={onOpenWorkflowCatalog}
+        />
       </div>
-    </div>
+    </section>
   );
 }

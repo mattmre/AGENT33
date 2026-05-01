@@ -11,7 +11,7 @@ describe("AppNavigation", () => {
     expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Guide \/ Intake/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: /Sessions & Runs/ })).not.toHaveAttribute("aria-current");
-    expect(screen.getByText("Tools & advanced surfaces")).toBeInTheDocument();
+    expect(screen.getByText("System surfaces")).toBeInTheDocument();
   });
 
   it("routes selected tabs through the shared navigation callback", async () => {
@@ -31,7 +31,7 @@ describe("AppNavigation", () => {
 
     render(<AppNavigation activeTab="fabric" onNavigate={onNavigate} />);
 
-    expect(screen.getByText("Tools & advanced surfaces").closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("System surfaces").closest("details")).toHaveAttribute("open");
     expect(screen.getByRole("button", { name: "Tool Fabric" })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("button", { name: "MCP Health" }));
@@ -42,7 +42,7 @@ describe("AppNavigation", () => {
   it("keeps the tools disclosure name concise while showing detail only in expanded content", () => {
     render(<AppNavigation activeTab="guide" onNavigate={vi.fn()} />);
 
-    expect(screen.getByText("Tools & advanced surfaces").closest("summary")).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByText("Specialized builders, MCP, analytics, marketplace, and setup panels.")).toBeInTheDocument();
+    expect(screen.getByText("System surfaces").closest("summary")).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Build, inspect, and governance panels that support the main cockpit flow.")).toBeInTheDocument();
   });
 });
