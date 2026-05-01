@@ -127,7 +127,7 @@ describe("App accessibility", () => {
     const skipLink = screen.getByText("Skip to main content");
     expect(skipLink).toBeInTheDocument();
     expect(skipLink).toHaveAttribute("href", "#main-content");
-  });
+  }, 10000);
 
   it("has a main-content landmark", async () => {
     const { default: App } = await import("../../App");

@@ -484,14 +484,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         default_image=settings.execution_default_docker_image,
     )
 
-    _llamacpp_active = settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
-    from agent33.llm.runtime_config import build_model_router
+    from agent33.llm.runtime_config import build_model_router, llamacpp_enabled
 
     model_router = build_model_router()
 
-    if _llamacpp_active:
+    if llamacpp_enabled():
         logger.info(
-            "llamacpp_provider_registered",
+            "local_orchestration_provider_registered",
+            engine=settings.local_orchestration_engine,
             base_url=settings.local_orchestration_base_url,
             model=settings.local_orchestration_model,
         )

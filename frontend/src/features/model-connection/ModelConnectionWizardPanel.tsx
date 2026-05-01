@@ -26,17 +26,23 @@ import {
 } from "./ProviderModelHealthSummary";
 import { ProviderPresetSelector } from "./ProviderPresetSelector";
 import {
+  DEFAULT_LOCAL_RUNTIME_BASELINE,
   DEFAULT_MODEL_CONNECTION_BASELINE,
-  buildOpenRouterConfigChanges,
+  buildModelConnectionConfigChanges,
   buildOpenRouterProbePayload,
+  formatLocalRuntimeModelRef,
   formatLmStudioModelRef,
   formatOllamaModelRef,
+  getLocalRuntimeFlavor,
   getModelReadinessLabel,
+  normalizeLocalRuntimeBaseUrl,
   normalizeLmStudioBaseUrl,
   normalizeOllamaBaseUrl,
   normalizeConfiguredValue,
+  stripLocalRuntimeModelRef,
   stripLmStudioModelRef,
   stripOllamaModelRef,
+  type LocalRuntimeBaseline,
   type ModelConnectionBaseline,
   type ModelConnectionForm
 } from "./helpers";
@@ -66,6 +72,8 @@ interface StatusMessage {
 
 interface ConfigSnapshot {
   baseline: ModelConnectionBaseline;
+  localRuntimeConfig: LocalRuntimeBaseline;
+  hasConfiguredLocalRuntime: boolean;
   hasStoredKey: boolean;
   storedKeyHint: string;
   localRuntimeBaseUrls: LocalRuntimeBaseUrls;
@@ -74,6 +82,7 @@ interface ConfigSnapshot {
 interface LocalRuntimeBaseUrls {
   ollama: string;
   lmStudio: string;
+  localOrchestration: string;
 }
 
 interface OllamaModelEntry {
@@ -108,6 +117,7 @@ interface LMStudioRuntimeStatus {
 interface LoadLocalModelHealthOptions {
   ollamaBaseUrl?: string;
   lmStudioBaseUrl?: string;
+  localOrchestrationBaseUrl?: string;
 }
 
 function buildConfigSnapshot(data: unknown): ConfigSnapshot {
@@ -116,28 +126,102 @@ function buildConfigSnapshot(data: unknown): ConfigSnapshot {
   const llm = asRecord(groups.llm);
   const ollama = asRecord(groups.ollama);
   const lmStudio = asRecord(groups.lm_studio);
+  const localOrchestration = asRecord(groups.local_orchestration);
+  const localOrchestrationModel = readString(localOrchestration.local_orchestration_model);
+  const localOrchestrationEngine = readString(localOrchestration.local_orchestration_engine);
+  const localOrchestrationBaseUrl = readString(localOrchestration.local_orchestration_base_url);
+  const localRuntimeFlavor = getLocalRuntimeFlavor(localOrchestrationEngine);
+  const effectiveLocalRuntimeBaseUrl =
+    localRuntimeFlavor === "ollama"
+      ? readString(ollama.ollama_base_url) || localOrchestrationBaseUrl
+      : localRuntimeFlavor === "lm-studio"
+        ? readString(lmStudio.lm_studio_base_url) || localOrchestrationBaseUrl
+        : localOrchestrationBaseUrl;
+  const effectiveLocalRuntimeModel =
+    localOrchestrationModel ||
+    (localRuntimeFlavor === "ollama"
+      ? readString(ollama.ollama_default_model)
+      : localRuntimeFlavor === "lm-studio"
+        ? readString(lmStudio.lm_studio_default_model)
+        : "");
+  const hasConfiguredLocalRuntime =
+    localOrchestrationModel.trim() !== "" ||
+    localOrchestrationEngine.trim() !== "" ||
+    effectiveLocalRuntimeBaseUrl.trim() !== "";
+  const effectiveDefaultModel =
+    readString(llm.default_model) ||
+    (localOrchestrationEngine && effectiveLocalRuntimeModel
+      ? formatLocalRuntimeModelRef(effectiveLocalRuntimeModel, localOrchestrationEngine)
+      : readString(ollama.ollama_default_model));
+  const normalizedDefaultModel =
+    hasConfiguredLocalRuntime &&
+    effectiveLocalRuntimeModel.trim() !== "" &&
+    (
+      effectiveDefaultModel.trim().toLowerCase() === effectiveLocalRuntimeModel.trim().toLowerCase() ||
+      effectiveDefaultModel.trim().toLowerCase() ===
+        formatLocalRuntimeModelRef(effectiveLocalRuntimeModel, localOrchestrationEngine).trim().toLowerCase()
+    )
+      ? formatLocalRuntimeModelRef(effectiveLocalRuntimeModel, localOrchestrationEngine)
+      : normalizeLikelyOpenRouterModelRef(effectiveDefaultModel);
   const storedKeyHint =
     readString(llm.openrouter_api_key) || readString(llm.openrouter_api_key_redacted);
 
   return {
     baseline: {
-      defaultModel:
-        normalizeLikelyOpenRouterModelRef(
-          readString(llm.default_model) || readString(ollama.default_model)
-        ) || DEFAULT_MODEL_CONNECTION_BASELINE.defaultModel,
+      defaultModel: normalizedDefaultModel || DEFAULT_MODEL_CONNECTION_BASELINE.defaultModel,
       baseUrl: readString(llm.openrouter_base_url) || DEFAULT_MODEL_CONNECTION_BASELINE.baseUrl,
       siteUrl: readString(llm.openrouter_site_url) || DEFAULT_MODEL_CONNECTION_BASELINE.siteUrl,
       appName: readString(llm.openrouter_app_name) || DEFAULT_MODEL_CONNECTION_BASELINE.appName,
       appCategory:
-        readString(llm.openrouter_app_category) || DEFAULT_MODEL_CONNECTION_BASELINE.appCategory
+        readString(llm.openrouter_app_category) || DEFAULT_MODEL_CONNECTION_BASELINE.appCategory,
+      localEngine:
+        readString(localOrchestration.local_orchestration_engine) ||
+        DEFAULT_MODEL_CONNECTION_BASELINE.localEngine
     },
+    localRuntimeConfig: {
+      baseUrl: effectiveLocalRuntimeBaseUrl || DEFAULT_LOCAL_RUNTIME_BASELINE.baseUrl,
+      defaultModel: effectiveLocalRuntimeModel || DEFAULT_LOCAL_RUNTIME_BASELINE.defaultModel,
+      engine: localOrchestrationEngine || DEFAULT_LOCAL_RUNTIME_BASELINE.engine
+    },
+    hasConfiguredLocalRuntime,
     hasStoredKey: storedKeyHint.trim() !== "",
     storedKeyHint,
     localRuntimeBaseUrls: {
       ollama: readString(ollama.ollama_base_url),
-      lmStudio: readString(lmStudio.lm_studio_base_url)
+      lmStudio: readString(lmStudio.lm_studio_base_url),
+      localOrchestration: effectiveLocalRuntimeBaseUrl
     }
   };
+}
+
+function inferPresetIdFromSnapshot(snapshot: ConfigSnapshot): ProviderPresetId {
+  const defaultModel = snapshot.baseline.defaultModel.trim().toLowerCase();
+  const localRuntimeModel = snapshot.localRuntimeConfig.defaultModel.trim().toLowerCase();
+  const localRuntimeModelRef = formatLocalRuntimeModelRef(
+    snapshot.localRuntimeConfig.defaultModel,
+    snapshot.localRuntimeConfig.engine
+  )
+    .trim()
+    .toLowerCase();
+  if (
+    snapshot.hasConfiguredLocalRuntime &&
+    (
+      defaultModel.startsWith("llamacpp/") ||
+      defaultModel === localRuntimeModel ||
+      defaultModel === localRuntimeModelRef
+    )
+  ) {
+    return "local-runtime";
+  }
+  if (defaultModel.startsWith("ollama/")) {
+    return "ollama";
+  }
+  if (defaultModel.startsWith("lmstudio/")) {
+    return "lm-studio";
+  }
+  return inferProviderPresetId(snapshot.baseline.baseUrl, {
+    localRuntimeBaseUrl: snapshot.localRuntimeConfig.baseUrl
+  });
 }
 
 function renderStatus(status: StatusMessage | null): JSX.Element | null {
@@ -247,7 +331,11 @@ function parseLocalModelHealth(data: unknown): LocalModelHealth {
 function parseLocalProviderHealth(data: unknown): LocalProviderHealth | null {
   const root = asRecord(data);
   const provider = readString(root.provider);
-  if (provider !== "ollama" && provider !== "lm-studio") {
+  if (
+    provider !== "ollama" &&
+    provider !== "lm-studio" &&
+    provider !== "local-orchestration"
+  ) {
     return null;
   }
   const state = readString(root.state);
@@ -258,10 +346,17 @@ function parseLocalProviderHealth(data: unknown): LocalProviderHealth | null {
 
   return {
     provider,
-    label: readString(root.label) || (provider === "ollama" ? "Ollama" : "LM Studio"),
+    label:
+      readString(root.label) ||
+      (provider === "ollama"
+        ? "Ollama"
+        : provider === "lm-studio"
+          ? "LM Studio"
+          : "Startup runtime"),
     state: normalizedState,
     ok: root.ok === true,
     baseUrl: readString(root.base_url),
+    defaultModel: readString(root.default_model),
     modelCount: readNumber(root.model_count) ?? 0,
     message: readString(root.message) || "Status unavailable.",
     action: readString(root.action) || "Refresh local health after checking this runtime."
@@ -292,11 +387,15 @@ export function ModelConnectionWizardPanel({
   const [baseline, setBaseline] = useState<ModelConnectionBaseline>(
     DEFAULT_MODEL_CONNECTION_BASELINE
   );
+  const [localRuntimeConfig, setLocalRuntimeConfig] = useState<LocalRuntimeBaseline>(
+    DEFAULT_LOCAL_RUNTIME_BASELINE
+  );
   const [hasStoredKey, setHasStoredKey] = useState(false);
   const [storedKeyHint, setStoredKeyHint] = useState("");
   const [localRuntimeBaseUrls, setLocalRuntimeBaseUrls] = useState<LocalRuntimeBaseUrls>({
     ollama: "",
-    lmStudio: ""
+    lmStudio: "",
+    localOrchestration: ""
   });
   const [models, setModels] = useState<OpenRouterModelEntry[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaRuntimeStatus | null>(null);
@@ -327,6 +426,10 @@ export function ModelConnectionWizardPanel({
     form.defaultModel,
     probeSucceeded
   );
+  const freeOpenRouterModels = useMemo(
+    () => models.filter((model) => model.isFree).slice(0, 4),
+    [models]
+  );
   const filteredModels = useMemo(
     () => filterOpenRouterModels(models, modelSearch).slice(0, 8),
     [modelSearch, models]
@@ -335,9 +438,13 @@ export function ModelConnectionWizardPanel({
   const liveOllamaModelRefs = ollamaModels.map((model) => formatOllamaModelRef(model.name));
   const lmStudioModels = lmStudioStatus?.models ?? [];
   const liveLMStudioModelRefs = lmStudioModels.map((model) => formatLmStudioModelRef(model.name));
+  const localRuntimeProvider =
+    localModelHealth?.providers.find((provider) => provider.provider === "local-orchestration") ??
+    null;
   const isOllamaSelected = selectedPresetId === "ollama";
   const isLMStudioSelected = selectedPresetId === "lm-studio";
-  const isLocalModelCatalog = isOllamaSelected || isLMStudioSelected;
+  const isLocalRuntimeSelected = selectedPresetId === "local-runtime";
+  const isLocalModelCatalog = isOllamaSelected || isLMStudioSelected || isLocalRuntimeSelected;
 
   useEffect(() => {
     if (!hasCredentials) {
@@ -364,10 +471,39 @@ export function ModelConnectionWizardPanel({
         onResult("Model Wizard - Config", configResult.value);
         if (configResult.value.ok) {
           const snapshot = buildConfigSnapshot(configResult.value.data);
+          const inferredPresetId = inferPresetIdFromSnapshot(snapshot);
           setBaseline(snapshot.baseline);
+          setLocalRuntimeConfig(snapshot.localRuntimeConfig);
           setLocalRuntimeBaseUrls(snapshot.localRuntimeBaseUrls);
-          setForm((current) => ({ ...current, ...snapshot.baseline, apiKey: "" }));
-          setSelectedPresetId(inferProviderPresetId(snapshot.baseline.baseUrl));
+          setForm((current) => ({
+            ...current,
+            ...snapshot.baseline,
+            baseUrl:
+              inferredPresetId === "ollama"
+                ? snapshot.localRuntimeBaseUrls.ollama ||
+                  getProviderPreset("ollama")?.baseUrlDefault ||
+                  current.baseUrl
+                : inferredPresetId === "lm-studio"
+                  ? snapshot.localRuntimeBaseUrls.lmStudio ||
+                    getProviderPreset("lm-studio")?.baseUrlDefault ||
+                    current.baseUrl
+                  : inferredPresetId === "local-runtime"
+                    ? snapshot.localRuntimeConfig.baseUrl
+                    : snapshot.baseline.baseUrl,
+            defaultModel:
+              inferredPresetId === "local-runtime"
+                ? formatLocalRuntimeModelRef(
+                    snapshot.localRuntimeConfig.defaultModel,
+                    snapshot.localRuntimeConfig.engine
+                  )
+                : snapshot.baseline.defaultModel,
+            localEngine:
+              inferredPresetId === "local-runtime"
+                ? snapshot.localRuntimeConfig.engine
+                : snapshot.baseline.localEngine,
+            apiKey: ""
+          }));
+          setSelectedPresetId(inferredPresetId);
           setHasStoredKey(snapshot.hasStoredKey);
           setStoredKeyHint(snapshot.storedKeyHint);
         }
@@ -419,6 +555,16 @@ export function ModelConnectionWizardPanel({
       if (preset.id === "lm-studio" && localRuntimeBaseUrls.lmStudio.trim()) {
         next.baseUrl = localRuntimeBaseUrls.lmStudio;
       }
+      if (preset.id === "local-runtime") {
+        next.baseUrl = localRuntimeBaseUrls.localOrchestration.trim()
+          ? localRuntimeBaseUrls.localOrchestration
+          : localRuntimeConfig.baseUrl;
+        next.defaultModel = formatLocalRuntimeModelRef(
+          localRuntimeConfig.defaultModel,
+          localRuntimeConfig.engine
+        );
+        next.localEngine = localRuntimeConfig.engine;
+      }
       return next;
     });
     setSaveStatus(null);
@@ -441,6 +587,16 @@ export function ModelConnectionWizardPanel({
     const current = normalizeLmStudioBaseUrl(form.baseUrl);
     const configured = normalizeLmStudioBaseUrl(
       localRuntimeBaseUrls.lmStudio || preset?.baseUrlDefault || ""
+    );
+    return current && current !== configured ? form.baseUrl : undefined;
+  }
+
+  function getLocalRuntimeBaseUrlOverride(): string | undefined {
+    const preset = getProviderPreset("local-runtime");
+    const current = normalizeLocalRuntimeBaseUrl(form.baseUrl, form.localEngine);
+    const configured = normalizeLocalRuntimeBaseUrl(
+      localRuntimeBaseUrls.localOrchestration || preset?.baseUrlDefault || "",
+      form.localEngine
     );
     return current && current !== configured ? form.baseUrl : undefined;
   }
@@ -525,6 +681,12 @@ export function ModelConnectionWizardPanel({
     if (options.lmStudioBaseUrl) {
       query.lm_studio_base_url = normalizeLmStudioBaseUrl(options.lmStudioBaseUrl);
     }
+    if (options.localOrchestrationBaseUrl) {
+      query.local_orchestration_base_url = normalizeLocalRuntimeBaseUrl(
+        options.localOrchestrationBaseUrl,
+        form.localEngine
+      );
+    }
 
     setIsLoadingLocalHealth(true);
     try {
@@ -578,12 +740,22 @@ export function ModelConnectionWizardPanel({
     if (selectedPresetId === "lm-studio") {
       void loadLMStudioStatus(getLMStudioBaseUrlOverride());
     }
+    if (selectedPresetId === "local-runtime") {
+      void loadLocalModelHealth({
+        localOrchestrationBaseUrl: getLocalRuntimeBaseUrlOverride()
+      });
+    }
     // Run when the operator enters a local runtime path; manual refresh handles base URL edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCredentials, selectedPresetId]);
 
   async function saveSettings(): Promise<void> {
-    const changes = buildOpenRouterConfigChanges(form, baseline);
+    const changes = buildModelConnectionConfigChanges(
+      selectedPresetId,
+      form,
+      baseline,
+      localRuntimeConfig
+    );
     if (Object.keys(changes).length === 0) {
       setSaveStatus({ tone: "info", message: "No model settings changed yet." });
       return;
@@ -616,18 +788,71 @@ export function ModelConnectionWizardPanel({
         return;
       }
 
+      const nextDefaultModel =
+        selectedPresetId === "local-runtime"
+          ? formatLocalRuntimeModelRef(
+              stripLocalRuntimeModelRef(form.defaultModel),
+              form.localEngine
+            )
+          : normalizeLikelyOpenRouterModelRef(form.defaultModel);
       const nextBaseline: ModelConnectionBaseline = {
-        defaultModel: normalizeLikelyOpenRouterModelRef(form.defaultModel),
-        baseUrl: normalizeConfiguredValue(form.baseUrl, DEFAULT_MODEL_CONNECTION_BASELINE.baseUrl),
+        defaultModel: nextDefaultModel,
+        baseUrl:
+          selectedPresetId === "local-runtime"
+            ? baseline.baseUrl
+            : normalizeConfiguredValue(form.baseUrl, DEFAULT_MODEL_CONNECTION_BASELINE.baseUrl),
         siteUrl: normalizeConfiguredValue(form.siteUrl, DEFAULT_MODEL_CONNECTION_BASELINE.siteUrl),
         appName: normalizeConfiguredValue(form.appName, DEFAULT_MODEL_CONNECTION_BASELINE.appName),
         appCategory: normalizeConfiguredValue(
           form.appCategory,
           DEFAULT_MODEL_CONNECTION_BASELINE.appCategory
-        )
+        ),
+        localEngine:
+          selectedPresetId === "local-runtime"
+            ? normalizeConfiguredValue(form.localEngine, DEFAULT_LOCAL_RUNTIME_BASELINE.engine)
+            : baseline.localEngine
       };
       setBaseline(nextBaseline);
-      setForm((current) => ({ ...current, ...nextBaseline, apiKey: "", removeStoredKey: false }));
+      if (selectedPresetId === "local-runtime") {
+        const nextLocalRuntimeConfig: LocalRuntimeBaseline = {
+          baseUrl: normalizeLocalRuntimeBaseUrl(
+            normalizeConfiguredValue(form.baseUrl, DEFAULT_LOCAL_RUNTIME_BASELINE.baseUrl),
+            form.localEngine
+          ),
+          defaultModel:
+            stripLocalRuntimeModelRef(form.defaultModel) || DEFAULT_LOCAL_RUNTIME_BASELINE.defaultModel,
+          engine: normalizeConfiguredValue(
+            form.localEngine,
+            DEFAULT_LOCAL_RUNTIME_BASELINE.engine
+          )
+        };
+        setLocalRuntimeConfig(nextLocalRuntimeConfig);
+        setLocalRuntimeBaseUrls((current) => ({
+          ...current,
+          ollama:
+            getLocalRuntimeFlavor(nextLocalRuntimeConfig.engine) === "ollama"
+              ? nextLocalRuntimeConfig.baseUrl
+              : current.ollama,
+          lmStudio:
+            getLocalRuntimeFlavor(nextLocalRuntimeConfig.engine) === "lm-studio"
+              ? nextLocalRuntimeConfig.baseUrl
+              : current.lmStudio,
+          localOrchestration: nextLocalRuntimeConfig.baseUrl
+        }));
+        setForm((current) => ({
+          ...current,
+          defaultModel: formatLocalRuntimeModelRef(
+            nextLocalRuntimeConfig.defaultModel,
+            nextLocalRuntimeConfig.engine
+          ),
+          baseUrl: nextLocalRuntimeConfig.baseUrl,
+          localEngine: nextLocalRuntimeConfig.engine,
+          apiKey: "",
+          removeStoredKey: false
+        }));
+      } else {
+        setForm((current) => ({ ...current, ...nextBaseline, apiKey: "", removeStoredKey: false }));
+      }
       setHasStoredKey(form.removeStoredKey ? false : form.apiKey.trim() !== "" || hasStoredKey);
       setStoredKeyHint(form.removeStoredKey ? "" : form.apiKey.trim() ? "configured" : storedKeyHint);
       setSaveStatus({ tone: "success", message: "Model settings saved." });
@@ -675,6 +900,28 @@ export function ModelConnectionWizardPanel({
             : status?.ok
               ? `LM Studio is running, but ${selectedModel || "the selected model"} is not listed.`
               : status?.message ?? "LM Studio connection failed."
+        });
+        return;
+      }
+
+      if (selectedPresetId === "local-runtime") {
+        const health = await loadLocalModelHealth({
+          localOrchestrationBaseUrl: getLocalRuntimeBaseUrlOverride()
+        });
+        const provider =
+          health?.providers.find((item) => item.provider === "local-orchestration") ?? null;
+        const selectedModel = stripLocalRuntimeModelRef(form.defaultModel);
+        const configuredModel = stripLocalRuntimeModelRef(provider?.defaultModel ?? "");
+        const ok = provider?.ok === true;
+        setProbeStatus({
+          tone: ok ? "success" : "error",
+          message: ok
+            ? `${provider?.label ?? "Startup runtime"} is ready at ${provider?.baseUrl ?? form.baseUrl}. ${
+                configuredModel && configuredModel !== selectedModel
+                  ? `Save settings to switch the configured startup model from ${configuredModel} to ${selectedModel}.`
+                  : `Model: ${configuredModel || selectedModel || "configured local default"}.`
+              }`
+            : provider?.message ?? "Startup runtime connection failed."
         });
         return;
       }
@@ -753,7 +1000,10 @@ export function ModelConnectionWizardPanel({
         onRefresh={() =>
           void loadLocalModelHealth({
             ollamaBaseUrl: isOllamaSelected ? getOllamaBaseUrlOverride() : undefined,
-            lmStudioBaseUrl: isLMStudioSelected ? getLMStudioBaseUrlOverride() : undefined
+            lmStudioBaseUrl: isLMStudioSelected ? getLMStudioBaseUrlOverride() : undefined,
+            localOrchestrationBaseUrl: isLocalRuntimeSelected
+              ? getLocalRuntimeBaseUrlOverride()
+              : undefined
           })
         }
       />
@@ -866,21 +1116,61 @@ export function ModelConnectionWizardPanel({
               ) : null}
             </div>
           ) : null}
+          {isLocalRuntimeSelected ? (
+            <div className="local-runtime-panel">
+              <div>
+                <strong>{localRuntimeProvider?.label ?? "Startup runtime status"}</strong>
+                <p>
+                  {isLoadingLocalHealth
+                    ? "Checking the startup runtime..."
+                    : localRuntimeProvider?.message ??
+                      "Check whether the local orchestration server is running and serving a model."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  void loadLocalModelHealth({
+                    localOrchestrationBaseUrl: getLocalRuntimeBaseUrlOverride()
+                  })
+                }
+                disabled={!hasCredentials || isLoadingLocalHealth}
+              >
+                {isLoadingLocalHealth ? "Checking..." : "Refresh startup runtime"}
+              </button>
+              {localRuntimeProvider ? (
+                <div className="local-runtime-summary">
+                  <strong>Configured startup model</strong>
+                  <small>
+                    {stripLocalRuntimeModelRef(localRuntimeProvider.defaultModel) ||
+                      stripLocalRuntimeModelRef(form.defaultModel) ||
+                      "Use the saved local orchestration model."}
+                  </small>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="model-wizard-card">
           <span>Step 2</span>
           <h3>Add provider access</h3>
-          <label>
-            {selectedPreset.apiKeyLabel}
-            <input
-              type="password"
-              value={form.apiKey}
-              onChange={(event) => updateField("apiKey", event.target.value)}
-              placeholder={hasStoredKey ? "Stored key already configured" : selectedPreset.apiKeyPlaceholder}
-            />
-          </label>
-          <p className="model-wizard-field-hint">{selectedPreset.apiKeyHint}</p>
+          {selectedPreset.needsApiKey ? (
+            <>
+              <label>
+                {selectedPreset.apiKeyLabel}
+                <input
+                  type="password"
+                  value={form.apiKey}
+                  onChange={(event) => updateField("apiKey", event.target.value)}
+                  placeholder={hasStoredKey ? "Stored key already configured" : selectedPreset.apiKeyPlaceholder}
+                />
+              </label>
+              <p className="model-wizard-field-hint">{selectedPreset.apiKeyHint}</p>
+            </>
+          ) : (
+            <p className="model-wizard-field-hint">{selectedPreset.apiKeyHint}</p>
+          )}
           <label>
             Default model
             <input
@@ -898,6 +1188,12 @@ export function ModelConnectionWizardPanel({
                 ? liveLMStudioModelRefs.map((modelRef) => (
                     <option key={modelRef} value={modelRef}>{stripLmStudioModelRef(modelRef)}</option>
                   ))
+              : isLocalRuntimeSelected
+                ? [
+                    <option key={form.defaultModel} value={form.defaultModel}>
+                      {stripLocalRuntimeModelRef(form.defaultModel)}
+                    </option>
+                  ]
               : models.slice(0, 80).map((model) => (
                   <option key={model.id} value={model.id}>{model.name}</option>
                 ))}
@@ -909,10 +1205,58 @@ export function ModelConnectionWizardPanel({
               onChange={(event) => {
                 const nextBaseUrl = event.target.value;
                 updateField("baseUrl", nextBaseUrl);
-                setSelectedPresetId(inferProviderPresetId(nextBaseUrl));
+                const inferredPreset = inferProviderPresetId(nextBaseUrl, {
+                  localRuntimeBaseUrl: localRuntimeConfig.baseUrl
+                });
+                const localRuntimePresetId =
+                  getLocalRuntimeFlavor(form.localEngine) === "ollama"
+                    ? "ollama"
+                    : getLocalRuntimeFlavor(form.localEngine) === "lm-studio"
+                      ? "lm-studio"
+                      : "local-runtime";
+                setSelectedPresetId(
+                  selectedPresetId === "local-runtime" &&
+                    (inferredPreset === "custom-openai" || inferredPreset === localRuntimePresetId)
+                    ? "local-runtime"
+                    : inferredPreset
+                );
               }}
             />
           </label>
+          {isLocalRuntimeSelected ? (
+            <label>
+              Runtime engine
+              <select
+                value={form.localEngine}
+                onChange={(event) => {
+                  const nextEngine = event.target.value;
+                  const runtimeFlavor = getLocalRuntimeFlavor(nextEngine);
+                  const nextBaseUrl =
+                    runtimeFlavor === "ollama"
+                      ? localRuntimeBaseUrls.ollama || form.baseUrl
+                      : runtimeFlavor === "lm-studio"
+                        ? localRuntimeBaseUrls.lmStudio || form.baseUrl
+                        : localRuntimeBaseUrls.localOrchestration || form.baseUrl;
+                  setForm((current) => ({
+                    ...current,
+                    localEngine: nextEngine,
+                    baseUrl: nextBaseUrl,
+                    defaultModel: formatLocalRuntimeModelRef(
+                      stripLocalRuntimeModelRef(current.defaultModel),
+                      nextEngine
+                    )
+                  }));
+                }}
+              >
+                <option value="ollama">Ollama</option>
+                <option value="lm-studio">LM Studio</option>
+                <option value="llama.cpp">llama.cpp</option>
+                <option value="vLLM">vLLM</option>
+                <option value="TGI">TGI</option>
+                <option value="openai-compatible">OpenAI-compatible local server</option>
+              </select>
+            </label>
+          ) : null}
           <label className="model-wizard-checkbox">
             <input
               type="checkbox"
@@ -921,7 +1265,7 @@ export function ModelConnectionWizardPanel({
             />
             Save to env file when supported
           </label>
-          {hasStoredKey ? (
+          {selectedPreset.needsApiKey && hasStoredKey ? (
             <label className="model-wizard-checkbox">
               <input
                 type="checkbox"
@@ -944,8 +1288,9 @@ export function ModelConnectionWizardPanel({
           <span>Step 3</span>
           <h3>Test and launch</h3>
           <p>
-            Test {selectedPreset.name}. If it succeeds, open the workflow catalog and start from a
-            packaged outcome.
+            {isLocalRuntimeSelected
+              ? "Test whether the startup runtime is reachable from the engine container, then launch a workflow against that local model."
+              : `Test ${selectedPreset.name}. If it succeeds, open the workflow catalog and start from a packaged outcome.`}
           </p>
           <div className="model-wizard-actions">
             <button type="button" onClick={() => void probeConnection()} disabled={!hasCredentials || isProbing}>
@@ -968,6 +1313,8 @@ export function ModelConnectionWizardPanel({
                 ? "Detected Ollama models"
                 : isLMStudioSelected
                   ? "Detected LM Studio models"
+                  : isLocalRuntimeSelected
+                    ? "Configured startup runtime"
                   : "Available OpenRouter models"}
             </h3>
             <p>
@@ -975,6 +1322,8 @@ export function ModelConnectionWizardPanel({
                 ? "Use detected local models after starting Ollama. No prompts or secrets are sent during this check."
                 : isLMStudioSelected
                   ? "Use detected local models after starting the LM Studio server. No prompts or secrets are sent during this check."
+                  : isLocalRuntimeSelected
+                    ? "Use the machine's startup model through the local orchestration server. This check only asks the runtime for metadata."
                 : "Use search to find coding, free, long-context, or moderated model options."}
             </p>
           </div>
@@ -989,6 +1338,21 @@ export function ModelConnectionWizardPanel({
             </label>
           ) : null}
         </div>
+        {!isLocalModelCatalog && freeOpenRouterModels.length > 0 ? (
+          <div className="model-free-cloud-strip" role="group" aria-label="Free cloud model picks">
+            {freeOpenRouterModels.map((model) => (
+              <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
+                <strong>{model.name}</strong>
+                <small>
+                  {model.contextLength
+                    ? `${formatOpenRouterNumber(model.contextLength)} context`
+                    : "Context unknown"}{" "}
+                  · Free cloud option
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="model-catalog-grid">
           {isOllamaSelected
             ? ollamaModels.map((model) => {
@@ -1020,6 +1384,34 @@ export function ModelConnectionWizardPanel({
                     </button>
                   );
                 })
+            : isLocalRuntimeSelected
+              ? [
+                  <button
+                    type="button"
+                    key={form.defaultModel || "local-runtime"}
+                    onClick={() =>
+                      updateField(
+                        "defaultModel",
+                        localRuntimeProvider?.defaultModel || form.defaultModel
+                      )
+                    }
+                  >
+                    <strong>
+                      {stripLocalRuntimeModelRef(localRuntimeProvider?.defaultModel || form.defaultModel) ||
+                        "Configured startup model"}
+                    </strong>
+                    <span>{localRuntimeProvider?.defaultModel || form.defaultModel || "llamacpp/local-model"}</span>
+                    <small>
+                      {[
+                        localRuntimeProvider?.label || form.localEngine,
+                        localRuntimeProvider?.baseUrl || form.baseUrl,
+                        localRuntimeProvider?.state === "available" ? "Reachable" : "Needs attention"
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  </button>
+                ]
             : filteredModels.map((model) => (
                 <button type="button" key={model.id} onClick={() => updateField("defaultModel", model.id)}>
                   <strong>{model.name}</strong>

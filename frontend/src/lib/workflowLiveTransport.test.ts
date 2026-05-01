@@ -35,7 +35,7 @@ describe("workflowLiveTransport", () => {
     vi.stubGlobal("WebSocket", webSocketSpy);
     const onEvent = vi.fn().mockName("onEvent");
 
-    connectWorkflowLiveTransport({
+    const connection = connectWorkflowLiveTransport({
       runId: "run-ws",
       token: "jwt-token",
       onEvent
@@ -54,6 +54,7 @@ describe("workflowLiveTransport", () => {
         expect.objectContaining({ type: "sync", run_id: "run-ws" })
       )
     );
+    connection.close();
   });
 
   it("uses SSE directly for api-key-only workflow live updates", async () => {
@@ -67,7 +68,7 @@ describe("workflowLiveTransport", () => {
     vi.stubGlobal("WebSocket", webSocketSpy);
     const onEvent = vi.fn();
 
-    connectWorkflowLiveTransport({
+    const connection = connectWorkflowLiveTransport({
       runId: "run-sse",
       apiKey: "api-key",
       onEvent
@@ -86,6 +87,7 @@ describe("workflowLiveTransport", () => {
         expect.objectContaining({ type: "sync", run_id: "run-sse" })
       )
     );
+    connection.close();
   });
 
   it("reconnects with Last-Event-ID after a transient SSE disconnect", async () => {
@@ -105,7 +107,7 @@ describe("workflowLiveTransport", () => {
     const onEvent = vi.fn();
     const onError = vi.fn();
 
-    connectWorkflowLiveTransport({
+    const connection = connectWorkflowLiveTransport({
       runId: "run-reconnect",
       token: "jwt-token",
       onEvent,
@@ -134,6 +136,7 @@ describe("workflowLiveTransport", () => {
       )
     );
     expect(onError).not.toHaveBeenCalled();
+    connection.close();
   });
 
   it("does not retry permanent SSE failures", async () => {
@@ -146,7 +149,7 @@ describe("workflowLiveTransport", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onError = vi.fn();
 
-    connectWorkflowLiveTransport({
+    const connection = connectWorkflowLiveTransport({
       runId: "run-missing",
       token: "jwt-token",
       onEvent: vi.fn(),
@@ -162,5 +165,6 @@ describe("workflowLiveTransport", () => {
         message: "Workflow SSE request failed with status 404"
       })
     );
+    connection.close();
   });
 });

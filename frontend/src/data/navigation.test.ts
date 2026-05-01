@@ -8,6 +8,8 @@ import {
   APP_TAB_IDS,
   DEFAULT_APP_TAB,
   ROLE_SELECTED_DEFAULT_APP_TAB,
+  getAppTabDescription,
+  getAppTabGroup,
   getAppTabLabel,
   isAppTab,
   isPrimaryAppTab,
@@ -35,6 +37,8 @@ describe("app navigation registry", () => {
     expect(getAppTabLabel("guide")).toBe("Guide / Intake");
     expect(getAppTabLabel("operations")).toBe("Sessions & Runs");
     expect(getAppTabLabel("advanced")).toBe("Advanced");
+    expect(getAppTabDescription("models")).toContain("Choose a default model");
+    expect(getAppTabGroup("operations")?.label).toBe("Operate");
   });
 
   it("splits cockpit primary navigation from demoted tools without losing destinations", () => {
@@ -46,7 +50,7 @@ describe("app navigation registry", () => {
     expect(new Set(secondaryIds).size).toBe(secondaryIds.length);
     expect(primaryIds.some((id) => secondaryIds.includes(id))).toBe(false);
     expect(new Set(splitIds)).toEqual(new Set(APP_TAB_IDS));
-    expect(primaryIds).toEqual(["guide", "start", "operations", "starter", "connect", "safety"]);
+    expect(primaryIds).toEqual(["guide", "start", "operations", "starter", "models", "safety"]);
   });
 
   it("identifies whether a tab is a primary cockpit destination or a secondary tool", () => {

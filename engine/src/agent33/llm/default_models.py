@@ -4,10 +4,24 @@ from __future__ import annotations
 
 from agent33.config import settings
 
+_LOCAL_ORCHESTRATION_ENGINES = {
+    "llama.cpp",
+    "llamacpp",
+    "llama-cpp",
+    "vllm",
+    "v-llm",
+    "tgi",
+    "text-generation-inference",
+    "textgenerationinference",
+    "openai-compatible",
+    "openai_compatible",
+    "local-openai",
+}
+
 
 def llamacpp_enabled() -> bool:
-    """Return True when the local orchestration engine is llama.cpp."""
-    return settings.local_orchestration_engine.lower() in ("llama.cpp", "llamacpp")
+    """Return True when local orchestration should back the default runtime."""
+    return settings.local_orchestration_engine.strip().lower() in _LOCAL_ORCHESTRATION_ENGINES
 
 
 def resolve_default_model() -> str:

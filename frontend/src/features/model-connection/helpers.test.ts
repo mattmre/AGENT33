@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_LOCAL_RUNTIME_BASELINE,
   DEFAULT_MODEL_CONNECTION_BASELINE,
+  buildLocalRuntimeConfigChanges,
+  buildModelConnectionConfigChanges,
   buildOpenRouterConfigChanges,
   buildOpenRouterProbePayload,
+  formatLocalRuntimeModelRef,
   formatLmStudioModelRef,
   formatOllamaModelRef,
   getModelReadinessLabel,
+  normalizeLocalRuntimeBaseUrl,
   normalizeLmStudioBaseUrl,
   normalizeOllamaBaseUrl,
+  stripLocalRuntimeModelRef,
   stripLmStudioModelRef,
   stripOllamaModelRef,
   type ModelConnectionForm
@@ -61,6 +67,76 @@ describe("model connection helpers", () => {
     expect(stripLmStudioModelRef("lmstudio/qwen2.5-coder-7b-instruct")).toBe(
       "qwen2.5-coder-7b-instruct"
     );
+  });
+
+  it("normalizes the startup runtime endpoint and config changes", () => {
+    expect(normalizeLocalRuntimeBaseUrl("http://localhost:8033", "vLLM")).toBe(
+      "http://localhost:8033/v1"
+    );
+    expect(normalizeLocalRuntimeBaseUrl("http://localhost:8033/v1/", "vLLM")).toBe(
+      "http://localhost:8033/v1"
+    );
+    expect(formatLocalRuntimeModelRef("qwen3-coder-next", "vLLM")).toBe(
+      "llamacpp/qwen3-coder-next"
+    );
+    expect(stripLocalRuntimeModelRef("llamacpp/qwen3-coder-next")).toBe("qwen3-coder-next");
+
+    const changes = buildLocalRuntimeConfigChanges(
+      form({
+        defaultModel: "llamacpp/qwen3-coder-next",
+        baseUrl: "http://localhost:8033",
+        localEngine: "vLLM"
+      }),
+      DEFAULT_MODEL_CONNECTION_BASELINE,
+      DEFAULT_LOCAL_RUNTIME_BASELINE
+    );
+
+    expect(changes.default_model).toBe("llamacpp/qwen3-coder-next");
+    expect(changes.local_orchestration_base_url).toBe("http://localhost:8033/v1");
+    expect(changes.local_orchestration_engine).toBe("vLLM");
+  });
+
+  it("maps the startup runtime onto Ollama settings when the local engine is Ollama", () => {
+    expect(normalizeLocalRuntimeBaseUrl("http://localhost:11434/v1", "ollama")).toBe(
+      "http://localhost:11434"
+    );
+    expect(formatLocalRuntimeModelRef("qwen3-coder", "ollama")).toBe("ollama/qwen3-coder");
+    expect(stripLocalRuntimeModelRef("ollama/qwen3-coder")).toBe("qwen3-coder");
+
+    const changes = buildLocalRuntimeConfigChanges(
+      form({
+        defaultModel: "ollama/qwen3-coder",
+        baseUrl: "http://localhost:11434/v1",
+        localEngine: "ollama"
+      }),
+      DEFAULT_MODEL_CONNECTION_BASELINE,
+      DEFAULT_LOCAL_RUNTIME_BASELINE
+    );
+
+    expect(changes.default_model).toBe("ollama/qwen3-coder");
+    expect(changes.ollama_base_url).toBe("http://localhost:11434");
+    expect(changes.ollama_default_model).toBe("qwen3-coder");
+    expect(changes.local_orchestration_model).toBe("qwen3-coder");
+    expect(changes.local_orchestration_engine).toBe("ollama");
+  });
+
+  it("routes config changes through the selected preset path", () => {
+    const openRouterChanges = buildModelConnectionConfigChanges(
+      "openrouter",
+      form({ defaultModel: "qwen/qwen3-32b" }),
+      DEFAULT_MODEL_CONNECTION_BASELINE,
+      DEFAULT_LOCAL_RUNTIME_BASELINE
+    );
+    const localRuntimeChanges = buildModelConnectionConfigChanges(
+      "local-runtime",
+      form({ defaultModel: "llamacpp/qwen3-coder-next", localEngine: "llama.cpp" }),
+      DEFAULT_MODEL_CONNECTION_BASELINE,
+      DEFAULT_LOCAL_RUNTIME_BASELINE
+    );
+
+    expect(openRouterChanges.default_model).toBe("openrouter/qwen/qwen3-32b");
+    expect(localRuntimeChanges.default_model).toBe("llamacpp/qwen3-coder-next");
+    expect(localRuntimeChanges.local_orchestration_model).toBeUndefined();
   });
 
   it("summarizes model readiness in user-facing states", () => {

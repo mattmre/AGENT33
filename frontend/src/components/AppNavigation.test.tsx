@@ -11,7 +11,8 @@ describe("AppNavigation", () => {
     expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Guide \/ Intake/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: /Sessions & Runs/ })).not.toHaveAttribute("aria-current");
-    expect(screen.getByText("Tools & advanced surfaces")).toBeInTheDocument();
+    expect(screen.getByText("Launch")).toBeInTheDocument();
+    expect(screen.getByText("Admin")).toBeInTheDocument();
   });
 
   it("routes selected tabs through the shared navigation callback", async () => {
@@ -25,24 +26,31 @@ describe("AppNavigation", () => {
     expect(onNavigate).toHaveBeenCalledWith("operations");
   });
 
-  it("keeps specialized tools reachable behind the tools section", async () => {
+  it("keeps specialized tools reachable through grouped sidebar sections", async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
 
     render(<AppNavigation activeTab="fabric" onNavigate={onNavigate} />);
 
-    expect(screen.getByText("Tools & advanced surfaces").closest("details")).toHaveAttribute("open");
-    expect(screen.getByRole("button", { name: "Tool Fabric" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Build")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tool Fabric/ })).toHaveAttribute("aria-current", "page");
+    await user.click(screen.getByRole("button", { name: /Task group Admin/ }));
 
-    await user.click(screen.getByRole("button", { name: "MCP Health" }));
+    await user.click(screen.getByRole("button", { name: /MCP Health/ }));
 
     expect(onNavigate).toHaveBeenCalledWith("mcp");
   });
 
-  it("keeps the tools disclosure name concise while showing detail only in expanded content", () => {
+  it("shows group descriptions so the sidebar reads like an information architecture instead of a tab wall", () => {
     render(<AppNavigation activeTab="guide" onNavigate={vi.fn()} />);
 
-    expect(screen.getByText("Tools & advanced surfaces").closest("summary")).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByText("Specialized builders, MCP, analytics, marketplace, and setup panels.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Prepare models, integrations, and credentials before you launch work.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Inspect external tool fabric health and use the quarantined raw controls only when needed."
+      )
+    ).toBeInTheDocument();
   });
 });

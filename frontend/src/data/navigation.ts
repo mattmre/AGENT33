@@ -1,28 +1,28 @@
 export const APP_TAB_IDS = [
   "guide",
   "start",
-  "connect",
   "demo",
+  "connect",
   "models",
-  "chat",
-  "voice",
   "setup",
+  "operations",
   "review",
   "safety",
-  "operations",
-  "skills",
-  "fabric",
-  "mcp",
+  "chat",
+  "voice",
   "catalog",
   "starter",
+  "skills",
+  "fabric",
   "tools",
+  "builder",
+  "spawner",
   "loops",
   "outcomes",
   "analytics",
   "impact",
   "marketplace",
-  "builder",
-  "spawner",
+  "mcp",
   "advanced"
 ] as const;
 
@@ -31,10 +31,13 @@ export type AppTab = (typeof APP_TAB_IDS)[number];
 export interface AppTabConfig {
   readonly id: AppTab;
   readonly label: string;
+  readonly description: string;
 }
 
 export interface AppTabGroup {
+  readonly id: string;
   readonly label: string;
+  readonly description: string;
   readonly tabs: ReadonlyArray<AppTabConfig>;
 }
 
@@ -48,53 +51,170 @@ export const ROLE_SELECTED_DEFAULT_APP_TAB: AppTab = "start";
 
 export const APP_TAB_GROUPS: ReadonlyArray<AppTabGroup> = [
   {
-    label: "Start",
+    id: "launch",
+    label: "Launch",
+    description: "Set role, orient the operator, and choose the safest first move.",
     tabs: [
-      { id: "guide", label: "Guide / Intake" },
-      { id: "start", label: "Home / Next Step" },
-      { id: "connect", label: "Connect Models" },
-      { id: "demo", label: "Demo Mode" },
-      { id: "models", label: "Models" },
-      { id: "chat", label: "Chat" },
-      { id: "voice", label: "Voice" }
+      {
+        id: "guide",
+        label: "Guide / Intake",
+        description: "State your role, objective, and what kind of help you need first."
+      },
+      {
+        id: "start",
+        label: "Home / Next Step",
+        description: "Return to the launchpad and resume the most likely next action."
+      },
+      {
+        id: "demo",
+        label: "Demo Mode",
+        description: "Preview a guided run before touching live workflows or approvals."
+      }
     ]
   },
   {
+    id: "connect",
+    label: "Connect",
+    description: "Prepare models, integrations, and credentials before you launch work.",
+    tabs: [
+      {
+        id: "connect",
+        label: "Connect Models",
+        description: "See the overall connection center for providers, runtimes, and readiness."
+      },
+      {
+        id: "models",
+        label: "Models",
+        description: "Choose a default model, test it, and prefer local or free paths when possible."
+      },
+      {
+        id: "setup",
+        label: "Integrations",
+        description: "Add tokens, messaging, and service-level access needed by the cockpit."
+      }
+    ]
+  },
+  {
+    id: "operate",
     label: "Operate",
+    description: "Run sessions, review decisions, and work inside the live operator surfaces.",
     tabs: [
-      { id: "setup", label: "Integrations" },
-      { id: "review", label: "Review Queue" },
-      { id: "safety", label: "Safety & Approvals" },
-      { id: "operations", label: "Sessions & Runs" }
+      {
+        id: "operations",
+        label: "Sessions & Runs",
+        description: "Track active work, current blockers, and reviewable artifacts."
+      },
+      {
+        id: "review",
+        label: "Review Queue",
+        description: "Process candidate assets and triage handoff items that need judgment."
+      },
+      {
+        id: "safety",
+        label: "Safety & Approvals",
+        description: "Approve guarded actions, inspect risk posture, and review protected routes."
+      },
+      {
+        id: "chat",
+        label: "Chat",
+        description: "Work directly with the agent runtime in the core text console."
+      },
+      {
+        id: "voice",
+        label: "Voice",
+        description: "Switch to live voice interaction for guided conversations and handoffs."
+      }
     ]
   },
   {
+    id: "build",
     label: "Build",
+    description: "Choose workflows, assemble capabilities, and create reusable systems.",
     tabs: [
-      { id: "skills", label: "Skill Wizard" },
-      { id: "fabric", label: "Tool Fabric" },
-      { id: "mcp", label: "MCP Health" },
-      { id: "catalog", label: "Workflow Catalog" },
-      { id: "starter", label: "Workflows" },
-      { id: "tools", label: "Tools" }
+      {
+        id: "catalog",
+        label: "Workflow Catalog",
+        description: "Start from prebuilt outcome systems instead of composing raw tools."
+      },
+      {
+        id: "starter",
+        label: "Workflows",
+        description: "Launch an outcome path with guided setup and runtime checks."
+      },
+      {
+        id: "skills",
+        label: "Skill Wizard",
+        description: "Author or install skills without dropping into the raw control plane."
+      },
+      {
+        id: "fabric",
+        label: "Tool Fabric",
+        description: "Discover tools, skills, and workflows that fit the current objective."
+      },
+      {
+        id: "tools",
+        label: "Tools",
+        description: "Inspect the live tool catalog, schemas, and callable surfaces."
+      },
+      {
+        id: "builder",
+        label: "Builder",
+        description: "Compose an agent with capabilities and preview the final definition."
+      },
+      {
+        id: "spawner",
+        label: "Spawner",
+        description: "Design sub-agent delegation flows and parent-child execution patterns."
+      }
     ]
   },
   {
+    id: "improve",
     label: "Improve",
+    description: "Evaluate outcomes, measure impact, and close the loop on quality.",
     tabs: [
-      { id: "loops", label: "Improvement Loops" },
-      { id: "outcomes", label: "Outcomes" },
-      { id: "analytics", label: "Analytics" },
-      { id: "impact", label: "Impact" }
+      {
+        id: "loops",
+        label: "Improvement Loops",
+        description: "Schedule recurring inspection, remediation, and upgrade runs."
+      },
+      {
+        id: "outcomes",
+        label: "Outcomes",
+        description: "Review the outcome ledger, trend lines, and decline-triggered actions."
+      },
+      {
+        id: "analytics",
+        label: "Analytics",
+        description: "Inspect usage, throughput, and session-level performance patterns."
+      },
+      {
+        id: "impact",
+        label: "Impact",
+        description: "Measure ROI, effect size, and whether the system is paying for itself."
+      },
+      {
+        id: "marketplace",
+        label: "Marketplace",
+        description: "Browse packs and outcome systems that can extend the current workspace."
+      }
     ]
   },
   {
-    label: "Extend",
+    id: "admin",
+    label: "Admin",
+    description: "Inspect external tool fabric health and use the quarantined raw controls only when needed.",
     tabs: [
-      { id: "marketplace", label: "Marketplace" },
-      { id: "builder", label: "Builder" },
-      { id: "spawner", label: "Spawner" },
-      { id: "advanced", label: "Advanced" }
+      {
+        id: "mcp",
+        label: "MCP Health",
+        description: "Check connected tool servers, sync posture, and discovery status."
+      },
+      {
+        id: "advanced",
+        label: "Advanced",
+        description: "Enter the raw control plane only for edge cases and deep operator work."
+      }
     ]
   }
 ];
@@ -117,7 +237,7 @@ export const APP_PRIMARY_NAV_ITEMS: ReadonlyArray<AppPrimaryNavItem> = [
     description: "Pick a prebuilt strategy instead of assembling tools manually."
   },
   {
-    id: "connect",
+    id: "models",
     description: "Set up providers, local models, and readiness checks."
   },
   {
@@ -134,8 +254,11 @@ export const APP_SECONDARY_NAV_GROUPS: ReadonlyArray<AppTabGroup> = APP_TAB_GROU
 })).filter((group) => group.tabs.length > 0);
 
 const APP_TAB_ID_SET = new Set<string>(APP_TAB_IDS);
-const APP_TAB_LABEL_MAP = new Map<AppTab, string>(
-  APP_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab.id, tab.label] as const))
+const APP_TAB_CONFIG_MAP = new Map<AppTab, AppTabConfig>(
+  APP_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab.id, tab] as const))
+);
+const APP_TAB_GROUP_MAP = new Map<AppTab, AppTabGroup>(
+  APP_TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => [tab.id, group] as const))
 );
 
 export function isAppTab(value: string): value is AppTab {
@@ -143,7 +266,15 @@ export function isAppTab(value: string): value is AppTab {
 }
 
 export function getAppTabLabel(tabId: AppTab): string {
-  return APP_TAB_LABEL_MAP.get(tabId) ?? tabId;
+  return APP_TAB_CONFIG_MAP.get(tabId)?.label ?? tabId;
+}
+
+export function getAppTabDescription(tabId: AppTab): string {
+  return APP_TAB_CONFIG_MAP.get(tabId)?.description ?? "";
+}
+
+export function getAppTabGroup(tabId: AppTab): AppTabGroup | null {
+  return APP_TAB_GROUP_MAP.get(tabId) ?? null;
 }
 
 export function isPrimaryAppTab(tabId: AppTab): boolean {

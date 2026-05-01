@@ -32,6 +32,11 @@ function mockApiRequest(): void {
             lm_studio: {
               lm_studio_base_url: "http://localhost:1234/v1",
               lm_studio_default_model: "qwen2.5-coder-7b-instruct"
+            },
+            local_orchestration: {
+              local_orchestration_base_url: "http://host.docker.internal:8033/v1",
+              local_orchestration_model: "qwen3-coder-next",
+              local_orchestration_engine: "vLLM"
             }
           }
         }
@@ -110,10 +115,10 @@ function mockApiRequest(): void {
         url: "http://localhost/v1/model-health",
         data: {
           overall_state: "ready",
-          summary: "2 local runtimes ready with 4 detected models.",
-          ready_provider_count: 2,
+          summary: "3 local runtimes ready with 5 detected models.",
+          ready_provider_count: 3,
           attention_provider_count: 0,
-          total_model_count: 4,
+          total_model_count: 5,
           providers: [
             {
               provider: "ollama",
@@ -134,6 +139,17 @@ function mockApiRequest(): void {
               model_count: 2,
               message: "Detected 2 LM Studio models.",
               action: "Choose a detected LM Studio model for local workflows."
+            },
+            {
+              provider: "local-orchestration",
+              label: "vLLM",
+              state: "available",
+              ok: true,
+              base_url: "http://host.docker.internal:8033/v1",
+              default_model: "qwen3-coder-next",
+              model_count: 1,
+              message: "Detected 1 local orchestration model.",
+              action: "Choose a detected vLLM model for local workflows."
             }
           ]
         }
@@ -150,7 +166,9 @@ function mockApiRequest(): void {
 }
 
 function getLocalRuntimePanel(label: string): HTMLElement {
-  const panel = screen.getByText(label).closest(".local-runtime-panel");
+  const panel = Array.from(document.querySelectorAll(".local-runtime-panel")).find((candidate) =>
+    candidate.textContent?.includes(label)
+  );
   expect(panel).not.toBeNull();
   return panel as HTMLElement;
 }
@@ -175,9 +193,10 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     expect(screen.getByRole("heading", { name: "Pick your model provider path" })).toBeInTheDocument();
     const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
     expect(providerPaths.getByRole("button", { name: /OpenRouter/ })).toHaveAttribute("aria-pressed", "true");
-    expect(providerPaths.getByRole("button", { name: /Ollama/ })).toBeInTheDocument();
-    expect(providerPaths.getByRole("button", { name: /LM Studio/ })).toBeInTheDocument();
-    expect(providerPaths.getByRole("button", { name: /OpenAI-compatible/ })).toBeInTheDocument();
+    expect(providerPaths.getByRole("button", { name: /^Local Startup runtime/ })).toBeInTheDocument();
+    expect(providerPaths.getByRole("button", { name: /^Local Ollama/ })).toBeInTheDocument();
+    expect(providerPaths.getByRole("button", { name: /^Local LM Studio/ })).toBeInTheDocument();
+    expect(providerPaths.getByRole("button", { name: /^Custom OpenAI-compatible/ })).toBeInTheDocument();
   });
 
   it("applies a local preset to the existing form fields", async () => {
@@ -192,10 +211,12 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Ollama/ }));
-
     const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
-    expect(providerPaths.getByRole("button", { name: /Ollama/ })).toHaveAttribute("aria-pressed", "true");
+    await user.click(providerPaths.getByRole("button", { name: /^Local Ollama/ }));
+    expect(providerPaths.getByRole("button", { name: /^Local Ollama/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
     expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:11434");
     expect(screen.getByLabelText("Default model")).toHaveValue("ollama/qwen2.5-coder:7b");
     expect(screen.getByText("Local path can run without a key")).toBeInTheDocument();
@@ -213,7 +234,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Ollama/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local Ollama/ }));
 
     const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
     expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
@@ -243,12 +265,13 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
 
     expect(await screen.findByText("One place to see what can run now")).toBeInTheDocument();
-    expect(screen.getByText("2 local runtimes ready with 4 detected models.")).toBeInTheDocument();
+    expect(screen.getByText("3 local runtimes ready with 5 detected models.")).toBeInTheDocument();
     const healthKpis = screen.getByLabelText("Local runtime readiness");
-    expect(within(healthKpis).getByText("4")).toBeInTheDocument();
+    expect(within(healthKpis).getByText("5")).toBeInTheDocument();
     expect(within(healthKpis).getByText("models detected")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local LM Studio/ }));
     const baseUrlInput = screen.getByLabelText("Base URL");
     await user.clear(baseUrlInput);
     await user.type(baseUrlInput, "http://127.0.0.1:1234");
@@ -265,6 +288,238 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
     );
   });
 
+  it("loads the startup runtime preset from operator config and tests it through unified health", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local Startup runtime/ }));
+
+    expect(screen.getByLabelText("Base URL")).toHaveValue("http://host.docker.internal:8033/v1");
+    expect(screen.getByLabelText("Default model")).toHaveValue("llamacpp/qwen3-coder-next");
+    expect(screen.getByLabelText("Runtime engine")).toHaveValue("vLLM");
+    const runtimePanel = getLocalRuntimePanel("vLLM");
+    expect(within(runtimePanel).getByText("Detected 1 local orchestration model.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText(/vLLM is ready at http:\/\/host\.docker\.internal:8033\/v1/)
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/model-health",
+          query: undefined
+        })
+      )
+    );
+  });
+
+  it("infers the startup runtime from configured local orchestration state even when the saved model is unprefixed", async () => {
+    apiRequestMock.mockReset();
+    apiRequestMock.mockImplementation(({ path }) => {
+      if (path === "/v1/operator/config") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/operator/config",
+          data: {
+            groups: {
+              llm: {
+                default_model: "qwen3-coder-next",
+                openrouter_base_url: "https://openrouter.ai/api/v1"
+              },
+              ollama: {},
+              lm_studio: {},
+              local_orchestration: {
+                local_orchestration_base_url: "https://runtime.internal.example/v1",
+                local_orchestration_model: "qwen3-coder-next",
+                local_orchestration_engine: "vLLM"
+              }
+            }
+          }
+        });
+      }
+      if (path === "/v1/openrouter/models") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/openrouter/models",
+          data: { data: [] }
+        });
+      }
+      if (path === "/v1/model-health") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/model-health",
+          data: {
+            overall_state: "ready",
+            summary: "1 local runtime ready with 1 detected model.",
+            ready_provider_count: 1,
+            attention_provider_count: 0,
+            total_model_count: 1,
+            providers: [
+              {
+                provider: "local-orchestration",
+                label: "vLLM",
+                state: "available",
+                ok: true,
+                base_url: "https://runtime.internal.example/v1",
+                default_model: "qwen3-coder-next",
+                model_count: 1,
+                message: "Detected 1 local orchestration model.",
+                action: "Choose a detected vLLM model for local workflows."
+              }
+            ]
+          }
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: `http://localhost${path}`,
+        data: {}
+      });
+    });
+
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    const providerPaths = await screen.findByRole("group", { name: "Provider setup paths" });
+    expect(
+      within(providerPaths).getByRole("button", { name: /^Local Startup runtime/ })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Base URL")).toHaveValue("https://runtime.internal.example/v1");
+    expect(screen.getByLabelText("Default model")).toHaveValue("llamacpp/qwen3-coder-next");
+    expect(screen.getByLabelText("Runtime engine")).toHaveValue("vLLM");
+  });
+
+  it("keeps the startup runtime path selected when the configured engine is Ollama", async () => {
+    apiRequestMock.mockReset();
+    apiRequestMock.mockImplementation(({ path }) => {
+      if (path === "/v1/operator/config") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/operator/config",
+          data: {
+            groups: {
+              llm: {
+                default_model: "ollama/qwen3-coder",
+                openrouter_base_url: "https://openrouter.ai/api/v1"
+              },
+              ollama: {
+                ollama_base_url: "http://host.docker.internal:11434",
+                ollama_default_model: "qwen3-coder"
+              },
+              lm_studio: {},
+              local_orchestration: {
+                local_orchestration_base_url: "http://host.docker.internal:8033/v1",
+                local_orchestration_model: "qwen3-coder",
+                local_orchestration_engine: "ollama"
+              }
+            }
+          }
+        });
+      }
+      if (path === "/v1/openrouter/models") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/openrouter/models",
+          data: { data: [] }
+        });
+      }
+      if (path === "/v1/model-health") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          durationMs: 5,
+          url: "http://localhost/v1/model-health",
+          data: {
+            overall_state: "ready",
+            summary: "2 local runtimes ready with 3 detected models.",
+            ready_provider_count: 2,
+            attention_provider_count: 0,
+            total_model_count: 3,
+            providers: [
+              {
+                provider: "ollama",
+                label: "Ollama",
+                state: "available",
+                ok: true,
+                base_url: "http://host.docker.internal:11434",
+                model_count: 2,
+                message: "Detected 2 local Ollama models.",
+                action: "Choose a detected Ollama model for local workflows."
+              },
+              {
+                provider: "local-orchestration",
+                label: "Ollama",
+                state: "available",
+                ok: true,
+                base_url: "http://host.docker.internal:11434",
+                default_model: "qwen3-coder",
+                model_count: 1,
+                message: "Detected 1 startup Ollama model.",
+                action: "Choose a detected Ollama model for local workflows."
+              }
+            ]
+          }
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        durationMs: 5,
+        url: `http://localhost${path}`,
+        data: {}
+      });
+    });
+
+    render(
+      <ModelConnectionWizardPanel
+        token="operator-token"
+        apiKey=""
+        onOpenSetup={vi.fn()}
+        onOpenWorkflowCatalog={vi.fn()}
+        onResult={vi.fn()}
+      />
+    );
+
+    const providerPaths = await screen.findByRole("group", { name: "Provider setup paths" });
+    expect(
+      within(providerPaths).getByRole("button", { name: /^Local Startup runtime/ })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Base URL")).toHaveValue("http://host.docker.internal:11434");
+    expect(screen.getByLabelText("Default model")).toHaveValue("ollama/qwen3-coder");
+    expect(screen.getByLabelText("Runtime engine")).toHaveValue("ollama");
+  });
+
   it("uses Ollama status for the local connection test", async () => {
     const user = userEvent.setup();
     render(
@@ -277,7 +532,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Ollama/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local Ollama/ }));
     const ollamaStatusPanel = getLocalRuntimePanel("Local Ollama status");
     expect(within(ollamaStatusPanel).getByText("Detected 2 local Ollama models.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Test connection" }));
@@ -302,7 +558,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local LM Studio/ }));
 
     expect(screen.getByLabelText("Base URL")).toHaveValue("http://localhost:1234/v1");
     const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
@@ -332,7 +589,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local LM Studio/ }));
     const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
     expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const detectedModels = within(screen.getByRole("group", { name: "Detected LM Studio models" }));
@@ -359,7 +617,8 @@ describe("ModelConnectionWizardPanel provider setup v2", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /LM Studio/ }));
+    const providerPaths = within(screen.getByRole("group", { name: "Provider setup paths" }));
+    await user.click(providerPaths.getByRole("button", { name: /^Local LM Studio/ }));
     const lmStudioStatusPanel = getLocalRuntimePanel("Local LM Studio status");
     expect(within(lmStudioStatusPanel).getByText("Detected 2 LM Studio models.")).toBeInTheDocument();
     const baseUrlInput = screen.getByLabelText("Base URL");

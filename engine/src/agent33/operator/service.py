@@ -262,6 +262,11 @@ class OperatorService:
                 "lm_studio_base_url": s.lm_studio_base_url,
                 "lm_studio_default_model": s.lm_studio_default_model,
             },
+            "local_orchestration": {
+                "local_orchestration_base_url": s.local_orchestration_base_url,
+                "local_orchestration_model": s.local_orchestration_model,
+                "local_orchestration_engine": s.local_orchestration_engine,
+            },
             "llm": {
                 "default_model": s.default_model,
                 "openai_api_key": _redact(s.openai_api_key),

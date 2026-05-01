@@ -22,6 +22,7 @@ _MODEL_PREFIX_PROVIDER_MAP: tuple[tuple[str, str], ...] = (
     ("openrouter/", "openrouter"),
     ("openai/", "openai"),
     ("ollama/", "ollama"),
+    ("lmstudio/", "lmstudio"),
     ("llamacpp/", "llamacpp"),
     ("gpt-", "openai"),
     ("o1", "openai"),
@@ -30,6 +31,8 @@ _MODEL_PREFIX_PROVIDER_MAP: tuple[tuple[str, str], ...] = (
     ("ft:gpt-", "openai"),
     ("airllm-", "airllm"),
 )
+_LOCAL_RUNTIME_LM_STUDIO_ENGINES = {"lmstudio", "lm-studio"}
+_LOCAL_RUNTIME_OLLAMA_ENGINES = {"ollama"}
 
 
 def _get_adapters() -> dict[str, Any]:
@@ -47,7 +50,15 @@ def _default_provider_name() -> str:
 
     if "/" in default_model:
         provider_name, _model_name = default_model.split("/", 1)
-        if provider_name in {"anthropic", "openai", "openrouter", "ollama", "llamacpp", "airllm"}:
+        if provider_name in {
+            "anthropic",
+            "openai",
+            "openrouter",
+            "ollama",
+            "lmstudio",
+            "llamacpp",
+            "airllm",
+        }:
             return provider_name
 
     for prefix, provider_name in _MODEL_PREFIX_PROVIDER_MAP:
@@ -61,9 +72,15 @@ def _required_runtime_services() -> set[str]:
     """Return the services the current runtime configuration actually depends on."""
     required = {"redis", "postgres", "nats"}
     provider_name = _default_provider_name()
+    startup_engine = settings.local_orchestration_engine.strip().lower()
 
     if provider_name in {"anthropic", "ollama", "openai", "openrouter"}:
         required.add(provider_name)
+    elif provider_name in {"llamacpp", "lmstudio"}:
+        required.add("local_orchestration")
+
+    if startup_engine in _LOCAL_RUNTIME_OLLAMA_ENGINES | _LOCAL_RUNTIME_LM_STUDIO_ENGINES:
+        required.add("local_orchestration")
 
     if settings.embedding_provider == "ollama":
         required.add("ollama")
@@ -91,21 +108,130 @@ async def _probe_catalog(base_url: str, headers: dict[str, str]) -> str:
 
 async def _probe_ollama(required_services: set[str]) -> str:
     """Check the Ollama dependency required by the active runtime."""
+    base_url = settings.runtime_ollama_base_url.rstrip("/")
+
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            if settings.embedding_provider == "ollama" and "ollama" in required_services:
-                response = await client.post(
-                    f"{settings.runtime_ollama_base_url}/api/embed",
-                    json={
-                        "model": settings.embedding_default_model,
-                        "input": ["health probe"],
-                    },
-                )
-            else:
-                response = await client.get(f"{settings.runtime_ollama_base_url}/api/version")
-            return "ok" if response.status_code == 200 else "degraded"
+            response = await client.get(f"{base_url}/api/tags")
+            if response.status_code != 200:
+                return "degraded"
+
+            payload = response.json()
+            raw_models = payload.get("models") if isinstance(payload, dict) else None
+            if not isinstance(raw_models, list):
+                return "degraded"
+
+            model_names = {
+                str(item.get("name") or item.get("model") or "").strip().lower()
+                for item in raw_models
+                if isinstance(item, dict)
+            }
+            model_names.discard("")
+            if not model_names:
+                return "degraded"
+
+            expected_models = {
+                settings.embedding_default_model.strip().lower()
+                for _ in [None]
+                if settings.embedding_provider == "ollama" and "ollama" in required_services
+            }
+            if _default_provider_name() == "ollama":
+                configured_default = settings.ollama_default_model.strip().lower()
+                if configured_default:
+                    expected_models.add(configured_default)
+
+            for configured_model in expected_models:
+                if not _ollama_model_is_installed(configured_model, model_names):
+                    return "degraded"
+
+            return "ok"
     except Exception:
         return "unavailable"
+
+
+async def _probe_local_orchestration() -> str:
+    """Check the configured startup runtime without sending prompts."""
+    engine = settings.local_orchestration_engine.strip().lower()
+    runtime_flavor = "local-orchestration"
+    base_url = settings.runtime_local_orchestration_base_url.rstrip("/")
+    configured_model = settings.local_orchestration_model.strip().lower()
+    path = "/models"
+
+    if engine in _LOCAL_RUNTIME_OLLAMA_ENGINES:
+        runtime_flavor = "ollama"
+        base_url = settings.runtime_ollama_base_url.rstrip("/")
+        path = "/api/tags"
+    elif engine in _LOCAL_RUNTIME_LM_STUDIO_ENGINES:
+        runtime_flavor = "lm-studio"
+        base_url = settings.runtime_lm_studio_base_url.rstrip("/")
+        path = "/models"
+
+    if not base_url:
+        return "unconfigured"
+
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{base_url}{path}")
+            if response.status_code != 200:
+                return "degraded"
+
+            payload = response.json()
+            model_names = _extract_runtime_model_names(payload, runtime_flavor)
+            if not model_names:
+                return "degraded"
+            if configured_model and not _ollama_model_is_installed(configured_model, model_names):
+                return "degraded"
+            return "ok"
+    except Exception:
+        return "unavailable"
+
+
+def _extract_runtime_model_names(payload: Any, runtime_flavor: str) -> set[str]:
+    """Return normalized model names from a startup runtime listing payload."""
+    if not isinstance(payload, dict):
+        return set()
+
+    if runtime_flavor == "ollama":
+        raw_models = payload.get("models")
+        if not isinstance(raw_models, list):
+            return set()
+        return {
+            str(item.get("name") or item.get("model") or "").strip().lower()
+            for item in raw_models
+            if isinstance(item, dict) and str(item.get("name") or item.get("model") or "").strip()
+        }
+
+    raw_models = payload.get("data")
+    if not isinstance(raw_models, list):
+        return set()
+    return {
+        str(item.get("id") or item.get("name") or "").strip().lower()
+        for item in raw_models
+        if isinstance(item, dict) and str(item.get("id") or item.get("name") or "").strip()
+    }
+
+
+def _ollama_model_is_installed(configured_model: str, installed_models: set[str]) -> bool:
+    """Return True when the configured Ollama model appears in the installed set."""
+    normalized = configured_model.strip().lower()
+    if not normalized:
+        return True
+
+    configured_aliases = {normalized, normalized.removesuffix(":latest")}
+    for model_name in installed_models:
+        normalized_model = model_name.strip().lower()
+        if not normalized_model:
+            continue
+        installed_aliases = {normalized_model, normalized_model.removesuffix(":latest")}
+        if configured_aliases & installed_aliases:
+            return True
+        if any(
+            normalized_model.startswith(f"{alias}:") or alias.startswith(f"{normalized_model}:")
+            for alias in configured_aliases
+            if alias
+        ):
+            return True
+    return False
 
 
 def _required_service_healthy(status: str) -> bool:
@@ -127,6 +253,13 @@ async def _core_dependency_checks(required_services: set[str] | None = None) -> 
         checks["ollama"] = await _probe_ollama(required)
     else:
         checks["ollama"] = "configured" if settings.runtime_ollama_base_url else "unconfigured"
+
+    if "local_orchestration" in required:
+        checks["local_orchestration"] = await _probe_local_orchestration()
+    else:
+        checks["local_orchestration"] = (
+            "configured" if settings.runtime_local_orchestration_base_url else "unconfigured"
+        )
 
     try:
         import redis.asyncio as aioredis

@@ -30,9 +30,11 @@ class _FakeAsyncClient:
     def __init__(
         self,
         response_codes: dict[str, int],
+        response_payloads: dict[str, object],
         failures: set[str],
     ) -> None:
         self._response_codes = response_codes
+        self._response_payloads = response_payloads
         self._failures = failures
 
     async def __aenter__(self) -> _FakeAsyncClient:
@@ -44,12 +46,18 @@ class _FakeAsyncClient:
     async def get(self, url: str, headers=None):  # noqa: ANN001
         if url in self._failures:
             raise RuntimeError(f"forced failure for {url}")
-        return SimpleNamespace(status_code=self._response_codes.get(url, 200))
+        return SimpleNamespace(
+            status_code=self._response_codes.get(url, 200),
+            json=lambda: self._response_payloads.get(url, {}),
+        )
 
     async def post(self, url: str, json=None, headers=None):  # noqa: ANN001
         if url in self._failures:
             raise RuntimeError(f"forced failure for {url}")
-        return SimpleNamespace(status_code=self._response_codes.get(url, 200))
+        return SimpleNamespace(
+            status_code=self._response_codes.get(url, 200),
+            json=lambda: self._response_payloads.get(url, {}),
+        )
 
 
 class _FakeRedisClient:
@@ -62,7 +70,7 @@ class _FakeRedisClient:
 
 @pytest.fixture()
 def health_http_state() -> dict[str, object]:
-    return {"response_codes": {}, "failures": set()}
+    return {"response_codes": {}, "response_payloads": {}, "failures": set()}
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +86,7 @@ def _install_phase48_health_services(
         "agent33.api.routes.health.httpx.AsyncClient",
         lambda timeout=3: _FakeAsyncClient(
             health_http_state["response_codes"],  # type: ignore[arg-type]
+            health_http_state["response_payloads"],  # type: ignore[arg-type]
             health_http_state["failures"],  # type: ignore[arg-type]
         ),
     )
@@ -97,6 +106,11 @@ def _install_phase48_health_services(
     monkeypatch.setattr(settings, "elevenlabs_api_key", SecretStr(""))
     monkeypatch.setattr(settings, "openai_api_key", SecretStr("test-openai-key"))
     monkeypatch.setattr(settings, "openrouter_api_key", SecretStr("test-openrouter-key"))
+    response_payloads = health_http_state["response_payloads"]
+    assert isinstance(response_payloads, dict)
+    response_payloads[f"{settings.runtime_ollama_base_url}/api/tags"] = {
+        "models": [{"name": settings.embedding_default_model}]
+    }
     _fake_redis_async = SimpleNamespace(from_url=lambda *args, **kwargs: _FakeRedisClient())
     monkeypatch.setitem(
         sys.modules,
@@ -219,7 +233,7 @@ def test_health_degrades_when_required_ollama_is_unavailable(
     assert isinstance(response_codes, dict)
     assert isinstance(failures, set)
     response_codes["https://openrouter.ai/api/v1/models"] = 200
-    failures.add(f"{settings.runtime_ollama_base_url}/api/embed")
+    failures.add(f"{settings.runtime_ollama_base_url}/api/tags")
 
     data = client.get("/health").json()
 
@@ -232,9 +246,13 @@ def test_health_degrades_when_required_embedding_model_is_missing(
     health_http_state: dict[str, object],
 ) -> None:
     response_codes = health_http_state["response_codes"]
+    response_payloads = health_http_state["response_payloads"]
     assert isinstance(response_codes, dict)
+    assert isinstance(response_payloads, dict)
     response_codes["https://openrouter.ai/api/v1/models"] = 200
-    response_codes[f"{settings.runtime_ollama_base_url}/api/embed"] = 404
+    response_payloads[f"{settings.runtime_ollama_base_url}/api/tags"] = {
+        "models": [{"name": "qwen3-coder"}]
+    }
 
     data = client.get("/health").json()
 
@@ -261,7 +279,6 @@ def test_readyz_tracks_anthropic_runtime_dependencies(
     monkeypatch.setattr(health_routes, "resolve_default_model", lambda: "claude-3-5-sonnet")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     response_codes["https://api.anthropic.com/v1/models"] = 200
-    response_codes[f"{settings.runtime_ollama_base_url}/api/embed"] = 200
 
     response = client.get("/readyz")
 
@@ -269,3 +286,29 @@ def test_readyz_tracks_anthropic_runtime_dependencies(
     data = response.json()
     assert data["status"] == "healthy"
     assert set(data["services"]) == {"anthropic", "ollama", "postgres", "redis", "nats"}
+
+
+def test_health_tracks_startup_runtime_when_using_ollama_engine(
+    client: TestClient,
+    health_http_state: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response_codes = health_http_state["response_codes"]
+    response_payloads = health_http_state["response_payloads"]
+    assert isinstance(response_codes, dict)
+    assert isinstance(response_payloads, dict)
+    monkeypatch.setattr(settings, "local_orchestration_engine", "ollama")
+    monkeypatch.setattr(settings, "local_orchestration_model", "qwen3-coder")
+    response_codes["https://openrouter.ai/api/v1/models"] = 200
+    response_payloads[f"{settings.runtime_ollama_base_url}/api/tags"] = {
+        "models": [
+            {"name": settings.embedding_default_model},
+            {"name": "qwen3-coder:latest"},
+        ]
+    }
+
+    data = client.get("/health").json()
+
+    assert data["status"] == "healthy"
+    assert data["required_services"]["local_orchestration"] == "ok"
+    assert data["services"]["local_orchestration"] == "ok"

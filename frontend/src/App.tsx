@@ -46,6 +46,8 @@ import { domains } from "./data/domains";
 import {
   DEFAULT_APP_TAB,
   ROLE_SELECTED_DEFAULT_APP_TAB,
+  getAppTabDescription,
+  getAppTabGroup,
   getAppTabLabel,
   type AppTab
 } from "./data/navigation";
@@ -136,8 +138,12 @@ export default function App(): JSX.Element {
   const [drawerSectionId, setDrawerSectionId] = useState<ArtifactDrawerSectionId>(
     initialCockpitUrlState.drawerSectionId
   );
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const selectedWorkspace = getWorkspaceSession(selectedWorkspaceId);
+  const selectedWorkspaceStatus = selectedWorkspace.status.toLowerCase();
   const showCockpitDashboard = activeTab === "operations";
+  const activeTabGroup = getAppTabGroup(activeTab);
+  const activeTabDescription = getAppTabDescription(activeTab);
   const currentCockpitUrlState = useMemo(
     (): CockpitUrlState => ({
       activeTab,
@@ -185,6 +191,10 @@ export default function App(): JSX.Element {
     hasSyncedInitialUrlRef.current = true;
     isApplyingBrowserNavigationRef.current = false;
   }, [currentCockpitUrlState]);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [activeTab]);
 
   function setToken(tokenValue: string): void {
     setTokenState(tokenValue);
@@ -248,6 +258,37 @@ export default function App(): JSX.Element {
     operationsBoard.focus();
   }, []);
 
+  const stageActions = useMemo(
+    () =>
+      [
+        activeTab === "starter"
+          ? null
+          : {
+              label: "Launch workflow",
+              onClick: () => openWorkflowStarter()
+            },
+        activeTab === "operations"
+          ? null
+          : {
+              label: "View runs",
+              onClick: () => setActiveTab("operations")
+            },
+        activeTab === "models"
+          ? null
+          : {
+              label: "Connect models",
+              onClick: () => setActiveTab("models")
+            },
+        activeTab === "safety"
+          ? null
+          : {
+              label: "Review approvals",
+              onClick: () => setActiveTab("safety")
+            }
+      ].filter((action): action is { label: string; onClick: () => void } => action !== null),
+    [activeTab, openWorkflowStarter]
+  );
+
   return (
     <div className="consumer-app-shell">
       <SkipLink />
@@ -256,37 +297,94 @@ export default function App(): JSX.Element {
           <div className="logo-orb" aria-hidden="true"></div>
           <h1>AGENT-33</h1>
         </div>
-        <div className="cockpit-topbar-actions">
-          <GlobalSearch token={token || null} />
-        </div>
+        <button
+          type="button"
+          className="consumer-nav-toggle"
+          aria-controls="cockpit-sidebar"
+          aria-expanded={isSidebarOpen}
+          onClick={() => setIsSidebarOpen((current) => !current)}
+        >
+          {isSidebarOpen ? "Close navigation" : "Open navigation"}
+        </button>
       </header>
 
+      <button
+        type="button"
+        className={`cockpit-sidebar-backdrop${isSidebarOpen ? " cockpit-sidebar-backdrop-visible" : ""}`}
+        aria-label="Close navigation"
+        onClick={() => setIsSidebarOpen(false)}
+      />
+
       <div className="cockpit-layout">
-        <aside className="cockpit-sidebar">
+        <aside
+          id="cockpit-sidebar"
+          className={`cockpit-sidebar${isSidebarOpen ? " cockpit-sidebar-open" : ""}`}
+          aria-label="Workspace navigation"
+        >
+          <div className="cockpit-sidebar-mobile-head">
+            <div>
+              <span className="main-nav-group-label">Navigation</span>
+              <strong>{selectedWorkspace.name}</strong>
+            </div>
+            <button type="button" onClick={() => setIsSidebarOpen(false)}>
+              Close
+            </button>
+          </div>
+          <section className="cockpit-sidebar-hero" aria-label="Workspace overview">
+            <div className="cockpit-sidebar-hero-copy">
+              <span className="main-nav-group-label">Current workspace</span>
+              <strong>{selectedWorkspace.name}</strong>
+              <p>{selectedWorkspace.template} template tuned for {selectedWorkspace.goal}.</p>
+            </div>
+            <div className="cockpit-sidebar-hero-meta">
+              <span>{selectedWorkspaceStatus}</span>
+              <small>{selectedWorkspace.updatedLabel}</small>
+            </div>
+          </section>
+          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
+          <section className="cockpit-sidebar-context cockpit-sidebar-actions" aria-label="Quick actions">
+            <span className="main-nav-group-label">Go next</span>
+            <p>Move to the next likely operator action without searching the whole cockpit.</p>
+            <div className="cockpit-sidebar-action-grid">
+              {stageActions.map((action) => (
+                <button key={action.label} type="button" onClick={action.onClick}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="cockpit-sidebar-context cockpit-sidebar-search" aria-label="Global search">
+            <span className="main-nav-group-label">Search</span>
+            <p>Jump to memory and prior execution context without leaving the sidebar.</p>
+            <GlobalSearch token={token || null} />
+          </section>
           <WorkspaceSessionSelector
             selectedWorkspaceId={selectedWorkspaceId}
             onSelectWorkspace={selectWorkspace}
             onOpenRuns={() => setActiveTab("operations")}
             onOpenWorkflows={openWorkflowStarter}
           />
-          <AppNavigation activeTab={activeTab} onNavigate={setActiveTab} />
+          <PermissionModeControl
+            selectedModeId={permissionModeId}
+            operatorMode={operatorMode}
+            onSelectMode={selectPermissionMode}
+            onOperatorModeChange={setOperatorMode}
+          />
         </aside>
 
         <main className="cockpit-main" id="main-content" role="main">
           <div className="cockpit-context-bar" aria-label="Current workspace context">
             <div className="cockpit-context-copy">
-              <span className="eyebrow">Now viewing</span>
+              <span className="eyebrow">{activeTabGroup?.label ?? "Workspace"}</span>
               <strong>{getAppTabLabel(activeTab)}</strong>
               <span className="cockpit-context-note">
-                {selectedWorkspace.name} uses the {selectedWorkspace.template} template. Choose a surface from the sidebar to continue.
+                {activeTabDescription || "Use the sidebar to switch surfaces and keep work in one lane."}
               </span>
             </div>
-            <PermissionModeControl
-              selectedModeId={permissionModeId}
-              operatorMode={operatorMode}
-              onSelectMode={selectPermissionMode}
-              onOperatorModeChange={setOperatorMode}
-            />
+            <div className="cockpit-context-stage">
+              <span>{selectedWorkspace.name}</span>
+              <small>{selectedWorkspaceStatus} · {selectedWorkspace.goal}</small>
+            </div>
           </div>
 
           <div className={showCockpitDashboard ? "cockpit-workspace-stage cockpit-workspace-stage-with-drawer" : "cockpit-workspace-stage"}>
@@ -359,57 +457,27 @@ export default function App(): JSX.Element {
         {/* Chat Central -> Render new ChatInterface */}
         {activeTab === "chat" && (
           <div className="consumer-chat-layout">
-            <div
-              style={{
-                display: "grid",
-                gap: "0.65rem",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
-              }}
-            >
+            <div className="consumer-chat-shortcuts" aria-label="Chat launch shortcuts">
               <button
+                className="consumer-chat-shortcut"
                 onClick={() => setActiveTab("voice")}
-                style={{
-                  background: "rgba(11, 30, 39, 0.65)",
-                  border: "1px solid rgba(48, 213, 200, 0.35)",
-                  borderRadius: "10px",
-                  color: "#d9edf4",
-                  padding: "0.65rem 0.85rem",
-                  fontSize: "0.86rem",
-                  textAlign: "left",
-                  cursor: "pointer"
-                }}
               >
-                🎙️ Start a voice session
+                <strong>Voice session</strong>
+                <small>Move the conversation into live voice and dictation.</small>
               </button>
               <button
+                className="consumer-chat-shortcut"
                 onClick={() => setActiveTab("setup")}
-                style={{
-                  background: "rgba(11, 30, 39, 0.65)",
-                  border: "1px solid rgba(48, 213, 200, 0.35)",
-                  borderRadius: "10px",
-                  color: "#d9edf4",
-                  padding: "0.65rem 0.85rem",
-                  fontSize: "0.86rem",
-                  textAlign: "left",
-                  cursor: "pointer"
-                }}
               >
-                🔌 Connect integrations
+                <strong>Connect integrations</strong>
+                <small>Fix provider or token gaps before you start a live thread.</small>
               </button>
               <button
+                className="consumer-chat-shortcut"
                 onClick={() => setActiveTab("advanced")}
-                style={{
-                  background: "rgba(11, 30, 39, 0.65)",
-                  border: "1px solid rgba(48, 213, 200, 0.35)",
-                  borderRadius: "10px",
-                  color: "#d9edf4",
-                  padding: "0.65rem 0.85rem",
-                  fontSize: "0.86rem",
-                  textAlign: "left",
-                  cursor: "pointer"
-                }}
               >
-                ⚙️ Open control plane
+                <strong>Open control plane</strong>
+                <small>Drop into raw controls only when the guided path is too shallow.</small>
               </button>
             </div>
             <ChatInterface token={token} apiKey={apiKey} />
