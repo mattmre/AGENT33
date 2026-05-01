@@ -264,8 +264,7 @@ class LocalOrchestrationReadinessService:
                 default_model=default_model,
                 checked_at=checked_at,
                 message=(
-                    "Local orchestration responded, but /v1/models returned an unexpected "
-                    "payload."
+                    "Local orchestration responded, but /v1/models returned an unexpected payload."
                 ),
             )
 
@@ -350,8 +349,7 @@ class LocalOrchestrationReadinessService:
         model_ids = [
             str(item.get("name") or item.get("model") or "").strip()
             for item in raw_models
-            if isinstance(item, dict)
-            and str(item.get("name") or item.get("model") or "").strip()
+            if isinstance(item, dict) and str(item.get("name") or item.get("model") or "").strip()
         ]
         if not model_ids:
             return LocalOrchestrationStatusResponse(
@@ -584,7 +582,9 @@ class ModelHealthService:
 
     @staticmethod
     def _coerce_result(
-        result: OllamaStatusResponse | LMStudioStatusResponse | LocalOrchestrationStatusResponse
+        result: OllamaStatusResponse
+        | LMStudioStatusResponse
+        | LocalOrchestrationStatusResponse
         | BaseException,
         checked_at: datetime,
         *,

@@ -196,7 +196,9 @@ class TestGetConfig:
 
     def test_local_orchestration_runtime_config_is_exposed(self) -> None:
         svc = _build_service()
-        object.__setattr__(svc._settings, "local_orchestration_base_url", "http://localhost:8033/v1")
+        object.__setattr__(
+            svc._settings, "local_orchestration_base_url", "http://localhost:8033/v1"
+        )
         object.__setattr__(svc._settings, "local_orchestration_model", "qwen3-coder-next")
         object.__setattr__(svc._settings, "local_orchestration_engine", "vLLM")
 
